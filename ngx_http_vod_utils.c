@@ -32,7 +32,6 @@ send_single_buffer_response(ngx_http_request_t *r, ngx_str_t *response, u_char* 
 
 	// set the content type
 	r->headers_out.content_type_len = content_type_len;
-	r->headers_out.content_type.len = content_type_len;
 	r->headers_out.content_type.data = (u_char *)content_type;
 
 	// set the status line
