@@ -1,0 +1,43 @@
+#ifndef __AES_ENCRYPT_H__
+#define __AES_ENCRYPT_H__
+
+// XXXX TODO make it optional, like #if (NGX_OPENSSL)
+
+// includes
+#include <openssl/evp.h>
+#include "write_buffer_queue.h"
+#include "common.h"
+
+// macros
+#define AES_BLOCK_SIZE (16)
+#define AES_ROUND_TO_BLOCK(n) (((n) + 0x10) & ~0xf)
+
+// typedefs
+typedef struct {
+	request_context_t* request_context;
+	write_callback_t callback;
+	void* callback_context;
+	EVP_CIPHER_CTX cipher;
+	u_char last_block[AES_BLOCK_SIZE];
+} aes_encrypt_context_t;
+
+// functions
+vod_status_t aes_encrypt_init(
+	aes_encrypt_context_t* ctx, 
+	request_context_t* request_context, 
+	write_callback_t callback, 
+	void* callback_context, 
+	const u_char* key, 
+	int segment_index);
+
+vod_status_t aes_encrypt_write(
+	aes_encrypt_context_t* ctx, 
+	u_char* buffer, 
+	uint32_t size, 
+	bool_t* reuse_buffer);
+
+vod_status_t aes_encrypt_flush(aes_encrypt_context_t* ctx);
+
+void aes_encrypt_cleanup(aes_encrypt_context_t* ctx);
+
+#endif // __AES_ENCRYPT_H__

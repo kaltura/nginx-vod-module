@@ -1,0 +1,44 @@
+adts_frame_header
+	syncword : 12
+	ID : 1
+	layer : 2
+	protection_absent : 1
+	profile_object_type : 2
+	sample_rate_index: 4
+	private_bit : 1
+	channel_configuration : 3
+	original_copy : 1
+	home : 1
+	copyright_identification_bit : 1
+	copyright_identification_start : 1
+	aac_frame_length : 13
+	adts_buffer_fullness : 11
+	number_of_raw_data_blocks_in_frame : 2
+
+pmt
+	pointerField : 8
+	tableId : 8
+	sectionSyntaxIndicator : 1
+	zero : 1
+	reserved1 : 2				// 11
+	reserved2 : 2				// 00
+	sectionLength : 10
+	programNumber : 16
+	reserved3 : 2				// 11
+	versionNumber : 5
+	currentNextIndicator : 1
+	sectionNumber : 8			// 0
+	lastSectionNumber : 8		// 0
+	reserved4 : 3
+	pcrPID : 13
+	reserved5 : 4
+	reserved6 : 2				// 00
+	programInfoLength : 10
+
+pmt_entry
+	streamType : 8
+	Reserved1 : 3
+	elementaryPID : 13
+	Reserved2 : 4
+	reserved3 : 2				// 00
+	esInfoLength : 10
