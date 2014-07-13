@@ -34,7 +34,7 @@
 
 ### Build
 
-cd to NGINX source directory & run this:
+cd to NGINX source directory and execute:
 
     ./configure --add-module=/path/to/nginx-vod-module
     make
@@ -143,7 +143,7 @@ Sets the timeout in milliseconds for reading data from the upstream (remote/mapp
 
 #### vod_path_response_prefix
 * **syntax**: `vod_path_response_prefix prefix`
-* **default**: `<?xml version=\"1.0\" encoding=\"utf-8\"?><xml><result>`
+* **default**: `<?xml version="1.0" encoding="utf-8"?><xml><result>`
 * **context**: `http`, `server`, `location`
 
 Sets the prefix that is expected in URI mapping responses (mapped mode only).
