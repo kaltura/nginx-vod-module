@@ -52,6 +52,8 @@ read_cache_get_read_buffer(read_cache_state_t* state, uint64_t offset, uint64_t*
 		target_buffer->buffer = vod_memalign(state->request_context->pool, state->buffer_size, state->alignment);
 		if (target_buffer->buffer == NULL)
 		{
+			vod_log_debug0(VOD_LOG_DEBUG_LEVEL, state->request_context->log, 0,
+				"read_cache_get_read_buffer: vod_memalign failed");
 			return VOD_ALLOC_FAILED;
 		}
 	}

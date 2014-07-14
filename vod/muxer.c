@@ -42,6 +42,8 @@ muxer_init(
 	state->first_stream = vod_alloc(request_context->pool, sizeof(*state->first_stream) * mpeg_metadata->streams.nelts);
 	if (state->first_stream == NULL)
 	{
+		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
+			"muxer_init: vod_alloc failed (1)");
 		return VOD_ALLOC_FAILED;
 	}
 
@@ -77,6 +79,8 @@ muxer_init(
 			cur_stream->top_filter_context = vod_alloc(request_context->pool, sizeof(mp4_to_annexb_state_t));
 			if (cur_stream->top_filter_context == NULL)
 			{
+				vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
+					"muxer_init: vod_alloc failed (2)");
 				return VOD_ALLOC_FAILED;
 			}
 
@@ -104,6 +108,8 @@ muxer_init(
 			cur_stream->buffer_state = vod_alloc(request_context->pool, sizeof(buffer_filter_t));
 			if (cur_stream->buffer_state == NULL)
 			{
+				vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
+					"muxer_init: vod_alloc failed (3)");
 				return VOD_ALLOC_FAILED;
 			}
 
@@ -116,6 +122,8 @@ muxer_init(
 			cur_stream->top_filter_context = vod_alloc(request_context->pool, sizeof(adts_encoder_state_t));
 			if (cur_stream->top_filter_context == NULL)
 			{
+				vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
+					"muxer_init: vod_alloc failed (4)");
 				return VOD_ALLOC_FAILED;
 			}
 

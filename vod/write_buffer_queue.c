@@ -94,6 +94,10 @@ buffer_queue_send(buffer_queue_t* queue, u_char* ptr)
 		}
 
 		remove_entry_list(&cur_buffer->link);
+		if (cur_buffer == queue->cur_write_buffer)
+		{
+			queue->cur_write_buffer = NULL;
+		}
 
 		queue->write_callback(queue->write_context, cur_buffer->start_pos, cur_buffer->cur_pos - cur_buffer->start_pos, &reuse_buffer);
 

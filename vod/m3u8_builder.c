@@ -67,6 +67,8 @@ build_required_tracks_string(request_context_t* request_context, mpeg_metadata_t
 	buffer = vod_alloc(request_context->pool, required_tracks->len + 1);
 	if (buffer == NULL)
 	{
+		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
+			"build_required_tracks_string: vod_alloc failed");
 		return VOD_ALLOC_FAILED;
 	}
 	required_tracks->data = buffer;
@@ -201,6 +203,8 @@ build_iframe_playlist_m3u8(
 	result->data = vod_alloc(request_context->pool, total_size);
 	if (result->data == NULL)
 	{
+		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
+			"build_iframe_playlist_m3u8: vod_alloc failed");
 		return VOD_ALLOC_FAILED;
 	}
 
@@ -284,6 +288,8 @@ build_index_playlist_m3u8(
 	result->data = vod_alloc(request_context->pool, total_size);
 	if (result->data == NULL)
 	{
+		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
+			"build_index_playlist_m3u8: vod_alloc failed");
 		return VOD_ALLOC_FAILED;
 	}
 

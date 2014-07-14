@@ -30,6 +30,8 @@ buffer_filter_init(
 	state->start_pos = vod_alloc(request_context->pool, size);
 	if (state->start_pos == NULL)
 	{
+		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
+			"buffer_filter_init: vod_alloc failed");
 		return VOD_ALLOC_FAILED;
 	}
 	state->end_pos = state->start_pos + size;
