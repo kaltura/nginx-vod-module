@@ -30,6 +30,8 @@ ngx_http_vod_create_request(ngx_http_request_t *r)
 	cl = ngx_alloc_chain_link(r->pool);
 	if (cl == NULL) 
 	{
+		ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+			"ngx_http_vod_create_request: ngx_alloc_chain_link failed");
 		return NGX_ERROR;
 	}
 
@@ -96,6 +98,8 @@ ngx_http_vod_process_header(ngx_http_request_t *r)
 				h = ngx_list_push(&r->upstream->headers_in.headers);
 				if (h == NULL) 
 				{
+					ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+						"ngx_http_vod_process_header: ngx_list_push failed");
 					return NGX_ERROR;
 				}
 
@@ -107,6 +111,8 @@ ngx_http_vod_process_header(ngx_http_request_t *r)
 				h->key.data = ngx_pnalloc(r->pool, h->key.len + 1 + h->value.len + 1 + h->key.len);
 				if (h->key.data == NULL) 
 				{
+					ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+						"ngx_http_vod_process_header: ngx_pnalloc failed (1)");
 					return NGX_ERROR;
 				}
 
@@ -170,6 +176,8 @@ ngx_http_vod_process_header(ngx_http_request_t *r)
 				ctx->response_buffer = ngx_palloc(r->pool, u->headers_in.content_length_n + 1);
 				if (ctx->response_buffer == NULL)
 				{
+					ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+						"ngx_http_vod_process_header: ngx_pnalloc failed (2)");
 					return NGX_ERROR;
 				}
 
@@ -222,6 +230,8 @@ ngx_http_vod_process_status_line(ngx_http_request_t *r)
 	rc = ngx_http_parse_status_line(r, &u->buffer, &status);
 	if (rc == NGX_AGAIN) 
 	{
+		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+			"ngx_http_vod_process_status_line: ngx_http_parse_status_line failed %i", rc);
 		return rc;
 	}
 
@@ -245,6 +255,8 @@ ngx_http_vod_process_status_line(ngx_http_request_t *r)
 	u->headers_in.status_line.data = ngx_pnalloc(r->pool, len);
 	if (u->headers_in.status_line.data == NULL) 
 	{
+		ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+			"ngx_http_vod_process_status_line: ngx_pnalloc failed");
 		return NGX_ERROR;
 	}
 
@@ -382,6 +394,8 @@ init_request_buffer(
 		b = ngx_create_temp_buf(r->pool, len);
 		if (b == NULL)
 		{
+			ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+				"init_request_buffer: ngx_create_temp_buf failed");
 			return NGX_ERROR;
 		}
 		p = b->last;
@@ -449,6 +463,8 @@ dump_request(
 	rc = create_upstream(r, upstream_conf);
 	if (rc != NGX_OK)
 	{
+		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+			"dump_request: create_upstream failed %i", rc);
 		return rc;
 	}
 
@@ -457,6 +473,8 @@ dump_request(
 	rc = init_request_buffer(r, ctx, uri, &empty_str, host_name, -1, -1, extra_headers);
 	if (rc != NGX_OK)
 	{
+		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+			"dump_request: init_request_buffer failed %i", rc);
 		return rc;
 	}
 
@@ -500,6 +518,8 @@ child_request_start(
 	rc = create_upstream(r, upstream_conf);
 	if (rc != NGX_OK)
 	{
+		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+			"child_request_start: create_upstream failed %i", rc);
 		return rc;
 	}
 
@@ -516,6 +536,8 @@ child_request_start(
 		ctx->headers_buffer = ngx_palloc(r->pool, ctx->headers_buffer_size);
 		if (ctx->headers_buffer == NULL)
 		{
+			ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+				"child_request_start: ngx_palloc failed");
 			return NGX_HTTP_INTERNAL_SERVER_ERROR;
 		}
 	}
@@ -528,6 +550,8 @@ child_request_start(
 
 	if (ngx_list_init(&u->headers_in.headers, r->pool, 8, sizeof(ngx_table_elt_t)) != NGX_OK)
 	{
+		ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+			"child_request_start: ngx_list_init failed");
 		return NGX_ERROR;
 	}
 
@@ -538,6 +562,8 @@ child_request_start(
 	rc = init_request_buffer(r, ctx, base_uri, extra_args, host_name, range_start, range_end, &empty_str);
 	if (rc != NGX_OK)
 	{
+		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+			"child_request_start: init_request_buffer failed %i", rc);
 		return rc;
 	}
 

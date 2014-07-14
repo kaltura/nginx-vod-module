@@ -25,6 +25,8 @@ extract_uri_tokens(ngx_http_request_t* r, request_params_t* request_params, u_ch
 	stripped_uri.data = ngx_palloc(r->pool, r->uri.len + 1);
 	if (stripped_uri.data == NULL)
 	{
+		ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+			"extract_uri_tokens: ngx_palloc failed");
 		return NGX_HTTP_INTERNAL_SERVER_ERROR;
 	}
 	p = stripped_uri.data;
@@ -207,6 +209,8 @@ parse_request_uri(ngx_http_request_t *r, ngx_http_vod_loc_conf_t *conf, request_
 	rc = extract_uri_tokens(r, request_params, &start_pos);
 	if (rc != NGX_OK)
 	{
+		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+			"parse_request_uri: extract_uri_tokens failed %i", rc);
 		return rc;
 	}
 
@@ -224,6 +228,8 @@ parse_request_uri(ngx_http_request_t *r, ngx_http_vod_loc_conf_t *conf, request_
 		rc = parse_required_tracks(r, start_pos, end_pos - (sizeof(".ts") - 1), TRUE, request_params);
 		if (rc != NGX_OK)
 		{
+			ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+				"parse_request_uri: parse_required_tracks failed %i (1)", rc);
 			return rc;
 		}
 
@@ -260,6 +266,8 @@ parse_request_uri(ngx_http_request_t *r, ngx_http_vod_loc_conf_t *conf, request_
 		rc = parse_required_tracks(r, start_pos, end_pos - (sizeof(".m3u8") - 1), FALSE, request_params);
 		if (rc != NGX_OK)
 		{
+			ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+				"parse_request_uri: parse_required_tracks failed %i (2)", rc);
 			return rc;
 		}
 

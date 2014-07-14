@@ -11,7 +11,9 @@ ngx_http_vod_create_loc_conf(ngx_conf_t *cf)
     conf = ngx_pcalloc(cf->pool, sizeof(ngx_http_vod_loc_conf_t));
     if (conf == NULL) 
 	{
-        return NGX_CONF_ERROR;
+		ngx_log_debug0(NGX_LOG_DEBUG_HTTP, cf->log, 0,
+			"ngx_http_vod_create_loc_conf: ngx_pcalloc failed");
+		return NGX_CONF_ERROR;
     }
 
 	init_upstream_conf(&conf->upstream);
@@ -46,6 +48,8 @@ ngx_http_vod_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child)
 	err = merge_upstream_conf(cf, &conf->upstream, &prev->upstream);
 	if (err != NGX_CONF_OK)
 	{
+		ngx_log_debug0(NGX_LOG_DEBUG_HTTP, cf->log, 0,
+			"ngx_http_vod_merge_loc_conf: merge_upstream_conf failed (1)");
 		return err;
 	}
 	ngx_conf_merge_str_value(conf->upstream_host_header, prev->upstream_host_header, "");
@@ -58,6 +62,8 @@ ngx_http_vod_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child)
 	err = merge_upstream_conf(cf, &conf->fallback_upstream, &prev->fallback_upstream);
 	if (err != NGX_CONF_OK)
 	{
+		ngx_log_debug0(NGX_LOG_DEBUG_HTTP, cf->log, 0,
+			"ngx_http_vod_merge_loc_conf: merge_upstream_conf failed (2)");
 		return err;
 	}
 	ngx_conf_merge_str_value(conf->proxy_header_name, prev->proxy_header_name, "X-Kaltura-Proxy");
@@ -205,7 +211,9 @@ ngx_http_upstream_command(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
 	upstream_conf->upstream = ngx_http_upstream_add(cf, &u, 0);
 	if (upstream_conf->upstream == NULL)
 	{
-        return NGX_CONF_ERROR;
+		ngx_log_debug0(NGX_LOG_DEBUG_HTTP, cf->log, 0,
+			"ngx_http_upstream_command: ngx_http_upstream_add failed");
+		return NGX_CONF_ERROR;
     }
 
     return NGX_CONF_OK;

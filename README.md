@@ -30,7 +30,19 @@
 
 * I-frames playlist generation is not supported when encryption is enabled
 
+* SAMPLE-AES encryption is not supported
+
 * Tested on Linux only
+
+### Nginx patch
+
+The module depends on a small patch to the nginx code - in src/http/ngx_http_upstream.c, in ngx_http_upstream_process_body_in_memory replace:
+	for ( ;; ) {
+with:
+	while (u->length) {
+	
+The problem with the existing code is that when the upstream buffer size matches the response size exactly, the upstream module fails with 'upstream buffer is too small to read response' instead of completing the result successfully.
+Since the nginx-vod-module performs range requests and sets the upstream buffer to the exact response size, this error always happens.
 
 ### Build
 

@@ -106,6 +106,8 @@ mp4_to_annexb_init(
 	state->sps_pps = vod_alloc(request_context->pool, state->sps_pps_size);
 	if (state->sps_pps == NULL)
 	{
+		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
+			"mp4_to_annexb_init: vod_alloc failed");
 		return VOD_ALLOC_FAILED;
 	}
 	sps_pps_pos = state->sps_pps;

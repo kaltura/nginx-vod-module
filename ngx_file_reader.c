@@ -32,8 +32,11 @@ file_reader_init(
 	of.errors = clcf->open_file_cache_errors;
 	of.events = clcf->open_file_cache_events;
 
-	if (ngx_http_set_disable_symlinks(r, clcf, path, &of) != NGX_OK) 
+	rc = ngx_http_set_disable_symlinks(r, clcf, path, &of);
+	if (rc != NGX_OK)
 	{
+		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+			"file_reader_init: ngx_http_set_disable_symlinks failed %i", rc);
 		return NGX_HTTP_INTERNAL_SERVER_ERROR;
 	}
 

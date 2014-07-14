@@ -169,7 +169,7 @@ enum {
 };
 
 typedef int bool_t;
-typedef int vod_status_t;
+typedef intptr_t vod_status_t;
 
 typedef struct {
 	vod_pool_t* pool;

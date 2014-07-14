@@ -576,6 +576,8 @@ parse_stts_atom(atom_info_t* atom_info, trak_info_t* trak_info)
 
 	if (vod_array_init(&frames_array, trak_info->request_context->pool, initial_alloc_size, sizeof(input_frame_t)) != VOD_OK)
 	{
+		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, trak_info->request_context->log, 0,
+			"parse_stts_atom: vod_array_init failed");
 		return VOD_ALLOC_FAILED;
 	}
 	
@@ -633,6 +635,8 @@ parse_stts_atom(atom_info_t* atom_info, trak_info_t* trak_info)
 			cur_frame = vod_array_push(&frames_array);
 			if (cur_frame == NULL)
 			{
+				vod_log_debug0(VOD_LOG_DEBUG_LEVEL, trak_info->request_context->log, 0,
+					"parse_stts_atom: vod_array_push failed");
 				return VOD_ALLOC_FAILED;
 			}
 			cur_frame->dts = accum_duration;
@@ -792,6 +796,8 @@ parse_stco_atom(atom_info_t* atom_info, trak_info_t* trak_info)
 	trak_info->frame_offsets = vod_alloc(trak_info->request_context->pool, trak_info->frame_count * sizeof(uint64_t));
 	if (trak_info->frame_offsets == NULL)
 	{
+		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, trak_info->request_context->log, 0,
+			"parse_stco_atom: vod_alloc failed");
 		return VOD_ALLOC_FAILED;
 	}
 	cur_offset = trak_info->frame_offsets;
@@ -1261,6 +1267,8 @@ parse_video_extra_data_atom(void* context, atom_info_t* atom_info)
 	trak_info->extra_data = vod_alloc(trak_info->request_context->pool, trak_info->extra_data_size);
 	if (trak_info->extra_data == NULL)
 	{
+		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, trak_info->request_context->log, 0,
+			"parse_video_extra_data_atom: vod_alloc failed");
 		return VOD_ALLOC_FAILED;
 	}
 	
@@ -1346,6 +1354,8 @@ ff_mp4_read_dec_config_descr(trak_info_t* trak_info, simple_read_stream_t* strea
 		trak_info->extra_data = vod_alloc(trak_info->request_context->pool, trak_info->extra_data_size);
 		if (trak_info->extra_data == NULL)
 		{
+			vod_log_debug0(VOD_LOG_DEBUG_LEVEL, trak_info->request_context->log, 0,
+				"ff_mp4_read_dec_config_descr: vod_alloc failed");
 			return VOD_ALLOC_FAILED;
 		}
 		
@@ -1688,6 +1698,8 @@ process_moov_atom_callback(void* ctx, atom_info_t* atom_info)
 	result_stream = vod_array_push(&result->streams);
 	if (result_stream == NULL)
 	{
+		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, context->request_context->log, 0,
+			"process_moov_atom_callback: vod_array_push failed");
 		return VOD_ALLOC_FAILED;
 	}
 		
@@ -1760,6 +1772,8 @@ mp4_parser_parse_moov_atom(
 
 	if (vod_array_init(&mpeg_metadata->streams, request_context->pool, 2, sizeof(mpeg_stream_metadata_t)) != VOD_OK)
 	{
+		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
+			"mp4_parser_parse_moov_atom: vod_array_init failed");
 		return VOD_ALLOC_FAILED;
 	}
 

@@ -273,6 +273,8 @@ mpegts_encoder_init(
 	cur_packet = buffer_queue_get_buffer(&state->queue, MPEGTS_PACKET_SIZE);
 	if (cur_packet == NULL)
 	{
+		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
+			"mpegts_encoder_init: buffer_queue_get_buffer failed");
 		return VOD_ALLOC_FAILED;
 	}
 
@@ -303,6 +305,8 @@ mpegts_encoder_init_streams(mpegts_encoder_state_t* state, mpegts_encoder_init_s
 	stream_state->pmt_packet_start = buffer_queue_get_buffer(&state->queue, MPEGTS_PACKET_SIZE);
 	if (stream_state->pmt_packet_start == NULL)
 	{
+		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, state->request_context->log, 0,
+			"mpegts_encoder_init_streams: buffer_queue_get_buffer failed");
 		return VOD_ALLOC_FAILED;
 	}
 	stream_state->pmt_packet_end = stream_state->pmt_packet_start + MPEGTS_PACKET_SIZE;
@@ -399,6 +403,8 @@ mpegts_encoder_init_packet(mpegts_encoder_state_t* state, bool_t first)
 	state->cur_packet_start = buffer_queue_get_buffer(&state->queue, MPEGTS_PACKET_SIZE);
 	if (state->cur_packet_start == NULL)
 	{
+		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, state->request_context->log, 0,
+			"mpegts_encoder_init_packet: buffer_queue_get_buffer failed");
 		return VOD_ALLOC_FAILED;
 	}
 	state->cur_packet_end = state->cur_packet_start + MPEGTS_PACKET_SIZE;

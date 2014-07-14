@@ -18,6 +18,8 @@ send_single_buffer_response(ngx_http_request_t *r, ngx_str_t *response, u_char* 
 	b = ngx_pcalloc(r->pool, sizeof(*b));
 	if (b == NULL)
 	{
+		ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+			"send_single_buffer_response: ngx_pcalloc failed");
 		return NGX_HTTP_INTERNAL_SERVER_ERROR;
 	}
 
@@ -39,14 +41,24 @@ send_single_buffer_response(ngx_http_request_t *r, ngx_str_t *response, u_char* 
 	r->headers_out.status = NGX_HTTP_OK;
 	r->headers_out.content_length_n = b->last - b->pos;
 
-	if (ngx_http_set_etag(r) != NGX_OK) 
+	rc = ngx_http_set_etag(r);
+	if (rc != NGX_OK) 
 	{
+		ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+			"send_single_buffer_response: ngx_http_set_etag failed");
 		return NGX_HTTP_INTERNAL_SERVER_ERROR;
 	}
 	
 	// send the headers
 	rc = ngx_http_send_header(r);
-	if (rc == NGX_ERROR || rc > NGX_OK || r->header_only || r->method == NGX_HTTP_HEAD) 
+	if (rc == NGX_ERROR || rc > NGX_OK)
+	{
+		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+			"send_single_buffer_response: ngx_http_send_header failed %i", rc);
+		return rc;
+	}
+
+	if (r->header_only || r->method == NGX_HTTP_HEAD)
 	{
 		return rc;
 	}
