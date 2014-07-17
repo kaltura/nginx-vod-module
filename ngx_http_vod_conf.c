@@ -1,6 +1,7 @@
 #include "ngx_http_vod_conf.h"
 #include "ngx_child_http_request.h"
 #include "ngx_http_vod_module.h"
+#include "ngx_buffer_cache.h"
 #include "vod/common.h"
 
 static void *
@@ -41,6 +42,10 @@ ngx_http_vod_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child)
 	ngx_conf_merge_uint_value(conf->segment_duration, prev->segment_duration, 10000);
 	ngx_conf_merge_str_value(conf->secret_key, prev->secret_key, "");
 
+	if (conf->moov_cache_zone == NULL) 
+	{
+		conf->moov_cache_zone = prev->moov_cache_zone;
+	}
 	ngx_conf_merge_size_value(conf->initial_read_size, prev->initial_read_size, 4096);
 	ngx_conf_merge_size_value(conf->max_moov_size, prev->max_moov_size, 1 * 1024 * 1024);
 	ngx_conf_merge_size_value(conf->cache_buffer_size, prev->cache_buffer_size, 64 * 1024);
@@ -119,7 +124,7 @@ ngx_http_vod_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child)
 	
 	if (conf->request_handler == remote_request_handler)
 	{
-		if (conf->upstream.upstream != NULL)
+		if (conf->fallback_upstream.upstream != NULL)
 		{
 			ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
 				"\"vod_fallback_upstream\" does not apply to remote mode");
@@ -182,6 +187,52 @@ ngx_http_vod_mode_command(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
 			"invalid value \"%s\" in \"%s\" directive, "
 			"it must be \"local\", \"remote\" or \"mapped\"",
 			value[1].data, cmd->name.data);
+		return NGX_CONF_ERROR;
+	}
+
+	return NGX_CONF_OK;
+}
+
+static char *
+ngx_http_vod_moov_cache(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
+{
+	ngx_http_vod_loc_conf_t    *mgcf = conf;
+	ngx_str_t  *value;
+	ssize_t size;
+
+	value = cf->args->elts;
+
+	if (mgcf->moov_cache_zone != NULL) 
+	{
+		return "is duplicate";
+	}
+
+	if (ngx_strcmp(value[1].data, "off") == 0) 
+	{
+		mgcf->moov_cache_zone = NULL;
+		return NGX_CONF_OK;
+	}
+
+	if (cf->args->nelts < 3)
+	{
+		ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
+			"size not specified in \"vod_moov_cache\"");
+		return NGX_CONF_ERROR;
+	}
+
+	size = ngx_parse_size(&value[2]);
+	if (size == NGX_ERROR)
+	{
+		ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
+			"invalid size %V", &value[2]);
+		return NGX_CONF_ERROR;
+	}
+
+	mgcf->moov_cache_zone = ngx_buffer_cache_create_zone(cf, &value[1], size, &ngx_http_vod_module);
+	if (mgcf->moov_cache_zone == NULL)
+	{
+		ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
+			"failed to create moov cache zone");
 		return NGX_CONF_ERROR;
 	}
 
@@ -263,6 +314,13 @@ ngx_command_t ngx_http_vod_commands[] = {
 	NULL },
 
 	// mp4 reading parameters
+	{ ngx_string("vod_moov_cache"),
+	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1 | NGX_CONF_TAKE2,
+	ngx_http_vod_moov_cache,
+	NGX_HTTP_LOC_CONF_OFFSET,
+	0,
+	NULL },
+
 	{ ngx_string("vod_initial_read_size"),
 	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1,
 	ngx_conf_set_size_slot,
