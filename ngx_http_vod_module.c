@@ -11,19 +11,18 @@
 #include "ngx_http_vod_utils.h"
 #include "ngx_http_vod_conf.h"
 #include "ngx_file_reader.h"
+#include "ngx_buffer_cache.h"
 #include "vod/aes_encrypt.h"
 #include "vod/m3u8_builder.h"
 #include "vod/mp4_parser.h"
 #include "vod/read_cache.h"
 #include "vod/muxer.h"
 
-// constants
-#define ENCRYPTION_KEY_SIZE (16)
-
 // enums
 enum {
 	STATE_INITIAL_READ,
 	STATE_MOOV_ATOM_READ,
+	STATE_MOOV_ATOM_PARSED,
 	STATE_FRAME_DATA_READ,
 };
 
@@ -43,19 +42,20 @@ typedef struct {
 	async_read_func_t async_reader;
 	void* async_reader_context;
 	u_char* read_buffer;
-	uint32_t buffer_size;
+	size_t buffer_size;
 
 	// input params
 	ngx_http_request_t *r;
 	ngx_str_t original_uri;
 	request_params_t request_params;
 	request_context_t request_context;
+	u_char file_key[BUFFER_CACHE_KEY_SIZE];
 	off_t alignment;
 
 	// common state
 	int state;
-	uint32_t moov_offset;
-	uint32_t moov_size;
+	off_t moov_offset;
+	size_t moov_size;
 	mpeg_metadata_t mpeg_metadata;
 
 	// TS requests only
@@ -89,27 +89,13 @@ ngx_module_t  ngx_http_vod_module = {
 
 ////// Encryption support
 
-static void 
-get_aes_key(ngx_http_request_t *r, u_char* key)
-{
-	ngx_http_vod_loc_conf_t *conf;
-	ngx_md5_t md5;
-
-	conf = ngx_http_get_module_loc_conf(r, ngx_http_vod_module);
-
-	ngx_md5_init(&md5);
-	ngx_md5_update(&md5, conf->secret_key.data, conf->secret_key.len);
-	ngx_md5_update(&md5, r->uri.data, r->uri.len);
-	ngx_md5_final(key, &md5);
-}
-
 static ngx_int_t
-process_encryption_key_request(ngx_http_request_t *r)
+process_encryption_key_request(ngx_http_request_t *r, u_char* file_key)
 {
 	ngx_str_t response;
 	u_char* encryption_key;
 
-	encryption_key = ngx_palloc(r->pool, ENCRYPTION_KEY_SIZE);
+	encryption_key = ngx_palloc(r->pool, BUFFER_CACHE_KEY_SIZE);
 	if (encryption_key == NULL)
 	{
 		ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
@@ -117,10 +103,10 @@ process_encryption_key_request(ngx_http_request_t *r)
 		return NGX_HTTP_INTERNAL_SERVER_ERROR;
 	}
 
-	get_aes_key(r, encryption_key);
+	ngx_memcpy(encryption_key, file_key, BUFFER_CACHE_KEY_SIZE);
 
 	response.data = encryption_key;
-	response.len = ENCRYPTION_KEY_SIZE;
+	response.len = BUFFER_CACHE_KEY_SIZE;
 
 	return send_single_buffer_response(r, &response, (u_char *)encryption_key_content_type, sizeof(encryption_key_content_type) - 1);
 }
@@ -129,7 +115,6 @@ static vod_status_t
 init_aes_encryption(ngx_http_vod_ctx_t *ctx, write_callback_t write_callback, void* callback_context)
 {
 	ngx_pool_cleanup_t  *cln;
-	u_char encryption_key[ENCRYPTION_KEY_SIZE];
 	vod_status_t rc;
 
 	ctx->encrypted_write_context = ngx_palloc(ctx->r->pool, sizeof(*ctx->encrypted_write_context));
@@ -139,8 +124,6 @@ init_aes_encryption(ngx_http_vod_ctx_t *ctx, write_callback_t write_callback, vo
 			"init_aes_encryption: ngx_palloc failed");
 		return VOD_ALLOC_FAILED;
 	}
-
-	get_aes_key(ctx->r, encryption_key);
 
 	cln = ngx_pool_cleanup_add(ctx->r->pool, 0);
 	if (cln == NULL) 
@@ -153,7 +136,7 @@ init_aes_encryption(ngx_http_vod_ctx_t *ctx, write_callback_t write_callback, vo
 	cln->handler = (ngx_pool_cleanup_pt)aes_encrypt_cleanup;
 	cln->data = ctx->encrypted_write_context;
 
-	rc = aes_encrypt_init(ctx->encrypted_write_context, &ctx->request_context, write_callback, callback_context, encryption_key, ctx->request_params.segment_index);
+	rc = aes_encrypt_init(ctx->encrypted_write_context, &ctx->request_context, write_callback, callback_context, ctx->file_key, ctx->request_params.segment_index);
 	if (rc != VOD_OK)
 	{
 		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, ctx->request_context.log, 0,
@@ -170,8 +153,8 @@ static ngx_int_t
 read_moov_atom(ngx_http_vod_ctx_t *ctx)
 {
 	ngx_http_vod_loc_conf_t   *conf;
-	u_char* new_read_buffer;
-	uint32_t new_buffer_size;
+	u_char* new_read_buffer = NULL;
+	size_t new_buffer_size;
 	vod_status_t rc;
 
 	// get moov atom offset and size
@@ -200,7 +183,7 @@ read_moov_atom(ngx_http_vod_ctx_t *ctx)
 		return vod_status_to_ngx_error(VOD_BAD_DATA);
 	}
 
-	// allocate a new buffer (round up to alignment)
+	// calculate the new buffer size (round the moov end up to alignment)
 	new_buffer_size = ((ctx->moov_offset + ctx->moov_size) + ctx->alignment - 1) & (~(ctx->alignment - 1));
 
 	new_read_buffer = ngx_pmemalign(ctx->r->pool, new_buffer_size, ctx->alignment);
@@ -223,19 +206,11 @@ read_moov_atom(ngx_http_vod_ctx_t *ctx)
 }
 
 static vod_status_t 
-parse_moov_atom(ngx_http_vod_ctx_t *ctx)
+parse_moov_atom(ngx_http_vod_ctx_t *ctx, u_char* moov_buffer, size_t moov_size)
 {
 	ngx_http_vod_loc_conf_t   *conf;
 	int parse_type;
 	vod_status_t rc;
-
-	// make sure we got the whole moov atom
-	if (ctx->buffer_size < ctx->moov_offset + ctx->moov_size)
-	{
-		ngx_log_error(NGX_LOG_ERR, ctx->request_context.log, 0,
-			"parse_moov_atom: buffer size %uD is smaller than moov end offset %uD", ctx->buffer_size, ctx->moov_offset + ctx->moov_size);
-		return VOD_BAD_DATA;
-	}
 
 	// initialize the request context
 	switch (ctx->request_params.segment_index)
@@ -279,8 +254,8 @@ parse_moov_atom(ngx_http_vod_ctx_t *ctx)
 		&ctx->request_context, 
 		parse_type,
 		ctx->request_params.required_tracks, 
-		ctx->read_buffer + ctx->moov_offset, 
-		ctx->moov_size, 
+		moov_buffer, 
+		moov_size,
 		&ctx->mpeg_metadata);
 	if (rc != VOD_OK)
 	{
@@ -288,10 +263,6 @@ parse_moov_atom(ngx_http_vod_ctx_t *ctx)
 			"parse_moov_atom: mp4_parser_parse_moov_atom failed %i", rc);
 		return rc;
 	}
-
-	// no longer need the moov atom buffer
-	ngx_pfree(ctx->r->pool, ctx->read_buffer);
-	ctx->read_buffer = NULL;
 
 	return VOD_OK;
 }
@@ -616,73 +587,85 @@ process_mp4_frames(ngx_http_vod_ctx_t *ctx)
 
 ////// Common
 
-static void 
-handle_read_completed(void* context, ngx_int_t rc, ssize_t bytes_read)
+static ngx_int_t 
+run_state_machine(ngx_http_vod_ctx_t *ctx)
 {
 	ngx_http_vod_loc_conf_t *conf;
-	ngx_http_vod_ctx_t *ctx = (ngx_http_vod_ctx_t *)context;
 	ngx_str_t response;
+	ngx_int_t rc;
 
-	if (rc != NGX_OK)
-	{
-		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, ctx->request_context.log, 0,
-			"handle_read_completed: read failed %i", rc);
-		goto finalize_request;
-	}
-
-	if (bytes_read <= 0)
-	{
-		ngx_log_error(NGX_LOG_ERR, ctx->request_context.log, 0,
-			"handle_read_completed: bytes read is zero");
-		rc = vod_status_to_ngx_error(VOD_BAD_DATA);
-		goto finalize_request;
-	}
+	conf = ngx_http_get_module_loc_conf(ctx->r, ngx_http_vod_module);
 
 	switch (ctx->state)
 	{
 	case STATE_INITIAL_READ:
-		ctx->buffer_size = bytes_read;
-
-		if (ctx->request_params.segment_index == REQUEST_TYPE_ENCRYPTION_KEY)
-		{
-			// note: this type of requests can be served without even reading the file, however reading
-			// the file blocks the possibility of an attacker to get the server to sign arbitrary strings
-			rc = process_encryption_key_request(ctx->r);
-			goto finalize_request;
-		}
-
+		// read the entire atom
 		rc = read_moov_atom(ctx);
 		if (rc == NGX_AGAIN)
 		{
-			return;
+			return NGX_AGAIN;
 		}
 
 		if (rc != NGX_OK)
 		{
 			ngx_log_debug1(NGX_LOG_DEBUG_HTTP, ctx->request_context.log, 0,
-				"handle_read_completed: read_moov_atom failed %i", rc);
-			goto finalize_request;
+				"run_state_machine: read_moov_atom failed %i", rc);
+			return rc;
 		}
-		bytes_read = rc;
+		ctx->buffer_size += rc;
 		// fallthrough
 
 	case STATE_MOOV_ATOM_READ:
-		ctx->buffer_size += bytes_read;
-		rc = parse_moov_atom(ctx);
+		// make sure we got the whole moov atom
+		if (ctx->buffer_size < ctx->moov_offset + ctx->moov_size)
+		{
+			ngx_log_error(NGX_LOG_ERR, ctx->request_context.log, 0,
+				"run_state_machine: buffer size %uD is smaller than moov end offset %uD", ctx->buffer_size, ctx->moov_offset + ctx->moov_size);
+			return vod_status_to_ngx_error(VOD_BAD_DATA);
+		}
+
+		// update the cache status
+		if (ngx_buffer_cache_store(
+			conf->moov_cache_zone,
+			ctx->file_key,
+			ctx->read_buffer + ctx->moov_offset,
+			ctx->moov_size))
+		{
+			ngx_log_debug0(NGX_LOG_DEBUG_HTTP, ctx->request_context.log, 0,
+				"run_state_machine: stored moov atom in cache");
+		}
+		else
+		{
+			ngx_log_debug0(NGX_LOG_DEBUG_HTTP, ctx->request_context.log, 0,
+				"run_state_machine: failed to store moov atom in cache");
+		}
+
+		// parse the moov atom
+		rc = parse_moov_atom(ctx, ctx->read_buffer + ctx->moov_offset, ctx->moov_size);
 		if (rc != VOD_OK)
 		{
 			ngx_log_debug1(NGX_LOG_DEBUG_HTTP, ctx->request_context.log, 0,
-				"handle_read_completed: parse_moov_atom failed %i", rc);
-			rc = vod_status_to_ngx_error(rc);
-			goto finalize_request;
+				"run_state_machine: parse_moov_atom failed %i", rc);
+			return vod_status_to_ngx_error(rc);
 		}
-		
+	
+		// no longer need the moov atom buffer
+		ngx_pfree(ctx->r->pool, ctx->read_buffer);
+		ctx->read_buffer = NULL;
+		// fallthrough
+
+	case STATE_MOOV_ATOM_PARSED:
+		// handle playlist requests
 		if (ctx->request_params.segment_index < 0)
 		{
-			conf = ngx_http_get_module_loc_conf(ctx->r, ngx_http_vod_module);
-
 			switch (ctx->request_params.segment_index)
 			{
+			case REQUEST_TYPE_ENCRYPTION_KEY:
+				// note: this type of requests can be served without even reading the file, however reading
+				// the file blocks the possibility of an attacker to get the server to sign arbitrary strings.
+				// also, the moov atom will usually return from cache
+				return process_encryption_key_request(ctx->r, ctx->file_key);
+
 			case REQUEST_TYPE_PLAYLIST:
 				rc = build_index_playlist_m3u8(
 					&ctx->request_context, 
@@ -706,13 +689,12 @@ handle_read_completed(void* context, ngx_int_t rc, ssize_t bytes_read)
 			if (rc != VOD_OK)
 			{
 				ngx_log_debug1(NGX_LOG_DEBUG_HTTP, ctx->request_context.log, 0,
-					"handle_read_completed: build_playlist_m3u8 failed %i", rc);
+					"run_state_machine: build_playlist_m3u8 failed %i", rc);
 				rc = vod_status_to_ngx_error(rc);
-				goto finalize_request;
+				return rc;
 			}
 
-			rc = send_single_buffer_response(ctx->r, &response, m3u8_content_type, sizeof(m3u8_content_type)-1);
-			goto finalize_request;
+			return send_single_buffer_response(ctx->r, &response, m3u8_content_type, sizeof(m3u8_content_type)-1);
 		}
 
 		// initialize the processing of the video frames
@@ -726,9 +708,9 @@ handle_read_completed(void* context, ngx_int_t rc, ssize_t bytes_read)
 			else
 			{
 				ngx_log_debug1(NGX_LOG_DEBUG_HTTP, ctx->request_context.log, 0,
-					"handle_read_completed: init_frame_processing failed %i", rc);
+					"run_state_machine: init_frame_processing failed %i", rc);
 			}
-			goto finalize_request;
+			return rc;
 		}
 
 		ctx->request_context.log->action = "processing frames";
@@ -736,8 +718,6 @@ handle_read_completed(void* context, ngx_int_t rc, ssize_t bytes_read)
 		break;		// handled outside the switch
 
 	case STATE_FRAME_DATA_READ:
-		// update the read cache
-		read_cache_read_completed(&ctx->read_cache_state, bytes_read);
 		break;		// handled outside the switch
 	}
 
@@ -746,7 +726,7 @@ handle_read_completed(void* context, ngx_int_t rc, ssize_t bytes_read)
 	switch (rc)
 	{
 	case NGX_AGAIN:
-		return;
+		break;
 
 	case NGX_OK:
 		rc = output_ts_response(ctx);
@@ -754,14 +734,60 @@ handle_read_completed(void* context, ngx_int_t rc, ssize_t bytes_read)
 
 	default:
 		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, ctx->request_context.log, 0,
-			"handle_read_completed: process_mp4_frames failed %i", rc);
+			"run_state_machine: process_mp4_frames failed %i", rc);
 		break;
+	}
+
+	return rc;
+}
+
+static void
+handle_read_completed(void* context, ngx_int_t rc, ssize_t bytes_read)
+{
+	ngx_http_vod_ctx_t *ctx = (ngx_http_vod_ctx_t *)context;
+
+	if (rc != NGX_OK)
+	{
+		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, ctx->request_context.log, 0,
+			"handle_read_completed: read failed %i", rc);
+		goto finalize_request;
+	}
+
+	if (bytes_read <= 0)
+	{
+		ngx_log_error(NGX_LOG_ERR, ctx->request_context.log, 0,
+			"handle_read_completed: bytes read is zero");
+		rc = vod_status_to_ngx_error(VOD_BAD_DATA);
+		goto finalize_request;
+	}
+	
+	// update the bytes read
+	switch (ctx->state)
+	{
+	case STATE_INITIAL_READ:
+		ctx->buffer_size = bytes_read;
+		break;
+
+	case STATE_MOOV_ATOM_READ:
+		ctx->buffer_size += bytes_read;
+		break;
+
+	case STATE_FRAME_DATA_READ:
+		// update the read cache
+		read_cache_read_completed(&ctx->read_cache_state, bytes_read);
+		break;		// handled outside the switch
+	}
+
+	// run the state machine
+	rc = run_state_machine(ctx);
+	if (rc == NGX_AGAIN)
+	{
+		return;
 	}
 
 finalize_request:
 
 	ngx_http_finalize_request(ctx->r, rc);
-	return;
 }
 
 static ngx_int_t 
@@ -769,7 +795,9 @@ start_processing_mp4_file(ngx_http_request_t *r)
 {
 	ngx_http_vod_loc_conf_t   *conf;
 	ngx_http_vod_ctx_t        *ctx;
-	int rc;
+	u_char* moov_buffer;
+	size_t moov_size;
+	ngx_int_t rc;
 
 	// update request flags
 	r->root_tested = !r->error_page;
@@ -780,8 +808,36 @@ start_processing_mp4_file(ngx_http_request_t *r)
 	ctx->request_context.pool = r->pool;
 	ctx->request_context.log = r->connection->log;
 
-	// allocate the initial read buffer
+	// try to fetch the moov atom from cache
 	conf = ngx_http_get_module_loc_conf(r, ngx_http_vod_module);
+	if (conf->moov_cache_zone != NULL)
+	{
+		if (ngx_buffer_cache_fetch(conf->moov_cache_zone, ctx->file_key, &moov_buffer, &moov_size))
+		{
+			ngx_log_debug0(NGX_LOG_DEBUG_HTTP, ctx->request_context.log, 0,
+				"start_processing_mp4_file: moov atom cache hit");
+
+			// parse the moov atom
+			rc = parse_moov_atom(ctx, moov_buffer, moov_size);
+			if (rc != VOD_OK)
+			{
+				ngx_log_debug1(NGX_LOG_DEBUG_HTTP, ctx->request_context.log, 0,
+					"start_processing_mp4_file: parse_moov_atom failed %i", rc);
+				return vod_status_to_ngx_error(rc);
+			}
+
+			// run the state machine
+			ctx->state = STATE_MOOV_ATOM_PARSED;
+			return run_state_machine(ctx);
+		}
+		else
+		{
+			ngx_log_debug0(NGX_LOG_DEBUG_HTTP, ctx->request_context.log, 0,
+				"start_processing_mp4_file: moov atom cache miss");
+		}
+	}
+
+	// allocate the initial read buffer
 	ctx->read_buffer = ngx_pmemalign(r->pool, conf->initial_read_size, ctx->alignment);
 	if (ctx->read_buffer == NULL)
 	{
@@ -805,9 +861,24 @@ start_processing_mp4_file(ngx_http_request_t *r)
 	}
 
 	// read completed synchronously
-	handle_read_completed(ctx, NGX_OK, rc);
+	ctx->buffer_size = rc;
+	return run_state_machine(ctx);
+}
 
-	return NGX_OK;
+static void
+init_file_key(ngx_http_request_t* r, ngx_str_t* path)
+{
+	ngx_http_vod_loc_conf_t   *conf;
+	ngx_http_vod_ctx_t        *ctx;
+	ngx_md5_t md5;
+
+	ctx = ngx_http_get_module_ctx(r, ngx_http_vod_module);
+	conf = ngx_http_get_module_loc_conf(r, ngx_http_vod_module);
+
+	ngx_md5_init(&md5);
+	ngx_md5_update(&md5, conf->secret_key.data, conf->secret_key.len);
+	ngx_md5_update(&md5, path->data, path->len);
+	ngx_md5_final(ctx->file_key, &md5);
 }
 
 ////// Local & mapped modes
@@ -817,7 +888,7 @@ init_file_reader(ngx_http_request_t *r, ngx_str_t* path)
 {
 	ngx_http_core_loc_conf_t  *clcf;
 	ngx_http_vod_ctx_t        *ctx;
-	int rc;
+	ngx_int_t rc;
 
 	ctx = ngx_http_get_module_ctx(r, ngx_http_vod_module);
 
@@ -914,6 +985,8 @@ local_request_handler(ngx_http_request_t *r)
 		return rc;
 	}
 
+	init_file_key(r, &path);
+
 	rc = start_processing_mp4_file(r);
 	if (rc == NGX_AGAIN)
 	{
@@ -994,6 +1067,8 @@ path_request_finished(void* context, ngx_int_t rc, ngx_buf_t* response)
 			"path_request_finished: init_file_reader failed %i", rc);
 		goto finalize_request;
 	}
+
+	init_file_key(r, &path);
 
 	rc = start_processing_mp4_file(r);
 	if (rc != NGX_AGAIN)
@@ -1100,6 +1175,8 @@ remote_request_handler(ngx_http_request_t *r)
 	ctx->async_reader_context = r;
 
 	ctx->alignment = sizeof(int64_t);		// don't care about alignment when working remote
+
+	init_file_key(r, &r->uri);
 
 	rc = start_processing_mp4_file(r);
 	if (rc != NGX_AGAIN)

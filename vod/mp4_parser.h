@@ -49,16 +49,16 @@ typedef struct {
 vod_status_t get_moov_atom_info(
 	request_context_t* request_context, 
 	const u_char* buffer, 
-	int buffer_size, 
-	uint32_t* offset, 
-	uint32_t* size);
+	size_t buffer_size, 
+	off_t* offset, 
+	size_t* size);
 
 vod_status_t mp4_parser_parse_moov_atom(
 	request_context_t* request_context, 
 	int parse_type,
 	uint32_t* required_tracks_mask,
 	const u_char* buffer,
-	int32_t size, 
+	size_t size, 
 	mpeg_metadata_t* mpeg_metadata);
 
 #endif // __MP4_PARSER_H__

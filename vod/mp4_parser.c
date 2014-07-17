@@ -1727,7 +1727,7 @@ process_moov_atom_callback(void* ctx, atom_info_t* atom_info)
 }
 
 vod_status_t 
-get_moov_atom_info(request_context_t* request_context, const u_char* buffer, int buffer_size, uint32_t* offset, uint32_t* size)
+get_moov_atom_info(request_context_t* request_context, const u_char* buffer, size_t buffer_size, off_t* offset, size_t* size)
 {
 	atom_info_t find_moov_context = { ATOM_NAME_MOOV, NULL, 0 };
 
@@ -1758,7 +1758,7 @@ mp4_parser_parse_moov_atom(
 	int parse_type,
 	uint32_t* required_tracks_mask,
 	const u_char* buffer, 
-	int32_t size, 
+	size_t size, 
 	mpeg_metadata_t* mpeg_metadata)
 {
 	process_moov_context_t process_moov_context;
