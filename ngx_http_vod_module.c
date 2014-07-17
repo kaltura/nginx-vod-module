@@ -202,7 +202,19 @@ read_moov_atom(ngx_http_vod_ctx_t *ctx)
 	// read the rest of the atom
 	ctx->request_context.log->action = "reading moov atom";
 	ctx->state = STATE_MOOV_ATOM_READ;
-	return ctx->async_reader(ctx->async_reader_context, ctx->read_buffer + ctx->buffer_size, new_buffer_size - ctx->buffer_size, ctx->buffer_size);
+	rc = ctx->async_reader(ctx->async_reader_context, ctx->read_buffer + ctx->buffer_size, new_buffer_size - ctx->buffer_size, ctx->buffer_size);
+	if (rc < 0)
+	{
+		if (rc != NGX_AGAIN)
+		{
+			ngx_log_debug1(NGX_LOG_DEBUG_HTTP, ctx->request_context.log, 0,
+				"read_moov_atom: async_reader failed %i", rc);
+		}
+		return rc;
+	}
+
+	ctx->buffer_size += rc;
+	return NGX_OK;
 }
 
 static vod_status_t 
@@ -478,7 +490,7 @@ output_ts_response(ngx_http_vod_ctx_t *ctx)
 		}
 
 		rc = ngx_http_send_special(r, NGX_HTTP_LAST);
-		if (rc != NGX_OK)
+		if (rc != NGX_OK && rc != NGX_AGAIN)
 		{
 			ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
 				"output_ts_response: ngx_http_send_special failed %i", rc);
@@ -568,15 +580,13 @@ process_mp4_frames(ngx_http_vod_ctx_t *ctx)
 
 		// perform the read
 		rc = ctx->async_reader(ctx->async_reader_context, read_buffer, read_size, read_offset);
-		if (rc == NGX_AGAIN)
+		if (rc < 0)
 		{
-			return VOD_AGAIN;
-		}
-
-		if (rc != NGX_OK)
-		{
-			ngx_log_debug1(NGX_LOG_DEBUG_HTTP, ctx->request_context.log, 0,
-				"process_mp4_frames: async_reader failed %i", rc);
+			if (rc != NGX_AGAIN)
+			{
+				ngx_log_debug1(NGX_LOG_DEBUG_HTTP, ctx->request_context.log, 0,
+					"process_mp4_frames: async_reader failed %i", rc);
+			}
 			return rc;
 		}
 
@@ -612,7 +622,6 @@ run_state_machine(ngx_http_vod_ctx_t *ctx)
 				"run_state_machine: read_moov_atom failed %i", rc);
 			return rc;
 		}
-		ctx->buffer_size += rc;
 		// fallthrough
 
 	case STATE_MOOV_ATOM_READ:
