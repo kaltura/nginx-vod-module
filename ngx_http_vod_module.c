@@ -624,7 +624,7 @@ run_state_machine(ngx_http_vod_ctx_t *ctx)
 			return vod_status_to_ngx_error(VOD_BAD_DATA);
 		}
 
-		// update the cache status
+		// save the moov atom to cache
 		if (ngx_buffer_cache_store(
 			conf->moov_cache_zone,
 			ctx->file_key,
@@ -648,7 +648,7 @@ run_state_machine(ngx_http_vod_ctx_t *ctx)
 				"run_state_machine: parse_moov_atom failed %i", rc);
 			return vod_status_to_ngx_error(rc);
 		}
-	
+
 		// no longer need the moov atom buffer
 		ngx_pfree(ctx->r->pool, ctx->read_buffer);
 		ctx->read_buffer = NULL;
@@ -668,12 +668,12 @@ run_state_machine(ngx_http_vod_ctx_t *ctx)
 
 			case REQUEST_TYPE_PLAYLIST:
 				rc = build_index_playlist_m3u8(
-					&ctx->request_context, 
-					&conf->m3u8_config, 
-					conf->segment_duration, 
-					ctx->request_params.clip_to, 
-					ctx->request_params.clip_from, 
-					&ctx->mpeg_metadata, 
+					&ctx->request_context,
+					&conf->m3u8_config,
+					conf->segment_duration,
+					ctx->request_params.clip_to,
+					ctx->request_params.clip_from,
+					&ctx->mpeg_metadata,
 					&response);
 				break;
 
@@ -690,8 +690,7 @@ run_state_machine(ngx_http_vod_ctx_t *ctx)
 			{
 				ngx_log_debug1(NGX_LOG_DEBUG_HTTP, ctx->request_context.log, 0,
 					"run_state_machine: build_playlist_m3u8 failed %i", rc);
-				rc = vod_status_to_ngx_error(rc);
-				return rc;
+				return vod_status_to_ngx_error(rc);
 			}
 
 			return send_single_buffer_response(ctx->r, &response, m3u8_content_type, sizeof(m3u8_content_type)-1);
@@ -715,30 +714,28 @@ run_state_machine(ngx_http_vod_ctx_t *ctx)
 
 		ctx->request_context.log->action = "processing frames";
 		ctx->state = STATE_FRAME_DATA_READ;
-		break;		// handled outside the switch
+		// fallthrough
 
 	case STATE_FRAME_DATA_READ:
-		break;		// handled outside the switch
-	}
-
-	// process some frames
-	rc = process_mp4_frames(ctx);
-	switch (rc)
-	{
-	case NGX_AGAIN:
-		break;
-
-	case NGX_OK:
-		rc = output_ts_response(ctx);
-		// fall through
+		// process some frames
+		rc = process_mp4_frames(ctx);
+		if (rc == NGX_OK)
+		{
+			// we're done
+			rc = output_ts_response(ctx);
+		}
+		else if (rc != NGX_AGAIN)
+		{
+			ngx_log_debug1(NGX_LOG_DEBUG_HTTP, ctx->request_context.log, 0,
+				"run_state_machine: process_mp4_frames failed %i", rc);
+		}
+		return rc;
 
 	default:
 		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, ctx->request_context.log, 0,
-			"run_state_machine: process_mp4_frames failed %i", rc);
-		break;
+			"run_state_machine: invalid state %d", ctx->state);
+		return NGX_HTTP_INTERNAL_SERVER_ERROR;
 	}
-
-	return rc;
 }
 
 static void
@@ -773,9 +770,8 @@ handle_read_completed(void* context, ngx_int_t rc, ssize_t bytes_read)
 		break;
 
 	case STATE_FRAME_DATA_READ:
-		// update the read cache
 		read_cache_read_completed(&ctx->read_cache_state, bytes_read);
-		break;		// handled outside the switch
+		break;
 	}
 
 	// run the state machine
