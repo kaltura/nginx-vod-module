@@ -484,7 +484,7 @@ output_ts_response(ngx_http_vod_ctx_t *ctx)
 	{
 		if (ctx->write_ts_buffer_context.total_size != r->headers_out.content_length_n)
 		{
-			ngx_log_error(NGX_LOG_ERR, ctx->request_context.log, 0,
+			ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
 				"actual content length %uD is different than reported length %O", 
 				ctx->write_ts_buffer_context.total_size, r->headers_out.content_length_n);
 		}
@@ -634,19 +634,22 @@ run_state_machine(ngx_http_vod_ctx_t *ctx)
 		}
 
 		// save the moov atom to cache
-		if (ngx_buffer_cache_store(
-			conf->moov_cache_zone,
-			ctx->file_key,
-			ctx->read_buffer + ctx->moov_offset,
-			ctx->moov_size))
+		if (conf->moov_cache_zone != NULL)
 		{
-			ngx_log_debug0(NGX_LOG_DEBUG_HTTP, ctx->request_context.log, 0,
-				"run_state_machine: stored moov atom in cache");
-		}
-		else
-		{
-			ngx_log_debug0(NGX_LOG_DEBUG_HTTP, ctx->request_context.log, 0,
-				"run_state_machine: failed to store moov atom in cache");
+			if (ngx_buffer_cache_store(
+				conf->moov_cache_zone,
+				ctx->file_key,
+				ctx->read_buffer + ctx->moov_offset,
+				ctx->moov_size))
+			{
+				ngx_log_debug0(NGX_LOG_DEBUG_HTTP, ctx->request_context.log, 0,
+					"run_state_machine: stored moov atom in cache");
+			}
+			else
+			{
+				ngx_log_debug0(NGX_LOG_DEBUG_HTTP, ctx->request_context.log, 0,
+					"run_state_machine: failed to store moov atom in cache");
+			}
 		}
 
 		// parse the moov atom
@@ -819,14 +822,14 @@ start_processing_mp4_file(ngx_http_request_t *r)
 	{
 		if (ngx_buffer_cache_fetch(conf->moov_cache_zone, ctx->file_key, &moov_buffer, &moov_size))
 		{
-			ngx_log_debug0(NGX_LOG_DEBUG_HTTP, ctx->request_context.log, 0,
+			ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
 				"start_processing_mp4_file: moov atom cache hit");
 
 			// parse the moov atom
 			rc = parse_moov_atom(ctx, moov_buffer, moov_size);
 			if (rc != VOD_OK)
 			{
-				ngx_log_debug1(NGX_LOG_DEBUG_HTTP, ctx->request_context.log, 0,
+				ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
 					"start_processing_mp4_file: parse_moov_atom failed %i", rc);
 				return vod_status_to_ngx_error(rc);
 			}
@@ -837,7 +840,7 @@ start_processing_mp4_file(ngx_http_request_t *r)
 		}
 		else
 		{
-			ngx_log_debug0(NGX_LOG_DEBUG_HTTP, ctx->request_context.log, 0,
+			ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
 				"start_processing_mp4_file: moov atom cache miss");
 		}
 	}
@@ -852,7 +855,7 @@ start_processing_mp4_file(ngx_http_request_t *r)
 	}
 
 	// read the file header
-	ctx->request_context.log->action = "reading mp4 header";
+	r->connection->log->action = "reading mp4 header";
 	ctx->state = STATE_INITIAL_READ;
 	rc = ctx->async_reader(ctx->async_reader_context, ctx->read_buffer, conf->initial_read_size, 0);
 	if (rc < 0)		// inc. NGX_AGAIN
@@ -993,17 +996,19 @@ local_request_handler(ngx_http_request_t *r)
 	init_file_key(r, &path);
 
 	rc = start_processing_mp4_file(r);
-	if (rc == NGX_AGAIN)
+	if (rc != NGX_AGAIN)
 	{
-		return NGX_OK;
-	}
-
-	if (rc != NGX_OK)
-	{
-		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
-			"local_request_handler: start_processing_mp4_file failed %i", rc);
+		if (rc != NGX_OK)
+		{
+			ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+				"local_request_handler: start_processing_mp4_file failed %i", rc);
+		}
 		return rc;
 	}
+
+#if defined nginx_version && nginx_version >= 8011
+	r->main->count++;
+#endif
 
 	return NGX_DONE;
 }
@@ -1014,6 +1019,7 @@ static void
 path_request_finished(void* context, ngx_int_t rc, ngx_buf_t* response)
 {
 	ngx_http_vod_loc_conf_t *conf;
+	ngx_http_vod_ctx_t *ctx;
 	ngx_http_request_t *r = context;
 	ngx_str_t path;
 
@@ -1065,6 +1071,26 @@ path_request_finished(void* context, ngx_int_t rc, ngx_buf_t* response)
 
 	child_request_free(r);
 
+	if (conf->path_mapping_cache_zone != NULL)
+	{
+		ctx = ngx_http_get_module_ctx(r, ngx_http_vod_module);
+
+		if (ngx_buffer_cache_store(
+			conf->path_mapping_cache_zone,
+			ctx->file_key,
+			path.data,
+			path.len))
+		{
+			ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+				"path_request_finished: stored in path mapping cache");
+		}
+		else
+		{
+			ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+				"path_request_finished: failed to store path mapping in cache");
+		}
+	}
+
 	rc = init_file_reader(r, &path);
 	if (rc != NGX_OK)
 	{
@@ -1078,8 +1104,11 @@ path_request_finished(void* context, ngx_int_t rc, ngx_buf_t* response)
 	rc = start_processing_mp4_file(r);
 	if (rc != NGX_AGAIN)
 	{
-		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
-			"path_request_finished: start_processing_mp4_file failed %i", rc);
+		if (rc != NGX_OK)
+		{
+			ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+				"path_request_finished: start_processing_mp4_file failed %i", rc);
+		}
 		goto finalize_request;
 	}
 
@@ -1095,9 +1124,75 @@ ngx_int_t
 mapped_request_handler(ngx_http_request_t *r)
 {
 	ngx_http_vod_loc_conf_t   *conf;
-	ngx_int_t                       rc;
+	ngx_http_vod_ctx_t *ctx;
+	ngx_str_t path;
+	ngx_int_t rc;
+	u_char* path_buffer;
+	size_t path_size;
 
 	conf = ngx_http_get_module_loc_conf(r, ngx_http_vod_module);
+
+	// try to fetch the file path from cache
+	if (conf->path_mapping_cache_zone != NULL)
+	{
+		init_file_key(r, &r->uri);
+
+		ctx = ngx_http_get_module_ctx(r, ngx_http_vod_module);
+
+		if (ngx_buffer_cache_fetch(conf->path_mapping_cache_zone, ctx->file_key, &path_buffer, &path_size))
+		{
+			ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+				"mapped_request_handler: path mapping cache hit");
+
+			// copy the path since the cache buffer should not be held for long
+			path.len = path_size;
+			path.data = ngx_palloc(r->pool, path.len + 1);
+			if (path.data == NULL)
+			{
+				ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+					"mapped_request_handler: ngx_palloc failed");
+				return NGX_HTTP_INTERNAL_SERVER_ERROR;
+			}
+
+			ngx_memcpy(path.data, path_buffer, path.len);
+			path.data[path.len] = '\0';
+
+			// init the file reader
+			rc = init_file_reader(r, &path);
+			if (rc != NGX_OK)
+			{
+				ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+					"mapped_request_handler: init_file_reader failed %i", rc);
+				return rc;
+			}
+
+			// recalculate the file key based on the path
+			init_file_key(r, &path);
+
+			// start processing the file
+			rc = start_processing_mp4_file(r);
+			if (rc != NGX_AGAIN)
+			{
+				if (rc != NGX_OK)
+				{
+					ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+						"mapped_request_handler: start_processing_mp4_file failed %i", rc);
+				}
+				return rc;
+			}
+
+#if defined nginx_version && nginx_version >= 8011
+			r->main->count++;
+#endif
+
+			return NGX_DONE;
+		}
+		else
+		{
+			ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+				"mapped_request_handler: path mapping cache miss");
+		}
+	}
 
 	// get the mp4 file path from upstream
 	r->connection->log->action = "getting file path";
@@ -1120,6 +1215,10 @@ mapped_request_handler(ngx_http_request_t *r)
 			"mapped_request_handler: child_request_start failed %i", rc);
 		return rc;
 	}
+
+#if defined nginx_version && nginx_version >= 8011
+	r->main->count++;
+#endif
 
 	return NGX_DONE;
 }
@@ -1186,10 +1285,17 @@ remote_request_handler(ngx_http_request_t *r)
 	rc = start_processing_mp4_file(r);
 	if (rc != NGX_AGAIN)
 	{
-		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
-			"remote_request_handler: start_processing_mp4_file failed %i", rc);
+		if (rc != NGX_OK)
+		{
+			ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+				"remote_request_handler: start_processing_mp4_file failed %i", rc);
+		}
 		return rc;
 	}
+
+#if defined nginx_version && nginx_version >= 8011
+	r->main->count++;
+#endif
 
 	return NGX_DONE;
 }

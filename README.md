@@ -90,6 +90,13 @@ Sets the HLS segment duration in milliseconds.
 
 Sets the secret that is used to generate the TS encryption key, if empty, no encryption is performed.
 
+#### vod_moov_cache
+* **syntax**: `vod_moov_cache zone_name zone_size`
+* **default**: `off`
+* **context**: `http`, `server`, `location`
+
+Configures the size and shared memory object name of the moov atom cache
+
 #### vod_initial_read_size
 * **syntax**: `vod_initial_read_size size`
 * **default**: `4K`
@@ -99,7 +106,7 @@ Sets the size of the initial read operation of the MP4 file.
 
 #### vod_max_moov_size
 * **syntax**: `vod_max_moov_size size`
-* **default**: `1MB`
+* **default**: `32MB`
 * **context**: `http`, `server`, `location`
 
 Sets the maximum supported MP4 moov atom size.
@@ -152,6 +159,13 @@ Sets the timeout in milliseconds for sending data to the upstream (remote/mapped
 * **context**: `http`, `server`, `location`
 
 Sets the timeout in milliseconds for reading data from the upstream (remote/mapped modes only).
+
+#### vod_path_mapping_cache
+* **syntax**: `vod_path_mapping_cache zone_name zone_size`
+* **default**: `off`
+* **context**: `http`, `server`, `location`
+
+Configures the size and shared memory object name of the path mapping cache (mapped mode only).
 
 #### vod_path_response_prefix
 * **syntax**: `vod_path_response_prefix prefix`
@@ -271,10 +285,16 @@ The name of the encryption key file name (only relevant when vod_secret_key is u
 			location /content/ {
 				vod;
 				vod_mode local;
+				vod_moov_cache moov_cache 512m;
 				vod_fallback_upstream fallback;
 
 				root /web/content;
 				
+				open_file_cache          max=1000 inactive=5m;
+				open_file_cache_valid    2m;
+				open_file_cache_min_uses 1;
+				open_file_cache_errors   on;
+
 				gzip on;
 				gzip_types application/vnd.apple.mpegurl;
 
@@ -302,11 +322,18 @@ The name of the encryption key file name (only relevant when vod_secret_key is u
 			location ~ ^/p/\d+/(sp/\d+/)?serveFlavor/ {
 				vod;
 				vod_mode mapped;
+				vod_moov_cache moov_cache 512m;
 				vod_secret_key mukkaukk;
 				vod_upstream kalapi;
 				vod_upstream_host_header www.kaltura.com;
 				vod_upstream_extra_args "pathOnly=1";
+				vod_path_mapping_cache mapping_cache 5m;
 				vod_fallback_upstream fallback;
+
+				open_file_cache          max=1000 inactive=5m;
+				open_file_cache_valid    2m;
+				open_file_cache_min_uses 1;
+				open_file_cache_errors   on;
 
 				gzip on;
 				gzip_types application/vnd.apple.mpegurl;
@@ -330,6 +357,7 @@ The name of the encryption key file name (only relevant when vod_secret_key is u
 			location ~ ^/p/\d+/(sp/\d+/)?serveFlavor/ {
 				vod;
 				vod_mode remote;
+				vod_moov_cache moov_cache 512m;
 				vod_secret_key mukkaukk;
 				vod_upstream kalapi;
 				vod_upstream_host_header www.kaltura.com;

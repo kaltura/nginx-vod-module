@@ -10,16 +10,19 @@ typedef void (*child_request_callback_t)(void* context, ngx_int_t rc, ngx_buf_t*
 typedef struct {
 	child_request_callback_t callback;
 	void* callback_context;
+	ngx_event_t* complete_event;
+	ngx_int_t request_status;
 
 	ngx_buf_t* request_buffer;
+
+	u_char* headers_buffer;
+	size_t headers_buffer_size;
+	ngx_flag_t save_response_headers;
 
 	u_char* response_buffer;
 	off_t response_buffer_size;
 
-	u_char* headers_buffer;
-	size_t headers_buffer_size;
-
-	ngx_flag_t save_response_headers;
+	ngx_pool_cleanup_t *cleanup;
 } child_request_context_t;
 
 // request initiation function

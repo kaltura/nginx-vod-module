@@ -53,15 +53,21 @@ ngx_http_vod_finalize_request(ngx_http_request_t *r, ngx_int_t rc)
 
 	ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0, "ngx_http_vod_finalize_request: started rc=%i", rc);
 
-	// reset the request state
-	r->subrequest_in_memory = 0;
-	r->headers_out.status_line.len = 0;
-
 	// notify the caller
 	ctx = ngx_http_get_module_ctx(r, ngx_http_vod_module);
 	if (ctx->callback != NULL)
 	{
-		ctx->callback(ctx->callback_context, rc, &r->upstream->buffer);
+		// call the callback in a deferred fashion since the callback may finalize the request, 
+		// and the upstream module uses the request object after this function returns
+		ctx->request_status = rc;
+		ngx_add_timer(ctx->complete_event, 0);
+	}
+	else
+	{
+		// reset the request state
+		r->subrequest_in_memory = 0;
+		r->headers_out.status_line.len = 0;
+		r->main->blocked--;
 	}
 
 	ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0, "ngx_http_vod_finalize_request done");
@@ -478,14 +484,36 @@ dump_request(
 		return rc;
 	}
 
-#if defined nginx_version && nginx_version >= 8011
-	r->main->count++;
-#endif
+	r->main->blocked++;
 
 	// start the request
 	ngx_http_upstream_init(r);
 
 	return NGX_AGAIN;
+}
+
+static void
+event_callback(ngx_event_t *ev)
+{
+	ngx_http_request_t *r = ev->data;
+	child_request_context_t* ctx;
+
+	// reset the request state
+	r->subrequest_in_memory = 0;
+	r->headers_out.status_line.len = 0;
+	r->main->blocked--;
+
+	ctx = ngx_http_get_module_ctx(r, ngx_http_vod_module);
+	ctx->callback(ctx->callback_context, ctx->request_status, &r->upstream->buffer);
+}
+
+static void
+child_request_del_timer(child_request_context_t* ctx)
+{
+	if (ctx->complete_event->timer_set)
+	{
+		ngx_del_timer(ctx->complete_event);
+	}
 }
 
 // Note: must not return positive error codes (like NGX_HTTP_INTERNAL_SERVER_ERROR)
@@ -523,7 +551,34 @@ child_request_start(
 		return rc;
 	}
 
-	u = r->upstream;
+	if (ctx->complete_event == NULL)
+	{
+		ctx->complete_event = ngx_pcalloc(r->pool, sizeof(*ctx->complete_event));
+		if (ctx->complete_event == NULL)
+		{
+			ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+				"child_request_start: ngx_pcalloc failed");
+			return NGX_HTTP_INTERNAL_SERVER_ERROR;
+		}
+
+		ctx->complete_event->handler = event_callback;
+		ctx->complete_event->data = r;
+		ctx->complete_event->log = r->connection->log;
+	}
+
+	if (ctx->cleanup == NULL)
+	{
+		ctx->cleanup = ngx_pool_cleanup_add(r->pool, 0);
+		if (ctx->cleanup == NULL)
+		{
+			ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+				"child_request_start: ngx_pool_cleanup_add failed");
+			return NGX_HTTP_INTERNAL_SERVER_ERROR;
+		}
+
+		ctx->cleanup->handler = (ngx_pool_cleanup_pt)child_request_del_timer;
+		ctx->cleanup->data = ctx;
+	}
 
 	if (ctx->headers_buffer == NULL || ctx->headers_buffer_size < upstream_conf->buffer_size)
 	{
@@ -541,6 +596,8 @@ child_request_start(
 			return NGX_HTTP_INTERNAL_SERVER_ERROR;
 		}
 	}
+
+	u = r->upstream;
 
 	u->buffer.start = ctx->headers_buffer;
 	u->buffer.pos = u->buffer.start;
@@ -570,9 +627,7 @@ child_request_start(
 	// make the upstream save the contents in memory instead of passing to the client
 	r->subrequest_in_memory = 1;
 
-#if defined nginx_version && nginx_version >= 8011
-	r->main->count++;
-#endif
+	r->main->blocked++;
 
 	// start the request
 	ngx_http_upstream_init(r);
