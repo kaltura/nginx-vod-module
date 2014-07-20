@@ -47,7 +47,7 @@ ngx_http_vod_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child)
 		conf->moov_cache_zone = prev->moov_cache_zone;
 	}
 	ngx_conf_merge_size_value(conf->initial_read_size, prev->initial_read_size, 4096);
-	ngx_conf_merge_size_value(conf->max_moov_size, prev->max_moov_size, 1 * 1024 * 1024);
+	ngx_conf_merge_size_value(conf->max_moov_size, prev->max_moov_size, 32 * 1024 * 1024);
 	ngx_conf_merge_size_value(conf->cache_buffer_size, prev->cache_buffer_size, 64 * 1024);
 
 	err = merge_upstream_conf(cf, &conf->upstream, &prev->upstream);
@@ -60,6 +60,10 @@ ngx_http_vod_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child)
 	ngx_conf_merge_str_value(conf->upstream_host_header, prev->upstream_host_header, "");
 	ngx_conf_merge_str_value(conf->upstream_extra_args, prev->upstream_extra_args, "");
 
+	if (conf->path_mapping_cache_zone == NULL)
+	{
+		conf->path_mapping_cache_zone = prev->path_mapping_cache_zone;
+	}
 	ngx_conf_merge_str_value(conf->path_response_prefix, prev->path_response_prefix, "<?xml version=\"1.0\" encoding=\"utf-8\"?><xml><result>");
 	ngx_conf_merge_str_value(conf->path_response_postfix, prev->path_response_postfix, "</result></xml>");
 	ngx_conf_merge_size_value(conf->max_path_length, prev->max_path_length, 1024);
@@ -196,27 +200,27 @@ ngx_http_vod_mode_command(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
 static char *
 ngx_http_vod_moov_cache(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
 {
-	ngx_http_vod_loc_conf_t    *mgcf = conf;
+	ngx_shm_zone_t **zone = (ngx_shm_zone_t **)((u_char*)conf + cmd->offset);
 	ngx_str_t  *value;
 	ssize_t size;
 
 	value = cf->args->elts;
 
-	if (mgcf->moov_cache_zone != NULL) 
+	if (*zone != NULL) 
 	{
 		return "is duplicate";
 	}
 
 	if (ngx_strcmp(value[1].data, "off") == 0) 
 	{
-		mgcf->moov_cache_zone = NULL;
+		*zone = NULL;
 		return NGX_CONF_OK;
 	}
 
 	if (cf->args->nelts < 3)
 	{
 		ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
-			"size not specified in \"vod_moov_cache\"");
+			"size not specified in \"%V\"", &cmd->name);
 		return NGX_CONF_ERROR;
 	}
 
@@ -228,8 +232,8 @@ ngx_http_vod_moov_cache(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
 		return NGX_CONF_ERROR;
 	}
 
-	mgcf->moov_cache_zone = ngx_buffer_cache_create_zone(cf, &value[1], size, &ngx_http_vod_module);
-	if (mgcf->moov_cache_zone == NULL)
+	*zone = ngx_buffer_cache_create_zone(cf, &value[1], size, &ngx_http_vod_module);
+	if (*zone == NULL)
 	{
 		ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
 			"failed to create moov cache zone");
@@ -318,7 +322,7 @@ ngx_command_t ngx_http_vod_commands[] = {
 	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1 | NGX_CONF_TAKE2,
 	ngx_http_vod_moov_cache,
 	NGX_HTTP_LOC_CONF_OFFSET,
-	0,
+	offsetof(ngx_http_vod_loc_conf_t, moov_cache_zone),
 	NULL },
 
 	{ ngx_string("vod_initial_read_size"),
@@ -386,6 +390,13 @@ ngx_command_t ngx_http_vod_commands[] = {
 	NULL },
 
 	// path request parameters - mapped mode only
+	{ ngx_string("vod_path_mapping_cache"),
+	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1 | NGX_CONF_TAKE2,
+	ngx_http_vod_moov_cache,
+	NGX_HTTP_LOC_CONF_OFFSET,
+	offsetof(ngx_http_vod_loc_conf_t, path_mapping_cache_zone),
+	NULL },
+
 	{ ngx_string("vod_path_response_prefix"),
 	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1,
 	ngx_conf_set_str_slot,
