@@ -221,7 +221,6 @@ static vod_status_t
 parse_moov_atom(ngx_http_vod_ctx_t *ctx, u_char* moov_buffer, size_t moov_size)
 {
 	ngx_http_vod_loc_conf_t   *conf;
-	int parse_type;
 	vod_status_t rc;
 
 	// initialize the request context
@@ -233,7 +232,7 @@ parse_moov_atom(ngx_http_vod_ctx_t *ctx, u_char* moov_buffer, size_t moov_size)
 		ctx->request_context.end = 0;
 		ctx->request_context.max_frame_count = 0;
 		ctx->request_context.simulation_only = TRUE;
-		parse_type = PARSE_INDEX;
+		ctx->request_context.parse_type = PARSE_INDEX;
 		break;
 
 	case REQUEST_TYPE_IFRAME_PLAYLIST:
@@ -241,7 +240,7 @@ parse_moov_atom(ngx_http_vod_ctx_t *ctx, u_char* moov_buffer, size_t moov_size)
 		ctx->request_context.end = ctx->request_params.clip_to;
 		ctx->request_context.max_frame_count = 1024 * 1024;
 		ctx->request_context.simulation_only = TRUE;
-		parse_type = PARSE_IFRAMES;
+		ctx->request_context.parse_type = PARSE_IFRAMES;
 		break;
 
 	default:	// TS segment
@@ -257,14 +256,13 @@ parse_moov_atom(ngx_http_vod_ctx_t *ctx, u_char* moov_buffer, size_t moov_size)
 		}
 		ctx->request_context.max_frame_count = 16 * 1024;
 		ctx->request_context.simulation_only = FALSE;
-		parse_type = PARSE_SEGMENT;
+		ctx->request_context.parse_type = PARSE_SEGMENT;
 		break;
 	}
 
 	// parse the moov atom
 	rc = mp4_parser_parse_moov_atom(
 		&ctx->request_context, 
-		parse_type,
 		ctx->request_params.required_tracks, 
 		moov_buffer, 
 		moov_size,
@@ -1016,23 +1014,15 @@ local_request_handler(ngx_http_request_t *r)
 ////// Mapped mode only
 
 static void 
-path_request_finished(void* context, ngx_int_t rc, ngx_buf_t* response)
+path_request_finished(void* context, ngx_buf_t* response)
 {
 	ngx_http_vod_loc_conf_t *conf;
 	ngx_http_vod_ctx_t *ctx;
 	ngx_http_request_t *r = context;
 	ngx_str_t path;
+	ngx_int_t rc;
 
-	if (rc != NGX_OK)
-	{
-		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
-			"path_request_finished: request failed %i", rc);
-		// no need to close the parent request, already handled by the upstream
-		return;
-	}
-
-	ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
-		"path request finished %s", response->pos);
+	ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0, "path request finished %s", response->pos);
 
 	path.data = response->pos;
 	path.len = response->last - path.data;
@@ -1226,17 +1216,8 @@ mapped_request_handler(ngx_http_request_t *r)
 ////// Remote mode only
 
 static void
-async_http_read_complete(void* context, ngx_int_t rc, ngx_buf_t* response)
+async_http_read_complete(void* context, ngx_buf_t* response)
 {
-	ngx_http_vod_ctx_t *ctx = (ngx_http_vod_ctx_t *)context;
-
-	if (rc != NGX_OK)
-	{
-		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, ctx->request_context.log, 0,
-			"async_http_read_complete: read failed %i", rc);
-		return;		// the upstream closes the parent request
-	}
-
 	handle_read_completed(context, NGX_OK, response->last - response->pos);
 }
 

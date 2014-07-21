@@ -5,13 +5,14 @@
 #include <ngx_http.h>
 
 // typedefs
-typedef void (*child_request_callback_t)(void* context, ngx_int_t rc, ngx_buf_t* response);
+// Note: the callback is invoked only in case the request completes successfully
+//		if the request fails, nginx terminates the parent request with an error
+typedef void (*child_request_callback_t)(void* context, ngx_buf_t* response);
 
 typedef struct {
 	child_request_callback_t callback;
 	void* callback_context;
 	ngx_event_t* complete_event;
-	ngx_int_t request_status;
 
 	ngx_buf_t* request_buffer;
 
