@@ -55,7 +55,6 @@ vod_status_t get_moov_atom_info(
 
 vod_status_t mp4_parser_parse_moov_atom(
 	request_context_t* request_context, 
-	int parse_type,
 	uint32_t* required_tracks_mask,
 	const u_char* buffer,
 	size_t size, 

@@ -174,6 +174,7 @@ typedef intptr_t vod_status_t;
 typedef struct {
 	vod_pool_t* pool;
 	vod_log_t *log;
+	int parse_type;
 	uint32_t start;		// millis
 	uint32_t end;		// millis
 	uint32_t max_frame_count;

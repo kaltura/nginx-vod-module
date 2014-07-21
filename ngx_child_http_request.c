@@ -53,13 +53,14 @@ ngx_http_vod_finalize_request(ngx_http_request_t *r, ngx_int_t rc)
 
 	ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0, "ngx_http_vod_finalize_request: started rc=%i", rc);
 
+	// Note: not doing anything in case of error since nginx terminates the parent request automatically with error 502
+
 	// notify the caller
 	ctx = ngx_http_get_module_ctx(r, ngx_http_vod_module);
-	if (ctx->callback != NULL)
+	if (ctx->callback != NULL && rc == NGX_OK)
 	{
 		// call the callback in a deferred fashion since the callback may finalize the request, 
 		// and the upstream module uses the request object after this function returns
-		ctx->request_status = rc;
 		ngx_add_timer(ctx->complete_event, 0);
 	}
 	else
@@ -169,7 +170,7 @@ ngx_http_vod_process_header(ngx_http_request_t *r)
 		if (rc == NGX_HTTP_PARSE_HEADER_DONE)	// finished reading all headers
 		{
 			// make sure we got some content length
-			if (u->headers_in.content_length_n == 0)
+			if (u->headers_in.content_length_n < 0)
 			{
 				ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
 					"ngx_http_vod_process_header: got no content-length header");
@@ -504,7 +505,7 @@ event_callback(ngx_event_t *ev)
 	r->main->blocked--;
 
 	ctx = ngx_http_get_module_ctx(r, ngx_http_vod_module);
-	ctx->callback(ctx->callback_context, ctx->request_status, &r->upstream->buffer);
+	ctx->callback(ctx->callback_context, &r->upstream->buffer);
 }
 
 static void

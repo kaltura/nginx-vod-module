@@ -646,17 +646,13 @@ parse_stts_atom(atom_info_t* atom_info, trak_info_t* trak_info)
 		}
 	}
 	
-	if (first_frame == UINT_MAX)
+	if (first_frame != UINT_MAX)
 	{
-		vod_log_error(VOD_LOG_ERR, trak_info->request_context->log, 0,
-			"parse_stts_atom: no frames were found within start %uD and end %uD", trak_info->request_context->start, trak_info->request_context->end);
-		return VOD_BAD_REQUEST;
+		trak_info->frames_info = frames_array.elts;
+		trak_info->first_frame = first_frame;
+		trak_info->last_frame = first_frame + frame_count;
+		trak_info->frame_count = frame_count;
 	}
-
-	trak_info->frames_info = frames_array.elts;
-	trak_info->first_frame = first_frame;
-	trak_info->last_frame = first_frame + frame_count;
-	trak_info->frame_count = frame_count;
 	
 	return VOD_OK;
 }
@@ -791,6 +787,11 @@ parse_stco_atom(atom_info_t* atom_info, trak_info_t* trak_info)
 		vod_log_error(VOD_LOG_ERR, trak_info->request_context->log, 0,
 			"parse_stco_atom: atom size %uL too small to hold %uD entries", atom_info->size, entries);
 		return VOD_BAD_DATA;
+	}
+
+	if (trak_info->frame_count == 0)
+	{
+		return VOD_OK;
 	}
 
 	trak_info->frame_offsets = vod_alloc(trak_info->request_context->pool, trak_info->frame_count * sizeof(uint64_t));
@@ -1687,6 +1688,14 @@ process_moov_atom_callback(void* ctx, atom_info_t* atom_info)
 		}
 	}
 
+	// don't add the track if it has no frames in the required range, unless it's an index request
+	if (trak_info.frame_count == 0 && 
+		context->request_context->parse_type != PARSE_INDEX)
+	{
+		vod_free(context->request_context->pool, trak_info.extra_data);
+		return VOD_OK;
+	}
+
 	// make sure we got the extra data
 	if (trak_info.extra_data == NULL)
 	{
@@ -1755,7 +1764,6 @@ static const trak_atom_parser_t* parsers[] = {
 vod_status_t 
 mp4_parser_parse_moov_atom(
 	request_context_t* request_context, 
-	int parse_type,
 	uint32_t* required_tracks_mask,
 	const u_char* buffer, 
 	size_t size, 
@@ -1768,7 +1776,7 @@ mp4_parser_parse_moov_atom(
 	process_moov_context.required_tracks_mask = required_tracks_mask;
 	vod_memzero(process_moov_context.track_indexes, sizeof(process_moov_context.track_indexes));
 	process_moov_context.result = mpeg_metadata;
-	process_moov_context.parsers = parsers[parse_type];
+	process_moov_context.parsers = parsers[request_context->parse_type];
 
 	if (vod_array_init(&mpeg_metadata->streams, request_context->pool, 2, sizeof(mpeg_stream_metadata_t)) != VOD_OK)
 	{
@@ -1781,6 +1789,13 @@ mp4_parser_parse_moov_atom(
 	if (rc != VOD_OK)
 	{
 		return rc;
+	}
+
+	if (mpeg_metadata->streams.nelts == 0)
+	{
+		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
+			"mp4_parser_parse_moov_atom: no matching streams were found");
+		return VOD_BAD_REQUEST;
 	}
 
 	return VOD_OK;
