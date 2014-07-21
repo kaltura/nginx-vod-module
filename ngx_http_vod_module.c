@@ -1248,13 +1248,10 @@ async_http_read(ngx_http_request_t *r, u_char *buf, size_t size, off_t offset)
 ngx_int_t
 remote_request_handler(ngx_http_request_t *r)
 {
-	ngx_http_vod_loc_conf_t   *conf;
 	ngx_int_t                       rc;
 	ngx_http_vod_ctx_t *ctx;
 
 	ctx = ngx_http_get_module_ctx(r, ngx_http_vod_module);
-
-	conf = ngx_http_get_module_loc_conf(r, ngx_http_vod_module);
 
 	ctx->async_reader = (async_read_func_t)async_http_read;
 	ctx->async_reader_context = r;

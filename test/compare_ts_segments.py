@@ -29,8 +29,8 @@ def compareFfprobeOutputs(file1, file2):
 
 	if len(lines1) != len(lines2):
 		print 'line count mismatch %s vs %s' % (len(lines1), len(lines2))
-		os.system("""cat %s | grep -v ^pos= | grep -v ^pts_time= | grep -v ^dts_time= | sed 's/00000000: 0000 0001 09f0/00000000: 0000 0001 09e0/g' > %s""" % (file1, file1))
-		os.system("""cat %s | grep -v ^pos= | grep -v ^pts_time= | grep -v ^dts_time= | sed 's/00000000: 0000 0001 09f0/00000000: 0000 0001 09e0/g' > %s""" % (file2, file2))
+		os.system("""cat %s | grep -v ^pts= | grep -v ^dts= | grep -v ^pos= | grep -v ^pts_time= | grep -v ^dts_time= | sed 's/00000000: 0000 0001 09f0/00000000: 0000 0001 09e0/g' > %s""" % (file1, file1))
+		os.system("""cat %s | grep -v ^pts= | grep -v ^dts= | grep -v ^pos= | grep -v ^pts_time= | grep -v ^dts_time= | sed 's/00000000: 0000 0001 09f0/00000000: 0000 0001 09e0/g' > %s""" % (file2, file2))
 		os.system('diff -bBu %s %s' % (file1, file2))
 		return False
 	

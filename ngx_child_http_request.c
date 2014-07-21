@@ -290,13 +290,10 @@ ngx_http_vod_abort_request(ngx_http_request_t *r)
 static ngx_int_t
 ngx_http_vod_filter_init(void *data)
 {
-	child_request_context_t* ctx;
 	ngx_http_request_t   *r = data;
 	ngx_http_upstream_t  *u;
 
 	u = r->upstream;
-
-	ctx = ngx_http_get_module_ctx(r, ngx_http_vod_module);
 
 	if (u->headers_in.content_length_n > u->buffer.end - u->buffer.start) 
 	{
@@ -459,7 +456,6 @@ dump_request(
 	ngx_str_t* extra_headers)
 {
 	child_request_context_t* ctx;
-	ngx_http_upstream_t *u;
 	ngx_int_t rc;
 
 	// save input params
@@ -474,8 +470,6 @@ dump_request(
 			"dump_request: create_upstream failed %i", rc);
 		return rc;
 	}
-
-	u = r->upstream;
 
 	rc = init_request_buffer(r, ctx, uri, &empty_str, host_name, -1, -1, extra_headers);
 	if (rc != NGX_OK)
