@@ -872,7 +872,7 @@ start_processing_mp4_file(ngx_http_request_t *r)
 }
 
 static void
-init_file_key(ngx_http_request_t* r, ngx_str_t* path)
+init_file_key(ngx_http_request_t* r, ngx_str_t* path1, ngx_str_t* path2)
 {
 	ngx_http_vod_loc_conf_t   *conf;
 	ngx_http_vod_ctx_t        *ctx;
@@ -883,7 +883,14 @@ init_file_key(ngx_http_request_t* r, ngx_str_t* path)
 
 	ngx_md5_init(&md5);
 	ngx_md5_update(&md5, conf->secret_key.data, conf->secret_key.len);
-	ngx_md5_update(&md5, path->data, path->len);
+	if (path1 != NULL)
+	{
+		ngx_md5_update(&md5, path1->data, path1->len);
+	}
+	if (path2 != NULL)
+	{
+		ngx_md5_update(&md5, path2->data, path2->len);
+	}
 	ngx_md5_final(ctx->file_key, &md5);
 }
 
@@ -922,12 +929,12 @@ dump_request_to_fallback_upstream(
 {
 	ngx_http_vod_loc_conf_t *conf;
 	ngx_http_vod_ctx_t *ctx;
+	ngx_str_t empty_string = ngx_null_string;
 	ngx_int_t rc;
 
 	conf = ngx_http_get_module_loc_conf(r, ngx_http_vod_module);
 
-	if (conf->fallback_upstream.upstream == NULL ||
-		r->headers_in.host == NULL)
+	if (conf->fallback_upstream.upstream == NULL)
 	{
 		ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
 			"dump_request_to_fallback_upstream: no fallback configured or no host header received");
@@ -947,7 +954,7 @@ dump_request_to_fallback_upstream(
 		r,
 		&conf->fallback_upstream,
 		&ctx->original_uri,
-		&r->headers_in.host->value,
+		&empty_string,
 		&conf->proxy_header);
 	return rc;
 }
@@ -991,7 +998,7 @@ local_request_handler(ngx_http_request_t *r)
 		return rc;
 	}
 
-	init_file_key(r, &path);
+	init_file_key(r, &path, NULL);
 
 	rc = start_processing_mp4_file(r);
 	if (rc != NGX_AGAIN)
@@ -1026,6 +1033,14 @@ path_request_finished(void* context, ngx_buf_t* response)
 
 	path.data = response->pos;
 	path.len = response->last - path.data;
+
+	if (path.len == 0)
+	{
+		ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
+			"path_request_finished: empty path mapping response");
+		rc = NGX_HTTP_SERVICE_UNAVAILABLE;
+		goto finalize_request;
+	}
 
 	// strip off the prefix and postfix of the path response
 	conf = ngx_http_get_module_loc_conf(r, ngx_http_vod_module);
@@ -1089,7 +1104,7 @@ path_request_finished(void* context, ngx_buf_t* response)
 		goto finalize_request;
 	}
 
-	init_file_key(r, &path);
+	init_file_key(r, &path, NULL);
 
 	rc = start_processing_mp4_file(r);
 	if (rc != NGX_AGAIN)
@@ -1125,7 +1140,7 @@ mapped_request_handler(ngx_http_request_t *r)
 	// try to fetch the file path from cache
 	if (conf->path_mapping_cache_zone != NULL)
 	{
-		init_file_key(r, &r->uri);
+		init_file_key(r, (r->headers_in.host != NULL ? &r->headers_in.host->value : NULL), &r->uri);
 
 		ctx = ngx_http_get_module_ctx(r, ngx_http_vod_module);
 
@@ -1157,7 +1172,7 @@ mapped_request_handler(ngx_http_request_t *r)
 			}
 
 			// recalculate the file key based on the path
-			init_file_key(r, &path);
+			init_file_key(r, &path, NULL);
 
 			// start processing the file
 			rc = start_processing_mp4_file(r);
@@ -1258,7 +1273,7 @@ remote_request_handler(ngx_http_request_t *r)
 
 	ctx->alignment = sizeof(int64_t);		// don't care about alignment when working remote
 
-	init_file_key(r, &r->uri);
+	init_file_key(r, (r->headers_in.host != NULL ? &r->headers_in.host->value : NULL), &r->uri);
 
 	rc = start_processing_mp4_file(r);
 	if (rc != NGX_AGAIN)

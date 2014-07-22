@@ -127,7 +127,7 @@ Sets the upstream that should be used for reading the MP4 file (remote mode) or 
 
 #### vod_upstream_host_header
 * **syntax**: `vod_upstream_host_header host_name`
-* **default**: `none`
+* **default**: `the host name of original request`
 * **context**: `http`, `server`, `location`
 
 Sets the value of the HTTP host header that should be sent to the upstream (remote/mapped modes only).

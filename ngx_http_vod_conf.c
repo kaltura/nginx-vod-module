@@ -101,13 +101,6 @@ ngx_http_vod_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child)
 				"\"vod_upstream\" is mandatory for remote/mapped modes");
 			return NGX_CONF_ERROR;
 		}
-
-		if (conf->upstream_host_header.len == 0)
-		{
-			ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
-				"\"vod_upstream_host_header\" is mandatory for remote/mapped modes");
-			return NGX_CONF_ERROR;
-		}
 	}
 	else
 	{

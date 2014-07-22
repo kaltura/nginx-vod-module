@@ -370,10 +370,25 @@ init_request_buffer(
 	off_t range_end,
 	ngx_str_t* extra_headers)
 {
+	ngx_http_core_srv_conf_t  *cscf;
 	ngx_flag_t range_request = (range_start >= 0) && (range_end >= 0);
 	ngx_buf_t *b;
 	size_t len;
 	u_char* p;
+
+	// if the host name is empty, use by default the host name of the incoming request
+	if (host_name->len == 0)
+	{
+		if (r->headers_in.host != NULL)
+		{
+			host_name = &r->headers_in.host->value;
+		}
+		else
+		{
+			cscf = ngx_http_get_module_srv_conf(r, ngx_http_core_module);
+			host_name = &cscf->server_name;
+		}
+	}
 
 	// calculate the request size
 	len =

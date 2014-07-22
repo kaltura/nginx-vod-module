@@ -89,8 +89,8 @@ def compareFfprobeOutputs(file1, file2):
 def compareTsUris(uri1, uri2, segmentIndex):
 	print 'comparing %s %s' % (uri1, uri2)
 	commands = [
-		'curl -s %s%s > %s' % (URL1_PREFIX, uri1, TEMP_TS_FILE1),
-		'curl -s %s%s > %s' % (URL2_PREFIX, uri2, TEMP_TS_FILE2),
+		"""curl -s '%s%s' > %s""" % (URL1_PREFIX, uri1, TEMP_TS_FILE1),
+		"""curl -s '%s%s' > %s""" % (URL2_PREFIX, uri2, TEMP_TS_FILE2),
 	]
 	for command in commands:
 		os.system(command)
