@@ -19,6 +19,7 @@ typedef void(*get_iframe_positions_callback_t)(
 
 typedef struct {
 	int media_type;
+	uint32_t stream_index;
 	
 	// input frames
 	input_frame_t* first_frame;

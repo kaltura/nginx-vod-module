@@ -742,7 +742,7 @@ run_state_machine(ngx_http_vod_ctx_t *ctx)
 		return rc;
 
 	default:
-		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, ctx->request_context.log, 0,
+		ngx_log_error(NGX_LOG_ERR, ctx->request_context.log, 0,
 			"run_state_machine: invalid state %d", ctx->state);
 		return NGX_HTTP_INTERNAL_SERVER_ERROR;
 	}
@@ -820,8 +820,8 @@ start_processing_mp4_file(ngx_http_request_t *r)
 	{
 		if (ngx_buffer_cache_fetch(conf->moov_cache_zone, ctx->file_key, &moov_buffer, &moov_size))
 		{
-			ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
-				"start_processing_mp4_file: moov atom cache hit");
+			ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+				"start_processing_mp4_file: moov atom cache hit, size is %uz", moov_size);
 
 			// parse the moov atom
 			rc = parse_moov_atom(ctx, moov_buffer, moov_size);
@@ -943,7 +943,7 @@ dump_request_to_fallback_upstream(
 
 	if (header_exists(r, &conf->proxy_header_name))
 	{
-		ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+		ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
 			"dump_request_to_fallback_upstream: proxy header exists");
 		return NGX_ERROR;
 	}
@@ -1146,9 +1146,6 @@ mapped_request_handler(ngx_http_request_t *r)
 
 		if (ngx_buffer_cache_fetch(conf->path_mapping_cache_zone, ctx->file_key, &path_buffer, &path_size))
 		{
-			ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
-				"mapped_request_handler: path mapping cache hit");
-
 			// copy the path since the cache buffer should not be held for long
 			path.len = path_size;
 			path.data = ngx_palloc(r->pool, path.len + 1);
@@ -1161,6 +1158,9 @@ mapped_request_handler(ngx_http_request_t *r)
 
 			ngx_memcpy(path.data, path_buffer, path.len);
 			path.data[path.len] = '\0';
+
+			ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+				"mapped_request_handler: path mapping cache hit %V", &path);
 
 			// init the file reader
 			rc = init_file_reader(r, &path);
@@ -1309,7 +1309,7 @@ ngx_http_vod_handler(ngx_http_request_t *r)
 	// we respond to 'GET' and 'HEAD' requests only
 	if (!(r->method & (NGX_HTTP_GET | NGX_HTTP_HEAD))) 
 	{
-		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+		ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
 			"ngx_http_vod_handler: unsupported method %ui", r->method);
 		return NGX_HTTP_NOT_ALLOWED;
 	}

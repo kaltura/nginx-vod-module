@@ -7,7 +7,15 @@
 static int 
 compare_streams(const void *s1, const void *s2)
 {
-	return ((muxer_stream_state_t*)s1)->media_type - ((muxer_stream_state_t*)s2)->media_type;
+	muxer_stream_state_t* stream1 = (muxer_stream_state_t*)s1;
+	muxer_stream_state_t* stream2 = (muxer_stream_state_t*)s2;
+
+	if (stream1->media_type != stream2->media_type)
+	{
+		return stream1->media_type - stream2->media_type;
+	}
+
+	return stream1->stream_index - stream2->stream_index;
 }
 
 vod_status_t 
@@ -58,6 +66,7 @@ muxer_init(
 		cur_stream_metadata = (mpeg_stream_metadata_t*)(mpeg_metadata->streams.elts) + i;
 
 		cur_stream->media_type = cur_stream_metadata->media_type;
+		cur_stream->stream_index = cur_stream_metadata->track_index;
 		cur_stream->first_frame = cur_stream_metadata->frames;
 		cur_stream->cur_frame = cur_stream_metadata->frames;
 		cur_stream->last_frame = cur_stream->cur_frame + cur_stream_metadata->frame_count;

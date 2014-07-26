@@ -1688,14 +1688,6 @@ process_moov_atom_callback(void* ctx, atom_info_t* atom_info)
 		}
 	}
 
-	// don't add the track if it has no frames in the required range, unless it's an index request
-	if (trak_info.frame_count == 0 && 
-		context->request_context->parse_type != PARSE_INDEX)
-	{
-		vod_free(context->request_context->pool, trak_info.extra_data);
-		return VOD_OK;
-	}
-
 	// make sure we got the extra data
 	if (trak_info.extra_data == NULL)
 	{
@@ -1770,7 +1762,10 @@ mp4_parser_parse_moov_atom(
 	mpeg_metadata_t* mpeg_metadata)
 {
 	process_moov_context_t process_moov_context;
+	mpeg_stream_metadata_t* cur_stream_metadata;
 	vod_status_t rc;
+	unsigned i;
+	bool_t has_frames;
 
 	process_moov_context.request_context = request_context;
 	process_moov_context.required_tracks_mask = required_tracks_mask;
@@ -1793,9 +1788,31 @@ mp4_parser_parse_moov_atom(
 
 	if (mpeg_metadata->streams.nelts == 0)
 	{
-		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
+		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
 			"mp4_parser_parse_moov_atom: no matching streams were found");
 		return VOD_BAD_REQUEST;
+	}
+
+	// fail the request if we didn't get no frames on all streams
+	if (request_context->parse_type != PARSE_INDEX)
+	{
+		has_frames = FALSE;
+		for (i = 0; i < mpeg_metadata->streams.nelts; i++)
+		{
+			cur_stream_metadata = (mpeg_stream_metadata_t*)(mpeg_metadata->streams.elts) + i;
+			if (cur_stream_metadata->frame_count != 0)
+			{
+				has_frames = TRUE;
+				break;
+			}
+		}
+
+		if (!has_frames)
+		{
+			vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+				"mp4_parser_parse_moov_atom: no frames were found for parse_type %d", request_context->parse_type);
+			return VOD_BAD_REQUEST;
+		}
 	}
 
 	return VOD_OK;

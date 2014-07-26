@@ -2,7 +2,7 @@
 
 // constants
 #define ENTRY_LOCK_EXPIRATION (60)
-#define ENTRIES_ALLOC_MARGIN (20)
+#define ENTRIES_ALLOC_MARGIN (256)
 #define BUFFER_ALIGNMENT (16)
 
 // enums
@@ -293,7 +293,8 @@ ngx_buffer_cache_allocate_buffer(
 	for (;;)
 	{
 		// Layout:	S	W/////R		E
-		if (cache->buffers_write <= cache->buffers_read)
+		if (cache->buffers_write < cache->buffers_read || 
+			(cache->buffers_write == cache->buffers_read && cache->oldest_entry->state == CES_FREE))
 		{
 			if (buffer_start >= cache->buffers_start)
 			{
