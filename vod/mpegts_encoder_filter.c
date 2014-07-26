@@ -506,7 +506,7 @@ mpegts_encoder_flush_frame(void* context, int32_t margin_size)
 	if (stuff_size > 0)
 	{
 		state->cur_pos = mpegts_add_stuffing(state->cur_packet_start, state->cur_pos, stuff_size);
-		if (state->cur_pes_size_ptr >= state->cur_packet_start)
+		if (state->cur_pes_size_ptr >= state->cur_packet_start && state->cur_pes_size_ptr < state->cur_packet_end)
 		{
 			state->cur_pes_size_ptr += stuff_size;
 		}
