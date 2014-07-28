@@ -37,10 +37,10 @@ typedef struct {
 
 typedef struct {
 	// file read state (either remote or local)
-	child_request_context_t child_req;		// must be first
 	file_reader_state_t file_reader;
 	async_read_func_t async_reader;
 	void* async_reader_context;
+	child_request_buffers_t child_request_buffers;
 	u_char* read_buffer;
 	size_t buffer_size;
 
@@ -1021,13 +1021,19 @@ local_request_handler(ngx_http_request_t *r)
 ////// Mapped mode only
 
 static void 
-path_request_finished(void* context, ngx_buf_t* response)
+path_request_finished(void* context, ngx_int_t rc, ngx_buf_t* response)
 {
 	ngx_http_vod_loc_conf_t *conf;
 	ngx_http_vod_ctx_t *ctx;
 	ngx_http_request_t *r = context;
 	ngx_str_t path;
-	ngx_int_t rc;
+
+	if (rc != NGX_OK)
+	{
+		ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
+			"path_request_finished: upstream request failed %i", rc);
+		goto finalize_request;
+	}
 
 	ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0, "path request finished %s", response->pos);
 
@@ -1074,12 +1080,11 @@ path_request_finished(void* context, ngx_buf_t* response)
 		return;
 	}
 
-	child_request_free(r);
+	ctx = ngx_http_get_module_ctx(r, ngx_http_vod_module);
+	child_request_free_buffers(r->pool, &ctx->child_request_buffers);
 
 	if (conf->path_mapping_cache_zone != NULL)
 	{
-		ctx = ngx_http_get_module_ctx(r, ngx_http_vod_module);
-
 		if (ngx_buffer_cache_store(
 			conf->path_mapping_cache_zone,
 			ctx->file_key,
@@ -1136,13 +1141,12 @@ mapped_request_handler(ngx_http_request_t *r)
 	size_t path_size;
 
 	conf = ngx_http_get_module_loc_conf(r, ngx_http_vod_module);
+	ctx = ngx_http_get_module_ctx(r, ngx_http_vod_module);
 
 	// try to fetch the file path from cache
 	if (conf->path_mapping_cache_zone != NULL)
 	{
 		init_file_key(r, (r->headers_in.host != NULL ? &r->headers_in.host->value : NULL), &r->uri);
-
-		ctx = ngx_http_get_module_ctx(r, ngx_http_vod_module);
 
 		if (ngx_buffer_cache_fetch(conf->path_mapping_cache_zone, ctx->file_key, &path_buffer, &path_size))
 		{
@@ -1204,9 +1208,11 @@ mapped_request_handler(ngx_http_request_t *r)
 
 	rc = child_request_start(
 		r, 
+		&ctx->child_request_buffers,
 		path_request_finished, 
 		r, 
 		&conf->upstream,
+		&conf->child_request_location,
 		&r->uri, 
 		&conf->upstream_extra_args, 
 		&conf->upstream_host_header, 
@@ -1231,8 +1237,18 @@ mapped_request_handler(ngx_http_request_t *r)
 ////// Remote mode only
 
 static void
-async_http_read_complete(void* context, ngx_buf_t* response)
+async_http_read_complete(void* context, ngx_int_t rc, ngx_buf_t* response)
 {
+	ngx_http_vod_ctx_t *ctx = (ngx_http_vod_ctx_t *)context;
+
+	if (rc != NGX_OK)
+	{
+		ngx_log_error(NGX_LOG_ERR, ctx->request_context.log, 0,
+			"async_http_read_complete: upstream request failed %i", rc);
+		ngx_http_finalize_request(ctx->r, rc);
+		return;
+	}
+
 	handle_read_completed(context, NGX_OK, response->last - response->pos);
 }
 
@@ -1248,9 +1264,11 @@ async_http_read(ngx_http_request_t *r, u_char *buf, size_t size, off_t offset)
 
 	return child_request_start(
 		r, 
+		&ctx->child_request_buffers,
 		async_http_read_complete, 
 		ctx,
 		&conf->upstream,
+		&conf->child_request_location,
 		&r->uri,
 		&conf->upstream_extra_args,
 		&conf->upstream_host_header, 
