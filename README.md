@@ -118,6 +118,22 @@ Sets the maximum supported MP4 moov atom size.
 
 Sets the size of the cache buffers used when reading MP4 frames.
 
+#### vod_child_request
+* **syntax**: `vod_child_request`
+* **default**: `n/a`
+* **context**: `location`
+
+Configures the enclosing location as handling nginx-vod module child requests (remote/mapped modes only)
+There should be at least one location with this command when working in remote/mapped modes.
+Note that multiple vod locations can point to a single location having vod_child_request.
+
+#### vod_child_request_path
+* **syntax**: `vod_child_request_path`
+* **default**: `none`
+* **context**: `location`
+
+Sets the path of an internal location that has vod_child_request enabled (remote/mapped modes only)
+
 #### vod_upstream
 * **syntax**: `vod_upstream upstream_name`
 * **default**: `none`
@@ -282,6 +298,13 @@ The name of the encryption key file name (only relevant when vod_secret_key is u
 		}
 
 		server {		
+			open_file_cache          max=1000 inactive=5m;
+			open_file_cache_valid    2m;
+			open_file_cache_min_uses 1;
+			open_file_cache_errors   on;
+
+			aio on;
+
 			location /content/ {
 				vod;
 				vod_mode local;
@@ -290,18 +313,11 @@ The name of the encryption key file name (only relevant when vod_secret_key is u
 
 				root /web/content;
 				
-				open_file_cache          max=1000 inactive=5m;
-				open_file_cache_valid    2m;
-				open_file_cache_min_uses 1;
-				open_file_cache_errors   on;
-
 				gzip on;
 				gzip_types application/vnd.apple.mpegurl;
 
 				expires 100d;
 				add_header Last-Modified "Sun, 19 Nov 2000 08:52:00 GMT";
-
-				aio on;
 			}
 		}
 	}
@@ -318,30 +334,37 @@ The name of the encryption key file name (only relevant when vod_secret_key is u
 			server kalhls-a-pa.origin.kaltura.com:80;
 		}
 
-		server {		
+		server {
+
+			open_file_cache          max=1000 inactive=5m;
+			open_file_cache_valid    2m;
+			open_file_cache_min_uses 1;
+			open_file_cache_errors   on;
+
+			aio on;
+			
+			location /__child_request__/ {
+				internal;
+				vod_child_request;
+			}
+		
 			location ~ ^/p/\d+/(sp/\d+/)?serveFlavor/ {
 				vod;
 				vod_mode mapped;
 				vod_moov_cache moov_cache 512m;
 				vod_secret_key mukkaukk;
+				vod_child_request_path /__child_request__/;
 				vod_upstream kalapi;
 				vod_upstream_host_header www.kaltura.com;
 				vod_upstream_extra_args "pathOnly=1";
 				vod_path_mapping_cache mapping_cache 5m;
 				vod_fallback_upstream fallback;
 
-				open_file_cache          max=1000 inactive=5m;
-				open_file_cache_valid    2m;
-				open_file_cache_min_uses 1;
-				open_file_cache_errors   on;
-
 				gzip on;
 				gzip_types application/vnd.apple.mpegurl;
 
 				expires 100d;
 				add_header Last-Modified "Sun, 19 Nov 2000 08:52:00 GMT";
-
-				aio on;
 			}
 		}
 	}
@@ -354,11 +377,17 @@ The name of the encryption key file name (only relevant when vod_secret_key is u
 		}
 
 		server {		
+			location /__child_request__/ {
+				internal;
+				vod_child_request;
+			}
+
 			location ~ ^/p/\d+/(sp/\d+/)?serveFlavor/ {
 				vod;
 				vod_mode remote;
 				vod_moov_cache moov_cache 512m;
 				vod_secret_key mukkaukk;
+				vod_child_request_path /__child_request__/;
 				vod_upstream kalapi;
 				vod_upstream_host_header www.kaltura.com;
 

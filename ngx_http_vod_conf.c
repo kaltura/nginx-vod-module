@@ -37,6 +37,7 @@ ngx_http_vod_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child)
 	u_char* p;
 	char* err;
 
+	ngx_conf_merge_str_value(conf->child_request_location, prev->child_request_location, "");
 	ngx_conf_merge_ptr_value(conf->request_handler, prev->request_handler, local_request_handler);
 
 	ngx_conf_merge_uint_value(conf->segment_duration, prev->segment_duration, 10000);
@@ -95,6 +96,13 @@ ngx_http_vod_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child)
 	// validate vod_upstream / vod_upstream_host_header used when needed
 	if (conf->request_handler == remote_request_handler || conf->request_handler == mapped_request_handler)
 	{
+		if (conf->child_request_location.len == 0)
+		{
+			ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
+				"\"vod_child_request_path\" is mandatory for remote/mapped modes");
+			return NGX_CONF_ERROR;
+		}
+
 		if (conf->upstream.upstream == NULL)
 		{
 			ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
@@ -161,22 +169,22 @@ ngx_http_vod_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child)
 static char *
 ngx_http_vod_mode_command(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
 {
-	ngx_http_vod_loc_conf_t    *mgcf = conf;
+	ngx_http_vod_loc_conf_t    *vod_conf = conf;
 	ngx_str_t                       *value;
 
 	value = cf->args->elts;
 
 	if (ngx_strcasecmp(value[1].data, (u_char *) "local") == 0) 
 	{
-		mgcf->request_handler = local_request_handler;
+		vod_conf->request_handler = local_request_handler;
 	}
 	else if (ngx_strcasecmp(value[1].data, (u_char *) "remote") == 0) 
 	{
-		mgcf->request_handler = remote_request_handler;
+		vod_conf->request_handler = remote_request_handler;
 	}
 	else if (ngx_strcasecmp(value[1].data, (u_char *) "mapped") == 0) 
 	{
-		mgcf->request_handler = mapped_request_handler;
+		vod_conf->request_handler = mapped_request_handler;
 	}
 	else 
 	{
@@ -278,6 +286,17 @@ ngx_http_vod(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
 	return NGX_CONF_OK;
 }
 
+static char *
+ngx_http_vod_child_request(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
+{
+	ngx_http_core_loc_conf_t *clcf;
+
+	clcf = ngx_http_conf_get_module_loc_conf(cf, ngx_http_core_module);
+	clcf->handler = child_request_internal_handler;
+
+	return NGX_CONF_OK;
+}
+
 ngx_command_t ngx_http_vod_commands[] = {
 
 	// basic parameters
@@ -294,7 +313,7 @@ ngx_command_t ngx_http_vod_commands[] = {
 	NGX_HTTP_LOC_CONF_OFFSET,
 	0,
 	NULL },
-
+	
 	// hls output generation parameters
 	{ ngx_string("vod_segment_duration"),
 	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1,
@@ -340,6 +359,20 @@ ngx_command_t ngx_http_vod_commands[] = {
 	NULL },
 
 	// upstream parameters - only for mapped/remote modes
+	{ ngx_string("vod_child_request"),
+	NGX_HTTP_LOC_CONF | NGX_CONF_NOARGS,
+	ngx_http_vod_child_request,
+	0,
+	0,
+	NULL },
+
+	{ ngx_string("vod_child_request_path"),
+	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1,
+	ngx_conf_set_str_slot,
+	NGX_HTTP_LOC_CONF_OFFSET,
+	offsetof(ngx_http_vod_loc_conf_t, child_request_location),
+	NULL },
+
 	{ ngx_string("vod_upstream"),
 	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1,
 	ngx_http_upstream_command,

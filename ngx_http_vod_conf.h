@@ -10,6 +10,7 @@ typedef struct ngx_http_vod_loc_conf_s {
     struct ngx_http_vod_loc_conf_s *parent;
 
 	// config fields
+	ngx_str_t child_request_location;
 	ngx_int_t(*request_handler)(ngx_http_request_t *r);
 	ngx_uint_t segment_duration;
 	ngx_str_t secret_key;
