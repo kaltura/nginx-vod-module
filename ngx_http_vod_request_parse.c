@@ -152,6 +152,7 @@ parse_required_tracks(ngx_http_request_t* r, u_char* start_pos, u_char* end_pos,
 					"parse_required_tracks: failed to parse the segment index");
 				return NGX_HTTP_BAD_REQUEST;
 			}
+			request_params->request_type = REQUEST_TYPE_HLS_SEGMENT;
 		}
 		else
 		{
@@ -243,13 +244,13 @@ parse_request_uri(ngx_http_request_t *r, ngx_http_vod_loc_conf_t *conf, request_
 		if (end_pos - start_pos >= (int)(conf->index_file_name_prefix.len + sizeof(".m3u8") - 1) &&
 			ngx_memcmp(start_pos, conf->index_file_name_prefix.data, conf->index_file_name_prefix.len) == 0)
 		{
-			request_params->segment_index = REQUEST_TYPE_PLAYLIST;
+			request_params->request_type = REQUEST_TYPE_HLS_PLAYLIST;
 			start_pos += conf->index_file_name_prefix.len;
 		}
 		else if (end_pos - start_pos >= (int)(conf->iframes_file_name_prefix.len + sizeof(".m3u8") - 1) &&
 			ngx_memcmp(start_pos, conf->iframes_file_name_prefix.data, conf->iframes_file_name_prefix.len) == 0)
 		{
-			request_params->segment_index = REQUEST_TYPE_IFRAME_PLAYLIST;
+			request_params->request_type = REQUEST_TYPE_HLS_IFRAME_PLAYLIST;
 			start_pos += conf->iframes_file_name_prefix.len;
 		}
 		else
@@ -278,8 +279,15 @@ parse_request_uri(ngx_http_request_t *r, ngx_http_vod_loc_conf_t *conf, request_
 		end_pos - start_pos == (int)conf->encryption_key_file_name.len &&
 		ngx_memcmp(start_pos, conf->encryption_key_file_name.data, conf->encryption_key_file_name.len) == 0)
 	{
-		request_params->segment_index = REQUEST_TYPE_ENCRYPTION_KEY;
+		request_params->request_type = REQUEST_TYPE_HLS_ENCRYPTION_KEY;
 		
+		return NGX_OK;
+	}
+
+	if (conf->serve_files)
+	{
+		request_params->request_type = REQUEST_TYPE_SERVE_FILE;
+
 		return NGX_OK;
 	}
 

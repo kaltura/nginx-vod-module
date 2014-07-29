@@ -15,6 +15,7 @@ typedef struct {
 	ngx_file_t file;
 	ngx_flag_t use_directio;
 	ngx_log_t* log;
+	off_t file_size;
 #if (NGX_HAVE_FILE_AIO)
 	ngx_flag_t use_aio;
 	async_read_callback_t callback;
@@ -30,6 +31,8 @@ ngx_int_t file_reader_init(
 	ngx_http_request_t *r,
 	ngx_http_core_loc_conf_t  *clcf,
 	ngx_str_t* path);
+
+ngx_int_t file_reader_dump_file(file_reader_state_t* state);
 
 ssize_t async_file_read(file_reader_state_t* state, u_char *buf, size_t size, off_t offset);
 

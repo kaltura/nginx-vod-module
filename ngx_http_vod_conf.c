@@ -20,6 +20,7 @@ ngx_http_vod_create_loc_conf(ngx_conf_t *cf)
 	init_upstream_conf(&conf->upstream);
 	init_upstream_conf(&conf->fallback_upstream);
 	conf->request_handler = NGX_CONF_UNSET_PTR;
+	conf->serve_files = NGX_CONF_UNSET;
 	conf->segment_duration = NGX_CONF_UNSET_UINT;
 	conf->initial_read_size = NGX_CONF_UNSET_SIZE;
 	conf->max_moov_size = NGX_CONF_UNSET_SIZE;
@@ -39,6 +40,7 @@ ngx_http_vod_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child)
 
 	ngx_conf_merge_str_value(conf->child_request_location, prev->child_request_location, "");
 	ngx_conf_merge_ptr_value(conf->request_handler, prev->request_handler, local_request_handler);
+	ngx_conf_merge_value(conf->serve_files, prev->serve_files, 1);
 
 	ngx_conf_merge_uint_value(conf->segment_duration, prev->segment_duration, 10000);
 	ngx_conf_merge_str_value(conf->secret_key, prev->secret_key, "");
@@ -281,7 +283,7 @@ ngx_http_vod(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
 	ngx_http_core_loc_conf_t *clcf;
 
 	clcf = ngx_http_conf_get_module_loc_conf(cf, ngx_http_core_module);
-	clcf->handler = ngx_http_vod_handler; /* handler to process the 'hello' directive */
+	clcf->handler = ngx_http_vod_handler;
 
 	return NGX_CONF_OK;
 }
@@ -312,6 +314,13 @@ ngx_command_t ngx_http_vod_commands[] = {
 	ngx_http_vod_mode_command,
 	NGX_HTTP_LOC_CONF_OFFSET,
 	0,
+	NULL },
+
+	{ ngx_string("vod_serve_files"),
+	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1,
+	ngx_conf_set_flag_slot,
+	NGX_HTTP_LOC_CONF_OFFSET,
+	offsetof(ngx_http_vod_loc_conf_t, serve_files),
 	NULL },
 	
 	// hls output generation parameters

@@ -37,7 +37,7 @@ static ngx_str_t child_http_hide_headers[] = {
 	ngx_null_string
 };
 
-static ngx_str_t empty_str = ngx_null_string;
+static ngx_str_t empty_string = ngx_null_string;
 
 // constants
 static const char content_length_header[] = "content-length";
@@ -474,7 +474,8 @@ ngx_int_t
 dump_request(
 	ngx_http_request_t *r,
 	ngx_http_upstream_conf_t* upstream_conf,
-	ngx_str_t* uri,
+	ngx_str_t* base_uri,
+	ngx_str_t* extra_args,
 	ngx_str_t* host_name,
 	ngx_str_t* extra_headers)
 {
@@ -487,7 +488,7 @@ dump_request(
 	{
 		ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
 			"dump_request: ngx_pcalloc failed");
-		return rc;
+		return NGX_ERROR;
 	}
 	ngx_http_set_ctx(r, ctx, ngx_http_vod_module);
 
@@ -501,7 +502,7 @@ dump_request(
 	}
 
 	// build the request
-	ctx->request_buffer = init_request_buffer(r, NULL, uri, &empty_str, host_name, -1, -1, extra_headers);
+	ctx->request_buffer = init_request_buffer(r, NULL, base_uri, extra_args, host_name, -1, -1, extra_headers);
 	if (ctx->request_buffer == NULL)
 	{
 		ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
@@ -628,7 +629,7 @@ child_request_start(
 	}
 
 	// initialize the request buffer
-	buffers->request_buffer = init_request_buffer(r, buffers->request_buffer, base_uri, extra_args, host_name, range_start, range_end, &empty_str);
+	buffers->request_buffer = init_request_buffer(r, buffers->request_buffer, base_uri, extra_args, host_name, range_start, range_end, &empty_string);
 	if (buffers->request_buffer == NULL)
 	{
 		ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,

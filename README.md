@@ -24,6 +24,8 @@
 
 * AES-128 encryption support
 
+* Serving of files for progressive download playback
+
 ### Limitations
 
 * MP4 files have to be "fast start" (the moov atom must be before the mdat atom)
@@ -31,6 +33,8 @@
 * I-frames playlist generation is not supported when encryption is enabled
 
 * SAMPLE-AES encryption is not supported
+
+* Clipping is not supported in progressive download
 
 * Tested on Linux only
 
@@ -75,6 +79,14 @@ Enables the nginx-vod module on the enclosing location.
 * **context**: `http`, `server`, `location`
 
 Sets the file access mode - local, remote or mapped
+
+#### vod_serve_files
+* **syntax**: `vod_serve_files on/off`
+* **default**: `on`
+* **context**: `http`, `server`, `location`
+
+When enabled requests that are not identified (e.g. .../index.m3u8, .../seg-1-v1-a1.ts etc.)
+will return the original media file.
 
 #### vod_segment_duration
 * **syntax**: `vod_segment_duration duration`
@@ -128,7 +140,7 @@ There should be at least one location with this command when working in remote/m
 Note that multiple vod locations can point to a single location having vod_child_request.
 
 #### vod_child_request_path
-* **syntax**: `vod_child_request_path`
+* **syntax**: `vod_child_request_path path`
 * **default**: `none`
 * **context**: `location`
 

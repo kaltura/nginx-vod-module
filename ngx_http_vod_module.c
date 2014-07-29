@@ -28,6 +28,7 @@ enum {
 
 // typedefs
 typedef ngx_int_t (*async_read_func_t)(void* context, u_char *buf, size_t size, off_t offset);
+typedef ngx_int_t (*dump_request_t)(void* context);
 
 typedef struct {
 	ngx_http_request_t* r;
@@ -39,6 +40,7 @@ typedef struct {
 	// file read state (either remote or local)
 	file_reader_state_t file_reader;
 	async_read_func_t async_reader;
+	dump_request_t dump_request;
 	void* async_reader_context;
 	child_request_buffers_t child_request_buffers;
 	u_char* read_buffer;
@@ -86,6 +88,8 @@ ngx_module_t  ngx_http_vod_module = {
     NULL,                             /* exit master */
     NGX_MODULE_V1_PADDING
 };
+
+static ngx_str_t empty_string = ngx_null_string;
 
 ////// Encryption support
 
@@ -224,10 +228,10 @@ parse_moov_atom(ngx_http_vod_ctx_t *ctx, u_char* moov_buffer, size_t moov_size)
 	vod_status_t rc;
 
 	// initialize the request context
-	switch (ctx->request_params.segment_index)
+	switch (ctx->request_params.request_type)
 	{
-	case REQUEST_TYPE_ENCRYPTION_KEY:
-	case REQUEST_TYPE_PLAYLIST:
+	case REQUEST_TYPE_HLS_ENCRYPTION_KEY:
+	case REQUEST_TYPE_HLS_PLAYLIST:
 		ctx->request_context.start = 0;
 		ctx->request_context.end = 0;
 		ctx->request_context.max_frame_count = 0;
@@ -235,7 +239,7 @@ parse_moov_atom(ngx_http_vod_ctx_t *ctx, u_char* moov_buffer, size_t moov_size)
 		ctx->request_context.parse_type = PARSE_INDEX;
 		break;
 
-	case REQUEST_TYPE_IFRAME_PLAYLIST:
+	case REQUEST_TYPE_HLS_IFRAME_PLAYLIST:
 		ctx->request_context.start = ctx->request_params.clip_from;
 		ctx->request_context.end = ctx->request_params.clip_to;
 		ctx->request_context.max_frame_count = 1024 * 1024;
@@ -243,7 +247,7 @@ parse_moov_atom(ngx_http_vod_ctx_t *ctx, u_char* moov_buffer, size_t moov_size)
 		ctx->request_context.parse_type = PARSE_IFRAMES;
 		break;
 
-	default:	// TS segment
+	case REQUEST_TYPE_HLS_SEGMENT:
 		conf = ngx_http_get_module_loc_conf(ctx->r, ngx_http_vod_module);
 		ctx->request_context.start = ctx->request_params.clip_from + ctx->request_params.segment_index * conf->segment_duration;
 		ctx->request_context.end = MIN(ctx->request_context.start + conf->segment_duration, ctx->request_params.clip_to);
@@ -666,17 +670,17 @@ run_state_machine(ngx_http_vod_ctx_t *ctx)
 
 	case STATE_MOOV_ATOM_PARSED:
 		// handle playlist requests
-		if (ctx->request_params.segment_index < 0)
+		if (ctx->request_params.request_type != REQUEST_TYPE_HLS_SEGMENT)
 		{
-			switch (ctx->request_params.segment_index)
+			switch (ctx->request_params.request_type)
 			{
-			case REQUEST_TYPE_ENCRYPTION_KEY:
+			case REQUEST_TYPE_HLS_ENCRYPTION_KEY:
 				// note: this type of requests can be served without even reading the file, however reading
 				// the file blocks the possibility of an attacker to get the server to sign arbitrary strings.
 				// also, the moov atom will usually return from cache
 				return process_encryption_key_request(ctx->r, ctx->file_key);
 
-			case REQUEST_TYPE_PLAYLIST:
+			case REQUEST_TYPE_HLS_PLAYLIST:
 				rc = build_index_playlist_m3u8(
 					&ctx->request_context,
 					&conf->m3u8_config,
@@ -687,7 +691,7 @@ run_state_machine(ngx_http_vod_ctx_t *ctx)
 					&response);
 				break;
 
-			case REQUEST_TYPE_IFRAME_PLAYLIST:
+			case REQUEST_TYPE_HLS_IFRAME_PLAYLIST:
 				rc = build_iframe_playlist_m3u8(
 					&ctx->request_context,
 					&conf->m3u8_config, conf->segment_duration,
@@ -809,8 +813,14 @@ start_processing_mp4_file(ngx_http_request_t *r)
 	r->root_tested = !r->error_page;
 	r->allow_ranges = 1;
 
-	// preliminary initialization of the request context
+	// handle serve requests
 	ctx = ngx_http_get_module_ctx(r, ngx_http_vod_module);
+	if (ctx->request_params.request_type == REQUEST_TYPE_SERVE_FILE)
+	{
+		return ctx->dump_request(ctx->async_reader_context);
+	}
+
+	// preliminary initialization of the request context
 	ctx->request_context.pool = r->pool;
 	ctx->request_context.log = r->connection->log;
 
@@ -918,6 +928,7 @@ init_file_reader(ngx_http_request_t *r, ngx_str_t* path)
 	ctx->alignment = clcf->directio_alignment;
 
 	ctx->async_reader = (async_read_func_t)async_file_read;
+	ctx->dump_request = (dump_request_t)file_reader_dump_file;
 	ctx->async_reader_context = &ctx->file_reader;
 
 	return NGX_OK;
@@ -929,7 +940,6 @@ dump_request_to_fallback_upstream(
 {
 	ngx_http_vod_loc_conf_t *conf;
 	ngx_http_vod_ctx_t *ctx;
-	ngx_str_t empty_string = ngx_null_string;
 	ngx_int_t rc;
 
 	conf = ngx_http_get_module_loc_conf(r, ngx_http_vod_module);
@@ -954,6 +964,7 @@ dump_request_to_fallback_upstream(
 		r,
 		&conf->fallback_upstream,
 		&ctx->original_uri,
+		&empty_string,
 		&empty_string,
 		&conf->proxy_header);
 	return rc;
@@ -1278,15 +1289,32 @@ async_http_read(ngx_http_request_t *r, u_char *buf, size_t size, off_t offset)
 		buf);
 }
 
+ngx_int_t 
+dump_http_request(ngx_http_request_t *r)
+{
+	ngx_http_vod_loc_conf_t *conf;
+
+	conf = ngx_http_get_module_loc_conf(r, ngx_http_vod_module);
+
+	return dump_request(
+		r,
+		&conf->upstream,
+		&r->uri,
+		&conf->upstream_extra_args,
+		&conf->upstream_host_header,
+		&empty_string);
+}
+
 ngx_int_t
 remote_request_handler(ngx_http_request_t *r)
 {
-	ngx_int_t                       rc;
 	ngx_http_vod_ctx_t *ctx;
+	ngx_int_t rc;
 
 	ctx = ngx_http_get_module_ctx(r, ngx_http_vod_module);
 
 	ctx->async_reader = (async_read_func_t)async_http_read;
+	ctx->dump_request = (dump_request_t)dump_http_request;
 	ctx->async_reader_context = r;
 
 	ctx->alignment = sizeof(int64_t);		// don't care about alignment when working remote
