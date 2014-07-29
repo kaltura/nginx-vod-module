@@ -89,8 +89,6 @@ ngx_module_t  ngx_http_vod_module = {
     NGX_MODULE_V1_PADDING
 };
 
-static ngx_str_t empty_string = ngx_null_string;
-
 ////// Encryption support
 
 static ngx_int_t
@@ -938,6 +936,7 @@ static ngx_int_t
 dump_request_to_fallback_upstream(
 	ngx_http_request_t *r)
 {
+	child_request_params_t child_params;
 	ngx_http_vod_loc_conf_t *conf;
 	ngx_http_vod_ctx_t *ctx;
 	ngx_int_t rc;
@@ -960,13 +959,16 @@ dump_request_to_fallback_upstream(
 
 	// dump the request to the fallback upstream
 	ctx = ngx_http_get_module_ctx(r, ngx_http_vod_module);
+	ngx_memzero(&child_params, sizeof(child_params));
+	child_params.method = r->method;
+	child_params.base_uri = ctx->original_uri;
+	child_params.extra_headers = conf->proxy_header;
+	child_params.proxy_range = 1;
+
 	rc = dump_request(
 		r,
 		&conf->fallback_upstream,
-		&ctx->original_uri,
-		&empty_string,
-		&empty_string,
-		&conf->proxy_header);
+		&child_params);
 	return rc;
 }
 
@@ -1145,6 +1147,7 @@ ngx_int_t
 mapped_request_handler(ngx_http_request_t *r)
 {
 	ngx_http_vod_loc_conf_t   *conf;
+	child_request_params_t child_params;
 	ngx_http_vod_ctx_t *ctx;
 	ngx_str_t path;
 	ngx_int_t rc;
@@ -1217,6 +1220,12 @@ mapped_request_handler(ngx_http_request_t *r)
 	// get the mp4 file path from upstream
 	r->connection->log->action = "getting file path";
 
+	ngx_memzero(&child_params, sizeof(child_params));
+	child_params.method = NGX_HTTP_GET;
+	child_params.base_uri = r->uri;
+	child_params.extra_args = conf->upstream_extra_args;
+	child_params.host_name = conf->upstream_host_header;
+
 	rc = child_request_start(
 		r, 
 		&ctx->child_request_buffers,
@@ -1224,11 +1233,7 @@ mapped_request_handler(ngx_http_request_t *r)
 		r, 
 		&conf->upstream,
 		&conf->child_request_location,
-		&r->uri, 
-		&conf->upstream_extra_args, 
-		&conf->upstream_host_header, 
-		-1, 
-		-1, 
+		&child_params,
 		conf->path_response_prefix.len + conf->max_path_length + conf->path_response_postfix.len,
 		NULL);
 	if (rc != NGX_AGAIN) 
@@ -1268,10 +1273,19 @@ async_http_read(ngx_http_request_t *r, u_char *buf, size_t size, off_t offset)
 {
 	ngx_http_vod_loc_conf_t   *conf;
 	ngx_http_vod_ctx_t *ctx;
+	child_request_params_t child_params;
 
 	ctx = ngx_http_get_module_ctx(r, ngx_http_vod_module);
 
 	conf = ngx_http_get_module_loc_conf(r, ngx_http_vod_module);
+
+	ngx_memzero(&child_params, sizeof(child_params));
+	child_params.method = NGX_HTTP_GET;
+	child_params.base_uri = r->uri;
+	child_params.extra_args = conf->upstream_extra_args;
+	child_params.host_name = conf->upstream_host_header;
+	child_params.range_start = offset;
+	child_params.range_end = offset + size;
 
 	return child_request_start(
 		r, 
@@ -1280,11 +1294,7 @@ async_http_read(ngx_http_request_t *r, u_char *buf, size_t size, off_t offset)
 		ctx,
 		&conf->upstream,
 		&conf->child_request_location,
-		&r->uri,
-		&conf->upstream_extra_args,
-		&conf->upstream_host_header, 
-		offset, 
-		offset + size - 1, 
+		&child_params,
 		size, 
 		buf);
 }
@@ -1293,16 +1303,21 @@ ngx_int_t
 dump_http_request(ngx_http_request_t *r)
 {
 	ngx_http_vod_loc_conf_t *conf;
+	child_request_params_t child_params;
 
 	conf = ngx_http_get_module_loc_conf(r, ngx_http_vod_module);
+
+	ngx_memzero(&child_params, sizeof(child_params));
+	child_params.method = r->method;
+	child_params.base_uri = r->uri;
+	child_params.extra_args = conf->upstream_extra_args;
+	child_params.host_name = conf->upstream_host_header;
+	child_params.proxy_range = 1;
 
 	return dump_request(
 		r,
 		&conf->upstream,
-		&r->uri,
-		&conf->upstream_extra_args,
-		&conf->upstream_host_header,
-		&empty_string);
+		&child_params);
 }
 
 ngx_int_t
