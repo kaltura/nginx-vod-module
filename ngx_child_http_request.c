@@ -37,8 +37,6 @@ static ngx_str_t child_http_hide_headers[] = {
 	ngx_null_string
 };
 
-static ngx_str_t empty_string = ngx_null_string;
-
 // constants
 static const char content_length_header[] = "content-length";
 
@@ -373,42 +371,73 @@ static ngx_buf_t*
 init_request_buffer(
 	ngx_http_request_t *r,
 	ngx_buf_t* request_buffer,
-	ngx_str_t* base_uri,
-	ngx_str_t* extra_args,
-	ngx_str_t* host_name,
-	off_t range_start,
-	off_t range_end,
-	ngx_str_t* extra_headers)
+	child_request_params_t* params)
 {
 	ngx_http_core_srv_conf_t *cscf;
-	ngx_flag_t range_request = (range_start >= 0) && (range_end >= 0);
+	ngx_list_part_t              *part;
+	ngx_table_elt_t              *header;
+	ngx_uint_t                    i;
+	ngx_flag_t range_request = params->range_start < params->range_end;
 	ngx_buf_t *b;
 	size_t len;
 	u_char* p;
 
 	// if the host name is empty, use by default the host name of the incoming request
-	if (host_name->len == 0)
+	if (params->host_name.len == 0)
 	{
 		if (r->headers_in.host != NULL)
 		{
-			host_name = &r->headers_in.host->value;
+			params->host_name = r->headers_in.host->value;
 		}
 		else
 		{
 			cscf = ngx_http_get_module_srv_conf(r, ngx_http_core_module);
-			host_name = &cscf->server_name;
+			params->host_name = cscf->server_name;
 		}
 	}
 
 	// calculate the request size
 	len =
-		sizeof("GET ") - 1 + base_uri->len + sizeof("?") - 1 + extra_args->len + sizeof(" HTTP/1.1" CRLF) - 1 +
-		sizeof("Host: ") - 1 + host_name->len + sizeof(CRLF) - 1 +
-		extra_headers->len +
+		sizeof("HEAD ") - 1 + params->base_uri.len + sizeof("?") - 1 + params->extra_args.len + sizeof(" HTTP/1.1" CRLF) - 1 +
+		sizeof("Host: ") - 1 + params->host_name.len + sizeof(CRLF)-1 +
+		params->extra_headers.len +
 		sizeof(CRLF);
 	if (range_request)
 	{
 		len += sizeof("Range: bytes=") - 1 + NGX_INT64_LEN + sizeof("-") - 1 + NGX_INT64_LEN + sizeof(CRLF) - 1;
+	}
+
+	// add all input headers except host and possibly range
+	part = &r->headers_in.headers.part;
+	header = part->elts;
+
+	for (i = 0; /* void */; i++) {
+
+		if (i >= part->nelts) {
+			if (part->next == NULL) {
+				break;
+			}
+
+			part = part->next;
+			header = part->elts;
+			i = 0;
+		}
+
+		if (header[i].key.len == sizeof("host") - 1 &&
+			ngx_memcmp(header[i].lowcase_key, "host", sizeof("host") - 1) == 0)
+		{
+			continue;
+		}
+
+		if (!params->proxy_range &&
+			header[i].key.len == sizeof("range") - 1 &&
+			ngx_memcmp(header[i].lowcase_key, "range", sizeof("range") - 1) == 0)
+		{
+			continue;
+		}
+
+		len += header[i].key.len + sizeof(": ") - 1
+			+ header[i].value.len + sizeof(CRLF)-1;
 	}
 
 	// get/allocate the request buffer
@@ -431,11 +460,19 @@ init_request_buffer(
 	}
 
 	// first header line
-	*p++ = 'G';		*p++ = 'E';		*p++ = 'T';		*p++ = ' ';
-	p = ngx_copy(p, base_uri->data, base_uri->len);
-	if (extra_args->len > 0)
+	if (params->method == NGX_HTTP_HEAD)
 	{
-		if (ngx_strchr(base_uri->data, '?'))
+		*p++ = 'H';		*p++ = 'E';		*p++ = 'A';		*p++ = 'D';
+	}
+	else
+	{
+		*p++ = 'G';		*p++ = 'E';		*p++ = 'T';
+	}
+	*p++ = ' ';
+	p = ngx_copy(p, params->base_uri.data, params->base_uri.len);
+	if (params->extra_args.len > 0)
+	{
+		if (ngx_strchr(params->base_uri.data, '?'))
 		{
 			*p++ = '&';
 		}
@@ -444,26 +481,64 @@ init_request_buffer(
 			*p++ = '?';
 		}
 
-		p = ngx_copy(p, extra_args->data, extra_args->len);
+		p = ngx_copy(p, params->extra_args.data, params->extra_args.len);
 	}
 	p = ngx_copy(p, " HTTP/1.1" CRLF, sizeof(" HTTP/1.1" CRLF) - 1);
 
 	// host line
 	p = ngx_copy(p, "Host: ", sizeof("Host: ") - 1);
-	p = ngx_copy(p, host_name->data, host_name->len);
-	*p++ = '\r';	*p++ = '\n';
+	p = ngx_copy(p, params->host_name.data, params->host_name.len);
+	*p++ = CR;	*p++ = LF;
 
 	// range request
 	if (range_request)
 	{
-		p = ngx_sprintf(p, "Range: bytes=%O-%O" CRLF, range_start, range_end);
+		p = ngx_sprintf(p, "Range: bytes=%O-%O" CRLF, params->range_start, params->range_end - 1);
 	}
 
 	// additional headers
-	p = ngx_copy(p, extra_headers->data, extra_headers->len);
+	p = ngx_copy(p, params->extra_headers.data, params->extra_headers.len);
+
+	// input headers
+	part = &r->headers_in.headers.part;
+	header = part->elts;
+
+	for (i = 0; /* void */; i++) {
+
+		if (i >= part->nelts) {
+			if (part->next == NULL) {
+				break;
+			}
+
+			part = part->next;
+			header = part->elts;
+			i = 0;
+		}
+
+		if (header[i].key.len == sizeof("Host") - 1 &&
+			ngx_memcmp(header[i].lowcase_key, "host", sizeof("host") - 1) == 0)
+		{
+			continue;
+		}
+
+		if (!params->proxy_range &&
+			header[i].key.len == sizeof("range") - 1 &&
+			ngx_memcmp(header[i].lowcase_key, "range", sizeof("range") - 1) == 0)
+		{
+			continue;
+		}
+
+		p = ngx_copy(p, header[i].key.data, header[i].key.len);
+
+		*p++ = ':'; *p++ = ' ';
+
+		p = ngx_copy(p, header[i].value.data, header[i].value.len);
+
+		*p++ = CR; *p++ = LF;
+	}
 
 	// headers end
-	*p++ = '\r';	*p++ = '\n';
+	*p++ = CR;	*p++ = LF;
 	*p = '\0';
 	b->last = p;
 
@@ -474,10 +549,7 @@ ngx_int_t
 dump_request(
 	ngx_http_request_t *r,
 	ngx_http_upstream_conf_t* upstream_conf,
-	ngx_str_t* base_uri,
-	ngx_str_t* extra_args,
-	ngx_str_t* host_name,
-	ngx_str_t* extra_headers)
+	child_request_params_t* params)
 {
 	child_request_base_context_t* ctx;
 	ngx_int_t rc;
@@ -502,7 +574,7 @@ dump_request(
 	}
 
 	// build the request
-	ctx->request_buffer = init_request_buffer(r, NULL, base_uri, extra_args, host_name, -1, -1, extra_headers);
+	ctx->request_buffer = init_request_buffer(r, NULL, params);
 	if (ctx->request_buffer == NULL)
 	{
 		ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
@@ -594,11 +666,7 @@ child_request_start(
 	void* callback_context,
 	ngx_http_upstream_conf_t* upstream_conf,
 	ngx_str_t* internal_location,
-	ngx_str_t* base_uri,
-	ngx_str_t* extra_args,
-	ngx_str_t* host_name,
-	off_t range_start,
-	off_t range_end,
+	child_request_params_t* params,
 	off_t max_response_length,
 	u_char* response_buffer)
 {
@@ -629,7 +697,7 @@ child_request_start(
 	}
 
 	// initialize the request buffer
-	buffers->request_buffer = init_request_buffer(r, buffers->request_buffer, base_uri, extra_args, host_name, range_start, range_end, &empty_string);
+	buffers->request_buffer = init_request_buffer(r, buffers->request_buffer, params);
 	if (buffers->request_buffer == NULL)
 	{
 		ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
@@ -658,7 +726,7 @@ child_request_start(
 	// build the subrequest uri
 	// Note: this uri is not important, we could have just used internal_location as is
 	//		but adding the child request uri makes the logs more readable
-	uri.data = ngx_palloc(r->pool, internal_location->len + base_uri->len + 1);
+	uri.data = ngx_palloc(r->pool, internal_location->len + params->base_uri.len + 1);
 	if (uri.data == NULL)
 	{
 		ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
@@ -666,7 +734,7 @@ child_request_start(
 		return NGX_ERROR;
 	}
 	p = ngx_copy(uri.data, internal_location->data, internal_location->len);
-	p = ngx_copy(p, base_uri->data, base_uri->len);
+	p = ngx_copy(p, params->base_uri.data, params->base_uri.len);
 	*p = '\0';
 	uri.len = p - uri.data;
 
