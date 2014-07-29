@@ -35,7 +35,8 @@ child_request_start(
 ngx_int_t dump_request(
 	ngx_http_request_t *r,
 	ngx_http_upstream_conf_t* upstream_conf,
-	ngx_str_t* uri,
+	ngx_str_t* base_uri,
+	ngx_str_t* extra_args,
 	ngx_str_t* host_name,
 	ngx_str_t* extra_headers);
 

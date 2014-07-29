@@ -5,12 +5,17 @@
 #include "ngx_http_vod_conf.h"
 #include "vod/mp4_parser.h"
 
-#define REQUEST_TYPE_PLAYLIST (-1)
-#define REQUEST_TYPE_ENCRYPTION_KEY (-2)
-#define REQUEST_TYPE_IFRAME_PLAYLIST (-3)
+enum {
+	REQUEST_TYPE_HLS_PLAYLIST,
+	REQUEST_TYPE_HLS_IFRAME_PLAYLIST,
+	REQUEST_TYPE_HLS_ENCRYPTION_KEY,
+	REQUEST_TYPE_HLS_SEGMENT,
+	REQUEST_TYPE_SERVE_FILE,
+};
 
 typedef struct {
-	int segment_index;		// or REQUEST_TYPE_XXX
+	int request_type;
+	int segment_index;
 	uint32_t required_tracks[MEDIA_TYPE_COUNT];
 	uint32_t clip_to;
 	uint32_t clip_from;

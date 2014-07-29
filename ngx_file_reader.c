@@ -93,7 +93,87 @@ file_reader_init(
 	state->file.fd = of.fd;
 	state->file.name = *path;
 	state->file.log = state->log;
+	state->file_size = of.size;
 	state->use_directio = (clcf->directio <= of.size);
+
+	return NGX_OK;
+}
+
+ngx_int_t
+file_reader_dump_file(file_reader_state_t* state)
+{
+	ngx_http_request_t* r = state->r;
+	ngx_buf_t                 *b;
+	ngx_int_t                  rc;
+	ngx_chain_t                out;
+
+	file_reader_enable_directio(state);		// ignore errors
+
+	r->headers_out.status = NGX_HTTP_OK;
+	r->headers_out.content_length_n = state->file_size;
+
+	rc = ngx_http_set_etag(r);
+	if (rc != NGX_OK) 
+	{
+		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, state->log, 0,
+			"file_reader_dump_file: ngx_http_set_etag failed %i", rc);
+		return NGX_HTTP_INTERNAL_SERVER_ERROR;
+	}
+
+	rc = ngx_http_set_content_type(r);
+	if (rc != NGX_OK) 
+	{
+		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, state->log, 0,
+			"file_reader_dump_file: ngx_http_set_content_type failed %i", rc);
+		return NGX_HTTP_INTERNAL_SERVER_ERROR;
+	}
+
+	b = ngx_pcalloc(r->pool, sizeof(ngx_buf_t));
+	if (b == NULL) 
+	{
+		ngx_log_debug0(NGX_LOG_DEBUG_HTTP, state->log, 0,
+			"file_reader_dump_file: ngx_pcalloc failed (1)");
+		return NGX_HTTP_INTERNAL_SERVER_ERROR;
+	}
+
+	b->file = ngx_pcalloc(r->pool, sizeof(ngx_file_t));
+	if (b->file == NULL) 
+	{
+		ngx_log_debug0(NGX_LOG_DEBUG_HTTP, state->log, 0,
+			"file_reader_dump_file: ngx_pcalloc failed (2)");
+		return NGX_HTTP_INTERNAL_SERVER_ERROR;
+	}
+
+	rc = ngx_http_send_header(r);
+	if (rc == NGX_ERROR || rc > NGX_OK || r->header_only) 
+	{
+		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, state->log, 0,
+			"file_reader_dump_file: ngx_http_send_header failed %i", rc);
+		return rc;
+	}
+
+	b->file_pos = 0;
+	b->file_last = state->file_size;
+
+	b->in_file = b->file_last ? 1 : 0;
+	b->last_buf = (r == r->main) ? 1 : 0;
+	b->last_in_chain = 1;
+
+	b->file->fd = state->file.fd;
+	b->file->name = state->file.name;
+	b->file->log = state->log;
+	b->file->directio = state->file.directio;
+
+	out.buf = b;
+	out.next = NULL;
+
+	rc = ngx_http_output_filter(r, &out);
+	if (rc != NGX_OK && rc != NGX_AGAIN)
+	{
+		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, state->log, 0,
+			"file_reader_dump_file: ngx_http_output_filter failed %i", rc);
+		return rc;
+	}
 
 	return NGX_OK;
 }
