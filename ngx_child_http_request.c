@@ -13,6 +13,7 @@
 // typedefs
 typedef struct {
 	ngx_buf_t* request_buffer;
+	ngx_http_status_t status;
 } child_request_base_context_t;		// fields common to dump requests and child requests
 
 typedef struct {
@@ -23,6 +24,8 @@ typedef struct {
 
 	u_char* headers_buffer;
 	size_t headers_buffer_size;
+
+	off_t read_body_size;
 
 	u_char* response_buffer;
 	off_t response_buffer_size;
@@ -89,7 +92,6 @@ ngx_http_vod_process_header(ngx_http_request_t *r)
 	ngx_http_upstream_t *u;
 	ngx_table_elt_t *h;
 	ngx_int_t rc;
-	off_t read_body_size;
 
 	u = r->upstream;
 
@@ -188,7 +190,8 @@ ngx_http_vod_process_header(ngx_http_request_t *r)
 			// allocate a response buffer if needed
 			if (ctx->response_buffer == NULL)
 			{
-				ctx->response_buffer = ngx_palloc(r->pool, u->headers_in.content_length_n + 1);
+				ctx->response_buffer_size = u->headers_in.content_length_n;
+				ctx->response_buffer = ngx_palloc(r->pool, ctx->response_buffer_size + 1);
 				if (ctx->response_buffer == NULL)
 				{
 					ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
@@ -196,21 +199,21 @@ ngx_http_vod_process_header(ngx_http_request_t *r)
 					return NGX_ERROR;
 				}
 
-				ctx->response_buffer[u->headers_in.content_length_n] = '\0';
+				ctx->response_buffer[ctx->response_buffer_size] = '\0';
 			}
 
 			// in case we already got some of the response body, copy it to the response buffer
-			read_body_size = u->buffer.last - u->buffer.pos;
-			if (read_body_size > ctx->response_buffer_size)
+			ctx->read_body_size = u->buffer.last - u->buffer.pos;
+			if (ctx->read_body_size > ctx->response_buffer_size)
 			{
-				read_body_size = ctx->response_buffer_size;
+				ctx->read_body_size = ctx->response_buffer_size;
 			}
-			ngx_memcpy(ctx->response_buffer, u->buffer.pos, read_body_size);
+			ngx_memcpy(ctx->response_buffer, u->buffer.pos, ctx->read_body_size);
 
 			// set the upstream buffer to our response buffer
 			u->buffer.start = ctx->response_buffer;
 			u->buffer.pos = u->buffer.start;
-			u->buffer.last = u->buffer.start + read_body_size;
+			u->buffer.last = u->buffer.start + ctx->read_body_size;
 			u->buffer.end = u->buffer.start + ctx->response_buffer_size;
 			u->buffer.temporary = 1;
 
@@ -232,8 +235,8 @@ ngx_http_vod_process_header(ngx_http_request_t *r)
 static ngx_int_t
 ngx_http_vod_process_status_line(ngx_http_request_t *r)
 {
+	child_request_base_context_t* ctx;
 	ngx_http_upstream_t *u;
-	ngx_http_status_t status;
 	size_t len;
 	ngx_int_t rc;
 
@@ -241,12 +244,10 @@ ngx_http_vod_process_status_line(ngx_http_request_t *r)
 
 	u = r->upstream;
 
-	ngx_memzero(&status, sizeof(status));
-	rc = ngx_http_parse_status_line(r, &u->buffer, &status);
+	ctx = ngx_http_get_module_ctx(r, ngx_http_vod_module);
+	rc = ngx_http_parse_status_line(r, &u->buffer, &ctx->status);
 	if (rc == NGX_AGAIN) 
 	{
-		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
-			"ngx_http_vod_process_status_line: ngx_http_parse_status_line failed %i", rc);
 		return rc;
 	}
 
@@ -259,12 +260,12 @@ ngx_http_vod_process_status_line(ngx_http_request_t *r)
 
 	if (u->state && u->state->status == 0) 
 	{
-		u->state->status = status.code;
+		u->state->status = ctx->status.code;
 	}
 
-	u->headers_in.status_n = status.code;
+	u->headers_in.status_n = ctx->status.code;
 
-	len = status.end - status.start;
+	len = ctx->status.end - ctx->status.start;
 	u->headers_in.status_line.len = len;
 
 	u->headers_in.status_line.data = ngx_pnalloc(r->pool, len);
@@ -275,9 +276,9 @@ ngx_http_vod_process_status_line(ngx_http_request_t *r)
 		return NGX_ERROR;
 	}
 
-	ngx_memcpy(u->headers_in.status_line.data, status.start, len);
+	ngx_memcpy(u->headers_in.status_line.data, ctx->status.start, len);
 
-	if (status.http_version < NGX_HTTP_VERSION_11) 
+	if (ctx->status.http_version < NGX_HTTP_VERSION_11)
 	{
 		u->headers_in.connection_close = 1;
 	}
@@ -298,6 +299,7 @@ ngx_http_vod_abort_request(ngx_http_request_t *r)
 static ngx_int_t
 ngx_http_vod_filter_init(void *data)
 {
+	child_request_context_t* ctx;
 	ngx_http_request_t *r = data;
 	ngx_http_upstream_t *u;
 
@@ -310,6 +312,8 @@ ngx_http_vod_filter_init(void *data)
 		return NGX_ERROR;
 	}
 
+	ctx = ngx_http_get_module_ctx(r, ngx_http_vod_module);
+	u->buffer.last = u->buffer.start + ctx->read_body_size;
 	u->length = u->headers_in.content_length_n;
 
 	return NGX_OK;
@@ -641,6 +645,7 @@ static ngx_int_t
 child_request_finished_handler(ngx_http_request_t *r, void *data, ngx_int_t rc)
 {
 	child_request_context_t* ctx;
+	ngx_http_upstream_t *u;
 
 	ctx = ngx_http_get_module_ctx(r, ngx_http_vod_module);
 	if (ctx->callback == NULL)
@@ -651,7 +656,24 @@ child_request_finished_handler(ngx_http_request_t *r, void *data, ngx_int_t rc)
 	ngx_log_debug2(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
 		"child_request_finished_handler: called rc=%i, r=%p", rc, r);
 
-	ctx->callback(ctx->callback_context, rc, &r->upstream->buffer);
+	u = r->upstream;
+	if (rc == NGX_OK)
+	{
+		if (u->state && u->state->status != NGX_HTTP_OK && u->state->status != NGX_HTTP_PARTIAL_CONTENT)
+		{
+			ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
+				"upstream returned a bad status %ui", u->state->status);
+			rc = NGX_HTTP_BAD_GATEWAY;
+		}
+		else if (u->length != 0)
+		{
+			ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
+				"upstream connection was closed with %O bytes left to read", u->length);
+			rc = NGX_HTTP_BAD_GATEWAY;
+		}
+	}
+
+	ctx->callback(ctx->callback_context, rc, &u->buffer);
 	ctx->callback = NULL;
 
 	return NGX_OK;

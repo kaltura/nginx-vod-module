@@ -1001,7 +1001,12 @@ local_request_handler(ngx_http_request_t *r)
 		{
 			return NGX_HTTP_NOT_FOUND;
 		}
-		return NGX_OK;
+
+#if defined nginx_version && nginx_version >= 8011
+		r->main->count++;
+#endif
+
+		return NGX_DONE;
 	}
 
 	if (rc != NGX_OK)

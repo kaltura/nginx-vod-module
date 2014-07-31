@@ -60,9 +60,13 @@ For asynchronous I/O support add `--with-file-aio` (highly recommended, local an
 
     ./configure --add-module=/path/to/nginx-vod-module --with-file-aio
 	
-For building debug version of nginx add `--with-debug`
+To compile nginx with debug messages add `--with-debug`
 
     ./configure --add-module=/path/to/nginx-vod-module --with-debug
+
+To disable compiler optimizations (for debugging with gdb) add `CFLAGS="-g -O0"`
+
+	CFLAGS="-g -O0" ./configure ....
 
 ### Configuration directives
 

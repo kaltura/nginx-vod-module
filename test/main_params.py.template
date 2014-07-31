@@ -1,0 +1,6 @@
+TEST_FLAVOR_URI = '/p/.../sp/.../serveFlavor/entryId/.../v/.../flavorId/...'
+TEST_FLAVOR_FILE = '/content/.../entry/data/...mp4'
+TEST_FILES_ROOT = '/web'
+TEST_NONEXISTING_FILE = '/content/file/not/found'
+TEST_NO_READ_ACCESS_FILE = '/content/shared/no_access'
+TEST_FOLDER = '/content/entry'
