@@ -17,6 +17,7 @@ URL1_ENCRYPTION_KEY_SUFFIX = '' #'/encryption.key'
 URL2_PREFIX = 'http://kalturavod-i.akamaihd.net/i'		# akamai
 URL2_SUFFIX = '/index_0_av.m3u8'
 FFPROBE_BIN = '/web/content/shared/bin/ffmpeg-2.1.3-bin/ffprobe-2.1.3.sh'
+TEST_PARTNER_ID = '437481'
 
 STOP_FILE = '/tmp/compare_stop'
 TEMP_TS_FILE1 = '/tmp/1.ts'
@@ -135,18 +136,16 @@ class TestThread(Thread):
 		self.writeOutput('comparing %s %s' % (uri1, uri2))
 
 		# avoid billing any real partners
-		uri1 = re.sub('/p/\d+/sp/\d+/', '/p/437481/sp/43748100/', uri1)
-		uri2 = re.sub('/p/\d+/sp/\d+/', '/p/437481/sp/43748100/', uri2)
+		uri1 = re.sub('/p/\d+/sp/\d+/', '/p/%s/sp/%s00/' % (TEST_PARTNER_ID, TEST_PARTNER_ID), uri1)
+		uri2 = re.sub('/p/\d+/sp/\d+/', '/p/%s/sp/%s00/' % (TEST_PARTNER_ID, TEST_PARTNER_ID), uri2)
 
 		startTime = time.time()
 		os.system("""curl -s '%s%s' < /dev/null > %s""" % (URL1_PREFIX, uri1, self.tsFile1))
 		self.writeOutput('get uri1 took %s' % (time.time() - startTime))
-		#self.writeOutput(commands.getoutput('cksum %s' % self.tsFile1))
 
 		startTime = time.time()
 		os.system("""curl -s '%s%s' < /dev/null > %s""" % (URL2_PREFIX, uri2, self.tsFile2))
 		self.writeOutput('get uri2 took %s' % (time.time() - startTime))		
-		#self.writeOutput(commands.getoutput('cksum %s' % self.tsFile2))
 		
 		if len(URL1_ENCRYPTION_KEY_SUFFIX) != 0:
 			encryptionKeyUrl = '%s%s%s' % (URL1_PREFIX, url1[:url1.rfind('/')], URL1_ENCRYPTION_KEY_SUFFIX)

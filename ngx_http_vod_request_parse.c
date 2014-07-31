@@ -286,6 +286,13 @@ parse_request_uri(ngx_http_request_t *r, ngx_http_vod_loc_conf_t *conf, request_
 
 	if (conf->serve_files)
 	{
+		// the file name was not recognized, add it back to the URL
+		r->uri.data[r->uri.len] = '/';
+		r->uri.len++;
+		ngx_memcpy(r->uri.data + r->uri.len, start_pos, end_pos - start_pos);
+		r->uri.len += end_pos - start_pos;
+		r->uri.data[r->uri.len] = '\0';
+
 		request_params->request_type = REQUEST_TYPE_SERVE_FILE;
 
 		return NGX_OK;

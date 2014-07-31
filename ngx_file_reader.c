@@ -82,12 +82,13 @@ file_reader_init(
 
 	if (!of.is_file) 
 	{
-		if (ngx_close_file(of.fd) == NGX_FILE_ERROR) 
+		ngx_log_error(NGX_LOG_ERR, state->log, 0, "\"%s\" is not a file", path->data);
+		if (ngx_close_file(of.fd) == NGX_FILE_ERROR)
 		{
 			ngx_log_error(NGX_LOG_ALERT, state->log, ngx_errno, ngx_close_file_n " \"%s\" failed", path->data);
 		}
 
-		return NGX_DECLINED;
+		return NGX_HTTP_FORBIDDEN;
 	}
 
 	state->file.fd = of.fd;
