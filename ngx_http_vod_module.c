@@ -964,6 +964,7 @@ dump_request_to_fallback_upstream(
 	child_params.base_uri = ctx->original_uri;
 	child_params.extra_headers = conf->proxy_header;
 	child_params.proxy_range = 1;
+	child_params.proxy_accept_encoding = 1;
 
 	rc = dump_request(
 		r,
@@ -1062,7 +1063,7 @@ path_request_finished(void* context, ngx_int_t rc, ngx_buf_t* response)
 	{
 		ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
 			"path_request_finished: empty path mapping response");
-		rc = NGX_HTTP_SERVICE_UNAVAILABLE;
+		rc = NGX_HTTP_NOT_FOUND;
 		goto finalize_request;
 	}
 
@@ -1318,6 +1319,7 @@ dump_http_request(ngx_http_request_t *r)
 	child_params.extra_args = conf->upstream_extra_args;
 	child_params.host_name = conf->upstream_host_header;
 	child_params.proxy_range = 1;
+	child_params.proxy_accept_encoding = 1;
 
 	return dump_request(
 		r,

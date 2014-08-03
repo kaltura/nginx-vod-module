@@ -67,7 +67,7 @@ send_single_buffer_response(ngx_http_request_t *r, ngx_str_t *response, u_char* 
 	rc = ngx_http_output_filter(r, &out);
 	if (rc != NGX_OK && rc != NGX_AGAIN)
 	{
-		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, state->log, 0,
+		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
 			"send_single_buffer_response: ngx_http_output_filter failed %i", rc);
 		return rc;
 	}

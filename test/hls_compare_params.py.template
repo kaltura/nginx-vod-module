@@ -1,0 +1,13 @@
+URL1_PREFIX = 'http://localhost:8001/mapped'
+URL1_SUFFIX = '/index.m3u8'
+URL1_ENCRYPTION_KEY_SUFFIX = '' #'/encryption.key'
+URL2_PREFIX = 'http://some-other-server'
+URL2_SUFFIX = '/index.m3u8'
+FFPROBE_BIN = '/path/to/ffprobe'
+TEST_PARTNER_ID = '12345'
+
+STOP_FILE = '/tmp/compare_stop'
+TEMP_TS_FILE1 = '/tmp/1.ts'
+TEMP_TS_FILE2 = '/tmp/2.ts'
+TEMP_FFPROBE_FILE1 = '/tmp/1.ts.ffp'
+TEMP_FFPROBE_FILE2 = '/tmp/2.ts.ffp'

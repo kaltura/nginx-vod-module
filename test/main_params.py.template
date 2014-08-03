@@ -1,6 +1,6 @@
-TEST_FLAVOR_URI = '/p/.../sp/.../serveFlavor/entryId/.../v/.../flavorId/...'
-TEST_FLAVOR_FILE = '/content/.../entry/data/...mp4'
+TEST_FLAVOR_URI = '/p/.../sp/.../serveFlavor/entryId/.../v/.../flavorId/...'		# a serveFlavor URI of some h264/aac mp4
+TEST_FLAVOR_FILE = '/content/.../entry/data/...mp4'									# the file path of some h264/aac mp4
 TEST_FILES_ROOT = '/web'
 TEST_NONEXISTING_FILE = '/content/file/not/found'
-TEST_NO_READ_ACCESS_FILE = '/content/shared/no_access'
-TEST_FOLDER = '/content/entry'
+TEST_NO_READ_ACCESS_FILE = '/content/shared/no_access'								# a file that nginx workers cant read
+TEST_FOLDER = '/content/entry'														# some folder

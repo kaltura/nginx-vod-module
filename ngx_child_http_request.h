@@ -16,6 +16,7 @@ typedef struct {
 	off_t range_end;
 	ngx_str_t extra_headers;
 	ngx_flag_t proxy_range;
+	ngx_flag_t proxy_accept_encoding;
 } child_request_params_t;
 
 // Note: the purpose of this struct is to reuse the request & headers buffers between several 

@@ -168,6 +168,8 @@ parse_required_tracks(ngx_http_request_t* r, u_char* start_pos, u_char* end_pos,
 				break;
 
 			default:
+				ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
+					"parse_required_tracks: failed to parse stream type");
 				return NGX_HTTP_BAD_REQUEST;
 			}
 
@@ -221,6 +223,8 @@ parse_request_uri(ngx_http_request_t *r, ngx_http_vod_loc_conf_t *conf, request_
 		// make sure the file name starts with the right prefix
 		if (ngx_memcmp(start_pos, conf->m3u8_config.segment_file_name_prefix.data, conf->m3u8_config.segment_file_name_prefix.len) != 0)
 		{
+			ngx_log_error(NGX_LOG_ERR, r->connection->log, 0, 
+				"parse_request_uri: unidentified ts request");
 			return NGX_HTTP_BAD_REQUEST;
 		}
 		start_pos += conf->m3u8_config.segment_file_name_prefix.len;
@@ -255,6 +259,8 @@ parse_request_uri(ngx_http_request_t *r, ngx_http_vod_loc_conf_t *conf, request_
 		}
 		else
 		{
+			ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
+				"parse_request_uri: unidentified m3u8 request");
 			return NGX_HTTP_BAD_REQUEST;
 		}
 

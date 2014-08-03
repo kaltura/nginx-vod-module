@@ -3,10 +3,10 @@ import urllib
 import sys
 import os
 
-# zgrep serveFlavor /data/logs/investigate/2014/06/27/pa-front-origin1-access_log-2014-06-27.gz | grep kalturavod-i.origin.kaltura.com | awk '{print $7}' | sort -u > /tmp/serveFlavorUris.txt
+from validate_iframes_params import *
 
-FFPROBE_BIN = '/web/content/shared/bin/ffmpeg-2.1.3-bin/ffprobe-2.1.3.sh'
-HOSTNAME = 'localhost:4321'
+SERVER_URL = 'http://localhost:8001/mapped'
+IFRAMES_URI = '/iframes.m3u8'
 
 def getFfprobeKeyframes(output, fileSize):
 	iframePositions = []
@@ -35,10 +35,10 @@ def getFfprobeKeyframes(output, fileSize):
 	return result
 
 def testUri(serveFlavorUri):
-	iframesUrl = 'http://%s%s/iframes.m3u8' % (HOSTNAME, serveFlavorUri)
+	iframesUrl = '%s%s%s' % (SERVER_URL, serveFlavorUri, IFRAMES_URI)
 
 	f = urllib.urlopen(iframesUrl)
-	if f.getcode() != '200':
+	if f.getcode() != 200:
 		print 'Notice: %s returned status %s' % (iframesUrl, f.getcode())
 		return
 	iframes = f.read()
@@ -61,7 +61,7 @@ def testUri(serveFlavorUri):
 
 	for curSegmentFile in sorted(segIframeRanges.keys()):
 		iframeRanges = segIframeRanges[curSegmentFile]
-		segmentUrl = 'http://%s%s/%s' % (HOSTNAME, serveFlavorUri, curSegmentFile)
+		segmentUrl = '%s%s/%s' % (SERVER_URL, serveFlavorUri, curSegmentFile)
 		os.system("curl -s '%s' > /tmp/testSeg.ts" % segmentUrl)
 		actualRanges = getFfprobeKeyframes(
 			commands.getoutput('%s -i /tmp/testSeg.ts -show_frames' % FFPROBE_BIN),

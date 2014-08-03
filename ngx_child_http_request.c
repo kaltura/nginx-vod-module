@@ -371,6 +371,32 @@ create_upstream(
 	return NGX_OK;
 }
 
+static ngx_flag_t
+should_proxy_header(ngx_table_elt_t* header, child_request_params_t* params)
+{
+	if (header->key.len == sizeof("host") - 1 &&
+		ngx_memcmp(header->lowcase_key, "host", sizeof("host") - 1) == 0)
+	{
+		return 0;
+	}
+
+	if (!params->proxy_range &&
+		header->key.len == sizeof("range") - 1 &&
+		ngx_memcmp(header->lowcase_key, "range", sizeof("range") - 1) == 0)
+	{
+		return 0;
+	}
+
+	if (!params->proxy_accept_encoding &&
+		header->key.len == sizeof("accept-encoding") - 1 &&
+		ngx_memcmp(header->lowcase_key, "accept-encoding", sizeof("accept-encoding") - 1) == 0)
+	{
+		return 0;
+	}
+
+	return 1;
+}
+
 static ngx_buf_t*
 init_request_buffer(
 	ngx_http_request_t *r,
@@ -427,15 +453,7 @@ init_request_buffer(
 			i = 0;
 		}
 
-		if (header[i].key.len == sizeof("host") - 1 &&
-			ngx_memcmp(header[i].lowcase_key, "host", sizeof("host") - 1) == 0)
-		{
-			continue;
-		}
-
-		if (!params->proxy_range &&
-			header[i].key.len == sizeof("range") - 1 &&
-			ngx_memcmp(header[i].lowcase_key, "range", sizeof("range") - 1) == 0)
+		if (!should_proxy_header(&header[i], params))
 		{
 			continue;
 		}
@@ -519,15 +537,7 @@ init_request_buffer(
 			i = 0;
 		}
 
-		if (header[i].key.len == sizeof("Host") - 1 &&
-			ngx_memcmp(header[i].lowcase_key, "host", sizeof("host") - 1) == 0)
-		{
-			continue;
-		}
-
-		if (!params->proxy_range &&
-			header[i].key.len == sizeof("range") - 1 &&
-			ngx_memcmp(header[i].lowcase_key, "range", sizeof("range") - 1) == 0)
+		if (!should_proxy_header(&header[i], params))
 		{
 			continue;
 		}
