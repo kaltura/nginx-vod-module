@@ -100,6 +100,32 @@ file_reader_init(
 	return NGX_OK;
 }
 
+// Note: this function initializes r->exten in order to have nginx select the correct mime type for the request
+//		the code was copied from nginx's ngx_http_set_exten
+static void
+file_reader_set_request_extension(ngx_http_request_t *r, ngx_str_t* path)
+{
+	ngx_int_t  i;
+
+	ngx_str_null(&r->exten);
+
+	for (i = path->len - 1; i > 1; i--) {
+		if (path->data[i] == '.' && path->data[i - 1] != '/') {
+
+			r->exten.len = path->len - i - 1;
+			r->exten.data = &path->data[i + 1];
+
+			return;
+
+		}
+		else if (path->data[i] == '/') {
+			return;
+		}
+	}
+
+	return;
+}
+
 ngx_int_t
 file_reader_dump_file(file_reader_state_t* state)
 {
@@ -107,6 +133,8 @@ file_reader_dump_file(file_reader_state_t* state)
 	ngx_buf_t                 *b;
 	ngx_int_t                  rc;
 	ngx_chain_t                out;
+
+	file_reader_set_request_extension(r, &state->file.name);
 
 	file_reader_enable_directio(state);		// ignore errors
 

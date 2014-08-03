@@ -1,29 +1,18 @@
 from threading import Thread
 from threading import Lock
 from Crypto.Cipher import AES
+from StringIO import StringIO
 import commands
-import urllib
+import urllib2
+import random
+import struct
 import time
+import gzip
 import sys
 import os
 import re
 
-# to generate the input file:
-# 	zgrep serveFlavor /data/logs/investigate/2014/07/14/??-front-origin*access_log* | grep kalturavod-vh | awk '{print $7}' | sort -u > /tmp/serveFlavorUris.txt
-
-URL1_PREFIX = 'http://localhost:4321'					# nginx vod
-URL1_SUFFIX = '/index.m3u8'
-URL1_ENCRYPTION_KEY_SUFFIX = '' #'/encryption.key'
-URL2_PREFIX = 'http://kalturavod-i.akamaihd.net/i'		# akamai
-URL2_SUFFIX = '/index_0_av.m3u8'
-FFPROBE_BIN = '/web/content/shared/bin/ffmpeg-2.1.3-bin/ffprobe-2.1.3.sh'
-TEST_PARTNER_ID = '437481'
-
-STOP_FILE = '/tmp/compare_stop'
-TEMP_TS_FILE1 = '/tmp/1.ts'
-TEMP_TS_FILE2 = '/tmp/2.ts'
-TEMP_FFPROBE_FILE1 = '/tmp/1.ts.ffp'
-TEMP_FFPROBE_FILE2 = '/tmp/2.ts.ffp'
+from hls_compare_params import *
 
 PTS_THRESHOLD = 1000		# 1/90 sec
 DTS_THRESHOLD = 1000		# 1/90 sec
@@ -132,25 +121,19 @@ class TestThread(Thread):
 		
 		return self.compareFfprobeOutputs(self.ffprobeFile1, self.ffprobeFile2)
 
-	def compareTsUris(self, uri1, uri2, segmentIndex):
-		self.writeOutput('comparing %s %s' % (uri1, uri2))
-
-		# avoid billing any real partners
-		uri1 = re.sub('/p/\d+/sp/\d+/', '/p/%s/sp/%s00/' % (TEST_PARTNER_ID, TEST_PARTNER_ID), uri1)
-		uri2 = re.sub('/p/\d+/sp/\d+/', '/p/%s/sp/%s00/' % (TEST_PARTNER_ID, TEST_PARTNER_ID), uri2)
+	def compareTsUris(self, url1, url2, segmentIndex, aesKey):
+		self.writeOutput('comparing %s %s' % (url1, url2))
 
 		startTime = time.time()
-		os.system("""curl -s '%s%s' < /dev/null > %s""" % (URL1_PREFIX, uri1, self.tsFile1))
-		self.writeOutput('get uri1 took %s' % (time.time() - startTime))
+		os.system("""curl -s '%s' < /dev/null > %s""" % (url1, self.tsFile1))
+		self.writeOutput('get url1 took %s' % (time.time() - startTime))
 
 		startTime = time.time()
-		os.system("""curl -s '%s%s' < /dev/null > %s""" % (URL2_PREFIX, uri2, self.tsFile2))
-		self.writeOutput('get uri2 took %s' % (time.time() - startTime))		
+		os.system("""curl -s '%s' < /dev/null > %s""" % (url2, self.tsFile2))
+		self.writeOutput('get url2 took %s' % (time.time() - startTime))		
 		
-		if len(URL1_ENCRYPTION_KEY_SUFFIX) != 0:
-			encryptionKeyUrl = '%s%s%s' % (URL1_PREFIX, url1[:url1.rfind('/')], URL1_ENCRYPTION_KEY_SUFFIX)
-			encryptionKey = urllib.urlopen(encryptionKeyUrl).read()
-			cipher = AES.new(encryptionKey, AES.MODE_CBC, '\0' * 12 + struct.pack('>L', segmentIndex))
+		if aesKey != None:
+			cipher = AES.new(aesKey, AES.MODE_CBC, '\0' * 12 + struct.pack('>L', segmentIndex))
 			decryptedTS = cipher.decrypt(file(self.tsFile1, 'rb').read())
 			padLength = ord(decryptedTS[-1])
 			decryptedTS = decryptedTS[:-padLength]
@@ -167,25 +150,73 @@ class TestThread(Thread):
 				result.append(curLine)
 		return result
 
+	def getM3U8(self, url):
+		request = urllib2.Request(url, headers={'Accept-encoding': 'gzip'})
+		f = urllib2.urlopen(request)
+		data = f.read()
+		if f.info().get('Content-Encoding') == 'gzip':
+			gzipFile = gzip.GzipFile(fileobj=StringIO(data))
+			try:
+				data = gzipFile.read()
+			except IOError, e:
+				self.writeOutput('Failed to decode gzip')
+				data = ''
+		return f.getcode(), data
+		
 	def compareM3U8Uris(self, uri):
 		self.writeOutput('Testing, uri=%s' % uri)
-		manifest1 = urllib.urlopen(URL1_PREFIX + uri + URL1_SUFFIX).read()
-		manifest2 = urllib.urlopen(URL2_PREFIX + uri + URL2_SUFFIX).read()
+		
+		# avoid billing real partners
+		uri = re.sub('/p/\d+/sp/\d+/', '/p/%s/sp/%s00/' % (TEST_PARTNER_ID, TEST_PARTNER_ID), uri)
+
+		# get the manifests
+		url1 = URL1_BASE + random.choice(URL1_PREFIXES) + uri
+		url2 = URL2_PREFIX + uri
+		
+		code1, manifest1 = self.getM3U8(url1 + URL1_SUFFIX)
+		code2, manifest2 = self.getM3U8(url2 + URL2_SUFFIX)
+		if code1 != code2:
+			self.writeOutput('got different status codes %s vs %s' % (code1, code2))
+			return True
+
+		if code1 == '404' and code2 == '404':
+			self.writeOutput('both servers returned 404')
+			return True
+		
+		# extract the ts uris
 		tsUris1 = self.getTsUris(manifest1)
 		tsUris2 = self.getTsUris(manifest2)
 		if len(tsUris1) != len(tsUris2):
-			self.writeOutput('TS segment count mismatch %s vs %s' % (len(tsUris1), len(tsUris2)))
-			self.writeOutput('manifest1=%s' % manifest1)
-			self.writeOutput('manifest2=%s' % manifest2)
-			return False
+			if len(tsUris1) < len(tsUris2) and '/clipTo/' in uri:
+				self.writeOutput('ignoring TS count mismatch (%s vs %s) due to clipTo parameter' % (len(tsUris1), len(tsUris2)))
+				tsUris2 = tsUris2[:len(tsUris1)]
+			else:
+				self.writeOutput('TS segment count mismatch %s vs %s' % (len(tsUris1), len(tsUris2)))
+				self.writeOutput('manifest1=%s' % manifest1)
+				self.writeOutput('manifest2=%s' % manifest2)
+				return False
+
+		# get the encryption key, if exists
+		keyUri = None
+		for curLine in manifest1.split('\n'):
+			if curLine.startswith('#EXT-X-KEY'):
+				keyUri = curLine.split('"')[1]
+		if keyUri != None:
+			url = url1 + URL1_SUFFIX
+			baseUrl = url[:url.rfind('/')] + '/'
+			aesKey = urllib2.urlopen(baseUrl + keyUri).read()
+		else:
+			aesKey = None
+
+		# compare the ts segments
 		self.writeOutput('segmentCount=%s' % len(tsUris1))
 		for curIndex in xrange(len(tsUris1)):
 			if os.path.exists(STOP_FILE):
 				return True
-			uri1 = '%s/%s' % (uri, tsUris1[curIndex])
-			uri2 = '%s/%s' % (uri, tsUris2[curIndex])
-			if not self.compareTsUris(uri1, uri2, curIndex + 1):
-				self.writeOutput('Error, uri1=%s, uri2=%s' % (uri1, uri2))
+			tsUrl1 = '%s/%s' % (url1, tsUris1[curIndex])
+			tsUrl2 = '%s/%s' % (url2, tsUris2[curIndex])
+			if not self.compareTsUris(tsUrl1, tsUrl2, curIndex + 1, aesKey):
+				self.writeOutput('Error, url1=%s, url2=%s' % (url1, url2))
 				return False
 		self.writeOutput('Success')
 		return True

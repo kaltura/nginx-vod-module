@@ -1,6 +1,8 @@
 from threading import Thread
+from Crypto.Cipher import AES
 import urlparse
 import urllib2
+import struct
 import socket
 import random
 import time
@@ -16,9 +18,10 @@ NGINX_LOG_PATH = '/var/log/nginx/error.log'
 NGINX_HOST = 'http://localhost:8001'
 API_SERVER_PORT = 8002
 FALLBACK_PORT = 8003
-NGINX_LOCAL = NGINX_HOST + '/local'
-NGINX_MAPPED = NGINX_HOST + '/mapped'
-NGINX_REMOTE = NGINX_HOST + '/remote'
+NGINX_LOCAL = NGINX_HOST + '/tlocal'
+NGINX_MAPPED = NGINX_HOST + '/tmapped'
+NGINX_REMOTE = NGINX_HOST + '/tremote'
+ENCRYPTED_PREFIX = '/enc'
 HLS_PLAYLIST_FILE = '/index.m3u8'
 HLS_IFRAMES_FILE = '/iframes.m3u8'
 HLS_SEGMENT_FILE = '/seg-1-a1-v1.ts'
@@ -28,13 +31,27 @@ M3U8_PREFIX = '''#EXTM3U
 #EXT-X-VERSION:2
 #EXT-X-MEDIA-SEQUENCE:1
 '''
+
+M3U8_PREFIX_ENCRYPTED = '''#EXTM3U
+#EXT-X-TARGETDURATION:10
+#EXT-X-ALLOW-CACHE:YES
+#EXT-X-KEY:METHOD=AES-128,URI="encryption.key"
+#EXT-X-VERSION:2
+#EXT-X-MEDIA-SEQUENCE:1
+'''
 M3U8_POSTFIX = '#EXT-X-ENDLIST\n'
 M3U8_EXTINF = '#EXTINF:'
 M3U8_SEGMENT_PREFIX = 'seg-'
 M3U8_SEGMENT_POSTFIX = '.ts'
 SERVER_NAME = 'localhost'
 
-HLS_REQUESTS = [HLS_PLAYLIST_FILE, HLS_IFRAMES_FILE, HLS_SEGMENT_FILE, '']      # '' returns the full file
+HLS_REQUESTS = [
+    (HLS_PLAYLIST_FILE, 'application/vnd.apple.mpegurl'),
+    (HLS_IFRAMES_FILE, 'application/vnd.apple.mpegurl'),
+    (HLS_SEGMENT_FILE, 'video/MP2T')]
+
+VOD_REQUESTS = HLS_REQUESTS + [
+    ('', 'video/mp4')]      # '' returns the full file
 
 ### Assertions
 def assertEquals(v1, v2):
@@ -75,10 +92,14 @@ def assertRequestFails(url, statusCode, expectedBody = None, headers = {}):
             assertEquals(expectedBody, e.read())
 
 def validatePlaylistM3U8(buffer):
-    assertStartsWith(buffer, M3U8_PREFIX)
+    if buffer.startswith(M3U8_PREFIX_ENCRYPTED):
+        buffer = buffer[len(M3U8_PREFIX_ENCRYPTED):]
+    else:
+        assertStartsWith(buffer, M3U8_PREFIX)
+        buffer = buffer[len(M3U8_PREFIX):]
     assertEndsWith(buffer, M3U8_POSTFIX)
     expectExtInf = True
-    for curLine in buffer[len(M3U8_PREFIX):-len(M3U8_POSTFIX)].split('\n'):
+    for curLine in buffer[:-len(M3U8_POSTFIX)].split('\n'):
         if len(curLine) == 0:
             continue
         if expectExtInf:
@@ -130,6 +151,13 @@ def getPathMappingResponse(path):
 
 def getUniqueUrl(baseUrl, path1, path2 = ''):
     return '%s%s/rand/%s%s' % (baseUrl, path1, random.randint(0, 0x100000), path2)
+
+def createRandomSymLink(sourcePath):
+    linkPath = TEST_LINK_BASE_PATH + '/testlink_%s.mp4' % random.randint(0, 0x100000)
+    linkFullPath = TEST_FILES_ROOT + linkPath
+    os.symlink(sourcePath, linkFullPath)
+    cleanupStack.push(lambda: os.unlink(linkFullPath))
+    return linkPath
 
 ### Socket functions
 def createTcpServer(port):
@@ -225,10 +253,10 @@ def sendHttp10Request(url):
     s.close()
     return result
 
-def serveFileHandler(s, path, headers):
+def serveFileHandler(s, path, mimeType, headers):
     # handle head
     if headers.startswith('HEAD'):
-        socketSendAndShutdown(s, getHttpResponse(length=os.path.getsize(path)))
+        socketSendAndShutdown(s, getHttpResponse(length=os.path.getsize(path), headers={'Content-Type':mimeType}))
         return
     
     # get the request body
@@ -247,11 +275,11 @@ def serveFileHandler(s, path, headers):
     f.close()
 
     # build the response
-    socketSendAndShutdown(s, getHttpResponse(body, status))
+    socketSendAndShutdown(s, getHttpResponse(body, status, headers={'Content-Type':mimeType}))
 
-def serveFile(s, path):
+def serveFile(s, path, mimeType):
     headers = socketReadHttpHeaders(s)
-    serveFileHandler(s, path, headers)
+    serveFileHandler(s, path, mimeType, headers)
 
 ### TCP server
 class TcpServer(Thread):
@@ -317,41 +345,92 @@ class TestSuite(object):
 
 ### Test suites
 class BasicTestSuite(TestSuite):
-    def __init__(self, getUrl, uri, setupServer):
+    def __init__(self, getUrl, setupServer):
         super(BasicTestSuite, self).__init__()
         self.getUrl = getUrl
-        self.uri = uri
-        self.setupServer = setupServer
-    
+        self.prepareTest = setupServer
+
+    # sanity
     def testHeadRequestSanity(self):
-        self.setupServer()
-        for curRequest in HLS_REQUESTS:
-            fullResponse = urllib2.urlopen(self.getUrl(self.uri, curRequest)).read()
-            request = urllib2.Request(self.getUrl(self.uri, curRequest))
+        for curRequest, contentType in VOD_REQUESTS:
+            fullResponse = urllib2.urlopen(self.getUrl(curRequest)).read()
+            request = urllib2.Request(self.getUrl(curRequest))
             request.get_method = lambda : 'HEAD'
             headResponse = urllib2.urlopen(request)
             assertEquals(int(headResponse.info().getheader('Content-Length')), len(fullResponse))
+            assertEquals(headResponse.info().getheader('Content-Type'), contentType)
 
     def testRangeRequestSanity(self):
-        self.setupServer()
-        for curRequest in HLS_REQUESTS:
-            fullResponse = urllib2.urlopen(self.getUrl(self.uri, curRequest)).read()
+        for curRequest, contentType in VOD_REQUESTS:
+            url = self.getUrl(curRequest)
+            response = urllib2.urlopen(url)
+            assertEquals(response.info().getheader('Content-Type'), contentType)
+            fullResponse = response.read()
             for i in xrange(10):
                 startOffset = random.randint(0, len(fullResponse) - 1)
                 endOffset = random.randint(startOffset, len(fullResponse) - 1)
-                request = urllib2.Request(self.getUrl(self.uri, curRequest), headers={'Range': 'bytes=%s-%s' % (startOffset, endOffset)})
-                response = urllib2.urlopen(request).read()
-                assertEquals(response, fullResponse[startOffset:(endOffset + 1)])
+                if not ENCRYPTED_PREFIX in url:         # the url must not change when enryption is enabled, since the key will change
+                    url = self.getUrl(curRequest)
+                request = urllib2.Request(url, headers={'Range': 'bytes=%s-%s' % (startOffset, endOffset)})
+                response = urllib2.urlopen(request)
+                assertEquals(response.info().getheader('Content-Type'), contentType)
+                assert(response.read() == fullResponse[startOffset:(endOffset + 1)])
 
+    def testEncryptionSanity(self):
+        url = self.getUrl(HLS_PLAYLIST_FILE)
+        response = urllib2.urlopen(url).read()
+        keyUri = None
+        for curLine in response.split('\n'):
+            if curLine.startswith('#EXT-X-KEY'):
+                keyUri = curLine.split('"')[1]
+        if keyUri == None:
+            return
+        baseUrl = url[:url.rfind('/')] + '/'        # cannot use getUrl here since it will create a new URL with a new key
+        aesKey = urllib2.urlopen(baseUrl + keyUri).read()
+
+        encryptedSegment = urllib2.urlopen(baseUrl + HLS_SEGMENT_FILE).read()
+        cipher = AES.new(aesKey, AES.MODE_CBC, '\0' * 12 + struct.pack('>L', 1))
+        decryptedSegment = cipher.decrypt(encryptedSegment)
+        padLength = ord(decryptedSegment[-1])
+        decryptedSegment = decryptedSegment[:-padLength]
+
+        clearSegment = urllib2.urlopen(self.getUrl(HLS_SEGMENT_FILE).replace(ENCRYPTED_PREFIX, '')).read()
+
+        assert(clearSegment == decryptedSegment)
+        
+
+    # bad requests
     def testSegmentIdTooBig(self):
-        self.setupServer()
-        assertRequestFails(self.getUrl(self.uri, '/seg-3600-a1-v1.ts'), 400)
+        assertRequestFails(self.getUrl('/seg-3600-a1-v1.ts'), 400)
         self.logTracker.assertContains('no frames were found')
 
     def testNonExistingTracks(self):
-        self.setupServer()
-        assertRequestFails(self.getUrl(self.uri, '/seg-1-a10-v10.ts'), 400)
+        assertRequestFails(self.getUrl('/seg-1-a10-v10.ts'), 400)
         self.logTracker.assertContains('no matching streams were found')
+
+    def testClipToLargerThanClipFrom(self):
+        assertRequestFails(self.getUrl('/clipFrom/10000/clipTo/1000/index.m3u8'), 400)
+        self.logTracker.assertContains('clip from 10000 is larger than clip to 1000')
+
+    def testBadSegmentIndex(self):
+        assertRequestFails(self.getUrl('/seg-abc-a1-v1.ts'), 400)
+        self.logTracker.assertContains('failed to parse the segment index')
+    
+    def testBadStreamIndex(self):
+        assertRequestFails(self.getUrl('/seg-1-aabc-v1.ts'), 400)
+        self.logTracker.assertContains('failed to parse a stream index')
+    
+    def testBadStreamType(self):
+        assertRequestFails(self.getUrl('/seg-1-a1-x1.ts'), 400)
+        self.logTracker.assertContains('failed to parse stream type')
+
+    def testUnrecognizedTSRequest(self):
+        assertRequestFails(self.getUrl('/bla-1-a1-v1.ts'), 400)
+        self.logTracker.assertContains('unidentified ts request')
+
+    def testUnrecognizedTSRequest(self):
+        assertRequestFails(self.getUrl('/bla.m3u8'), 400)
+        self.logTracker.assertContains('unidentified m3u8 request')
 
 class UpstreamTestSuite(TestSuite):
     def __init__(self, baseUrl, uri, serverPort, urlFile = ''):
@@ -488,72 +567,139 @@ class FileServeTestSuite(TestSuite):
         assertRequestFails(self.getServeUrl(TEST_FOLDER), 403)
         self.logTracker.assertContains('"%s" is not a file' % (TEST_FILES_ROOT + TEST_FOLDER))
 
+    def testMoovAtomCache(self):
+        for curRequest, _ in HLS_REQUESTS:
+            linkPath = createRandomSymLink(TEST_FILES_ROOT + TEST_FLAVOR_FILE)
+            url = self.getServeUrl(linkPath) + curRequest
+
+            logTracker = LogTracker()
+            uncachedResponse = urllib2.urlopen(url).read()
+            logTracker.assertContains('moov atom cache miss')
+            
+            logTracker = LogTracker()
+            cachedResponse = urllib2.urlopen(url).read()
+            logTracker.assertContains('moov atom cache hit')
+
+            assert(cachedResponse == uncachedResponse)
+
+            cleanupStack.resetAndDestroy()
+
 class LocalTestSuite(TestSuite):
+    def __init__(self, baseUrl):
+        super(LocalTestSuite, self).__init__()
+        self.baseUrl = baseUrl
+            
     def runChildSuites(self):
         BasicTestSuite(
-            lambda uri, filePath: NGINX_LOCAL + uri + filePath,
-            TEST_FLAVOR_FILE,
+            lambda filePath: self.baseUrl + TEST_FLAVOR_FILE + filePath,
             lambda: None).run()
-        FallbackUpstreamTestSuite(NGINX_LOCAL, TEST_NONEXISTING_FILE, FALLBACK_PORT).run()
-        FileServeTestSuite(lambda uri: NGINX_LOCAL + uri).run()
+        FallbackUpstreamTestSuite(self.baseUrl, TEST_NONEXISTING_FILE, FALLBACK_PORT).run()
+        FileServeTestSuite(lambda uri: self.baseUrl + uri).run()
 
     def testFileNotFound(self):
-        assertRequestFails(NGINX_LOCAL + TEST_NONEXISTING_FILE, 502)    # 502 is due to failing to connect to fallback
+        assertRequestFails(self.baseUrl + TEST_NONEXISTING_FILE, 502)    # 502 is due to failing to connect to fallback
         self.logTracker.assertContains('open() "%s" failed' % (TEST_FILES_ROOT + TEST_NONEXISTING_FILE))
 
 class MappedTestSuite(TestSuite):
+    def __init__(self, baseUrl):
+        super(MappedTestSuite, self).__init__()
+        self.baseUrl = baseUrl
+            
     def runChildSuites(self):
         BasicTestSuite(
-            lambda uri, filePath: getUniqueUrl(NGINX_MAPPED, uri, filePath),
-            TEST_FLAVOR_URI, 
+            lambda filePath: getUniqueUrl(self.baseUrl, TEST_FLAVOR_URI, filePath),
             lambda: TcpServer(API_SERVER_PORT, lambda s: socketSendAndShutdown(s, getPathMappingResponse(TEST_FILES_ROOT + TEST_FLAVOR_FILE)))).run()
         requestHandler = lambda s,h: socketSendAndShutdown(s, getPathMappingResponse(TEST_FILES_ROOT + TEST_FLAVOR_FILE))
-        MemoryUpstreamTestSuite(NGINX_MAPPED, TEST_FLAVOR_URI, API_SERVER_PORT, '', requestHandler).run()
-        suite = FallbackUpstreamTestSuite(NGINX_MAPPED, TEST_FLAVOR_URI, FALLBACK_PORT)
+        MemoryUpstreamTestSuite(self.baseUrl, TEST_FLAVOR_URI, API_SERVER_PORT, '', requestHandler).run()
+        suite = FallbackUpstreamTestSuite(self.baseUrl, TEST_FLAVOR_URI, FALLBACK_PORT)
         suite.prepareTest = lambda: TcpServer(API_SERVER_PORT, lambda s: socketSendAndShutdown(s, getPathMappingResponse('')))
         suite.run()
-        FileServeTestSuite(MappedTestSuite.getServeUrl).run()
+        FileServeTestSuite(self.getServeUrl).run()
 
-    @staticmethod
-    def getServeUrl(uri):
+    def getServeUrl(self, uri):
         TcpServer(API_SERVER_PORT, lambda s: socketSendAndShutdown(s, getPathMappingResponse(TEST_FILES_ROOT + uri)))
-        return getUniqueUrl(NGINX_MAPPED, TEST_FLAVOR_URI)
+        return getUniqueUrl(self.baseUrl, TEST_FLAVOR_URI)
 
     def testEmptyPathMappingResponse(self):
         TcpServer(API_SERVER_PORT, lambda s: socketSendAndShutdown(s, getHttpResponse('')))
-        assertRequestFails(getUniqueUrl(NGINX_MAPPED, TEST_FLAVOR_URI), 503)
+        assertRequestFails(getUniqueUrl(self.baseUrl, TEST_FLAVOR_URI), 404)
         self.logTracker.assertContains('empty path mapping response')
 
     def testUnexpectedPathResponse(self):
         TcpServer(API_SERVER_PORT, lambda s: socketSendAndShutdown(s, getHttpResponse('abcde')))
-        assertRequestFails(getUniqueUrl(NGINX_MAPPED, TEST_FLAVOR_URI), 503)
+        assertRequestFails(getUniqueUrl(self.baseUrl, TEST_FLAVOR_URI), 503)
         self.logTracker.assertContains('unexpected path mapping response abcde')
 
     def testEmptyPathResponse(self):
         TcpServer(API_SERVER_PORT, lambda s: socketSendAndShutdown(s, getPathMappingResponse('')))
-        assertRequestFails(getUniqueUrl(NGINX_MAPPED, TEST_FLAVOR_URI), 502)     # 502 is due to failing to connect to fallback
+        assertRequestFails(getUniqueUrl(self.baseUrl, TEST_FLAVOR_URI), 502)     # 502 is due to failing to connect to fallback
         self.logTracker.assertContains('empty path returned from upstream')
 
     def testFileNotFound(self):
         TcpServer(API_SERVER_PORT, lambda s: socketSendAndShutdown(s, getPathMappingResponse(TEST_NONEXISTING_FILE)))
-        assertRequestFails(getUniqueUrl(NGINX_MAPPED, TEST_FLAVOR_URI), 404)
+        assertRequestFails(getUniqueUrl(self.baseUrl, TEST_FLAVOR_URI), 404)
         self.logTracker.assertContains('open() "%s" failed' % TEST_NONEXISTING_FILE)
-    
+
+    def testPathMappingCache(self):
+        TcpServer(API_SERVER_PORT, lambda s: socketSendAndShutdown(s, getPathMappingResponse(TEST_FILES_ROOT + TEST_FLAVOR_FILE)))
+        for curRequest, contentType in VOD_REQUESTS:
+            url = getUniqueUrl(self.baseUrl, TEST_FLAVOR_URI, curRequest)
+            
+            # uncached
+            logTracker = LogTracker()
+            response = urllib2.urlopen(url)            
+            assertEquals(response.info().getheader('Content-Type'), contentType)            
+            uncachedResponse = response.read()
+            logTracker.assertContains('path mapping cache miss')
+
+            #cached
+            logTracker = LogTracker()
+            response = urllib2.urlopen(url)
+            assertEquals(response.info().getheader('Content-Type'), contentType)            
+            cachedResponse = response.read()
+            logTracker.assertContains('path mapping cache hit')
+
+            assert(cachedResponse == uncachedResponse)
+                   
 class RemoteTestSuite(TestSuite):
+    def __init__(self, baseUrl):
+        super(RemoteTestSuite, self).__init__()
+        self.baseUrl = baseUrl
+            
     def runChildSuites(self):
         BasicTestSuite(
-            lambda uri, filePath: getUniqueUrl(NGINX_REMOTE, uri, filePath),
-            TEST_FLAVOR_URI, 
-            lambda: TcpServer(API_SERVER_PORT, lambda s: serveFile(s, TEST_FILES_ROOT + TEST_FLAVOR_FILE))).run()
-        requestHandler = lambda s,h: serveFileHandler(s, TEST_FILES_ROOT + TEST_FLAVOR_FILE, h)
-        MemoryUpstreamTestSuite(NGINX_REMOTE, TEST_FLAVOR_URI, API_SERVER_PORT, HLS_PLAYLIST_FILE, requestHandler).run()
-        DumpUpstreamTestSuite(NGINX_REMOTE, TEST_FLAVOR_URI, API_SERVER_PORT).run()      # non HLS URL will just dump to upstream
+            lambda filePath: getUniqueUrl(self.baseUrl, TEST_FLAVOR_URI, filePath),
+            lambda: TcpServer(API_SERVER_PORT, lambda s: serveFile(s, TEST_FILES_ROOT + TEST_FLAVOR_FILE, TEST_FILE_TYPE))).run()
+        requestHandler = lambda s,h: serveFileHandler(s, TEST_FILES_ROOT + TEST_FLAVOR_FILE, TEST_FILE_TYPE, h)
+        MemoryUpstreamTestSuite(self.baseUrl, TEST_FLAVOR_URI, API_SERVER_PORT, HLS_PLAYLIST_FILE, requestHandler).run()
+        DumpUpstreamTestSuite(self.baseUrl, TEST_FLAVOR_URI, API_SERVER_PORT).run()      # non HLS URL will just dump to upstream
+
+    def testMoovAtomCache(self):
+        TcpServer(API_SERVER_PORT, lambda s: serveFile(s, TEST_FILES_ROOT + TEST_FLAVOR_FILE, TEST_FILE_TYPE))
+        for curRequest, _ in HLS_REQUESTS:
+            url = getUniqueUrl(self.baseUrl, TEST_FLAVOR_URI, curRequest)
+
+            logTracker = LogTracker()
+            uncachedResponse = urllib2.urlopen(url).read()
+            logTracker.assertContains('moov atom cache miss')
+            
+            logTracker = LogTracker()
+            cachedResponse = urllib2.urlopen(url).read()
+            logTracker.assertContains('moov atom cache hit')
+
+            assert(cachedResponse == uncachedResponse)
 
 class MainTestSuite(TestSuite):
     def runChildSuites(self):
-        LocalTestSuite().run()
-        MappedTestSuite().run()
-        RemoteTestSuite().run()
+        # non encrypted
+        #LocalTestSuite(NGINX_LOCAL).run()
+        #MappedTestSuite(NGINX_MAPPED).run()
+        #RemoteTestSuite(NGINX_REMOTE).run()
+
+        # encrypted
+        LocalTestSuite(NGINX_LOCAL + ENCRYPTED_PREFIX).run()
+        MappedTestSuite(NGINX_MAPPED + ENCRYPTED_PREFIX).run()
+        RemoteTestSuite(NGINX_REMOTE + ENCRYPTED_PREFIX).run()
 
 socketSend = socketSendRegular
 MainTestSuite().run()
