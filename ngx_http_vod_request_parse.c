@@ -127,9 +127,6 @@ parse_required_tracks(ngx_http_request_t* r, u_char* start_pos, u_char* end_pos,
 
 	if (start_pos >= end_pos && !has_stream_index)
 	{
-		// no required tracks specified, default to the first audio & first video tracks
-		request_params->required_tracks[MEDIA_TYPE_VIDEO] = 1;
-		request_params->required_tracks[MEDIA_TYPE_AUDIO] = 1;
 		return NGX_OK;
 	}
 
@@ -208,6 +205,11 @@ parse_request_uri(ngx_http_request_t *r, ngx_http_vod_loc_conf_t *conf, request_
 	ngx_int_t rc;
 	u_char* start_pos = NULL;
 	u_char* end_pos = r->uri.data + r->uri.len;
+
+	ngx_memzero(request_params, sizeof(*request_params));
+	// by default choose the first audio & first video tracks
+	request_params->required_tracks[MEDIA_TYPE_VIDEO] = 1;
+	request_params->required_tracks[MEDIA_TYPE_AUDIO] = 1;
 
 	rc = extract_uri_tokens(r, request_params, &start_pos);
 	if (rc != NGX_OK)

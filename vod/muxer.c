@@ -2,7 +2,7 @@
 
 // from ffmpeg mpegtsenc
 #define DEFAULT_PES_HEADER_FREQ 16
-#define DEFAULT_PES_PAYLOAD_SIZE (((DEFAULT_PES_HEADER_FREQ - 1) * 184 + 170) * 2)
+#define DEFAULT_PES_PAYLOAD_SIZE ((DEFAULT_PES_HEADER_FREQ - 1) * 184 + 170)
 
 static int 
 compare_streams(const void *s1, const void *s2)
@@ -237,7 +237,7 @@ muxer_start_frame(muxer_state_t* state)
 		}
 
 		if (buffer_filter_get_dts(cur_stream->buffer_state, &buffer_dts) &&
-			state->cur_frame->dts > buffer_dts + HLS_DELAY)
+			state->cur_frame->dts > buffer_dts + HLS_DELAY / 2)
 		{
 			rc = buffer_filter_force_flush(cur_stream->buffer_state);
 			if (rc != VOD_OK)
@@ -387,7 +387,7 @@ muxer_simulation_flush_delayed_streams(muxer_state_t* state, muxer_stream_state_
 		}
 
 		if (buffer_filter_get_dts(cur_stream->buffer_state, &buffer_dts) &&
-			frame_dts > buffer_dts + HLS_DELAY)
+			frame_dts > buffer_dts + HLS_DELAY / 2)
 		{
 			buffer_filter_simulated_force_flush(cur_stream->buffer_state);
 		}

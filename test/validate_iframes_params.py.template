@@ -1,1 +1,2 @@
 FFPROBE_BIN = '/path/to/ffprobe'
+STOP_FILE = '/tmp/validate_iframes_stop'
