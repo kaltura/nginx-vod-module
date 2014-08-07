@@ -81,10 +81,10 @@ def assertEndsWith(buffer, postfix):
     print 'Assertion failed - %s.endswith(%s)' % (buffer, postfix)
     assert(False)
 
-def assertRequestFails(url, statusCode, expectedBody = None, headers = {}):
+def assertRequestFails(url, statusCode, expectedBody = None, headers = {}, postData = None):
     request = urllib2.Request(url, headers=headers)
     try:
-        response = urllib2.urlopen(request)
+        response = urllib2.urlopen(request, data=postData)
         assert(False)
     except urllib2.HTTPError, e:
         assertEquals(e.getcode(), statusCode)
@@ -399,7 +399,11 @@ class BasicTestSuite(TestSuite):
         assert(clearSegment == decryptedSegment)
         
 
-    # bad requests
+    # bad requests    
+    def testPostRequest(self):
+        assertRequestFails(self.getUrl('/seg-1-a1-v1.ts'), 405, postData='abcd')
+        self.logTracker.assertContains('unsupported method')
+
     def testSegmentIdTooBig(self):
         assertRequestFails(self.getUrl('/seg-3600-a1-v1.ts'), 400)
         self.logTracker.assertContains('no frames were found')
@@ -431,6 +435,17 @@ class BasicTestSuite(TestSuite):
     def testUnrecognizedTSRequest(self):
         assertRequestFails(self.getUrl('/bla.m3u8'), 400)
         self.logTracker.assertContains('unidentified m3u8 request')
+
+    # XXXXXXXXXX move out of local - remote/mapped only
+    def testBadClipTo(self):        # the error should be ignored
+        testBody = urllib2.urlopen(self.getUrl('/clipTo/abcd' + HLS_PLAYLIST_FILE)).read()
+        refBody = urllib2.urlopen(self.getUrl(HLS_PLAYLIST_FILE)).read()
+        assert(testBody == refBody)
+
+    def testBadClipFrom(self):        # the error should be ignored
+        testBody = urllib2.urlopen(self.getUrl('/clipFrom/abcd' + HLS_PLAYLIST_FILE)).read()
+        refBody = urllib2.urlopen(self.getUrl(HLS_PLAYLIST_FILE)).read()
+        assert(testBody == refBody)
 
 class UpstreamTestSuite(TestSuite):
     def __init__(self, baseUrl, uri, serverPort, urlFile = ''):
