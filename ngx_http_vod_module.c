@@ -252,7 +252,7 @@ parse_moov_atom(ngx_http_vod_ctx_t *ctx, u_char* moov_buffer, size_t moov_size)
 		if (ctx->request_context.end <= ctx->request_context.start)
 		{
 			vod_log_error(VOD_LOG_ERR, ctx->request_context.log, 0,
-				"build_index_playlist_m3u8: segment index %i too big for clip from %uD and clip to %uD", 
+				"build_index_playlist_m3u8: segment index %uD too big for clip from %uD and clip to %uD", 
 				ctx->request_params.segment_index, ctx->request_params.clip_from, ctx->request_params.clip_to);
 			return VOD_BAD_REQUEST;
 		}
@@ -601,6 +601,8 @@ static ngx_int_t
 run_state_machine(ngx_http_vod_ctx_t *ctx)
 {
 	ngx_http_vod_loc_conf_t *conf;
+	uint32_t duration_millis;
+	uint32_t segment_count;
 	ngx_str_t response;
 	ngx_int_t rc;
 
@@ -706,6 +708,16 @@ run_state_machine(ngx_http_vod_ctx_t *ctx)
 			}
 
 			return send_single_buffer_response(ctx->r, &response, m3u8_content_type, sizeof(m3u8_content_type)-1);
+		}
+
+		// validate the requested segment index
+		duration_millis = DIV_CEIL(ctx->mpeg_metadata.duration, 90);
+		segment_count = DIV_CEIL(duration_millis, conf->segment_duration);
+		if (ctx->request_params.segment_index >= segment_count)
+		{
+			ngx_log_error(NGX_LOG_ERR, ctx->request_context.log, 0,
+				"run_state_machine: requested segment index %uD exceeds the segment count %uD", ctx->request_params.segment_index, segment_count);
+			return NGX_HTTP_NOT_FOUND;
 		}
 
 		// initialize the processing of the video frames

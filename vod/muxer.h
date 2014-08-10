@@ -12,7 +12,7 @@
 // typedefs
 typedef void(*get_iframe_positions_callback_t)(
 	void* context, 
-	int segment_index, 
+	uint32_t segment_index, 
 	uint32_t frame_duration, 
 	uint32_t frame_start, 
 	uint32_t frame_size);
@@ -67,7 +67,7 @@ typedef struct {
 vod_status_t muxer_init(
 	muxer_state_t* state,
 	request_context_t* request_context,
-	int segment_index,
+	uint32_t segment_index,
 	mpeg_metadata_t* mpeg_metadata,
 	read_cache_state_t* read_cache_state,
 	write_callback_t write_callback,

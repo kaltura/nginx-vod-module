@@ -252,7 +252,7 @@ vod_status_t
 mpegts_encoder_init(
 	mpegts_encoder_state_t* state, 
 	request_context_t* request_context, 
-	int segment_index, 
+	uint32_t segment_index, 
 	write_callback_t write_callback, 
 	void* write_context)
 {
@@ -288,7 +288,7 @@ mpegts_encoder_init(
 }
 
 vod_status_t 
-mpegts_encoder_init_streams(mpegts_encoder_state_t* state, mpegts_encoder_init_streams_state_t* stream_state, int segment_index)
+mpegts_encoder_init_streams(mpegts_encoder_state_t* state, mpegts_encoder_init_streams_state_t* stream_state, uint32_t segment_index)
 {
 	stream_state->request_context = state->request_context;
 	stream_state->cur_pid = PCR_PID;

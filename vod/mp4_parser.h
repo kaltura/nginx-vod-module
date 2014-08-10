@@ -43,6 +43,9 @@ typedef struct {
 
 typedef struct {
 	vod_array_t streams;
+	int64_t duration;
+	uint32_t video_key_frame_count;
+	uint32_t max_track_index;
 } mpeg_metadata_t;
 
 // functions

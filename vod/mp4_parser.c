@@ -1762,10 +1762,9 @@ mp4_parser_parse_moov_atom(
 	mpeg_metadata_t* mpeg_metadata)
 {
 	process_moov_context_t process_moov_context;
-	mpeg_stream_metadata_t* cur_stream_metadata;
+	mpeg_stream_metadata_t* cur_stream;
+	mpeg_stream_metadata_t* streams_end;
 	vod_status_t rc;
-	unsigned i;
-	bool_t has_frames;
 
 	process_moov_context.request_context = request_context;
 	process_moov_context.required_tracks_mask = required_tracks_mask;
@@ -1793,25 +1792,28 @@ mp4_parser_parse_moov_atom(
 		return VOD_BAD_REQUEST;
 	}
 
-	// fail the request if we didn't get no frames on all streams
-	if (request_context->parse_type != PARSE_INDEX)
+	// calculate the max duration and track index
+	mpeg_metadata->duration = 0;
+	mpeg_metadata->max_track_index = 0;
+	mpeg_metadata->video_key_frame_count = 0;
+
+	cur_stream = (mpeg_stream_metadata_t*)mpeg_metadata->streams.elts;
+	streams_end = cur_stream + mpeg_metadata->streams.nelts;
+	for (; cur_stream < streams_end; cur_stream++)
 	{
-		has_frames = FALSE;
-		for (i = 0; i < mpeg_metadata->streams.nelts; i++)
+		if (cur_stream->duration > mpeg_metadata->duration)
 		{
-			cur_stream_metadata = (mpeg_stream_metadata_t*)(mpeg_metadata->streams.elts) + i;
-			if (cur_stream_metadata->frame_count != 0)
-			{
-				has_frames = TRUE;
-				break;
-			}
+			mpeg_metadata->duration = cur_stream->duration;
 		}
 
-		if (!has_frames)
+		if (cur_stream->track_index > mpeg_metadata->max_track_index)
 		{
-			vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-				"mp4_parser_parse_moov_atom: no frames were found for parse_type %d", request_context->parse_type);
-			return VOD_BAD_REQUEST;
+			mpeg_metadata->max_track_index = cur_stream->track_index;
+		}
+
+		if (cur_stream->media_type == MEDIA_TYPE_VIDEO)
+		{
+			mpeg_metadata->video_key_frame_count += cur_stream->key_frame_count;
 		}
 	}
 

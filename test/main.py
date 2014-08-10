@@ -405,8 +405,8 @@ class BasicTestSuite(TestSuite):
         self.logTracker.assertContains('unsupported method')
 
     def testSegmentIdTooBig(self):
-        assertRequestFails(self.getUrl('/seg-3600-a1-v1.ts'), 400)
-        self.logTracker.assertContains('no frames were found')
+        assertRequestFails(self.getUrl('/seg-3600-a1-v1.ts'), 404)
+        self.logTracker.assertContains('requested segment index 3599 exceeds the segment count')
 
     def testNonExistingTracks(self):
         assertRequestFails(self.getUrl('/seg-1-a10-v10.ts'), 400)
