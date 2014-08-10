@@ -49,11 +49,11 @@ extern const media_filter_t mpegts_encoder;
 vod_status_t mpegts_encoder_init(
 	mpegts_encoder_state_t* state, 
 	request_context_t* request_context, 
-	int segment_index,
+	uint32_t segment_index,
 	write_callback_t write_callback, 
 	void* write_context);
 
-vod_status_t mpegts_encoder_init_streams(mpegts_encoder_state_t* state, mpegts_encoder_init_streams_state_t* stream_state, int segment_index);
+vod_status_t mpegts_encoder_init_streams(mpegts_encoder_state_t* state, mpegts_encoder_init_streams_state_t* stream_state, uint32_t segment_index);
 vod_status_t mpegts_encoder_add_stream(mpegts_encoder_init_streams_state_t* stream_state, int media_type, unsigned* pid, unsigned* sid);
 void mpegts_encoder_finalize_streams(mpegts_encoder_init_streams_state_t* stream_state);
 

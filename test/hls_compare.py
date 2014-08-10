@@ -50,7 +50,7 @@ class TestThread(stress_base.TestThreadBase):
 		if len(lines1) != len(lines2):
 			os.system("""cat %s < /dev/null | grep -v ^pts= | grep -v ^dts= | grep -v ^pos= | grep -v ^pts_time= | grep -v ^dts_time= | sed 's/00000000: 0000 0001 09f0/00000000: 0000 0001 09e0/g' > %s.tmp""" % (file1, file1))
 			os.system("""cat %s < /dev/null | grep -v ^pts= | grep -v ^dts= | grep -v ^pos= | grep -v ^pts_time= | grep -v ^dts_time= | sed 's/00000000: 0000 0001 09f0/00000000: 0000 0001 09e0/g' > %s.tmp""" % (file2, file2))
-			diffResult = commands.getoutput('diff -bBu %s.tmp %s.tmp < /dev/null | head -1000' % (file1, file2))
+			diffResult = commands.getoutput('diff -bBu %s.tmp %s.tmp < /dev/null' % (file1, file2))
 			os.remove('%s.tmp' % file1)
 			os.remove('%s.tmp' % file2)
 				
@@ -67,7 +67,8 @@ class TestThread(stress_base.TestThreadBase):
 				diffResult.count('\n-[PACKET]') > 0):
 				self.writeOutput('Notice: %s %s packets were added' % (diffResult.count('\n-[PACKET]'), 'audio' if streamType == 'a' else 'video'))
 				return True
-				
+			
+			diffResult = '\n'.join(diffResult.split('\n')[:1000])
 			self.writeOutput('Error: line count mismatch %s vs %s' % (len(lines1), len(lines2)))
 			self.writeOutput(diffResult)
 			return False
@@ -161,6 +162,9 @@ class TestThread(stress_base.TestThreadBase):
 			r = urllib2.urlopen(urllib2.Request(url))
 		except urllib2.HTTPError, e:
 			return e.getcode()
+		except urllib2.URLError, e:
+			self.writeOutput('Error: request failed %s' % e)
+			return 0
 		result = r.getcode()
 		with file(fileName, 'wb') as w:
 			shutil.copyfileobj(r,w)
@@ -180,7 +184,7 @@ class TestThread(stress_base.TestThreadBase):
 		code2 = self.retrieveUrl(url2, self.tsFile2, 'url2')
 		
 		if code1 != code2:
-			self.writeOutput('Error: different http statues %s %s' % (code1, code2))
+			self.writeOutput('Error: got different status codes %s vs %s (ts)' % (code1, code2))
 			return False
 		
 		if aesKey != None and code1 == 200:
@@ -223,7 +227,10 @@ class TestThread(stress_base.TestThreadBase):
 		try:
 			f = urllib2.urlopen(request)
 		except urllib2.HTTPError, e:
-			return e.getcode(), e.read()
+			return e.getcode(), e.read()			
+		except urllib2.URLError, e:
+			self.writeOutput('Error: request failed %s' % e)
+			return 0, ''
 		data = f.read()
 		if f.info().get('Content-Encoding') == 'gzip':
 			gzipFile = gzip.GzipFile(fileobj=StringIO(data))
@@ -248,12 +255,25 @@ class TestThread(stress_base.TestThreadBase):
 		code1, manifest1 = self.getM3U8(url1 + URL1_SUFFIX)
 		code2, manifest2 = self.getM3U8(url2 + URL2_SUFFIX)
 		if code1 != code2:
-			self.writeOutput('Error: got different status codes %s vs %s' % (code1, code2))
+			self.writeOutput('Error: got different status codes %s vs %s (m3u8)' % (code1, code2))
 			return False
 
 		if code1 == 404 and code2 == 404:
 			self.writeOutput('Notice: both servers returned 404')
 			return True
+		
+		if not manifest1.startswith('#EXTM3U') or not manifest2.startswith('#EXTM3U'):
+			if not manifest1.startswith('#EXTM3U') and not manifest2.startswith('#EXTM3U'):
+				self.writeOutput('Notice: both servers returned invalid manifests')
+				return True
+			if not manifest1.startswith('#EXTM3U'):
+				self.writeOutput('Error: server1 returned invalid manifest')
+				self.writeOutput('manifest1=%s' % manifest1)
+				return True
+			if not manifest2.startswith('#EXTM3U'):
+				self.writeOutput('Error: server2 returned invalid manifest')
+				self.writeOutput('manifest2=%s' % manifest2)
+				return True
 		
 		# extract the ts uris
 		tsUris1 = self.getTsUris(manifest1)
@@ -264,9 +284,6 @@ class TestThread(stress_base.TestThreadBase):
 				tsUris2 = tsUris2[:len(tsUris1)]
 			else:
 				self.writeOutput('Error: TS segment count mismatch %s vs %s' % (len(tsUris1), len(tsUris2)))
-				self.writeOutput('manifest1=%s' % manifest1)
-				self.writeOutput('manifest2=%s' % manifest2)
-				return False
 
 		# get the encryption key, if exists
 		keyUri = None
@@ -287,8 +304,9 @@ class TestThread(stress_base.TestThreadBase):
 		# compare the ts segments
 		result = True
 		continuityCounters = {}
-		self.writeOutput('Info: segmentCount=%s' % len(tsUris1))
-		for curIndex in xrange(max(len(tsUris1) - MAX_TS_SEGMENTS_TO_COMPARE, 0), len(tsUris1), 1):
+		minCount = min(len(tsUris1), len(tsUris2))
+		self.writeOutput('Info: segmentCount=%s' % minCount)
+		for curIndex in xrange(max(minCount - MAX_TS_SEGMENTS_TO_COMPARE, 0), minCount, 1):
 			if os.path.exists(STOP_FILE):
 				return True
 			tsUrl1 = '%s/%s' % (url1, tsUris1[curIndex])

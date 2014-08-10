@@ -15,7 +15,7 @@ enum {
 
 typedef struct {
 	int request_type;
-	int segment_index;
+	uint32_t segment_index;
 	uint32_t required_tracks[MEDIA_TYPE_COUNT];
 	uint32_t clip_to;
 	uint32_t clip_from;

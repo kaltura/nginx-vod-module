@@ -28,7 +28,7 @@ vod_status_t aes_encrypt_init(
 	write_callback_t callback, 
 	void* callback_context, 
 	const u_char* key, 
-	int segment_index);
+	uint32_t segment_index);
 
 vod_status_t aes_encrypt_write(
 	aes_encrypt_context_t* ctx, 

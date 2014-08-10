@@ -121,6 +121,7 @@ extract_uri_tokens(ngx_http_request_t* r, request_params_t* request_params, u_ch
 static bool_t 
 parse_required_tracks(ngx_http_request_t* r, u_char* start_pos, u_char* end_pos, bool_t has_stream_index, request_params_t* request_params)
 {
+	ngx_int_t segment_index;
 	int stream_index;
 	int media_type;
 	u_char* next_pos;
@@ -142,13 +143,14 @@ parse_required_tracks(ngx_http_request_t* r, u_char* start_pos, u_char* end_pos,
 			// segment index
 			has_stream_index = FALSE;
 
-			request_params->segment_index = ngx_atoi(start_pos, next_pos - start_pos) - 1;		// convert to 0-based
-			if (request_params->segment_index < 0)
+			segment_index = ngx_atoi(start_pos, next_pos - start_pos) - 1;		// convert to 0-based
+			if (segment_index < 0)
 			{
 				ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
 					"parse_required_tracks: failed to parse the segment index");
 				return NGX_HTTP_BAD_REQUEST;
 			}
+			request_params->segment_index = segment_index;
 			request_params->request_type = REQUEST_TYPE_HLS_SEGMENT;
 		}
 		else

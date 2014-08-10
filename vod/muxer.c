@@ -22,7 +22,7 @@ vod_status_t
 muxer_init(
 	muxer_state_t* state, 
 	request_context_t* request_context,
-	int segment_index,
+	uint32_t segment_index,
 	mpeg_metadata_t* mpeg_metadata, 
 	read_cache_state_t* read_cache_state, 
 	write_callback_t write_callback, 
@@ -426,8 +426,8 @@ muxer_simulate_get_iframes(muxer_state_t* state, uint32_t segment_duration, get_
 	uint32_t first_frame_time = 0;
 	uint32_t end_time;
 	int64_t segment_end_dts;
-	int frame_segment_index = 0;
-	int segment_index = 1;
+	uint32_t frame_segment_index = 0;
+	uint32_t segment_index = 1;
 
 	segment_duration *= 90;			// convert to 90KHz
 	segment_end_dts = segment_duration;

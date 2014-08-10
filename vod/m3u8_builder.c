@@ -57,13 +57,13 @@ format_double(u_char* p, uint32_t n, uint32_t scale)
 }
 
 static vod_status_t
-build_required_tracks_string(request_context_t* request_context, mpeg_metadata_t* mpeg_metadata, uint32_t max_track_index, vod_str_t* required_tracks)
+build_required_tracks_string(request_context_t* request_context, mpeg_metadata_t* mpeg_metadata, vod_str_t* required_tracks)
 {
 	mpeg_stream_metadata_t* cur_stream;
 	mpeg_stream_metadata_t* streams_end;
 	u_char* buffer;
 
-	required_tracks->len = mpeg_metadata->streams.nelts * (sizeof("-v") - 1 + get_int_print_len(max_track_index + 1));
+	required_tracks->len = mpeg_metadata->streams.nelts * (sizeof("-v") - 1 + get_int_print_len(mpeg_metadata->max_track_index + 1));
 	buffer = vod_alloc(request_context->pool, required_tracks->len + 1);
 	if (buffer == NULL)
 	{
@@ -103,7 +103,7 @@ static u_char*
 append_segment_name(u_char* p, vod_str_t* segment_file_name_prefix, uint32_t segment_index, vod_str_t* required_tracks)
 {
 	p = vod_copy(p, segment_file_name_prefix->data, segment_file_name_prefix->len);
-	p = vod_sprintf(p, "%d", segment_index);
+	p = vod_sprintf(p, "%uD", segment_index);
 	p = vod_copy(p, required_tracks->data, required_tracks->len);
 	p = vod_copy(p, ".ts\n", sizeof(".ts\n") - 1);
 	return p;
@@ -120,7 +120,7 @@ append_extinf_tag(u_char* p, uint32_t duration, uint32_t scale)
 }
 
 static void
-append_iframe_string(void* context, int segment_index, uint32_t frame_duration, uint32_t frame_start, uint32_t frame_size)
+append_iframe_string(void* context, uint32_t segment_index, uint32_t frame_duration, uint32_t frame_start, uint32_t frame_size)
 {
 	append_iframe_context_t* ctx = (append_iframe_context_t*)context;
 
@@ -138,17 +138,12 @@ build_iframe_playlist_m3u8(
 	vod_str_t* result)
 {
 	append_iframe_context_t append_iframe_context;
-	mpeg_stream_metadata_t* cur_stream;
-	mpeg_stream_metadata_t* streams_end;
-	int64_t duration = 0;
 	uint32_t duration_millis;
 	uint32_t segment_count;
 	uint32_t iframe_length;
 	uint32_t total_size;
-	uint32_t key_frame_count = 0;
 	muxer_state_t muxer_state;
 	bool_t simulation_supported;
-	uint32_t max_track_index = 0;
 	vod_status_t rc;
 
 	// initialize the muxer
@@ -165,28 +160,15 @@ build_iframe_playlist_m3u8(
 		return VOD_BAD_REQUEST;
 	}
 
-	// get the max duration and track index
-	cur_stream = (mpeg_stream_metadata_t*)mpeg_metadata->streams.elts;
-	streams_end = cur_stream + mpeg_metadata->streams.nelts;
-	for (; cur_stream < streams_end; cur_stream++)
-	{
-		duration = MAX(duration, cur_stream->duration);
-		max_track_index = MAX(max_track_index, cur_stream->track_index);
-		if (cur_stream->media_type == MEDIA_TYPE_VIDEO)
-		{
-			key_frame_count += cur_stream->key_frame_count;
-		}
-	}
-
 	// build the required tracks string
-	rc = build_required_tracks_string(request_context, mpeg_metadata, max_track_index, &append_iframe_context.required_tracks);
+	rc = build_required_tracks_string(request_context, mpeg_metadata, &append_iframe_context.required_tracks);
 	if (rc != VOD_OK)
 	{
 		return rc;
 	}
 
 	// calculate the required buffer length
-	duration_millis = DIV_CEIL(duration, 90);
+	duration_millis = DIV_CEIL(mpeg_metadata->duration, 90);
 
 	segment_count = DIV_CEIL(duration_millis, segment_duration);
 
@@ -196,7 +178,7 @@ build_iframe_playlist_m3u8(
 
 	total_size =
 		conf->iframes_m3u8_header_len +
-		iframe_length * key_frame_count +
+		iframe_length * mpeg_metadata->video_key_frame_count +
 		sizeof(m3u8_footer);
 
 	// allocate the buffer
@@ -229,29 +211,16 @@ build_index_playlist_m3u8(
 	mpeg_metadata_t* mpeg_metadata,
 	vod_str_t* result)
 {
-	mpeg_stream_metadata_t* cur_stream;
-	mpeg_stream_metadata_t* streams_end;
 	vod_str_t required_tracks;
 	uint32_t segment_count;
 	uint32_t segment_index;
 	uint32_t total_size;
-	uint32_t max_track_index = 0;
 	uint32_t duration_millis;
-	int64_t duration = 0;
 	u_char* p;
 	vod_status_t rc;
 
-	// get max duration and track index
-	cur_stream = (mpeg_stream_metadata_t*)mpeg_metadata->streams.elts;
-	streams_end = cur_stream + mpeg_metadata->streams.nelts;
-	for (; cur_stream < streams_end; cur_stream++)
-	{
-		duration = MAX(duration, cur_stream->duration);
-		max_track_index = MAX(max_track_index, cur_stream->track_index);
-	}
-
 	// get the effective duration
-	duration_millis = DIV_CEIL(duration, 90);
+	duration_millis = DIV_CEIL(mpeg_metadata->duration, 90);
 
 	if (duration_millis <= clip_from)
 	{
@@ -263,7 +232,7 @@ build_index_playlist_m3u8(
 	duration_millis = MIN(duration_millis - clip_from, clip_to);
 
 	// build the required tracks string
-	rc = build_required_tracks_string(request_context, mpeg_metadata, max_track_index, &required_tracks);
+	rc = build_required_tracks_string(request_context, mpeg_metadata, &required_tracks);
 	if (rc != VOD_OK)
 	{
 		return rc;

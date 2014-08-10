@@ -7,7 +7,7 @@ aes_encrypt_init(
 	write_callback_t callback,
 	void* callback_context,
 	const u_char* key,
-	int segment_index)
+	uint32_t segment_index)
 {
 	u_char iv[AES_BLOCK_SIZE];
 	u_char* p;
