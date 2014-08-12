@@ -1,4 +1,5 @@
 #include "ngx_http_vod_conf.h"
+#include "ngx_http_vod_request_parse.h"
 #include "ngx_child_http_request.h"
 #include "ngx_http_vod_module.h"
 #include "ngx_buffer_cache.h"
@@ -19,8 +20,8 @@ ngx_http_vod_create_loc_conf(ngx_conf_t *cf)
 
 	init_upstream_conf(&conf->upstream);
 	init_upstream_conf(&conf->fallback_upstream);
+	conf->request_parser = NGX_CONF_UNSET_PTR;
 	conf->request_handler = NGX_CONF_UNSET_PTR;
-	conf->serve_files = NGX_CONF_UNSET;
 	conf->segment_duration = NGX_CONF_UNSET_UINT;
 	conf->initial_read_size = NGX_CONF_UNSET_SIZE;
 	conf->max_moov_size = NGX_CONF_UNSET_SIZE;
@@ -39,8 +40,8 @@ ngx_http_vod_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child)
 	char* err;
 
 	ngx_conf_merge_str_value(conf->child_request_location, prev->child_request_location, "");
+	ngx_conf_merge_ptr_value(conf->request_parser, prev->request_parser, parse_request_uri_hls);
 	ngx_conf_merge_ptr_value(conf->request_handler, prev->request_handler, local_request_handler);
-	ngx_conf_merge_value(conf->serve_files, prev->serve_files, 1);
 
 	ngx_conf_merge_uint_value(conf->segment_duration, prev->segment_duration, 10000);
 	ngx_conf_merge_str_value(conf->secret_key, prev->secret_key, "");
@@ -280,10 +281,31 @@ ngx_http_upstream_command(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
 static char *
 ngx_http_vod(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
 {
+	ngx_http_vod_loc_conf_t *vod_conf = conf;
 	ngx_http_core_loc_conf_t *clcf;
+	ngx_str_t *value;
 
 	clcf = ngx_http_conf_get_module_loc_conf(cf, ngx_http_core_module);
 	clcf->handler = ngx_http_vod_handler;
+
+	value = cf->args->elts;
+
+	if (ngx_strcasecmp(value[1].data, (u_char *) "none") == 0)
+	{
+		vod_conf->request_parser = parse_request_uri_serve_file;
+	}
+	else if (ngx_strcasecmp(value[1].data, (u_char *) "hls") == 0)
+	{
+		vod_conf->request_parser = parse_request_uri_hls;
+	}
+	else
+	{
+		ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
+			"invalid value \"%s\" in \"%s\" directive, "
+			"it must be either \"hls\" or \"none\"",
+			value[1].data, cmd->name.data);
+		return NGX_CONF_ERROR;
+	}
 
 	return NGX_CONF_OK;
 }
@@ -303,9 +325,9 @@ ngx_command_t ngx_http_vod_commands[] = {
 
 	// basic parameters
 	{ ngx_string("vod"),
-	NGX_HTTP_LOC_CONF | NGX_CONF_NOARGS,
+	NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1,
 	ngx_http_vod,
-	0,
+	NGX_HTTP_LOC_CONF_OFFSET,
 	0,
 	NULL },
 
@@ -316,14 +338,7 @@ ngx_command_t ngx_http_vod_commands[] = {
 	0,
 	NULL },
 
-	{ ngx_string("vod_serve_files"),
-	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1,
-	ngx_conf_set_flag_slot,
-	NGX_HTTP_LOC_CONF_OFFSET,
-	offsetof(ngx_http_vod_loc_conf_t, serve_files),
-	NULL },
-	
-	// hls output generation parameters
+	// output generation parameters
 	{ ngx_string("vod_segment_duration"),
 	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1,
 	ngx_conf_set_num_slot,

@@ -18,10 +18,11 @@ NGINX_LOG_PATH = '/var/log/nginx/error.log'
 NGINX_HOST = 'http://localhost:8001'
 API_SERVER_PORT = 8002
 FALLBACK_PORT = 8003
-NGINX_LOCAL = NGINX_HOST + '/tlocal'
-NGINX_MAPPED = NGINX_HOST + '/tmapped'
-NGINX_REMOTE = NGINX_HOST + '/tremote'
 ENCRYPTED_PREFIX = '/enc'
+HLS_PREFIX = '/hls'
+NGINX_LOCAL = NGINX_HOST + '/tlocal' + HLS_PREFIX
+NGINX_MAPPED = NGINX_HOST + '/tmapped' + HLS_PREFIX
+NGINX_REMOTE = NGINX_HOST + '/tremote' + HLS_PREFIX
 HLS_PLAYLIST_FILE = '/index.m3u8'
 HLS_IFRAMES_FILE = '/iframes.m3u8'
 HLS_SEGMENT_FILE = '/seg-1-a1-v1.ts'
@@ -437,18 +438,18 @@ class BasicTestSuite(TestSuite):
         self.logTracker.assertContains('unidentified m3u8 request')
 
     # XXXXXXXXXX move out of local - remote/mapped only
-    def testBadClipTo(self):        # the error should be ignored
-        testBody = urllib2.urlopen(self.getUrl('/clipTo/abcd' + HLS_PLAYLIST_FILE)).read()
-        refBody = urllib2.urlopen(self.getUrl(HLS_PLAYLIST_FILE)).read()
-        assert(testBody == refBody)
+    #def testBadClipTo(self):        # the error should be ignored
+    #    testBody = urllib2.urlopen(self.getUrl('/clipTo/abcd' + HLS_PLAYLIST_FILE)).read()
+    #    refBody = urllib2.urlopen(self.getUrl(HLS_PLAYLIST_FILE)).read()
+    #    assert(testBody == refBody)
 
-    def testBadClipFrom(self):        # the error should be ignored
-        testBody = urllib2.urlopen(self.getUrl('/clipFrom/abcd' + HLS_PLAYLIST_FILE)).read()
-        refBody = urllib2.urlopen(self.getUrl(HLS_PLAYLIST_FILE)).read()
-        assert(testBody == refBody)
+    #def testBadClipFrom(self):        # the error should be ignored
+    #    testBody = urllib2.urlopen(self.getUrl('/clipFrom/abcd' + HLS_PLAYLIST_FILE)).read()
+    #    refBody = urllib2.urlopen(self.getUrl(HLS_PLAYLIST_FILE)).read()
+    #    assert(testBody == refBody)
 
 class UpstreamTestSuite(TestSuite):
-    def __init__(self, baseUrl, uri, serverPort, urlFile = ''):
+    def __init__(self, baseUrl, uri, serverPort, urlFile = HLS_PLAYLIST_FILE):
         super(UpstreamTestSuite, self).__init__()
         self.baseUrl = baseUrl
         self.uri = uri
@@ -575,11 +576,11 @@ class FileServeTestSuite(TestSuite):
         self.getServeUrl = getServeUrl
 
     def testNoReadAccessFile(self):
-        assertRequestFails(self.getServeUrl(TEST_NO_READ_ACCESS_FILE), 403)
+        assertRequestFails(self.getServeUrl(TEST_NO_READ_ACCESS_FILE) + HLS_PLAYLIST_FILE, 403)
         self.logTracker.assertContains('open() "%s" failed' % (TEST_FILES_ROOT + TEST_NO_READ_ACCESS_FILE))
 
     def testOpenFolder(self):
-        assertRequestFails(self.getServeUrl(TEST_FOLDER), 403)
+        assertRequestFails(self.getServeUrl(TEST_FOLDER) + HLS_PLAYLIST_FILE, 403)
         self.logTracker.assertContains('"%s" is not a file' % (TEST_FILES_ROOT + TEST_FOLDER))
 
     def testMoovAtomCache(self):
@@ -599,33 +600,37 @@ class FileServeTestSuite(TestSuite):
 
             cleanupStack.resetAndDestroy()
 
-class LocalTestSuite(TestSuite):
+class ModeTestSuite(TestSuite):
     def __init__(self, baseUrl):
-        super(LocalTestSuite, self).__init__()
+        super(ModeTestSuite, self).__init__()
         self.baseUrl = baseUrl
-            
+
+    def getBaseUrl(self, filePath):
+        if len(filePath) == 0:
+            baseUrl = self.baseUrl.replace(HLS_PREFIX, '').replace(ENCRYPTED_PREFIX, '')
+        else:
+            baseUrl = self.baseUrl
+        return baseUrl
+
+class LocalTestSuite(ModeTestSuite):            
     def runChildSuites(self):
         BasicTestSuite(
-            lambda filePath: self.baseUrl + TEST_FLAVOR_FILE + filePath,
+            lambda filePath: self.getBaseUrl(filePath) + TEST_FLAVOR_FILE + filePath,
             lambda: None).run()
         FallbackUpstreamTestSuite(self.baseUrl, TEST_NONEXISTING_FILE, FALLBACK_PORT).run()
         FileServeTestSuite(lambda uri: self.baseUrl + uri).run()
 
     def testFileNotFound(self):
-        assertRequestFails(self.baseUrl + TEST_NONEXISTING_FILE, 502)    # 502 is due to failing to connect to fallback
+        assertRequestFails(self.baseUrl + TEST_NONEXISTING_FILE + HLS_PLAYLIST_FILE, 502)    # 502 is due to failing to connect to fallback
         self.logTracker.assertContains('open() "%s" failed' % (TEST_FILES_ROOT + TEST_NONEXISTING_FILE))
-
-class MappedTestSuite(TestSuite):
-    def __init__(self, baseUrl):
-        super(MappedTestSuite, self).__init__()
-        self.baseUrl = baseUrl
-            
+        
+class MappedTestSuite(ModeTestSuite):
     def runChildSuites(self):
         BasicTestSuite(
-            lambda filePath: getUniqueUrl(self.baseUrl, TEST_FLAVOR_URI, filePath),
+            lambda filePath: getUniqueUrl(self.getBaseUrl(filePath), TEST_FLAVOR_URI, filePath),
             lambda: TcpServer(API_SERVER_PORT, lambda s: socketSendAndShutdown(s, getPathMappingResponse(TEST_FILES_ROOT + TEST_FLAVOR_FILE)))).run()
         requestHandler = lambda s,h: socketSendAndShutdown(s, getPathMappingResponse(TEST_FILES_ROOT + TEST_FLAVOR_FILE))
-        MemoryUpstreamTestSuite(self.baseUrl, TEST_FLAVOR_URI, API_SERVER_PORT, '', requestHandler).run()
+        MemoryUpstreamTestSuite(self.baseUrl, TEST_FLAVOR_URI, API_SERVER_PORT, HLS_PLAYLIST_FILE, requestHandler).run()
         suite = FallbackUpstreamTestSuite(self.baseUrl, TEST_FLAVOR_URI, FALLBACK_PORT)
         suite.prepareTest = lambda: TcpServer(API_SERVER_PORT, lambda s: socketSendAndShutdown(s, getPathMappingResponse('')))
         suite.run()
@@ -633,32 +638,32 @@ class MappedTestSuite(TestSuite):
 
     def getServeUrl(self, uri):
         TcpServer(API_SERVER_PORT, lambda s: socketSendAndShutdown(s, getPathMappingResponse(TEST_FILES_ROOT + uri)))
-        return getUniqueUrl(self.baseUrl, TEST_FLAVOR_URI)
+        return getUniqueUrl(self.baseUrl, TEST_FLAVOR_URI, HLS_PLAYLIST_FILE)
 
     def testEmptyPathMappingResponse(self):
         TcpServer(API_SERVER_PORT, lambda s: socketSendAndShutdown(s, getHttpResponse('')))
-        assertRequestFails(getUniqueUrl(self.baseUrl, TEST_FLAVOR_URI), 404)
+        assertRequestFails(getUniqueUrl(self.baseUrl, TEST_FLAVOR_URI, HLS_PLAYLIST_FILE), 404)
         self.logTracker.assertContains('empty path mapping response')
 
     def testUnexpectedPathResponse(self):
         TcpServer(API_SERVER_PORT, lambda s: socketSendAndShutdown(s, getHttpResponse('abcde')))
-        assertRequestFails(getUniqueUrl(self.baseUrl, TEST_FLAVOR_URI), 503)
+        assertRequestFails(getUniqueUrl(self.baseUrl, TEST_FLAVOR_URI, HLS_PLAYLIST_FILE), 503)
         self.logTracker.assertContains('unexpected path mapping response abcde')
 
     def testEmptyPathResponse(self):
         TcpServer(API_SERVER_PORT, lambda s: socketSendAndShutdown(s, getPathMappingResponse('')))
-        assertRequestFails(getUniqueUrl(self.baseUrl, TEST_FLAVOR_URI), 502)     # 502 is due to failing to connect to fallback
+        assertRequestFails(getUniqueUrl(self.baseUrl, TEST_FLAVOR_URI, HLS_PLAYLIST_FILE), 502)     # 502 is due to failing to connect to fallback
         self.logTracker.assertContains('empty path returned from upstream')
 
     def testFileNotFound(self):
         TcpServer(API_SERVER_PORT, lambda s: socketSendAndShutdown(s, getPathMappingResponse(TEST_NONEXISTING_FILE)))
-        assertRequestFails(getUniqueUrl(self.baseUrl, TEST_FLAVOR_URI), 404)
+        assertRequestFails(getUniqueUrl(self.baseUrl, TEST_FLAVOR_URI, HLS_PLAYLIST_FILE), 404)
         self.logTracker.assertContains('open() "%s" failed' % TEST_NONEXISTING_FILE)
 
     def testPathMappingCache(self):
         TcpServer(API_SERVER_PORT, lambda s: socketSendAndShutdown(s, getPathMappingResponse(TEST_FILES_ROOT + TEST_FLAVOR_FILE)))
         for curRequest, contentType in VOD_REQUESTS:
-            url = getUniqueUrl(self.baseUrl, TEST_FLAVOR_URI, curRequest)
+            url = getUniqueUrl(self.getBaseUrl(curRequest), TEST_FLAVOR_URI, curRequest)
             
             # uncached
             logTracker = LogTracker()
@@ -676,18 +681,14 @@ class MappedTestSuite(TestSuite):
 
             assert(cachedResponse == uncachedResponse)
                    
-class RemoteTestSuite(TestSuite):
-    def __init__(self, baseUrl):
-        super(RemoteTestSuite, self).__init__()
-        self.baseUrl = baseUrl
-            
+class RemoteTestSuite(ModeTestSuite):            
     def runChildSuites(self):
         BasicTestSuite(
-            lambda filePath: getUniqueUrl(self.baseUrl, TEST_FLAVOR_URI, filePath),
+            lambda filePath: getUniqueUrl(self.getBaseUrl(filePath), TEST_FLAVOR_URI, filePath),
             lambda: TcpServer(API_SERVER_PORT, lambda s: serveFile(s, TEST_FILES_ROOT + TEST_FLAVOR_FILE, TEST_FILE_TYPE))).run()
         requestHandler = lambda s,h: serveFileHandler(s, TEST_FILES_ROOT + TEST_FLAVOR_FILE, TEST_FILE_TYPE, h)
         MemoryUpstreamTestSuite(self.baseUrl, TEST_FLAVOR_URI, API_SERVER_PORT, HLS_PLAYLIST_FILE, requestHandler).run()
-        DumpUpstreamTestSuite(self.baseUrl, TEST_FLAVOR_URI, API_SERVER_PORT).run()      # non HLS URL will just dump to upstream
+        DumpUpstreamTestSuite(self.getBaseUrl(''), TEST_FLAVOR_URI, API_SERVER_PORT).run()      # non HLS URL will just dump to upstream
 
     def testMoovAtomCache(self):
         TcpServer(API_SERVER_PORT, lambda s: serveFile(s, TEST_FILES_ROOT + TEST_FLAVOR_FILE, TEST_FILE_TYPE))
@@ -707,9 +708,9 @@ class RemoteTestSuite(TestSuite):
 class MainTestSuite(TestSuite):
     def runChildSuites(self):
         # non encrypted
-        #LocalTestSuite(NGINX_LOCAL).run()
-        #MappedTestSuite(NGINX_MAPPED).run()
-        #RemoteTestSuite(NGINX_REMOTE).run()
+        LocalTestSuite(NGINX_LOCAL).run()
+        MappedTestSuite(NGINX_MAPPED).run()
+        RemoteTestSuite(NGINX_REMOTE).run()
 
         # encrypted
         LocalTestSuite(NGINX_LOCAL + ENCRYPTED_PREFIX).run()
