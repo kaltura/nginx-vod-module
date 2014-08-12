@@ -1407,11 +1407,11 @@ ngx_http_vod_handler(ngx_http_request_t *r)
 
 	original_uri = r->uri;
 
-	rc = parse_request_uri(r, conf, &request_params);
+	rc = conf->request_parser(r, conf, &request_params);
 	if (rc != NGX_OK)
 	{
 		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
-			"ngx_http_vod_handler: parse_request_uri failed %i", rc);
+			"ngx_http_vod_handler: request parser failed %i", rc);
 		return rc;
 	}
 

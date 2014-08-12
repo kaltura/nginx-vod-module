@@ -162,6 +162,7 @@ mp4_to_annexb_start_frame(void* context, output_frame_t* frame)
 	state->cur_state = STATE_PACKET_SIZE;
 	state->length_bytes_left = state->nal_packet_size_length;
 	state->packet_size_left = 0;
+	state->key_frame = frame->key;
 	state->frame_size_left = frame->original_size;		// not adding the aud packet since we're just about to write it
 	if (frame->key)
 	{
@@ -214,7 +215,7 @@ mp4_to_annexb_write(void* context, const u_char* buffer, uint32_t size)
 			case NAL_IDR_SLICE:
 			case NAL_SPS:
 			case NAL_PPS:
-				if (state->first_idr)
+				if (state->key_frame && state->first_idr)
 				{
 					state->frame_size_left -= state->sps_pps_size;
 					rc = state->next_filter->write(state->next_filter_context, state->sps_pps, state->sps_pps_size);

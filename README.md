@@ -30,6 +30,8 @@
 
 * MP4 files have to be "fast start" (the moov atom must be before the mdat atom)
 
+* Only AAC audio is supported (MP3 audio is not)
+
 * I-frames playlist generation is not supported when encryption is enabled
 
 * SAMPLE-AES encryption is not supported
@@ -71,11 +73,14 @@ To disable compiler optimizations (for debugging with gdb) add `CFLAGS="-g -O0"`
 ### Configuration directives
 
 #### vod
-* **syntax**: `vod`
+* **syntax**: `vod segmenter`
 * **default**: `n/a`
 * **context**: `location`
 
-Enables the nginx-vod module on the enclosing location.
+Enables the nginx-vod module on the enclosing location. 
+Currently the allowed values for `segmenter` are:
+1. `none` - serves the MP4 files as is
+2. `hls` - Apple HTTP Live Streaming packetizer
 
 #### vod_mode
 * **syntax**: `vod_mode mode`
@@ -83,14 +88,6 @@ Enables the nginx-vod module on the enclosing location.
 * **context**: `http`, `server`, `location`
 
 Sets the file access mode - local, remote or mapped
-
-#### vod_serve_files
-* **syntax**: `vod_serve_files on/off`
-* **default**: `on`
-* **context**: `http`, `server`, `location`
-
-When enabled requests that are not identified (e.g. .../index.m3u8, .../seg-1-v1-a1.ts etc.)
-will return the original media file.
 
 #### vod_segment_duration
 * **syntax**: `vod_segment_duration duration`

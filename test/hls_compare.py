@@ -43,7 +43,7 @@ class TestThread(stress_base.TestThreadBase):
 		self.ffprobeFile1 = '%s.%s' % (TEMP_FFPROBE_FILE1, uniqueId)
 		self.ffprobeFile2 = '%s.%s' % (TEMP_FFPROBE_FILE2, uniqueId)
 
-	def compareFfprobeOutputs(self, file1, file2, streamType):
+	def compareFfprobeOutputs(self, file1, file2, streamType, messages):
 		lines1 = file(file1, 'rb').readlines()
 		lines2 = file(file2, 'rb').readlines()
 
@@ -59,18 +59,18 @@ class TestThread(stress_base.TestThreadBase):
 				diffResult.count('\n+[PACKET]') == 1 and 
 				diffResult.count('\n+[/PACKET]') == 1 and 
 				'ID3' in diffResult and 'TXXX' in diffResult):
-				self.writeOutput('Notice: a padding id3 packet was removed')
+				messages.append('Notice: a padding id3 packet was removed')
 				return True
 
 			if (not '\n+' in diffResult.replace('+++ ','') and 
 				diffResult.count('\n-[PACKET]') == diffResult.count('\n-[/PACKET]') and 
 				diffResult.count('\n-[PACKET]') > 0):
-				self.writeOutput('Notice: %s %s packets were added' % (diffResult.count('\n-[PACKET]'), 'audio' if streamType == 'a' else 'video'))
+				messages.append('Notice: %s %s packets were added' % (diffResult.count('\n-[PACKET]'), 'audio' if streamType == 'a' else 'video'))
 				return True
 			
 			diffResult = '\n'.join(diffResult.split('\n')[:1000])
-			self.writeOutput('Error: line count mismatch %s vs %s' % (len(lines1), len(lines2)))
-			self.writeOutput(diffResult)
+			messages.append('Error: line count mismatch %s vs %s' % (len(lines1), len(lines2)))
+			messages.append(diffResult)
 			return False
 		
 		ptsDiff = None
@@ -98,7 +98,7 @@ class TestThread(stress_base.TestThreadBase):
 					continue
 				curDiff = abs(pts1 - (pts2 + ptsDiff))
 				if curDiff > PTS_THRESHOLD:
-					self.writeOutput('Error: pts diff %s exceeds threshold, pts1=%s pts2=%s diff=%s' % (curDiff, pts1, pts2, ptsDiff))
+					messages.append('Error: pts diff %s exceeds threshold, pts1=%s pts2=%s diff=%s' % (curDiff, pts1, pts2, ptsDiff))
 					return False
 				continue
 			
@@ -111,7 +111,7 @@ class TestThread(stress_base.TestThreadBase):
 					continue
 				curDiff = abs(dts1 - (dts2 + dtsDiff))
 				if curDiff > DTS_THRESHOLD:
-					self.writeOutput('Error: dts diff %s exceeds threshold, dts1=%s dts2=%s diff=%s' % (curDiff, dts1, dts2, dtsDiff))
+					messages.append('Error: dts diff %s exceeds threshold, dts1=%s dts2=%s diff=%s' % (curDiff, dts1, dts2, dtsDiff))
 					return False
 				continue
 			
@@ -121,11 +121,11 @@ class TestThread(stress_base.TestThreadBase):
 			if line1 == line2:
 				continue
 			
-			self.writeOutput('Error: test failed line1=%s line2=%s' % (line1, line2))
+			messages.append('Error: test failed line1=%s line2=%s' % (line1, line2))
 			return False
 		return True
 
-	def compareStream(self, streamType):
+	def compareStream(self, streamType, messages):
 		commands = [	
 			'%s -i %s -show_packets -show_data -select_streams %s < /dev/null 2>/dev/null > %s' % (FFPROBE_BIN, self.tsFile1, streamType, self.ffprobeFile1),
 			'%s -i %s -show_packets -show_data -select_streams %s < /dev/null 2>/dev/null > %s' % (FFPROBE_BIN, self.tsFile2, streamType, self.ffprobeFile2),
@@ -133,7 +133,7 @@ class TestThread(stress_base.TestThreadBase):
 		for command in commands:
 			os.system(command)
 		
-		return self.compareFfprobeOutputs(self.ffprobeFile1, self.ffprobeFile2, streamType)
+		return self.compareFfprobeOutputs(self.ffprobeFile1, self.ffprobeFile2, streamType, messages)
 
 	def testContinuity(self, tsFileName, continuityCounters):
 		tsData = file(tsFileName, 'rb').read()
@@ -156,62 +156,85 @@ class TestThread(stress_base.TestThreadBase):
 		self.writeOutput('Info: validated %s counters' % okCounters)
 		return result
 		
-	def retrieveUrl(self, url, fileName, name):
+	def retrieveUrl(self, url, fileName):
 		startTime = time.time()
 		try:
 			r = urllib2.urlopen(urllib2.Request(url))
 		except urllib2.HTTPError, e:
 			return e.getcode()
 		except urllib2.URLError, e:
-			self.writeOutput('Error: request failed %s' % e)
+			self.writeOutput('Error: request failed %s %s' % (url, e))
 			return 0
 		result = r.getcode()
 		with file(fileName, 'wb') as w:
 			shutil.copyfileobj(r,w)
 		r.close()
 		
+		self.writeOutput('Info: get %s took %s, cksum %s' % (url, time.time() - startTime, commands.getoutput('cksum "%s"' % fileName)))
 		fileSize = os.path.getsize(fileName)
-		self.writeOutput('Info: get %s took %s, size=%s' % (name, time.time() - startTime, fileSize))
 		if r.info().getheader('content-length') != '%s' % fileSize:
-			self.writeOutput('Error: content-length %s is different than the resulting file size %s' % (r.info().getheader('content-length'), fileSize))
+			self.writeOutput('Error: %s content-length %s is different than the resulting file size %s' % (url, r.info().getheader('content-length'), fileSize))
 			return 0
 		return result
+
+	def decryptTsSegment(self, fileName, aesKey, segmentIndex):
+		cipher = AES.new(aesKey, AES.MODE_CBC, '\0' * 12 + struct.pack('>L', segmentIndex))
+		try:
+			decryptedTS = cipher.decrypt(file(fileName, 'rb').read())
+		except ValueError:
+			self.writeOutput('Error: cipher.decrypt failed')
+			return False
+		padLength = ord(decryptedTS[-1])
+		if padLength > 16:
+			self.writeOutput('Error: invalid pad length %s' % padLength)
+			return False
+		if decryptedTS[-padLength:] != chr(padLength) * padLength:
+			self.writeOutput('Error: invalid padding')
+			return False
+		decryptedTS = decryptedTS[:-padLength]
+		file(fileName, 'wb').write(decryptedTS)
+		return True
 		
 	def compareTsUris(self, url1, url2, segmentIndex, aesKey, continuityCounters):
+		result = True
 		self.writeOutput('Info: comparing %s %s' % (url1, url2))
 
-		code1 = self.retrieveUrl(url1, self.tsFile1, 'url1')
-		code2 = self.retrieveUrl(url2, self.tsFile2, 'url2')
+		code1 = self.retrieveUrl(url1, self.tsFile1)
+		if code1 == 200:
+			if aesKey != None:
+				if not self.decryptTsSegment(self.tsFile1, aesKey, segmentIndex):
+					return False
+			
+			if not self.testContinuity(self.tsFile1, continuityCounters):
+				result = False
+		else:
+			continuityCounters.clear()
+			
+		for attempt in xrange(3):
+			code2 = self.retrieveUrl(url2, self.tsFile2)
+			
+			if code1 == 200 and code2 == 404:
+				self.writeOutput('Info: got different status codes %s vs %s (ts)' % (code1, code2))
+				return True
+			
+			if code1 != code2:
+				if code1 != 0 and code2 != 0:
+					self.writeOutput('Error: got different status codes %s vs %s (ts)' % (code1, code2))
+				return False
+			
+			messages = []
+			curResult = True
+			if not self.compareStream('a', messages):
+				curResult = False
+			if not self.compareStream('v', messages):
+				curResult = False
+			if curResult:
+				break
+			self.writeOutput('Info: got errors, retrying...')
 		
-		if code1 != code2:
-			self.writeOutput('Error: got different status codes %s vs %s (ts)' % (code1, code2))
-			return False
-		
-		if aesKey != None and code1 == 200:
-			cipher = AES.new(aesKey, AES.MODE_CBC, '\0' * 12 + struct.pack('>L', segmentIndex))
-			try:
-				decryptedTS = cipher.decrypt(file(self.tsFile1, 'rb').read())
-			except ValueError:
-				self.writeOutput('Error: cipher.decrypt failed')
-				return False
-			padLength = ord(decryptedTS[-1])
-			if padLength > 16:
-				self.writeOutput('Error: invalid pad length %s' % padLength)
-				return False
-			if decryptedTS[-padLength:] != chr(padLength) * padLength:
-				self.writeOutput('Error: invalid padding')
-				return False
-			decryptedTS = decryptedTS[:-padLength]
-			file(self.tsFile1, 'wb').write(decryptedTS)
-				
-		result = True
-		if not self.testContinuity(self.tsFile1, continuityCounters):
-			result = False
-		if not self.compareStream('a'):
-			result = False
-		if not self.compareStream('v'):
-			result = False
-		return result
+		for message in messages:
+			self.writeOutput(message)
+		return result and curResult
 
 	@staticmethod		
 	def getTsUris(manifest):
@@ -229,7 +252,7 @@ class TestThread(stress_base.TestThreadBase):
 		except urllib2.HTTPError, e:
 			return e.getcode(), e.read()			
 		except urllib2.URLError, e:
-			self.writeOutput('Error: request failed %s' % e)
+			self.writeOutput('Error: request failed %s %s' % (url, e))
 			return 0, ''
 		data = f.read()
 		if f.info().get('Content-Encoding') == 'gzip':
@@ -280,7 +303,8 @@ class TestThread(stress_base.TestThreadBase):
 		tsUris2 = self.getTsUris(manifest2)
 		if len(tsUris1) != len(tsUris2):
 			if len(tsUris1) < len(tsUris2) and '/clipTo/' in uri:
-				self.writeOutput('Notice: ignoring TS count mismatch (%s vs %s) due to clipTo parameter' % (len(tsUris1), len(tsUris2)))
+				clipToValue = url.split('/clipTo/')[1].split('/')[0]
+				self.writeOutput('Notice: ignoring TS count mismatch (%s vs %s) due to clipTo %s' % (len(tsUris1), len(tsUris2), clipToValue))
 				tsUris2 = tsUris2[:len(tsUris1)]
 			else:
 				self.writeOutput('Error: TS segment count mismatch %s vs %s' % (len(tsUris1), len(tsUris2)))

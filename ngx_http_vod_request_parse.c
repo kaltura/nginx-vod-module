@@ -201,8 +201,16 @@ parse_required_tracks(ngx_http_request_t* r, u_char* start_pos, u_char* end_pos,
 	return NGX_OK;
 }
 
+ngx_int_t
+parse_request_uri_serve_file(ngx_http_request_t *r, ngx_http_vod_loc_conf_t *conf, request_params_t* request_params)
+{
+	ngx_memzero(request_params, sizeof(*request_params));
+	request_params->request_type = REQUEST_TYPE_SERVE_FILE;
+	return NGX_OK;
+}
+
 ngx_int_t 
-parse_request_uri(ngx_http_request_t *r, ngx_http_vod_loc_conf_t *conf, request_params_t* request_params)
+parse_request_uri_hls(ngx_http_request_t *r, ngx_http_vod_loc_conf_t *conf, request_params_t* request_params)
 {
 	ngx_int_t rc;
 	u_char* start_pos = NULL;
@@ -291,20 +299,6 @@ parse_request_uri(ngx_http_request_t *r, ngx_http_vod_loc_conf_t *conf, request_
 	{
 		request_params->request_type = REQUEST_TYPE_HLS_ENCRYPTION_KEY;
 		
-		return NGX_OK;
-	}
-
-	if (conf->serve_files)
-	{
-		// the file name was not recognized, add it back to the URL
-		r->uri.data[r->uri.len] = '/';
-		r->uri.len++;
-		ngx_memcpy(r->uri.data + r->uri.len, start_pos, end_pos - start_pos);
-		r->uri.len += end_pos - start_pos;
-		r->uri.data[r->uri.len] = '\0';
-
-		request_params->request_type = REQUEST_TYPE_SERVE_FILE;
-
 		return NGX_OK;
 	}
 

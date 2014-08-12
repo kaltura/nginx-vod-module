@@ -20,6 +20,7 @@ typedef struct {
 	int cur_state;
 	bool_t first_idr;
 	bool_t first_frame_packet;
+	bool_t key_frame;
 	uint32_t length_bytes_left;
 	uint32_t packet_size_left;
 	int32_t frame_size_left;

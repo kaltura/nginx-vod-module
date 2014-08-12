@@ -1,5 +1,5 @@
 URL1_PREFIX = 'http://localhost:8001/mapped'
-URL1_PREFIXES = ['mapped','remote','mapped/enc','remote/enc']
+URL1_PREFIXES = ['mapped/hls','remote/hls','mapped/hls/enc','remote/hls/enc']
 URL1_SUFFIX = '/index.m3u8'
 URL2_PREFIX = 'http://some-other-server'
 URL2_SUFFIX = '/index.m3u8'

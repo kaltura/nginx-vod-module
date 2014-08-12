@@ -583,7 +583,7 @@ parse_stts_atom(atom_info_t* atom_info, trak_info_t* trak_info)
 	
 	for (; cur_entry < last_entry; cur_entry++)
 	{
-		if (accum_duration > end_time)
+		if (accum_duration >= end_time)
 		{
 			break;
 		}
@@ -615,9 +615,14 @@ parse_stts_atom(atom_info_t* atom_info, trak_info_t* trak_info)
 		
 		for (; sample_count != 0; sample_count--, frame_index++, accum_duration += sample_duration)
 		{
-			if (accum_duration < start_time || accum_duration >= end_time)
+			if (accum_duration < start_time)
 			{
 				continue;
+			}
+
+			if (accum_duration >= end_time)
+			{
+				break;
 			}
 
 			if (first_frame == UINT_MAX)
@@ -729,9 +734,14 @@ parse_ctts_atom(atom_info_t* atom_info, trak_info_t* trak_info)
 
 		for (; sample_count != 0; sample_count--, frame_index++)
 		{
-			if (frame_index < trak_info->first_frame || frame_index >= trak_info->last_frame)
+			if (frame_index < trak_info->first_frame)
 			{
 				continue;
+			}
+
+			if (frame_index >= trak_info->last_frame)
+			{
+				break;
 			}
 			
 			trak_info->frames_info[frame_index - trak_info->first_frame].pts += sample_duration;

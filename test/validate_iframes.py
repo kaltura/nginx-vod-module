@@ -6,7 +6,7 @@ import os
 
 from validate_iframes_params import *
 
-SERVER_URL = 'http://localhost:8001/mapped'
+SERVER_URL = 'http://localhost:8001/mapped/hls'
 IFRAMES_URI = '/iframes.m3u8'
 
 class TestThread(stress_base.TestThreadBase):
