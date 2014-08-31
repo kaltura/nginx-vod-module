@@ -303,7 +303,7 @@ class TestThread(stress_base.TestThreadBase):
 		tsUris2 = self.getTsUris(manifest2)
 		if len(tsUris1) != len(tsUris2):
 			if len(tsUris1) < len(tsUris2) and '/clipTo/' in uri:
-				clipToValue = url.split('/clipTo/')[1].split('/')[0]
+				clipToValue = uri.split('/clipTo/')[1].split('/')[0]
 				self.writeOutput('Notice: ignoring TS count mismatch (%s vs %s) due to clipTo %s' % (len(tsUris1), len(tsUris2), clipToValue))
 				tsUris2 = tsUris2[:len(tsUris1)]
 			else:
