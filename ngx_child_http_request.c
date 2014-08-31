@@ -49,7 +49,7 @@ ngx_http_vod_create_request(ngx_http_request_t *r)
 	ngx_chain_t *cl;
 	child_request_base_context_t* ctx;
 
-	ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0, "ngx_http_vod_create_request started");
+	ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0, "ngx_http_vod_create_request: started");
 	
 	// allocate a chain and associate the previously created request buffer
 	cl = ngx_alloc_chain_link(r->pool);
@@ -66,7 +66,7 @@ ngx_http_vod_create_request(ngx_http_request_t *r)
 
 	r->upstream->request_bufs = cl;
 
-	ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0, "ngx_http_vod_create_request done %s", ctx->request_buffer->pos);
+	ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0, "ngx_http_vod_create_request: done %s", ctx->request_buffer->pos);
 
 	return NGX_OK;
 }
@@ -80,7 +80,7 @@ ngx_http_vod_finalize_request(ngx_http_request_t *r, ngx_int_t rc)
 static ngx_int_t
 ngx_http_vod_reinit_request(ngx_http_request_t *r)
 {
-	ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0, "ngx_http_vod_reinit_request called");
+	ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0, "ngx_http_vod_reinit_request: called");
 
 	return NGX_OK;
 }
@@ -240,7 +240,7 @@ ngx_http_vod_process_status_line(ngx_http_request_t *r)
 	size_t len;
 	ngx_int_t rc;
 
-	ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0, "ngx_http_vod_process_status_line started");
+	ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0, "ngx_http_vod_process_status_line: started");
 
 	u = r->upstream;
 
@@ -292,7 +292,7 @@ ngx_http_vod_process_status_line(ngx_http_request_t *r)
 static void
 ngx_http_vod_abort_request(ngx_http_request_t *r)
 {
-	ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0, "ngx_http_vod_abort_request called");
+	ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0, "ngx_http_vod_abort_request: called");
 	return;
 }
 
@@ -672,13 +672,13 @@ child_request_finished_handler(ngx_http_request_t *r, void *data, ngx_int_t rc)
 		if (u->state && u->state->status != NGX_HTTP_OK && u->state->status != NGX_HTTP_PARTIAL_CONTENT)
 		{
 			ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
-				"upstream returned a bad status %ui", u->state->status);
+				"child_request_finished_handler: upstream returned a bad status %ui", u->state->status);
 			rc = NGX_HTTP_BAD_GATEWAY;
 		}
 		else if (u->length != 0)
 		{
 			ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
-				"upstream connection was closed with %O bytes left to read", u->length);
+				"child_request_finished_handler: upstream connection was closed with %O bytes left to read", u->length);
 			rc = NGX_HTTP_BAD_GATEWAY;
 		}
 	}

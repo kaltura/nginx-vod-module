@@ -37,6 +37,7 @@ ngx_http_vod_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child)
 {
     ngx_http_vod_loc_conf_t *prev = parent;
     ngx_http_vod_loc_conf_t *conf = child;
+	size_t proxy_header_len;
 	u_char* p;
 	char* err;
 
@@ -154,8 +155,8 @@ ngx_http_vod_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child)
 		conf->secret_key.len > 0 ? (char*)conf->encryption_key_file_name.data : NULL);
 
 	// combine the proxy header name and value to a single line
-	conf->proxy_header.len = conf->proxy_header_name.len + sizeof(": ") - 1 + conf->proxy_header_value.len + sizeof(CRLF);
-	conf->proxy_header.data = ngx_alloc(conf->proxy_header.len, cf->log);
+	proxy_header_len = conf->proxy_header_name.len + sizeof(": ") - 1 + conf->proxy_header_value.len + sizeof(CRLF);
+	conf->proxy_header.data = ngx_alloc(proxy_header_len, cf->log);
 	if (conf->proxy_header.data == NULL)
 	{
 		return NGX_CONF_ERROR;
@@ -166,6 +167,8 @@ ngx_http_vod_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child)
 	p = ngx_copy(p, conf->proxy_header_value.data, conf->proxy_header_value.len);
 	*p++ = '\r';		*p++ = '\n';
 	*p = '\0';
+
+	conf->proxy_header.len = p - conf->proxy_header.data;
 
     return NGX_CONF_OK;
 }

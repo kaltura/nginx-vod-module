@@ -252,7 +252,7 @@ parse_moov_atom(ngx_http_vod_ctx_t *ctx, u_char* moov_buffer, size_t moov_size)
 		if (ctx->request_context.end <= ctx->request_context.start)
 		{
 			vod_log_error(VOD_LOG_ERR, ctx->request_context.log, 0,
-				"build_index_playlist_m3u8: segment index %uD too big for clip from %uD and clip to %uD", 
+				"parse_moov_atom: segment index %uD too big for clip from %uD and clip to %uD", 
 				ctx->request_params.segment_index, ctx->request_params.clip_from, ctx->request_params.clip_to);
 			return VOD_BAD_REQUEST;
 		}
@@ -485,7 +485,7 @@ output_ts_response(ngx_http_vod_ctx_t *ctx)
 		if (ctx->write_ts_buffer_context.total_size != r->headers_out.content_length_n)
 		{
 			ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
-				"actual content length %uD is different than reported length %O", 
+				"output_ts_response: actual content length %uD is different than reported length %O", 
 				ctx->write_ts_buffer_context.total_size, r->headers_out.content_length_n);
 		}
 
@@ -635,6 +635,15 @@ run_state_machine(ngx_http_vod_ctx_t *ctx)
 			return vod_status_to_ngx_error(VOD_BAD_DATA);
 		}
 
+		// parse the moov atom
+		rc = parse_moov_atom(ctx, ctx->read_buffer + ctx->moov_offset, ctx->moov_size);
+		if (rc != VOD_OK)
+		{
+			ngx_log_debug1(NGX_LOG_DEBUG_HTTP, ctx->request_context.log, 0,
+				"run_state_machine: parse_moov_atom failed %i", rc);
+			return vod_status_to_ngx_error(rc);
+		}
+
 		// save the moov atom to cache
 		if (conf->moov_cache_zone != NULL)
 		{
@@ -652,15 +661,6 @@ run_state_machine(ngx_http_vod_ctx_t *ctx)
 				ngx_log_debug0(NGX_LOG_DEBUG_HTTP, ctx->request_context.log, 0,
 					"run_state_machine: failed to store moov atom in cache");
 			}
-		}
-
-		// parse the moov atom
-		rc = parse_moov_atom(ctx, ctx->read_buffer + ctx->moov_offset, ctx->moov_size);
-		if (rc != VOD_OK)
-		{
-			ngx_log_debug1(NGX_LOG_DEBUG_HTTP, ctx->request_context.log, 0,
-				"run_state_machine: parse_moov_atom failed %i", rc);
-			return vod_status_to_ngx_error(rc);
 		}
 
 		// no longer need the moov atom buffer
@@ -712,6 +712,15 @@ run_state_machine(ngx_http_vod_ctx_t *ctx)
 
 		// validate the requested segment index
 		duration_millis = DIV_CEIL(ctx->mpeg_metadata.duration, 90);
+
+		if (duration_millis <= ctx->request_params.clip_from)
+		{
+			ngx_log_error(NGX_LOG_ERR, ctx->request_context.log, 0,
+				"run_state_machine: clip from %uD exceeds video duration %uD", ctx->request_params.clip_from, duration_millis);
+			return NGX_HTTP_NOT_FOUND;
+		}
+
+		duration_millis = MIN(duration_millis, ctx->request_params.clip_to) - ctx->request_params.clip_from;
 		segment_count = DIV_CEIL(duration_millis, conf->segment_duration);
 		if (ctx->request_params.segment_index >= segment_count)
 		{
@@ -958,7 +967,7 @@ dump_request_to_fallback_upstream(
 	if (conf->fallback_upstream.upstream == NULL)
 	{
 		ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
-			"dump_request_to_fallback_upstream: no fallback configured or no host header received");
+			"dump_request_to_fallback_upstream: no fallback configured");
 		return NGX_ERROR;
 	}
 
@@ -1066,7 +1075,7 @@ path_request_finished(void* context, ngx_int_t rc, ngx_buf_t* response)
 		goto finalize_request;
 	}
 
-	ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0, "path request finished %s", response->pos);
+	ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0, "path_request_finished: result %s", response->pos);
 
 	path.data = response->pos;
 	path.len = response->last - path.data;

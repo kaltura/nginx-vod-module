@@ -237,12 +237,15 @@ class TestThread(stress_base.TestThreadBase):
 		return result and curResult
 
 	@staticmethod		
-	def getTsUris(manifest):
+	def getTsSegments(manifest):
 		result = []
+		duration = None
 		for curLine in manifest.split('\n'):
 			curLine = curLine.strip()
+			if curLine.startswith('#EXTINF:'):
+				duration = float(curLine[len('#EXTINF:'):].split(',')[0])
 			if len(curLine) > 0 and curLine[0] != '#':
-				result.append(curLine)
+				result.append((curLine, duration))
 		return result
 
 	def getM3U8(self, url):
@@ -299,8 +302,8 @@ class TestThread(stress_base.TestThreadBase):
 				return True
 		
 		# extract the ts uris
-		tsUris1 = self.getTsUris(manifest1)
-		tsUris2 = self.getTsUris(manifest2)
+		tsUris1 = self.getTsSegments(manifest1)
+		tsUris2 = self.getTsSegments(manifest2)
 		if len(tsUris1) != len(tsUris2):
 			if len(tsUris1) < len(tsUris2) and '/clipTo/' in uri:
 				clipToValue = uri.split('/clipTo/')[1].split('/')[0]
@@ -309,6 +312,15 @@ class TestThread(stress_base.TestThreadBase):
 			else:
 				self.writeOutput('Error: TS segment count mismatch %s vs %s' % (len(tsUris1), len(tsUris2)))
 
+		# check the durations
+		minCount = min(len(tsUris1), len(tsUris2))
+		for curIndex in xrange(minCount):
+			duration1 = tsUris1[curIndex][1]
+			duration2 = tsUris2[curIndex][1]
+			if abs(duration1 - duration2) > 0.01:
+				self.writeOutput('Error: TS durations mismatch at index %s - %s vs %s' % (curIndex, duration1, duration2))
+				return False
+				
 		# get the encryption key, if exists
 		keyUri = None
 		for curLine in manifest1.split('\n'):
@@ -328,13 +340,12 @@ class TestThread(stress_base.TestThreadBase):
 		# compare the ts segments
 		result = True
 		continuityCounters = {}
-		minCount = min(len(tsUris1), len(tsUris2))
 		self.writeOutput('Info: segmentCount=%s' % minCount)
 		for curIndex in xrange(max(minCount - MAX_TS_SEGMENTS_TO_COMPARE, 0), minCount, 1):
 			if os.path.exists(STOP_FILE):
 				return True
-			tsUrl1 = '%s/%s' % (url1, tsUris1[curIndex])
-			tsUrl2 = '%s/%s' % (url2, tsUris2[curIndex])
+			tsUrl1 = '%s/%s' % (url1, tsUris1[curIndex][0])
+			tsUrl2 = '%s/%s' % (url2, tsUris2[curIndex][0])
 			if not self.compareTsUris(tsUrl1, tsUrl2, curIndex + 1, aesKey, continuityCounters):
 				self.writeOutput('Error: ts comparison failed - url1=%s, url2=%s' % (tsUrl1, tsUrl2))
 				result = False

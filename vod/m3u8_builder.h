@@ -7,7 +7,7 @@
 // constants
 #define MAX_ENCRYPTION_KEY_FILE_NAME_LEN (32)
 
-static const char m3u8_header_format[] = "#EXTM3U\n#EXT-X-TARGETDURATION:%d\n#EXT-X-ALLOW-CACHE:YES\n%s%s%s#EXT-X-VERSION:%d\n#EXT-X-MEDIA-SEQUENCE:1\n";
+static const char m3u8_header_format[] = "#EXTM3U\n#EXT-X-TARGETDURATION:%d\n#EXT-X-ALLOW-CACHE:YES\n#EXT-X-PLAYLIST-TYPE:VOD\n%s%s%s#EXT-X-VERSION:%d\n#EXT-X-MEDIA-SEQUENCE:1\n";
 static const char encryption_key_tag_prefix[] = "#EXT-X-KEY:METHOD=AES-128,URI=\"";
 static const char encryption_key_tag_postfix[] = "\"\n";
 static const char m3u8_extinf_format[] = "#EXTINF:%d.%d,\n";

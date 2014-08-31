@@ -29,15 +29,17 @@ HLS_SEGMENT_FILE = '/seg-1-a1-v1.ts'
 M3U8_PREFIX = '''#EXTM3U
 #EXT-X-TARGETDURATION:10
 #EXT-X-ALLOW-CACHE:YES
-#EXT-X-VERSION:2
+#EXT-X-PLAYLIST-TYPE:VOD
+#EXT-X-VERSION:3
 #EXT-X-MEDIA-SEQUENCE:1
 '''
 
 M3U8_PREFIX_ENCRYPTED = '''#EXTM3U
 #EXT-X-TARGETDURATION:10
 #EXT-X-ALLOW-CACHE:YES
+#EXT-X-PLAYLIST-TYPE:VOD
 #EXT-X-KEY:METHOD=AES-128,URI="encryption.key"
-#EXT-X-VERSION:2
+#EXT-X-VERSION:3
 #EXT-X-MEDIA-SEQUENCE:1
 '''
 M3U8_POSTFIX = '#EXT-X-ENDLIST\n'
@@ -135,7 +137,15 @@ class LogTracker:
         f.seek(self.initialSize, os.SEEK_SET)
         buffer = f.read()
         f.close()
-        assert(logLine in buffer)
+        if type(logLine) == list:
+            found = False
+            for curLine in logLine:
+                if curLine in buffer:
+                    found = True
+                    break
+            assert(found)
+        else:
+            assert(logLine in buffer)
 
 ### Misc utility functions
 def getHttpResponse(body = '', status = '200 OK', length = None, headers = {}):
@@ -399,6 +409,34 @@ class BasicTestSuite(TestSuite):
 
         assert(clearSegment == decryptedSegment)
         
+    def testClipToSanity(self):
+        # index
+        clippedResponse = urllib2.urlopen(self.getUrl('/clipTo/10000' + HLS_PLAYLIST_FILE)).read()
+        validatePlaylistM3U8(clippedResponse)
+        assertEquals(clippedResponse.count(M3U8_EXTINF), 1)
+
+        # segment
+        assertRequestFails(self.getUrl('/clipTo/10000/seg-2-a1-v1.ts'), 400)
+
+        # iframes
+        fullResponse = urllib2.urlopen(self.getUrl(HLS_IFRAMES_FILE)).read()
+        clippedResponse = urllib2.urlopen(self.getUrl('/clipTo/10000' + HLS_IFRAMES_FILE)).read()
+        assert(len(clippedResponse) < len(fullResponse))
+
+    def testClipFromSanity(self):
+        # index
+        fullResponse = urllib2.urlopen(self.getUrl(HLS_PLAYLIST_FILE)).read()
+        clippedResponse = urllib2.urlopen(self.getUrl('/clipFrom/10000' + HLS_PLAYLIST_FILE)).read()
+        validatePlaylistM3U8(clippedResponse)
+        assertEquals(clippedResponse.count(M3U8_EXTINF) + 1, fullResponse.count(M3U8_EXTINF))
+
+        # segment
+        assertRequestFails(self.getUrl('/clipFrom/10000/seg-%s-a1-v1.ts' % fullResponse.count(M3U8_EXTINF)), 404)
+
+        # iframes
+        fullResponse = urllib2.urlopen(self.getUrl(HLS_IFRAMES_FILE)).read()
+        clippedResponse = urllib2.urlopen(self.getUrl('/clipFrom/10000' + HLS_IFRAMES_FILE)).read()
+        assert(len(clippedResponse) < len(fullResponse))
 
     # bad requests    
     def testPostRequest(self):
@@ -417,6 +455,14 @@ class BasicTestSuite(TestSuite):
         assertRequestFails(self.getUrl('/clipFrom/10000/clipTo/1000/index.m3u8'), 400)
         self.logTracker.assertContains('clip from 10000 is larger than clip to 1000')
 
+    def testClipFromLargerThanVideoDurationTS(self):
+        assertRequestFails(self.getUrl('/clipFrom/9999999' + HLS_SEGMENT_FILE), 404)
+        self.logTracker.assertContains('clip from 9999999 exceeds video duration')
+
+    def testClipFromLargerThanVideoDurationM3U8(self):
+        assertRequestFails(self.getUrl('/clipFrom/9999999' + HLS_PLAYLIST_FILE), 400)
+        self.logTracker.assertContains('clip from 9999999 exceeds the file duration')
+
     def testBadSegmentIndex(self):
         assertRequestFails(self.getUrl('/seg-abc-a1-v1.ts'), 400)
         self.logTracker.assertContains('failed to parse the segment index')
@@ -433,20 +479,25 @@ class BasicTestSuite(TestSuite):
         assertRequestFails(self.getUrl('/bla-1-a1-v1.ts'), 400)
         self.logTracker.assertContains('unidentified ts request')
 
-    def testUnrecognizedTSRequest(self):
+    def testUnrecognizedM3U8Request(self):
         assertRequestFails(self.getUrl('/bla.m3u8'), 400)
         self.logTracker.assertContains('unidentified m3u8 request')
 
-    # XXXXXXXXXX move out of local - remote/mapped only
-    #def testBadClipTo(self):        # the error should be ignored
-    #    testBody = urllib2.urlopen(self.getUrl('/clipTo/abcd' + HLS_PLAYLIST_FILE)).read()
-    #    refBody = urllib2.urlopen(self.getUrl(HLS_PLAYLIST_FILE)).read()
-    #    assert(testBody == refBody)
+class BasicNonLocalTestSuite(TestSuite):
+    def __init__(self, getUrl, setupServer):
+        super(BasicNonLocalTestSuite, self).__init__()
+        self.getUrl = getUrl
+        self.prepareTest = setupServer
 
-    #def testBadClipFrom(self):        # the error should be ignored
-    #    testBody = urllib2.urlopen(self.getUrl('/clipFrom/abcd' + HLS_PLAYLIST_FILE)).read()
-    #    refBody = urllib2.urlopen(self.getUrl(HLS_PLAYLIST_FILE)).read()
-    #    assert(testBody == refBody)
+    def testBadClipTo(self):        # the error should be ignored
+        testBody = urllib2.urlopen(self.getUrl('/clipTo/abcd' + HLS_PLAYLIST_FILE)).read()
+        refBody = urllib2.urlopen(self.getUrl(HLS_PLAYLIST_FILE)).read()
+        assert(testBody == refBody)
+
+    def testBadClipFrom(self):        # the error should be ignored
+        testBody = urllib2.urlopen(self.getUrl('/clipFrom/abcd' + HLS_PLAYLIST_FILE)).read()
+        refBody = urllib2.urlopen(self.getUrl(HLS_PLAYLIST_FILE)).read()
+        assert(testBody == refBody)
 
 class UpstreamTestSuite(TestSuite):
     def __init__(self, baseUrl, uri, serverPort, urlFile = HLS_PLAYLIST_FILE):
@@ -622,11 +673,14 @@ class LocalTestSuite(ModeTestSuite):
 
     def testFileNotFound(self):
         assertRequestFails(self.baseUrl + TEST_NONEXISTING_FILE + HLS_PLAYLIST_FILE, 502)    # 502 is due to failing to connect to fallback
-        self.logTracker.assertContains('open() "%s" failed' % (TEST_FILES_ROOT + TEST_NONEXISTING_FILE))
+        self.logTracker.assertContains(['open() "%s" failed' % (TEST_FILES_ROOT + TEST_NONEXISTING_FILE), 'stat() "%s" failed' % (TEST_FILES_ROOT + TEST_NONEXISTING_FILE)])
         
 class MappedTestSuite(ModeTestSuite):
     def runChildSuites(self):
         BasicTestSuite(
+            lambda filePath: getUniqueUrl(self.getBaseUrl(filePath), TEST_FLAVOR_URI, filePath),
+            lambda: TcpServer(API_SERVER_PORT, lambda s: socketSendAndShutdown(s, getPathMappingResponse(TEST_FILES_ROOT + TEST_FLAVOR_FILE)))).run()
+        BasicNonLocalTestSuite(
             lambda filePath: getUniqueUrl(self.getBaseUrl(filePath), TEST_FLAVOR_URI, filePath),
             lambda: TcpServer(API_SERVER_PORT, lambda s: socketSendAndShutdown(s, getPathMappingResponse(TEST_FILES_ROOT + TEST_FLAVOR_FILE)))).run()
         requestHandler = lambda s,h: socketSendAndShutdown(s, getPathMappingResponse(TEST_FILES_ROOT + TEST_FLAVOR_FILE))
@@ -639,6 +693,18 @@ class MappedTestSuite(ModeTestSuite):
     def getServeUrl(self, uri):
         TcpServer(API_SERVER_PORT, lambda s: socketSendAndShutdown(s, getPathMappingResponse(TEST_FILES_ROOT + uri)))
         return getUniqueUrl(self.baseUrl, TEST_FLAVOR_URI, HLS_PLAYLIST_FILE)
+
+    def testNoReadAccessFileMappingCached(self):
+        url = self.getServeUrl(TEST_NO_READ_ACCESS_FILE) + HLS_PLAYLIST_FILE
+        assertRequestFails(url, 403)
+        assertRequestFails(url, 403)
+        self.logTracker.assertContains('open() "%s" failed' % (TEST_FILES_ROOT + TEST_NO_READ_ACCESS_FILE))
+
+    def testOpenFolderMappingCached(self):
+        url = self.getServeUrl(TEST_FOLDER) + HLS_PLAYLIST_FILE
+        assertRequestFails(url, 403)
+        assertRequestFails(url, 403)
+        self.logTracker.assertContains('"%s" is not a file' % (TEST_FILES_ROOT + TEST_FOLDER))
 
     def testEmptyPathMappingResponse(self):
         TcpServer(API_SERVER_PORT, lambda s: socketSendAndShutdown(s, getHttpResponse('')))
@@ -658,7 +724,7 @@ class MappedTestSuite(ModeTestSuite):
     def testFileNotFound(self):
         TcpServer(API_SERVER_PORT, lambda s: socketSendAndShutdown(s, getPathMappingResponse(TEST_NONEXISTING_FILE)))
         assertRequestFails(getUniqueUrl(self.baseUrl, TEST_FLAVOR_URI, HLS_PLAYLIST_FILE), 404)
-        self.logTracker.assertContains('open() "%s" failed' % TEST_NONEXISTING_FILE)
+        self.logTracker.assertContains(['open() "%s" failed' % TEST_NONEXISTING_FILE, 'stat() "%s" failed' % TEST_NONEXISTING_FILE])
 
     def testPathMappingCache(self):
         TcpServer(API_SERVER_PORT, lambda s: socketSendAndShutdown(s, getPathMappingResponse(TEST_FILES_ROOT + TEST_FLAVOR_FILE)))
@@ -686,6 +752,9 @@ class RemoteTestSuite(ModeTestSuite):
         BasicTestSuite(
             lambda filePath: getUniqueUrl(self.getBaseUrl(filePath), TEST_FLAVOR_URI, filePath),
             lambda: TcpServer(API_SERVER_PORT, lambda s: serveFile(s, TEST_FILES_ROOT + TEST_FLAVOR_FILE, TEST_FILE_TYPE))).run()
+        BasicNonLocalTestSuite(
+            lambda filePath: getUniqueUrl(self.getBaseUrl(filePath), TEST_FLAVOR_URI, filePath),
+            lambda: TcpServer(API_SERVER_PORT, lambda s: serveFile(s, TEST_FILES_ROOT + TEST_FLAVOR_FILE, TEST_FILE_TYPE))).run()
         requestHandler = lambda s,h: serveFileHandler(s, TEST_FILES_ROOT + TEST_FLAVOR_FILE, TEST_FILE_TYPE, h)
         MemoryUpstreamTestSuite(self.baseUrl, TEST_FLAVOR_URI, API_SERVER_PORT, HLS_PLAYLIST_FILE, requestHandler).run()
         DumpUpstreamTestSuite(self.getBaseUrl(''), TEST_FLAVOR_URI, API_SERVER_PORT).run()      # non HLS URL will just dump to upstream
@@ -704,6 +773,21 @@ class RemoteTestSuite(ModeTestSuite):
             logTracker.assertContains('moov atom cache hit')
 
             assert(cachedResponse == uncachedResponse)
+
+    def testErrorWhileProcessingFrames(self):
+        # get the moov atom into cache
+        TcpServer(API_SERVER_PORT, lambda s: serveFile(s, TEST_FILES_ROOT + TEST_FLAVOR_FILE, TEST_FILE_TYPE))
+        url = getUniqueUrl(self.baseUrl, TEST_FLAVOR_URI, HLS_SEGMENT_FILE)
+        urllib2.urlopen(url).read()
+
+        cleanupStack.resetAndDestroy()  # terminate the server
+        urllib2.urlopen(url).read()
+        self.logTracker.assertContains('upstream request failed')
+
+    def testZeroBytesRead(self):
+        TcpServer(API_SERVER_PORT, lambda s: socketSendAndShutdown(s, getHttpResponse('')))
+        assertRequestFails(getUniqueUrl(self.baseUrl, TEST_FLAVOR_URI, HLS_PLAYLIST_FILE), 404)
+        self.logTracker.assertContains('bytes read is zero')
 
 class MainTestSuite(TestSuite):
     def runChildSuites(self):
