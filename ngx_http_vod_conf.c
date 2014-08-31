@@ -2,6 +2,7 @@
 #include "ngx_http_vod_request_parse.h"
 #include "ngx_child_http_request.h"
 #include "ngx_http_vod_module.h"
+#include "ngx_http_vod_status.h"
 #include "ngx_buffer_cache.h"
 #include "vod/common.h"
 
@@ -321,6 +322,17 @@ ngx_http_vod_child_request(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
 	return NGX_CONF_OK;
 }
 
+static char *
+ngx_http_vod_status(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
+{
+	ngx_http_core_loc_conf_t *clcf;
+
+	clcf = ngx_http_conf_get_module_loc_conf(cf, ngx_http_core_module);
+	clcf->handler = ngx_http_vod_status_handler;
+
+	return NGX_CONF_OK;
+}
+
 ngx_command_t ngx_http_vod_commands[] = {
 
 	// basic parameters
@@ -335,6 +347,13 @@ ngx_command_t ngx_http_vod_commands[] = {
 	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1,
 	ngx_http_vod_mode_command,
 	NGX_HTTP_LOC_CONF_OFFSET,
+	0,
+	NULL },
+
+	{ ngx_string("vod_status"),
+	NGX_HTTP_LOC_CONF | NGX_CONF_NOARGS,
+	ngx_http_vod_status,
+	0,
 	0,
 	NULL },
 

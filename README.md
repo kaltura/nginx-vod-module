@@ -89,6 +89,13 @@ Currently the allowed values for `segmenter` are:
 
 Sets the file access mode - local, remote or mapped
 
+#### vod_status
+* **syntax**: `vod_status`
+* **default**: `n/a`
+* **context**: `location`
+
+Enables the nginx-vod status page on the enclosing location. 
+
 #### vod_segment_duration
 * **syntax**: `vod_segment_duration duration`
 * **default**: `10s`
