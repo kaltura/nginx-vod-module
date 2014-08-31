@@ -74,7 +74,7 @@ file_reader_init(
 
 		if (rc != NGX_HTTP_NOT_FOUND || clcf->log_not_found) 
 		{
-			ngx_log_error(level, state->log, of.err, "%s \"%s\" failed", of.failed, path->data);
+			ngx_log_error(level, state->log, of.err, "file_reader_init: %s \"%s\" failed", of.failed, path->data);
 		}
 
 		return rc;
@@ -82,10 +82,10 @@ file_reader_init(
 
 	if (!of.is_file) 
 	{
-		ngx_log_error(NGX_LOG_ERR, state->log, 0, "\"%s\" is not a file", path->data);
+		ngx_log_error(NGX_LOG_ERR, state->log, 0, "file_reader_init: \"%s\" is not a file", path->data);
 		if (ngx_close_file(of.fd) == NGX_FILE_ERROR)
 		{
-			ngx_log_error(NGX_LOG_ALERT, state->log, ngx_errno, ngx_close_file_n " \"%s\" failed", path->data);
+			ngx_log_error(NGX_LOG_ALERT, state->log, ngx_errno, "file_reader_init: " ngx_close_file_n " \"%s\" failed", path->data);
 		}
 
 		return NGX_HTTP_FORBIDDEN;
@@ -215,7 +215,7 @@ file_reader_enable_directio(file_reader_state_t* state)
 		if (ngx_directio_on(state->file.fd) == NGX_FILE_ERROR) 
 		{
 			ngx_log_error(NGX_LOG_ALERT, state->log, ngx_errno,
-				ngx_directio_on_n " \"%s\" failed", state->file.name.data);
+				"file_reader_enable_directio: " ngx_directio_on_n " \"%s\" failed", state->file.name.data);
 			return NGX_FILE_ERROR;
 		}
 

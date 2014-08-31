@@ -130,6 +130,14 @@ mp4_to_annexb_init(
 		}
 	}
 	
+	if (sps_pps_pos - state->sps_pps != state->sps_pps_size)
+	{
+		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+			"mp4_to_annexb_init: actual sps/pps size %uz is different than calculated size %uD", 
+			(size_t)(sps_pps_pos - state->sps_pps), state->sps_pps_size);
+		return VOD_UNEXPECTED;
+	}
+	
 	vod_log_buffer(VOD_LOG_DEBUG_LEVEL, request_context->log, 0, "mp4_to_annexb_init: parsed extra data ", state->sps_pps, state->sps_pps_size);
 	return VOD_OK;
 }

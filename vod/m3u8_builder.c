@@ -29,8 +29,7 @@ get_int_print_len(int n)
 }
 
 // Notes: 
-//	1. not using vod_sprintf since it doesn't have the option to limit the precision
-//		without forcing it (e.g. have 1.5 printed as 1.5 and 1.12345 printed as 1.123)
+//	1. not using vod_sprintf in order to avoid the use of floats
 //  2. scale must be a power of 10
 
 static u_char* 
@@ -42,13 +41,19 @@ format_double(u_char* p, uint32_t n, uint32_t scale)
 
 	p = vod_sprintf(p, "%d", int_n);
 
-	if (fraction == 0)
+	if (scale == 1)
+	{
 		return p;
+	}
 
 	*p++ = '.';
-	while (fraction)
+	for (;;)
 	{
 		scale /= 10;
+		if (scale == 0)
+		{
+			break;
+		}
 		cur_digit = fraction / scale;
 		*p++ = cur_digit + '0';
 		fraction -= cur_digit * scale;
@@ -62,9 +67,10 @@ build_required_tracks_string(request_context_t* request_context, mpeg_metadata_t
 	mpeg_stream_metadata_t* cur_stream;
 	mpeg_stream_metadata_t* streams_end;
 	u_char* buffer;
+	size_t length;
 
-	required_tracks->len = mpeg_metadata->streams.nelts * (sizeof("-v") - 1 + get_int_print_len(mpeg_metadata->max_track_index + 1));
-	buffer = vod_alloc(request_context->pool, required_tracks->len + 1);
+	length = mpeg_metadata->streams.nelts * (sizeof("-v") - 1 + get_int_print_len(mpeg_metadata->max_track_index + 1));
+	buffer = vod_alloc(request_context->pool, length + 1);
 	if (buffer == NULL)
 	{
 		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
@@ -94,7 +100,16 @@ build_required_tracks_string(request_context_t* request_context, mpeg_metadata_t
 
 		buffer = vod_sprintf(buffer, "%d", cur_stream->track_index + 1);
 	}
+	
 	required_tracks->len = buffer - required_tracks->data;
+
+	if (required_tracks->len > length)
+	{
+		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+			"build_required_tracks_string: result length %uz exceeded allocated length %uz", 
+			required_tracks->len, length);
+		return VOD_UNEXPECTED;
+	}
 
 	return VOD_OK;
 }
@@ -172,7 +187,7 @@ build_iframe_playlist_m3u8(
 
 	segment_count = DIV_CEIL(duration_millis, segment_duration);
 
-	iframe_length = sizeof("#EXTINF:.00000,\n") - 1 + get_int_print_len(DIV_CEIL(duration_millis, 1000)) +
+	iframe_length = sizeof("#EXTINF:.000,\n") - 1 + get_int_print_len(DIV_CEIL(duration_millis, 1000)) +
 		sizeof(byte_range_tag_format) + VOD_INT32_LEN + get_int_print_len(MAX_FRAME_SIZE) - (sizeof("%uD%uD") - 1) +
 		conf->segment_file_name_prefix.len + get_int_print_len(segment_count) + append_iframe_context.required_tracks.len + sizeof(".ts\n") - 1;
 
@@ -198,6 +213,14 @@ build_iframe_playlist_m3u8(
 
 	result->len = vod_copy(append_iframe_context.p, m3u8_footer, sizeof(m3u8_footer)-1) - result->data;
 
+	if (result->len > total_size)
+	{
+		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+			"build_iframe_playlist_m3u8: result length %uz exceeded allocated length %uD", 
+			result->len, total_size);
+		return VOD_UNEXPECTED;
+	}
+	
 	return VOD_OK;
 }
 
@@ -229,7 +252,7 @@ build_index_playlist_m3u8(
 		return VOD_BAD_REQUEST;
 	}
 
-	duration_millis = MIN(duration_millis - clip_from, clip_to);
+	duration_millis = MIN(duration_millis, clip_to) - clip_from;
 
 	// build the required tracks string
 	rc = build_required_tracks_string(request_context, mpeg_metadata, &required_tracks);
@@ -291,6 +314,14 @@ build_index_playlist_m3u8(
 
 	result->len = p - result->data;
 
+	if (result->len > total_size)
+	{
+		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+			"build_index_playlist_m3u8: result length %uz exceeded allocated length %uD", 
+			result->len, total_size);
+		return VOD_UNEXPECTED;
+	}
+	
 	return VOD_OK;
 }
 
@@ -300,12 +331,22 @@ init_m3u8_config(
 	uint32_t segment_duration, 
 	const char* encryption_key_file_name)
 {
-	conf->m3u8_version = (segment_duration % 1000 == 0) ? 2 : 3;
+	conf->m3u8_version = 3;
 
-	conf->m3u8_extinf_len = append_extinf_tag(
-		conf->m3u8_extinf,
-		segment_duration,
-		1000) - conf->m3u8_extinf;
+	if (conf->m3u8_version >= 3)
+	{
+		conf->m3u8_extinf_len = append_extinf_tag(
+			conf->m3u8_extinf,
+			segment_duration,
+			1000) - conf->m3u8_extinf;
+	}
+	else
+	{
+		conf->m3u8_extinf_len = append_extinf_tag(
+			conf->m3u8_extinf,
+			(segment_duration + 500) / 1000,
+			1) - conf->m3u8_extinf;
+	}
 
 	conf->m3u8_header_len = vod_snprintf(
 		conf->m3u8_header,

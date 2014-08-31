@@ -1690,7 +1690,7 @@ process_moov_atom_callback(void* ctx, atom_info_t* atom_info)
 	// parse the rest of the trak atoms
 	for (cur_parser = context->parsers; cur_parser->parse; cur_parser++)
 	{
-		vod_log_debug1(VOD_LOG_DEBUG_LEVEL, context->request_context->log, 0, "running parser %i", parser_index++);
+		vod_log_debug1(VOD_LOG_DEBUG_LEVEL, context->request_context->log, 0, "process_moov_atom_callback: running parser %i", parser_index++);
 		rc = cur_parser->parse((atom_info_t*)((u_char*)&trak_atom_infos + cur_parser->offset), &trak_info);
 		if (rc != VOD_OK)
 		{

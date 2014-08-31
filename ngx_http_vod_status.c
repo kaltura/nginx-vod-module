@@ -72,8 +72,8 @@ ngx_http_vod_status_handler(ngx_http_request_t *r)
 	ngx_stat_def_t* cur_stat;
 	ngx_str_t response;
 	u_char* p;
-	int cache_stats_len = 0;
-	int length;
+	size_t cache_stats_len = 0;
+	size_t length;
 
 	conf = ngx_http_get_module_loc_conf(r, ngx_http_vod_module);
 
@@ -126,8 +126,16 @@ ngx_http_vod_status_handler(ngx_http_request_t *r)
 	}
 
 	p = ngx_copy(p, status_postfix, sizeof(status_postfix)-1);
-
+	
 	response.len = p - response.data;
+	
+	if (response.len > length)
+	{
+		ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
+			"ngx_http_vod_status_handler: response length %uz exceeded allocated length %uz", 
+			response.len, length);
+		return NGX_HTTP_INTERNAL_SERVER_ERROR;
+	}
 
 	return send_single_buffer_response(r, &response, xml_content_type, sizeof(xml_content_type)-1);
 }
