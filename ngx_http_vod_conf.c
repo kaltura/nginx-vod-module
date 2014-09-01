@@ -19,8 +19,8 @@ ngx_http_vod_create_loc_conf(ngx_conf_t *cf)
 		return NGX_CONF_ERROR;
     }
 
-	init_upstream_conf(&conf->upstream);
-	init_upstream_conf(&conf->fallback_upstream);
+	ngx_init_upstream_conf(&conf->upstream);
+	ngx_init_upstream_conf(&conf->fallback_upstream);
 	conf->request_parser = NGX_CONF_UNSET_PTR;
 	conf->request_handler = NGX_CONF_UNSET_PTR;
 	conf->segment_duration = NGX_CONF_UNSET_UINT;
@@ -42,8 +42,8 @@ ngx_http_vod_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child)
 	char* err;
 
 	ngx_conf_merge_str_value(conf->child_request_location, prev->child_request_location, "");
-	ngx_conf_merge_ptr_value(conf->request_parser, prev->request_parser, parse_request_uri_hls);
-	ngx_conf_merge_ptr_value(conf->request_handler, prev->request_handler, local_request_handler);
+	ngx_conf_merge_ptr_value(conf->request_parser, prev->request_parser, ngx_http_vod_parse_hls_uri);
+	ngx_conf_merge_ptr_value(conf->request_handler, prev->request_handler, ngx_http_vod_local_request_handler);
 
 	ngx_conf_merge_uint_value(conf->segment_duration, prev->segment_duration, 10000);
 	ngx_conf_merge_str_value(conf->secret_key, prev->secret_key, "");
@@ -56,11 +56,11 @@ ngx_http_vod_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child)
 	ngx_conf_merge_size_value(conf->max_moov_size, prev->max_moov_size, 32 * 1024 * 1024);
 	ngx_conf_merge_size_value(conf->cache_buffer_size, prev->cache_buffer_size, 64 * 1024);
 
-	err = merge_upstream_conf(cf, &conf->upstream, &prev->upstream);
+	err = ngx_merge_upstream_conf(cf, &conf->upstream, &prev->upstream);
 	if (err != NGX_CONF_OK)
 	{
 		ngx_log_debug0(NGX_LOG_DEBUG_HTTP, cf->log, 0,
-			"ngx_http_vod_merge_loc_conf: merge_upstream_conf failed (1)");
+			"ngx_http_vod_merge_loc_conf: ngx_merge_upstream_conf failed (1)");
 		return err;
 	}
 	ngx_conf_merge_str_value(conf->upstream_host_header, prev->upstream_host_header, "");
@@ -74,11 +74,11 @@ ngx_http_vod_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child)
 	ngx_conf_merge_str_value(conf->path_response_postfix, prev->path_response_postfix, "</result></xml>");
 	ngx_conf_merge_size_value(conf->max_path_length, prev->max_path_length, 1024);
 
-	err = merge_upstream_conf(cf, &conf->fallback_upstream, &prev->fallback_upstream);
+	err = ngx_merge_upstream_conf(cf, &conf->fallback_upstream, &prev->fallback_upstream);
 	if (err != NGX_CONF_OK)
 	{
 		ngx_log_debug0(NGX_LOG_DEBUG_HTTP, cf->log, 0,
-			"ngx_http_vod_merge_loc_conf: merge_upstream_conf failed (2)");
+			"ngx_http_vod_merge_loc_conf: ngx_merge_upstream_conf failed (2)");
 		return err;
 	}
 	ngx_conf_merge_str_value(conf->proxy_header_name, prev->proxy_header_name, "X-Kaltura-Proxy");
@@ -99,7 +99,7 @@ ngx_http_vod_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child)
 	}
 
 	// validate vod_upstream / vod_upstream_host_header used when needed
-	if (conf->request_handler == remote_request_handler || conf->request_handler == mapped_request_handler)
+	if (conf->request_handler == ngx_http_vod_remote_request_handler || conf->request_handler == ngx_http_vod_mapped_request_handler)
 	{
 		if (conf->child_request_location.len == 0)
 		{
@@ -132,7 +132,7 @@ ngx_http_vod_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child)
 		}
 	}
 	
-	if (conf->request_handler == remote_request_handler)
+	if (conf->request_handler == ngx_http_vod_remote_request_handler)
 	{
 		if (conf->fallback_upstream.upstream != NULL)
 		{
@@ -149,7 +149,7 @@ ngx_http_vod_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child)
 		return NGX_CONF_ERROR;
 	}
 
-	init_m3u8_config(
+	m3u8_builder_init_config(
 		&conf->m3u8_config,
 		conf->segment_duration,
 		conf->secret_key.len > 0 ? (char*)conf->encryption_key_file_name.data : NULL);
@@ -183,15 +183,15 @@ ngx_http_vod_mode_command(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
 
 	if (ngx_strcasecmp(value[1].data, (u_char *) "local") == 0) 
 	{
-		vod_conf->request_handler = local_request_handler;
+		vod_conf->request_handler = ngx_http_vod_local_request_handler;
 	}
 	else if (ngx_strcasecmp(value[1].data, (u_char *) "remote") == 0) 
 	{
-		vod_conf->request_handler = remote_request_handler;
+		vod_conf->request_handler = ngx_http_vod_remote_request_handler;
 	}
 	else if (ngx_strcasecmp(value[1].data, (u_char *) "mapped") == 0) 
 	{
-		vod_conf->request_handler = mapped_request_handler;
+		vod_conf->request_handler = ngx_http_vod_mapped_request_handler;
 	}
 	else 
 	{
@@ -296,11 +296,11 @@ ngx_http_vod(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
 
 	if (ngx_strcasecmp(value[1].data, (u_char *) "none") == 0)
 	{
-		vod_conf->request_parser = parse_request_uri_serve_file;
+		vod_conf->request_parser = ngx_http_vod_parse_serve_file_uri;
 	}
 	else if (ngx_strcasecmp(value[1].data, (u_char *) "hls") == 0)
 	{
-		vod_conf->request_parser = parse_request_uri_hls;
+		vod_conf->request_parser = ngx_http_vod_parse_hls_uri;
 	}
 	else
 	{
@@ -320,7 +320,7 @@ ngx_http_vod_child_request(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
 	ngx_http_core_loc_conf_t *clcf;
 
 	clcf = ngx_http_conf_get_module_loc_conf(cf, ngx_http_core_module);
-	clcf->handler = child_request_internal_handler;
+	clcf->handler = ngx_child_request_internal_handler;
 
 	return NGX_CONF_OK;
 }

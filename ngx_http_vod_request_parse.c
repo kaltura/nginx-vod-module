@@ -3,7 +3,7 @@
 #include "ngx_http_vod_conf.h"
 
 static ngx_int_t 
-extract_uri_tokens(ngx_http_request_t* r, request_params_t* request_params, u_char** file_name)
+ngx_http_vod_extract_uri_tokens(ngx_http_request_t* r, ngx_http_vod_request_params_t* request_params, u_char** file_name)
 {
 	ngx_str_t stripped_uri;
 	u_char* last_slash = NULL;
@@ -26,7 +26,7 @@ extract_uri_tokens(ngx_http_request_t* r, request_params_t* request_params, u_ch
 	if (stripped_uri.data == NULL)
 	{
 		ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
-			"extract_uri_tokens: ngx_palloc failed");
+			"ngx_http_vod_extract_uri_tokens: ngx_palloc failed");
 		return NGX_HTTP_INTERNAL_SERVER_ERROR;
 	}
 	p = stripped_uri.data;
@@ -94,14 +94,14 @@ extract_uri_tokens(ngx_http_request_t* r, request_params_t* request_params, u_ch
 	if (last_slash == NULL)
 	{
 		ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
-			"extract_uri_tokens: no slashes in uri");
+			"ngx_http_vod_extract_uri_tokens: no slashes in uri");
 		return NGX_HTTP_BAD_REQUEST;
 	}
 
 	if (request_params->clip_from >= request_params->clip_to)
 	{
 		ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
-			"extract_uri_tokens: clip from %uD is larger than clip to %uD", request_params->clip_from, request_params->clip_to);
+			"ngx_http_vod_extract_uri_tokens: clip from %uD is larger than clip to %uD", request_params->clip_from, request_params->clip_to);
 		return NGX_HTTP_BAD_REQUEST;
 	}
 
@@ -119,7 +119,7 @@ extract_uri_tokens(ngx_http_request_t* r, request_params_t* request_params, u_ch
 }
 
 static bool_t 
-parse_required_tracks(ngx_http_request_t* r, u_char* start_pos, u_char* end_pos, bool_t has_stream_index, request_params_t* request_params)
+ngx_http_vod_parse_required_tracks(ngx_http_request_t* r, u_char* start_pos, u_char* end_pos, bool_t has_stream_index, ngx_http_vod_request_params_t* request_params)
 {
 	ngx_int_t segment_index;
 	int stream_index;
@@ -147,7 +147,7 @@ parse_required_tracks(ngx_http_request_t* r, u_char* start_pos, u_char* end_pos,
 			if (segment_index < 0)
 			{
 				ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
-					"parse_required_tracks: failed to parse the segment index");
+					"ngx_http_vod_parse_required_tracks: failed to parse the segment index");
 				return NGX_HTTP_BAD_REQUEST;
 			}
 			request_params->segment_index = segment_index;
@@ -168,7 +168,7 @@ parse_required_tracks(ngx_http_request_t* r, u_char* start_pos, u_char* end_pos,
 
 			default:
 				ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
-					"parse_required_tracks: failed to parse stream type");
+					"ngx_http_vod_parse_required_tracks: failed to parse stream type");
 				return NGX_HTTP_BAD_REQUEST;
 			}
 
@@ -177,7 +177,7 @@ parse_required_tracks(ngx_http_request_t* r, u_char* start_pos, u_char* end_pos,
 			if (stream_index < 0)
 			{
 				ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
-					"parse_required_tracks: failed to parse a stream index");
+					"ngx_http_vod_parse_required_tracks: failed to parse a stream index");
 				return NGX_HTTP_BAD_REQUEST;
 			}
 
@@ -202,7 +202,7 @@ parse_required_tracks(ngx_http_request_t* r, u_char* start_pos, u_char* end_pos,
 }
 
 ngx_int_t
-parse_request_uri_serve_file(ngx_http_request_t *r, ngx_http_vod_loc_conf_t *conf, request_params_t* request_params)
+ngx_http_vod_parse_serve_file_uri(ngx_http_request_t *r, ngx_http_vod_loc_conf_t *conf, ngx_http_vod_request_params_t* request_params)
 {
 	ngx_memzero(request_params, sizeof(*request_params));
 	request_params->request_type = REQUEST_TYPE_SERVE_FILE;
@@ -210,7 +210,7 @@ parse_request_uri_serve_file(ngx_http_request_t *r, ngx_http_vod_loc_conf_t *con
 }
 
 ngx_int_t 
-parse_request_uri_hls(ngx_http_request_t *r, ngx_http_vod_loc_conf_t *conf, request_params_t* request_params)
+ngx_http_vod_parse_hls_uri(ngx_http_request_t *r, ngx_http_vod_loc_conf_t *conf, ngx_http_vod_request_params_t* request_params)
 {
 	ngx_int_t rc;
 	u_char* start_pos = NULL;
@@ -221,11 +221,11 @@ parse_request_uri_hls(ngx_http_request_t *r, ngx_http_vod_loc_conf_t *conf, requ
 	request_params->required_tracks[MEDIA_TYPE_VIDEO] = 1;
 	request_params->required_tracks[MEDIA_TYPE_AUDIO] = 1;
 
-	rc = extract_uri_tokens(r, request_params, &start_pos);
+	rc = ngx_http_vod_extract_uri_tokens(r, request_params, &start_pos);
 	if (rc != NGX_OK)
 	{
 		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
-			"parse_request_uri: extract_uri_tokens failed %i", rc);
+			"parse_request_uri: ngx_http_vod_extract_uri_tokens failed %i", rc);
 		return rc;
 	}
 
@@ -242,11 +242,11 @@ parse_request_uri_hls(ngx_http_request_t *r, ngx_http_vod_loc_conf_t *conf, requ
 		start_pos += conf->m3u8_config.segment_file_name_prefix.len;
 
 		// parse the required tracks string
-		rc = parse_required_tracks(r, start_pos, end_pos - (sizeof(".ts") - 1), TRUE, request_params);
+		rc = ngx_http_vod_parse_required_tracks(r, start_pos, end_pos - (sizeof(".ts") - 1), TRUE, request_params);
 		if (rc != NGX_OK)
 		{
 			ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
-				"parse_request_uri: parse_required_tracks failed %i (1)", rc);
+				"parse_request_uri: ngx_http_vod_parse_required_tracks failed %i (1)", rc);
 			return rc;
 		}
 
@@ -282,11 +282,11 @@ parse_request_uri_hls(ngx_http_request_t *r, ngx_http_vod_loc_conf_t *conf, requ
 		}
 
 		// parse the required tracks string
-		rc = parse_required_tracks(r, start_pos, end_pos - (sizeof(".m3u8") - 1), FALSE, request_params);
+		rc = ngx_http_vod_parse_required_tracks(r, start_pos, end_pos - (sizeof(".m3u8") - 1), FALSE, request_params);
 		if (rc != NGX_OK)
 		{
 			ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
-				"parse_request_uri: parse_required_tracks failed %i (2)", rc);
+				"parse_request_uri: ngx_http_vod_parse_required_tracks failed %i (2)", rc);
 			return rc;
 		}
 

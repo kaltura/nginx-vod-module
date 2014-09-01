@@ -6,14 +6,14 @@
 #include "vod/m3u8_builder.h"
 
 // typedefs
-struct request_params_s;
+struct ngx_http_vod_request_params_s;
 
 typedef struct ngx_http_vod_loc_conf_s {
     struct ngx_http_vod_loc_conf_s *parent;
 
 	// config fields
 	ngx_str_t child_request_location;
-	ngx_int_t(*request_parser)(ngx_http_request_t *r, struct ngx_http_vod_loc_conf_s *conf, struct request_params_s* request_params);
+	ngx_int_t(*request_parser)(ngx_http_request_t *r, struct ngx_http_vod_loc_conf_s *conf, struct ngx_http_vod_request_params_s* request_params);
 	ngx_int_t(*request_handler)(ngx_http_request_t *r);
 	ngx_uint_t segment_duration;
 	ngx_str_t secret_key;

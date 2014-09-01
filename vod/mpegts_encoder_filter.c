@@ -359,7 +359,7 @@ mpegts_encoder_add_stream(mpegts_encoder_init_streams_state_t* stream_state, int
 	}
 
 	vod_memcpy(stream_state->pmt_packet_pos, pmt_entry, pmt_entry_size);
-	pmt_entry_set_elementaryPID(stream_state->pmt_packet_pos, *pid);
+	pmt_entry_set_elementary_pid(stream_state->pmt_packet_pos, *pid);
 	stream_state->pmt_packet_pos += pmt_entry_size;
 	return VOD_OK;
 }
@@ -378,11 +378,11 @@ mpegts_encoder_finalize_streams(mpegts_encoder_init_streams_state_t* stream_stat
 
 	// append id3 stream
 	vod_memcpy(p, pmt_entry_template_id3, sizeof(pmt_entry_template_id3));
-	pmt_entry_set_elementaryPID(p, stream_state->cur_pid);
+	pmt_entry_set_elementary_pid(p, stream_state->cur_pid);
 	p += sizeof(pmt_entry_template_id3);
 
 	// update the length in the PMT header
-	pmt_set_sectionLength(stream_state->pmt_packet_start + SIZEOF_MPEGTS_HEADER, 
+	pmt_set_section_length(stream_state->pmt_packet_start + SIZEOF_MPEGTS_HEADER, 
 		p - (stream_state->pmt_packet_start + SIZEOF_MPEGTS_HEADER + PMT_LENGTH_END_OFFSET) + sizeof(crc));
 
 	// append the CRC
@@ -475,7 +475,7 @@ mpegts_encoder_write(void* context, const u_char* buffer, uint32_t size)
 }
 
 static vod_status_t 
-append_null_packet(mpegts_encoder_state_t* state)
+mpegts_append_null_packet(mpegts_encoder_state_t* state)
 {
 	u_char* packet;
 	vod_status_t rc;
@@ -527,7 +527,7 @@ mpegts_encoder_flush_frame(void* context, int32_t margin_size)
 		margin_size -= stuff_size;
 		while (margin_size > 0)
 		{
-			rc = append_null_packet(state);
+			rc = mpegts_append_null_packet(state);
 			if (rc != VOD_OK)
 			{
 				return rc;
@@ -542,7 +542,7 @@ mpegts_encoder_flush_frame(void* context, int32_t margin_size)
 	{
 		while ((*state->cc) & 0x0F)
 		{
-			rc = append_null_packet(state);
+			rc = mpegts_append_null_packet(state);
 			if (rc != VOD_OK)
 			{
 				return rc;

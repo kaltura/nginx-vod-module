@@ -4,8 +4,8 @@ typedef unsigned char adts_frame_header_t;
 
 #define adts_frame_header_get_syncword(x) ((((x)[0]) << 4) | ((((x)[1]) & 0xf0) >> 4))
 #define adts_frame_header_set_syncword(x, v) { (x)[0] = (((v) >> 4) & 0xff); (x)[1] = (((x)[1]) & 0x0f) | (((v) << 4) & 0xf0); }
-#define adts_frame_header_get_ID(x) (((((x)[1]) & 0x08) >> 3))
-#define adts_frame_header_set_ID(x, v) { (x)[1] = (((x)[1]) & 0xf7) | (((v) << 3) & 0x08); }
+#define adts_frame_header_get_id(x) (((((x)[1]) & 0x08) >> 3))
+#define adts_frame_header_set_id(x, v) { (x)[1] = (((x)[1]) & 0xf7) | (((v) << 3) & 0x08); }
 #define adts_frame_header_get_layer(x) (((((x)[1]) & 0x06) >> 1))
 #define adts_frame_header_set_layer(x, v) { (x)[1] = (((x)[1]) & 0xf9) | (((v) << 1) & 0x06); }
 #define adts_frame_header_get_protection_absent(x) ((((x)[1]) & 0x01))
@@ -38,60 +38,60 @@ typedef unsigned char adts_frame_header_t;
 // pmt
 typedef unsigned char pmt_t;
 
-#define pmt_get_pointerField(x) (((x)[0]))
-#define pmt_set_pointerField(x, v) { (x)[0] = ((v) & 0xff); }
-#define pmt_get_tableId(x) (((x)[1]))
-#define pmt_set_tableId(x, v) { (x)[1] = ((v) & 0xff); }
-#define pmt_get_sectionSyntaxIndicator(x) (((((x)[2]) & 0x80) >> 7))
-#define pmt_set_sectionSyntaxIndicator(x, v) { (x)[2] = (((x)[2]) & 0x7f) | (((v) << 7) & 0x80); }
+#define pmt_get_pointer_field(x) (((x)[0]))
+#define pmt_set_pointer_field(x, v) { (x)[0] = ((v) & 0xff); }
+#define pmt_get_table_id(x) (((x)[1]))
+#define pmt_set_table_id(x, v) { (x)[1] = ((v) & 0xff); }
+#define pmt_get_section_syntax_indicator(x) (((((x)[2]) & 0x80) >> 7))
+#define pmt_set_section_syntax_indicator(x, v) { (x)[2] = (((x)[2]) & 0x7f) | (((v) << 7) & 0x80); }
 #define pmt_get_zero(x) (((((x)[2]) & 0x40) >> 6))
 #define pmt_set_zero(x, v) { (x)[2] = (((x)[2]) & 0xbf) | (((v) << 6) & 0x40); }
 #define pmt_get_reserved1(x) (((((x)[2]) & 0x30) >> 4))
 #define pmt_set_reserved1(x, v) { (x)[2] = (((x)[2]) & 0xcf) | (((v) << 4) & 0x30); }
 #define pmt_get_reserved2(x) (((((x)[2]) & 0x0c) >> 2))
 #define pmt_set_reserved2(x, v) { (x)[2] = (((x)[2]) & 0xf3) | (((v) << 2) & 0x0c); }
-#define pmt_get_sectionLength(x) (((((x)[2]) & 0x03) << 8) | ((x)[3]))
-#define pmt_set_sectionLength(x, v) { (x)[2] = (((x)[2]) & 0xfc) | (((v) >> 8) & 0x03); (x)[3] = ((v) & 0xff); }
-#define pmt_get_programNumber(x) ((((x)[4]) << 8) | ((x)[5]))
-#define pmt_set_programNumber(x, v) { (x)[4] = (((v) >> 8) & 0xff); (x)[5] = ((v) & 0xff); }
+#define pmt_get_section_length(x) (((((x)[2]) & 0x03) << 8) | ((x)[3]))
+#define pmt_set_section_length(x, v) { (x)[2] = (((x)[2]) & 0xfc) | (((v) >> 8) & 0x03); (x)[3] = ((v) & 0xff); }
+#define pmt_get_program_number(x) ((((x)[4]) << 8) | ((x)[5]))
+#define pmt_set_program_number(x, v) { (x)[4] = (((v) >> 8) & 0xff); (x)[5] = ((v) & 0xff); }
 #define pmt_get_reserved3(x) (((((x)[6]) & 0xc0) >> 6))
 #define pmt_set_reserved3(x, v) { (x)[6] = (((x)[6]) & 0x3f) | (((v) << 6) & 0xc0); }
-#define pmt_get_versionNumber(x) (((((x)[6]) & 0x3e) >> 1))
-#define pmt_set_versionNumber(x, v) { (x)[6] = (((x)[6]) & 0xc1) | (((v) << 1) & 0x3e); }
-#define pmt_get_currentNextIndicator(x) ((((x)[6]) & 0x01))
-#define pmt_set_currentNextIndicator(x, v) { (x)[6] = (((x)[6]) & 0xfe) | ((v) & 0x01); }
-#define pmt_get_sectionNumber(x) (((x)[7]))
-#define pmt_set_sectionNumber(x, v) { (x)[7] = ((v) & 0xff); }
-#define pmt_get_lastSectionNumber(x) (((x)[8]))
-#define pmt_set_lastSectionNumber(x, v) { (x)[8] = ((v) & 0xff); }
+#define pmt_get_version_number(x) (((((x)[6]) & 0x3e) >> 1))
+#define pmt_set_version_number(x, v) { (x)[6] = (((x)[6]) & 0xc1) | (((v) << 1) & 0x3e); }
+#define pmt_get_current_next_indicator(x) ((((x)[6]) & 0x01))
+#define pmt_set_current_next_indicator(x, v) { (x)[6] = (((x)[6]) & 0xfe) | ((v) & 0x01); }
+#define pmt_get_section_number(x) (((x)[7]))
+#define pmt_set_section_number(x, v) { (x)[7] = ((v) & 0xff); }
+#define pmt_get_last_section_number(x) (((x)[8]))
+#define pmt_set_last_section_number(x, v) { (x)[8] = ((v) & 0xff); }
 #define pmt_get_reserved4(x) (((((x)[9]) & 0xe0) >> 5))
 #define pmt_set_reserved4(x, v) { (x)[9] = (((x)[9]) & 0x1f) | (((v) << 5) & 0xe0); }
-#define pmt_get_pcrPID(x) (((((x)[9]) & 0x1f) << 8) | ((x)[10]))
-#define pmt_set_pcrPID(x, v) { (x)[9] = (((x)[9]) & 0xe0) | (((v) >> 8) & 0x1f); (x)[10] = ((v) & 0xff); }
+#define pmt_get_pcr_pid(x) (((((x)[9]) & 0x1f) << 8) | ((x)[10]))
+#define pmt_set_pcr_pid(x, v) { (x)[9] = (((x)[9]) & 0xe0) | (((v) >> 8) & 0x1f); (x)[10] = ((v) & 0xff); }
 #define pmt_get_reserved5(x) (((((x)[11]) & 0xf0) >> 4))
 #define pmt_set_reserved5(x, v) { (x)[11] = (((x)[11]) & 0x0f) | (((v) << 4) & 0xf0); }
 #define pmt_get_reserved6(x) (((((x)[11]) & 0x0c) >> 2))
 #define pmt_set_reserved6(x, v) { (x)[11] = (((x)[11]) & 0xf3) | (((v) << 2) & 0x0c); }
-#define pmt_get_programInfoLength(x) (((((x)[11]) & 0x03) << 8) | ((x)[12]))
-#define pmt_set_programInfoLength(x, v) { (x)[11] = (((x)[11]) & 0xfc) | (((v) >> 8) & 0x03); (x)[12] = ((v) & 0xff); }
+#define pmt_get_program_info_length(x) (((((x)[11]) & 0x03) << 8) | ((x)[12]))
+#define pmt_set_program_info_length(x, v) { (x)[11] = (((x)[11]) & 0xfc) | (((v) >> 8) & 0x03); (x)[12] = ((v) & 0xff); }
 
 #define sizeof_pmt (13)
 
 // pmt_entry
 typedef unsigned char pmt_entry_t;
 
-#define pmt_entry_get_streamType(x) (((x)[0]))
-#define pmt_entry_set_streamType(x, v) { (x)[0] = ((v) & 0xff); }
-#define pmt_entry_get_Reserved1(x) (((((x)[1]) & 0xe0) >> 5))
-#define pmt_entry_set_Reserved1(x, v) { (x)[1] = (((x)[1]) & 0x1f) | (((v) << 5) & 0xe0); }
-#define pmt_entry_get_elementaryPID(x) (((((x)[1]) & 0x1f) << 8) | ((x)[2]))
-#define pmt_entry_set_elementaryPID(x, v) { (x)[1] = (((x)[1]) & 0xe0) | (((v) >> 8) & 0x1f); (x)[2] = ((v) & 0xff); }
-#define pmt_entry_get_Reserved2(x) (((((x)[3]) & 0xf0) >> 4))
-#define pmt_entry_set_Reserved2(x, v) { (x)[3] = (((x)[3]) & 0x0f) | (((v) << 4) & 0xf0); }
+#define pmt_entry_get_stream_type(x) (((x)[0]))
+#define pmt_entry_set_stream_type(x, v) { (x)[0] = ((v) & 0xff); }
+#define pmt_entry_get_reserved1(x) (((((x)[1]) & 0xe0) >> 5))
+#define pmt_entry_set_reserved1(x, v) { (x)[1] = (((x)[1]) & 0x1f) | (((v) << 5) & 0xe0); }
+#define pmt_entry_get_elementary_pid(x) (((((x)[1]) & 0x1f) << 8) | ((x)[2]))
+#define pmt_entry_set_elementary_pid(x, v) { (x)[1] = (((x)[1]) & 0xe0) | (((v) >> 8) & 0x1f); (x)[2] = ((v) & 0xff); }
+#define pmt_entry_get_reserved2(x) (((((x)[3]) & 0xf0) >> 4))
+#define pmt_entry_set_reserved2(x, v) { (x)[3] = (((x)[3]) & 0x0f) | (((v) << 4) & 0xf0); }
 #define pmt_entry_get_reserved3(x) (((((x)[3]) & 0x0c) >> 2))
 #define pmt_entry_set_reserved3(x, v) { (x)[3] = (((x)[3]) & 0xf3) | (((v) << 2) & 0x0c); }
-#define pmt_entry_get_esInfoLength(x) (((((x)[3]) & 0x03) << 8) | ((x)[4]))
-#define pmt_entry_set_esInfoLength(x, v) { (x)[3] = (((x)[3]) & 0xfc) | (((v) >> 8) & 0x03); (x)[4] = ((v) & 0xff); }
+#define pmt_entry_get_es_info_length(x) (((((x)[3]) & 0x03) << 8) | ((x)[4]))
+#define pmt_entry_set_es_info_length(x, v) { (x)[3] = (((x)[3]) & 0xfc) | (((v) >> 8) & 0x03); (x)[4] = ((v) & 0xff); }
 
 #define sizeof_pmt_entry (5)
 

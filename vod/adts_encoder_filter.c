@@ -27,17 +27,17 @@ adts_encoder_init(
 
 	vod_log_buffer(VOD_LOG_DEBUG_LEVEL, request_context->log, 0, "adts_encoder_init: extra data ", extra_data, extra_data_size);
 	
-	init_bits_reader(&reader, extra_data, extra_data_size);
+	bit_read_stream_init(&reader, extra_data, extra_data_size);
 
-    object_type = get_bits(&reader, 5);
+    object_type = bit_read_stream_get(&reader, 5);
     if (object_type == AOT_ESCAPE)
-        object_type = 32 + get_bits(&reader, 6);
+        object_type = 32 + bit_read_stream_get(&reader, 6);
 	
-	sample_rate_index = get_bits(&reader, 4);
+	sample_rate_index = bit_read_stream_get(&reader, 4);
 	if (sample_rate_index == 0x0f)
-		get_bits(&reader, 24);
+		bit_read_stream_get(&reader, 24);
 
-    channel_config = get_bits(&reader, 4);
+    channel_config = bit_read_stream_get(&reader, 4);
 	
 	if (reader.stream.eof_reached)
 	{

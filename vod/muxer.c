@@ -5,7 +5,7 @@
 #define DEFAULT_PES_PAYLOAD_SIZE ((DEFAULT_PES_HEADER_FREQ - 1) * 184 + 170)
 
 static int 
-compare_streams(const void *s1, const void *s2)
+muxer_compare_streams(const void *s1, const void *s2)
 {
 	muxer_stream_state_t* stream1 = (muxer_stream_state_t*)s1;
 	muxer_stream_state_t* stream2 = (muxer_stream_state_t*)s2;
@@ -154,7 +154,7 @@ muxer_init(
 	}
 
 	// place the video streams before the audio streams (usually there will only one video and one audio)
-	qsort(state->first_stream, state->last_stream - state->first_stream, sizeof(*state->first_stream), compare_streams);
+	qsort(state->first_stream, state->last_stream - state->first_stream, sizeof(*state->first_stream), muxer_compare_streams);
 
 	// init the packetizer streams and get the packet ids / stream ids
 	rc = mpegts_encoder_init_streams(&state->mpegts_encoder_state, &init_streams_state, segment_index);

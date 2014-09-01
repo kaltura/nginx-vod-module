@@ -13,7 +13,7 @@ typedef struct {
 
 // functions
 static vod_inline void 
-init_bits_reader(bit_reader_state_t* state, const u_char* buffer, int size)
+bit_read_stream_init(bit_reader_state_t* state, const u_char* buffer, int size)
 {
 	state->stream.cur_pos = buffer;
 	state->stream.end_pos = buffer + size;
@@ -23,7 +23,7 @@ init_bits_reader(bit_reader_state_t* state, const u_char* buffer, int size)
 }
 
 static vod_inline int 
-get_bits(bit_reader_state_t* state, int count)
+bit_read_stream_get(bit_reader_state_t* state, int count)
 {
 	int result = 0;
 	
@@ -31,7 +31,7 @@ get_bits(bit_reader_state_t* state, int count)
 	{
 		if (state->cur_bit < 0)
 		{
-			state->cur_byte = stream_get8(&state->stream);
+			state->cur_byte = read_stream_get_byte(&state->stream);
 			state->cur_bit = 7;
 		}
 	
