@@ -1,6 +1,6 @@
 adts_frame_header
 	syncword : 12
-	ID : 1
+	id : 1
 	layer : 2
 	protection_absent : 1
 	profile_object_type : 2
@@ -16,29 +16,29 @@ adts_frame_header
 	number_of_raw_data_blocks_in_frame : 2
 
 pmt
-	pointerField : 8
-	tableId : 8
-	sectionSyntaxIndicator : 1
+	pointer_field : 8
+	table_id : 8
+	section_syntax_indicator : 1
 	zero : 1
 	reserved1 : 2				// 11
 	reserved2 : 2				// 00
-	sectionLength : 10
-	programNumber : 16
+	section_length : 10
+	program_number : 16
 	reserved3 : 2				// 11
-	versionNumber : 5
-	currentNextIndicator : 1
-	sectionNumber : 8			// 0
-	lastSectionNumber : 8		// 0
+	version_number : 5
+	current_next_indicator : 1
+	section_number : 8			// 0
+	last_section_number : 8		// 0
 	reserved4 : 3
-	pcrPID : 13
+	pcr_pid : 13
 	reserved5 : 4
 	reserved6 : 2				// 00
-	programInfoLength : 10
+	program_info_length : 10
 
 pmt_entry
-	streamType : 8
-	Reserved1 : 3
-	elementaryPID : 13
-	Reserved2 : 4
+	stream_type : 8
+	reserved1 : 3
+	elementary_pid : 13
+	reserved2 : 4
 	reserved3 : 2				// 00
-	esInfoLength : 10
+	es_info_length : 10

@@ -8,7 +8,7 @@ static const ngx_int_t error_map[VOD_ERROR_LAST - VOD_ERROR_FIRST] = {
 };
 
 ngx_int_t
-send_single_buffer_response(ngx_http_request_t *r, ngx_str_t *response, u_char* content_type, size_t content_type_len)
+ngx_http_vod_send_response(ngx_http_request_t *r, ngx_str_t *response, u_char* content_type, size_t content_type_len)
 {
 	ngx_chain_t  out;
 	ngx_int_t    rc;
@@ -19,7 +19,7 @@ send_single_buffer_response(ngx_http_request_t *r, ngx_str_t *response, u_char* 
 	if (b == NULL)
 	{
 		ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
-			"send_single_buffer_response: ngx_pcalloc failed");
+			"ngx_http_vod_send_response: ngx_pcalloc failed");
 		return NGX_HTTP_INTERNAL_SERVER_ERROR;
 	}
 
@@ -45,7 +45,7 @@ send_single_buffer_response(ngx_http_request_t *r, ngx_str_t *response, u_char* 
 	if (rc != NGX_OK) 
 	{
 		ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
-			"send_single_buffer_response: ngx_http_set_etag failed");
+			"ngx_http_vod_send_response: ngx_http_set_etag failed");
 		return NGX_HTTP_INTERNAL_SERVER_ERROR;
 	}
 	
@@ -54,7 +54,7 @@ send_single_buffer_response(ngx_http_request_t *r, ngx_str_t *response, u_char* 
 	if (rc == NGX_ERROR || rc > NGX_OK)
 	{
 		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
-			"send_single_buffer_response: ngx_http_send_header failed %i", rc);
+			"ngx_http_vod_send_response: ngx_http_send_header failed %i", rc);
 		return rc;
 	}
 
@@ -68,7 +68,7 @@ send_single_buffer_response(ngx_http_request_t *r, ngx_str_t *response, u_char* 
 	if (rc != NGX_OK && rc != NGX_AGAIN)
 	{
 		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
-			"send_single_buffer_response: ngx_http_output_filter failed %i", rc);
+			"ngx_http_vod_send_response: ngx_http_output_filter failed %i", rc);
 		return rc;
 	}
 
@@ -76,7 +76,7 @@ send_single_buffer_response(ngx_http_request_t *r, ngx_str_t *response, u_char* 
 }
 
 ngx_int_t 
-vod_status_to_ngx_error(vod_status_t rc)
+ngx_http_vod_status_to_ngx_error(vod_status_t rc)
 {
 	if (rc >= VOD_ERROR_FIRST && rc < VOD_ERROR_LAST)
 	{
@@ -87,7 +87,7 @@ vod_status_to_ngx_error(vod_status_t rc)
 }
 
 ngx_flag_t
-header_exists(ngx_http_request_t* r, ngx_str_t* searched_header)
+ngx_http_vod_header_exists(ngx_http_request_t* r, ngx_str_t* searched_header)
 {
 	ngx_table_elt_t *header;
 	ngx_table_elt_t *last_header;

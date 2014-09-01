@@ -14,12 +14,12 @@
 typedef struct {
 	ngx_buf_t* request_buffer;
 	ngx_http_status_t status;
-} child_request_base_context_t;		// fields common to dump requests and child requests
+} ngx_child_request_base_context_t;		// fields common to dump requests and child requests
 
 typedef struct {
-	child_request_base_context_t base;		// must be first
+	ngx_child_request_base_context_t base;		// must be first
 
-	child_request_callback_t callback;
+	ngx_child_request_callback_t callback;
 	void* callback_context;
 
 	u_char* headers_buffer;
@@ -31,7 +31,7 @@ typedef struct {
 	off_t response_buffer_size;
 
 	ngx_http_upstream_conf_t* upstream_conf;
-} child_request_context_t;
+} ngx_child_request_context_t;
 
 // globals
 static ngx_str_t child_http_hide_headers[] = {
@@ -47,7 +47,7 @@ static ngx_int_t
 ngx_http_vod_create_request(ngx_http_request_t *r)
 {
 	ngx_chain_t *cl;
-	child_request_base_context_t* ctx;
+	ngx_child_request_base_context_t* ctx;
 
 	ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0, "ngx_http_vod_create_request: started");
 	
@@ -88,7 +88,7 @@ ngx_http_vod_reinit_request(ngx_http_request_t *r)
 static ngx_int_t
 ngx_http_vod_process_header(ngx_http_request_t *r)
 {
-	child_request_context_t* ctx;
+	ngx_child_request_context_t* ctx;
 	ngx_http_upstream_t *u;
 	ngx_table_elt_t *h;
 	ngx_int_t rc;
@@ -173,7 +173,7 @@ ngx_http_vod_process_header(ngx_http_request_t *r)
 
 		if (rc == NGX_HTTP_PARSE_HEADER_DONE)	// finished reading all headers
 		{
-			// in case of dump_request, no need to do anything
+			// in case of ngx_dump_request, no need to do anything
 			if (is_dump_request(r))
 			{
 				return NGX_OK;
@@ -235,7 +235,7 @@ ngx_http_vod_process_header(ngx_http_request_t *r)
 static ngx_int_t
 ngx_http_vod_process_status_line(ngx_http_request_t *r)
 {
-	child_request_base_context_t* ctx;
+	ngx_child_request_base_context_t* ctx;
 	ngx_http_upstream_t *u;
 	size_t len;
 	ngx_int_t rc;
@@ -299,7 +299,7 @@ ngx_http_vod_abort_request(ngx_http_request_t *r)
 static ngx_int_t
 ngx_http_vod_filter_init(void *data)
 {
-	child_request_context_t* ctx;
+	ngx_child_request_context_t* ctx;
 	ngx_http_request_t *r = data;
 	ngx_http_upstream_t *u;
 
@@ -337,7 +337,7 @@ ngx_http_vod_filter(void *data, ssize_t bytes)
 }
 
 static ngx_int_t
-create_upstream(
+ngx_create_upstream(
 	ngx_http_request_t *r, 
 	ngx_http_upstream_conf_t* conf)
 {
@@ -349,7 +349,7 @@ create_upstream(
 	if (rc != NGX_OK)
 	{
 		ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
-			"create_upstream: failed to create upstream rc=%i", rc);
+			"ngx_create_upstream: failed to create upstream rc=%i", rc);
 		return NGX_ERROR;
 	}
 
@@ -372,7 +372,7 @@ create_upstream(
 }
 
 static ngx_flag_t
-should_proxy_header(ngx_table_elt_t* header, child_request_params_t* params)
+ngx_should_proxy_header(ngx_table_elt_t* header, ngx_child_request_params_t* params)
 {
 	if (header->key.len == sizeof("host") - 1 &&
 		ngx_memcmp(header->lowcase_key, "host", sizeof("host") - 1) == 0)
@@ -398,10 +398,10 @@ should_proxy_header(ngx_table_elt_t* header, child_request_params_t* params)
 }
 
 static ngx_buf_t*
-init_request_buffer(
+ngx_init_request_buffer(
 	ngx_http_request_t *r,
 	ngx_buf_t* request_buffer,
-	child_request_params_t* params)
+	ngx_child_request_params_t* params)
 {
 	ngx_http_core_srv_conf_t *cscf;
 	ngx_list_part_t              *part;
@@ -453,7 +453,7 @@ init_request_buffer(
 			i = 0;
 		}
 
-		if (!should_proxy_header(&header[i], params))
+		if (!ngx_should_proxy_header(&header[i], params))
 		{
 			continue;
 		}
@@ -475,7 +475,7 @@ init_request_buffer(
 		if (b == NULL)
 		{
 			ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
-				"init_request_buffer: ngx_create_temp_buf failed");
+				"ngx_init_request_buffer: ngx_create_temp_buf failed");
 			return NULL;
 		}
 		p = b->last;
@@ -537,7 +537,7 @@ init_request_buffer(
 			i = 0;
 		}
 
-		if (!should_proxy_header(&header[i], params))
+		if (!ngx_should_proxy_header(&header[i], params))
 		{
 			continue;
 		}
@@ -560,39 +560,39 @@ init_request_buffer(
 }
 
 ngx_int_t
-dump_request(
+ngx_dump_request(
 	ngx_http_request_t *r,
 	ngx_http_upstream_conf_t* upstream_conf,
-	child_request_params_t* params)
+	ngx_child_request_params_t* params)
 {
-	child_request_base_context_t* ctx;
+	ngx_child_request_base_context_t* ctx;
 	ngx_int_t rc;
 
-	// replace the module context - after calling dump_request the caller is not allowed to use the context
+	// replace the module context - after calling ngx_dump_request the caller is not allowed to use the context
 	ctx = ngx_pcalloc(r->pool, sizeof(*ctx));
 	if (ctx == NULL)
 	{
 		ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
-			"dump_request: ngx_pcalloc failed");
+			"ngx_dump_request: ngx_pcalloc failed");
 		return NGX_ERROR;
 	}
 	ngx_http_set_ctx(r, ctx, ngx_http_vod_module);
 
 	// create an upstream
-	rc = create_upstream(r, upstream_conf);
+	rc = ngx_create_upstream(r, upstream_conf);
 	if (rc != NGX_OK)
 	{
 		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
-			"dump_request: create_upstream failed %i", rc);
+			"ngx_dump_request: ngx_create_upstream failed %i", rc);
 		return rc;
 	}
 
 	// build the request
-	ctx->request_buffer = init_request_buffer(r, NULL, params);
+	ctx->request_buffer = ngx_init_request_buffer(r, NULL, params);
 	if (ctx->request_buffer == NULL)
 	{
 		ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
-			"dump_request: init_request_buffer failed");
+			"ngx_dump_request: ngx_init_request_buffer failed");
 		return NGX_ERROR;
 	}
 
@@ -603,19 +603,19 @@ dump_request(
 }
 
 ngx_int_t
-child_request_internal_handler(ngx_http_request_t *r)
+ngx_child_request_internal_handler(ngx_http_request_t *r)
 {
-	child_request_context_t* ctx;
+	ngx_child_request_context_t* ctx;
 	ngx_http_upstream_t *u;
 	ngx_int_t rc;
 
 	// create the upstream
 	ctx = ngx_http_get_module_ctx(r, ngx_http_vod_module);
-	rc = create_upstream(r, ctx->upstream_conf);
+	rc = ngx_create_upstream(r, ctx->upstream_conf);
 	if (rc != NGX_OK)
 	{
 		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
-			"child_request_internal_handler: create_upstream failed %i", rc);
+			"ngx_child_request_internal_handler: ngx_create_upstream failed %i", rc);
 		return rc;
 	}
 
@@ -632,7 +632,7 @@ child_request_internal_handler(ngx_http_request_t *r)
 	if (ngx_list_init(&u->headers_in.headers, r->pool, 8, sizeof(ngx_table_elt_t)) != NGX_OK)
 	{
 		ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
-			"child_request_internal_handler: ngx_list_init failed");
+			"ngx_child_request_internal_handler: ngx_list_init failed");
 		return NGX_ERROR;
 	}
 
@@ -652,9 +652,9 @@ child_request_internal_handler(ngx_http_request_t *r)
 }
 
 static ngx_int_t
-child_request_finished_handler(ngx_http_request_t *r, void *data, ngx_int_t rc)
+ngx_child_request_finished_handler(ngx_http_request_t *r, void *data, ngx_int_t rc)
 {
-	child_request_context_t* ctx;
+	ngx_child_request_context_t* ctx;
 	ngx_http_upstream_t *u;
 
 	ctx = ngx_http_get_module_ctx(r, ngx_http_vod_module);
@@ -664,7 +664,7 @@ child_request_finished_handler(ngx_http_request_t *r, void *data, ngx_int_t rc)
 	}
 
 	ngx_log_debug2(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
-		"child_request_finished_handler: called rc=%i, r=%p", rc, r);
+		"ngx_child_request_finished_handler: called rc=%i, r=%p", rc, r);
 
 	u = r->upstream;
 	if (rc == NGX_OK)
@@ -672,13 +672,13 @@ child_request_finished_handler(ngx_http_request_t *r, void *data, ngx_int_t rc)
 		if (u->state && u->state->status != NGX_HTTP_OK && u->state->status != NGX_HTTP_PARTIAL_CONTENT)
 		{
 			ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
-				"child_request_finished_handler: upstream returned a bad status %ui", u->state->status);
+				"ngx_child_request_finished_handler: upstream returned a bad status %ui", u->state->status);
 			rc = NGX_HTTP_BAD_GATEWAY;
 		}
 		else if (u->length != 0)
 		{
 			ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
-				"child_request_finished_handler: upstream connection was closed with %O bytes left to read", u->length);
+				"ngx_child_request_finished_handler: upstream connection was closed with %O bytes left to read", u->length);
 			rc = NGX_HTTP_BAD_GATEWAY;
 		}
 	}
@@ -691,18 +691,18 @@ child_request_finished_handler(ngx_http_request_t *r, void *data, ngx_int_t rc)
 
 // Note: must not return positive error codes (like NGX_HTTP_INTERNAL_SERVER_ERROR)
 ngx_int_t
-child_request_start(
+ngx_child_request_start(
 	ngx_http_request_t *r,
-	child_request_buffers_t* buffers, 
-	child_request_callback_t callback,
+	ngx_child_request_buffers_t* buffers, 
+	ngx_child_request_callback_t callback,
 	void* callback_context,
 	ngx_http_upstream_conf_t* upstream_conf,
 	ngx_str_t* internal_location,
-	child_request_params_t* params,
+	ngx_child_request_params_t* params,
 	off_t max_response_length,
 	u_char* response_buffer)
 {
-	child_request_context_t* child_ctx;
+	ngx_child_request_context_t* child_ctx;
 	ngx_http_post_subrequest_t *psr;
 	ngx_http_request_t *sr;
 	ngx_str_t args = ngx_null_string;
@@ -723,17 +723,17 @@ child_request_start(
 		if (buffers->headers_buffer == NULL)
 		{
 			ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
-				"child_request_start: ngx_palloc failed (1)");
+				"ngx_child_request_start: ngx_palloc failed (1)");
 			return NGX_ERROR;
 		}
 	}
 
 	// initialize the request buffer
-	buffers->request_buffer = init_request_buffer(r, buffers->request_buffer, params);
+	buffers->request_buffer = ngx_init_request_buffer(r, buffers->request_buffer, params);
 	if (buffers->request_buffer == NULL)
 	{
 		ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
-			"child_request_start: init_request_buffer failed");
+			"ngx_child_request_start: ngx_init_request_buffer failed");
 		return NGX_ERROR;
 	}
 
@@ -742,7 +742,7 @@ child_request_start(
 	if (child_ctx == NULL)
 	{
 		ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
-			"child_request_start: ngx_pcalloc failed");
+			"ngx_child_request_start: ngx_pcalloc failed");
 		return NGX_ERROR;
 	}
 
@@ -762,7 +762,7 @@ child_request_start(
 	if (uri.data == NULL)
 	{
 		ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
-			"child_request_start: ngx_palloc failed (2)");
+			"ngx_child_request_start: ngx_palloc failed (2)");
 		return NGX_ERROR;
 	}
 	p = ngx_copy(uri.data, internal_location->data, internal_location->len);
@@ -775,18 +775,18 @@ child_request_start(
 	if (psr == NULL) 
 	{
 		ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
-			"child_request_start: ngx_palloc failed (3)");
+			"ngx_child_request_start: ngx_palloc failed (3)");
 		return NGX_ERROR;
 	}
 
-	psr->handler = child_request_finished_handler;
+	psr->handler = ngx_child_request_finished_handler;
 	psr->data = r;
 
 	rc = ngx_http_subrequest(r, &uri, &args, &sr, psr, NGX_HTTP_SUBREQUEST_WAITED | NGX_HTTP_SUBREQUEST_IN_MEMORY);
 	if (rc == NGX_ERROR) 
 	{
 		ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
-			"child_request_start: ngx_http_subrequest failed %i", rc);
+			"ngx_child_request_start: ngx_http_subrequest failed %i", rc);
 		return rc;
 	}
 
@@ -794,13 +794,13 @@ child_request_start(
 	ngx_http_set_ctx(sr, child_ctx, ngx_http_vod_module);
 
 	ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
-		"child_request_start: completed successfully sr=%p", sr);
+		"ngx_child_request_start: completed successfully sr=%p", sr);
 
 	return NGX_AGAIN;
 }
 
 void
-child_request_free_buffers(ngx_pool_t* pool, child_request_buffers_t* buffers)
+ngx_child_request_free_buffers(ngx_pool_t* pool, ngx_child_request_buffers_t* buffers)
 {
 	ngx_pfree(pool, buffers->headers_buffer);
 	buffers->headers_buffer = NULL;
@@ -809,7 +809,7 @@ child_request_free_buffers(ngx_pool_t* pool, child_request_buffers_t* buffers)
 }
 
 void 
-init_upstream_conf(ngx_http_upstream_conf_t* upstream)
+ngx_init_upstream_conf(ngx_http_upstream_conf_t* upstream)
 {
 	upstream->connect_timeout = NGX_CONF_UNSET_MSEC;
 	upstream->send_timeout = NGX_CONF_UNSET_MSEC;
@@ -836,7 +836,7 @@ init_upstream_conf(ngx_http_upstream_conf_t* upstream)
 }
 
 char *
-merge_upstream_conf(
+ngx_merge_upstream_conf(
 	ngx_conf_t *cf,
 	ngx_http_upstream_conf_t* conf_upstream, 
 	ngx_http_upstream_conf_t* prev_upstream)

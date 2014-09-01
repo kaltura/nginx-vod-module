@@ -27,29 +27,29 @@ enum {
 };
 
 // typedefs
-typedef ngx_int_t (*async_read_func_t)(void* context, u_char *buf, size_t size, off_t offset);
-typedef ngx_int_t (*dump_request_t)(void* context);
+typedef ngx_int_t (*ngx_http_vod_async_read_func_t)(void* context, u_char *buf, size_t size, off_t offset);
+typedef ngx_int_t (*ngx_http_vod_dump_request_t)(void* context);
 
 typedef struct {
 	ngx_http_request_t* r;
 	ngx_chain_t* chain_end;
 	uint32_t total_size;
-} write_ts_buffer_context_t;
+} ngx_http_vod_write_ts_context_t;
 
 typedef struct {
 	// file read state (either remote or local)
-	file_reader_state_t file_reader;
-	async_read_func_t async_reader;
-	dump_request_t dump_request;
+	ngx_file_reader_state_t file_reader;
+	ngx_http_vod_async_read_func_t async_reader;
+	ngx_http_vod_dump_request_t ngx_dump_request;
 	void* async_reader_context;
-	child_request_buffers_t child_request_buffers;
+	ngx_child_request_buffers_t child_request_buffers;
 	u_char* read_buffer;
 	size_t buffer_size;
 
 	// input params
 	ngx_http_request_t *r;
 	ngx_str_t original_uri;
-	request_params_t request_params;
+	ngx_http_vod_request_params_t request_params;
 	request_context_t request_context;
 	u_char file_key[BUFFER_CACHE_KEY_SIZE];
 	off_t alignment;
@@ -64,7 +64,7 @@ typedef struct {
 	read_cache_state_t read_cache_state;
 	muxer_state_t muxer;
 	ngx_chain_t  out;
-	write_ts_buffer_context_t write_ts_buffer_context;
+	ngx_http_vod_write_ts_context_t write_ts_buffer_context;
 	aes_encrypt_context_t* encrypted_write_context;
 } ngx_http_vod_ctx_t;
 
@@ -92,7 +92,7 @@ ngx_module_t  ngx_http_vod_module = {
 ////// Encryption support
 
 static ngx_int_t
-process_encryption_key_request(ngx_http_request_t *r, u_char* file_key)
+ngx_http_vod_process_enc_key_request(ngx_http_request_t *r, u_char* file_key)
 {
 	ngx_str_t response;
 	u_char* encryption_key;
@@ -101,7 +101,7 @@ process_encryption_key_request(ngx_http_request_t *r, u_char* file_key)
 	if (encryption_key == NULL)
 	{
 		ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
-			"process_encryption_key_request: ngx_palloc failed");
+			"ngx_http_vod_process_enc_key_request: ngx_palloc failed");
 		return NGX_HTTP_INTERNAL_SERVER_ERROR;
 	}
 
@@ -110,11 +110,11 @@ process_encryption_key_request(ngx_http_request_t *r, u_char* file_key)
 	response.data = encryption_key;
 	response.len = BUFFER_CACHE_KEY_SIZE;
 
-	return send_single_buffer_response(r, &response, (u_char *)encryption_key_content_type, sizeof(encryption_key_content_type) - 1);
+	return ngx_http_vod_send_response(r, &response, (u_char *)encryption_key_content_type, sizeof(encryption_key_content_type) - 1);
 }
 
 static vod_status_t
-init_aes_encryption(ngx_http_vod_ctx_t *ctx, write_callback_t write_callback, void* callback_context)
+ngx_http_vod_init_aes_encryption(ngx_http_vod_ctx_t *ctx, write_callback_t write_callback, void* callback_context)
 {
 	ngx_pool_cleanup_t  *cln;
 	vod_status_t rc;
@@ -123,7 +123,7 @@ init_aes_encryption(ngx_http_vod_ctx_t *ctx, write_callback_t write_callback, vo
 	if (ctx->encrypted_write_context == NULL)
 	{
 		ngx_log_debug0(NGX_LOG_DEBUG_HTTP, ctx->request_context.log, 0,
-			"init_aes_encryption: ngx_palloc failed");
+			"ngx_http_vod_init_aes_encryption: ngx_palloc failed");
 		return VOD_ALLOC_FAILED;
 	}
 
@@ -131,7 +131,7 @@ init_aes_encryption(ngx_http_vod_ctx_t *ctx, write_callback_t write_callback, vo
 	if (cln == NULL) 
 	{
 		ngx_log_debug0(NGX_LOG_DEBUG_HTTP, ctx->request_context.log, 0,
-			"init_aes_encryption: ngx_pool_cleanup_add failed");
+			"ngx_http_vod_init_aes_encryption: ngx_pool_cleanup_add failed");
 		return VOD_ALLOC_FAILED;
 	}
 
@@ -142,7 +142,7 @@ init_aes_encryption(ngx_http_vod_ctx_t *ctx, write_callback_t write_callback, vo
 	if (rc != VOD_OK)
 	{
 		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, ctx->request_context.log, 0,
-			"init_aes_encryption: aes_encrypt_init failed %i", rc);
+			"ngx_http_vod_init_aes_encryption: aes_encrypt_init failed %i", rc);
 		return rc;
 	}
 
@@ -152,7 +152,7 @@ init_aes_encryption(ngx_http_vod_ctx_t *ctx, write_callback_t write_callback, vo
 ////// Common mp4 processing
 
 static ngx_int_t 
-read_moov_atom(ngx_http_vod_ctx_t *ctx)
+ngx_http_vod_read_moov_atom(ngx_http_vod_ctx_t *ctx)
 {
 	ngx_http_vod_loc_conf_t   *conf;
 	u_char* new_read_buffer = NULL;
@@ -160,19 +160,19 @@ read_moov_atom(ngx_http_vod_ctx_t *ctx)
 	vod_status_t rc;
 
 	// get moov atom offset and size
-	rc = get_moov_atom_info(&ctx->request_context, ctx->read_buffer, ctx->buffer_size, &ctx->moov_offset, &ctx->moov_size);
+	rc = mp4_parser_get_moov_atom_info(&ctx->request_context, ctx->read_buffer, ctx->buffer_size, &ctx->moov_offset, &ctx->moov_size);
 	if (rc != VOD_OK)
 	{
 		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, ctx->request_context.log, 0,
-			"read_moov_atom: get_moov_atom_info failed %i", rc);
-		return vod_status_to_ngx_error(rc);
+			"ngx_http_vod_read_moov_atom: mp4_parser_get_moov_atom_info failed %i", rc);
+		return ngx_http_vod_status_to_ngx_error(rc);
 	}
 
 	// check whether we already have the whole atom
 	if (ctx->moov_offset + ctx->moov_size < ctx->buffer_size)
 	{
 		ngx_log_debug0(NGX_LOG_DEBUG_HTTP, ctx->request_context.log, 0,
-			"read_moov_atom: already read the full moov atom");
+			"ngx_http_vod_read_moov_atom: already read the full moov atom");
 		return NGX_OK;
 	}
 
@@ -181,8 +181,8 @@ read_moov_atom(ngx_http_vod_ctx_t *ctx)
 	if (ctx->moov_size > conf->max_moov_size)
 	{
 		ngx_log_error(NGX_LOG_ERR, ctx->request_context.log, 0,
-			"read_moov_atom: moov size %uD exceeds the max %uz", ctx->moov_size, conf->max_moov_size);
-		return vod_status_to_ngx_error(VOD_BAD_DATA);
+			"ngx_http_vod_read_moov_atom: moov size %uD exceeds the max %uz", ctx->moov_size, conf->max_moov_size);
+		return ngx_http_vod_status_to_ngx_error(VOD_BAD_DATA);
 	}
 
 	// calculate the new buffer size (round the moov end up to alignment)
@@ -192,7 +192,7 @@ read_moov_atom(ngx_http_vod_ctx_t *ctx)
 	if (new_read_buffer == NULL)
 	{
 		ngx_log_debug0(NGX_LOG_DEBUG_HTTP, ctx->request_context.log, 0,
-			"read_moov_atom: ngx_pmemalign failed");
+			"ngx_http_vod_read_moov_atom: ngx_pmemalign failed");
 		return NGX_HTTP_INTERNAL_SERVER_ERROR;
 	}
 
@@ -210,7 +210,7 @@ read_moov_atom(ngx_http_vod_ctx_t *ctx)
 		if (rc != NGX_AGAIN)
 		{
 			ngx_log_debug1(NGX_LOG_DEBUG_HTTP, ctx->request_context.log, 0,
-				"read_moov_atom: async_reader failed %i", rc);
+				"ngx_http_vod_read_moov_atom: async_reader failed %i", rc);
 		}
 		return rc;
 	}
@@ -220,7 +220,7 @@ read_moov_atom(ngx_http_vod_ctx_t *ctx)
 }
 
 static vod_status_t 
-parse_moov_atom(ngx_http_vod_ctx_t *ctx, u_char* moov_buffer, size_t moov_size)
+ngx_http_vod_parse_moov_atom(ngx_http_vod_ctx_t *ctx, u_char* moov_buffer, size_t moov_size)
 {
 	ngx_http_vod_loc_conf_t   *conf;
 	vod_status_t rc;
@@ -252,7 +252,7 @@ parse_moov_atom(ngx_http_vod_ctx_t *ctx, u_char* moov_buffer, size_t moov_size)
 		if (ctx->request_context.end <= ctx->request_context.start)
 		{
 			vod_log_error(VOD_LOG_ERR, ctx->request_context.log, 0,
-				"parse_moov_atom: segment index %uD too big for clip from %uD and clip to %uD", 
+				"ngx_http_vod_parse_moov_atom: segment index %uD too big for clip from %uD and clip to %uD", 
 				ctx->request_params.segment_index, ctx->request_params.clip_from, ctx->request_params.clip_to);
 			return VOD_BAD_REQUEST;
 		}
@@ -272,7 +272,7 @@ parse_moov_atom(ngx_http_vod_ctx_t *ctx, u_char* moov_buffer, size_t moov_size)
 	if (rc != VOD_OK)
 	{
 		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, ctx->request_context.log, 0,
-			"parse_moov_atom: mp4_parser_parse_moov_atom failed %i", rc);
+			"ngx_http_vod_parse_moov_atom: mp4_parser_parse_moov_atom failed %i", rc);
 		return rc;
 	}
 
@@ -282,9 +282,9 @@ parse_moov_atom(ngx_http_vod_ctx_t *ctx, u_char* moov_buffer, size_t moov_size)
 ////// TS segment request handling
 
 static vod_status_t 
-write_ts_buffer(void* ctx, u_char* buffer, uint32_t size, bool_t* reuse_buffer)
+ngx_http_vod_write_ts_buffer(void* ctx, u_char* buffer, uint32_t size, bool_t* reuse_buffer)
 {
-	write_ts_buffer_context_t* context = (write_ts_buffer_context_t*)ctx;
+	ngx_http_vod_write_ts_context_t* context = (ngx_http_vod_write_ts_context_t*)ctx;
 	ngx_buf_t   *b;
 	ngx_chain_t  *chain;
 	ngx_chain_t  out;
@@ -298,7 +298,7 @@ write_ts_buffer(void* ctx, u_char* buffer, uint32_t size, bool_t* reuse_buffer)
 	if (b == NULL) 
 	{
 		ngx_log_debug0(NGX_LOG_DEBUG_HTTP, context->r->connection->log, 0,
-			"write_ts_buffer: ngx_pcalloc failed (1)");
+			"ngx_http_vod_write_ts_buffer: ngx_pcalloc failed (1)");
 		return VOD_ALLOC_FAILED;
 	}
 
@@ -319,7 +319,7 @@ write_ts_buffer(void* ctx, u_char* buffer, uint32_t size, bool_t* reuse_buffer)
 			// either the connection dropped, or some allocation failed
 			// in case the connection dropped, the error code doesn't matter anyway
 			ngx_log_debug1(NGX_LOG_DEBUG_HTTP, context->r->connection->log, 0,
-				"write_ts_buffer: ngx_http_output_filter failed %i", rc);
+				"ngx_http_vod_write_ts_buffer: ngx_http_output_filter failed %i", rc);
 			return VOD_ALLOC_FAILED;
 		}
 	}
@@ -332,7 +332,7 @@ write_ts_buffer(void* ctx, u_char* buffer, uint32_t size, bool_t* reuse_buffer)
 			if (chain == NULL) 
 			{
 				ngx_log_debug0(NGX_LOG_DEBUG_HTTP, context->r->connection->log, 0,
-					"write_ts_buffer: ngx_pcalloc failed (2)");
+					"ngx_http_vod_write_ts_buffer: ngx_pcalloc failed (2)");
 				return VOD_ALLOC_FAILED;
 			}
 
@@ -348,7 +348,7 @@ write_ts_buffer(void* ctx, u_char* buffer, uint32_t size, bool_t* reuse_buffer)
 }
 
 static ngx_int_t 
-init_frame_processing(ngx_http_vod_ctx_t *ctx)
+ngx_http_vod_init_frame_processing(ngx_http_vod_ctx_t *ctx)
 {
 	ngx_http_request_t* r = ctx->r;
 	ngx_http_vod_loc_conf_t   *conf;
@@ -361,9 +361,9 @@ init_frame_processing(ngx_http_vod_ctx_t *ctx)
 	// enable directio if enabled in the configuration (ignore errors)
 	// Note that directio is set on transfer only to allow the kernel to cache the "moov" atom
 	conf = ngx_http_get_module_loc_conf(ctx->r, ngx_http_vod_module);
-	if (conf->request_handler != remote_request_handler)
+	if (conf->request_handler != ngx_http_vod_remote_request_handler)
 	{
-		file_reader_enable_directio(&ctx->file_reader);
+		ngx_file_reader_enable_directio(&ctx->file_reader);
 	}
 
 	// initialize the read cache
@@ -378,12 +378,12 @@ init_frame_processing(ngx_http_vod_ctx_t *ctx)
 
 	if (conf->secret_key.len != 0)
 	{
-		rc = init_aes_encryption(ctx, write_ts_buffer, &ctx->write_ts_buffer_context);
+		rc = ngx_http_vod_init_aes_encryption(ctx, ngx_http_vod_write_ts_buffer, &ctx->write_ts_buffer_context);
 		if (rc != VOD_OK)
 		{
 			ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
-				"init_frame_processing: init_aes_encryption failed %i", rc);
-			return vod_status_to_ngx_error(rc);
+				"ngx_http_vod_init_frame_processing: ngx_http_vod_init_aes_encryption failed %i", rc);
+			return ngx_http_vod_status_to_ngx_error(rc);
 		}
 
 		write_callback = (write_callback_t)aes_encrypt_write;
@@ -391,7 +391,7 @@ init_frame_processing(ngx_http_vod_ctx_t *ctx)
 	}
 	else
 	{
-		write_callback = write_ts_buffer;
+		write_callback = ngx_http_vod_write_ts_buffer;
 		write_context = &ctx->write_ts_buffer_context;
 	}
 
@@ -408,8 +408,8 @@ init_frame_processing(ngx_http_vod_ctx_t *ctx)
 	if (rc != VOD_OK)
 	{
 		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
-			"init_frame_processing: muxer_init failed %i", rc);
-		return vod_status_to_ngx_error(rc);
+			"ngx_http_vod_init_frame_processing: muxer_init failed %i", rc);
+		return ngx_http_vod_status_to_ngx_error(rc);
 	}
 
 	// set the 'Content-type' header
@@ -440,7 +440,7 @@ init_frame_processing(ngx_http_vod_ctx_t *ctx)
 	if (rc != NGX_OK)
 	{
 		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
-			"init_frame_processing: ngx_http_set_etag failed %i", rc);
+			"ngx_http_vod_init_frame_processing: ngx_http_set_etag failed %i", rc);
 		return NGX_HTTP_INTERNAL_SERVER_ERROR;
 	}
 
@@ -449,7 +449,7 @@ init_frame_processing(ngx_http_vod_ctx_t *ctx)
 	if (rc == NGX_ERROR || rc > NGX_OK)
 	{
 		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
-			"init_frame_processing: ngx_http_send_header failed %i", rc);
+			"ngx_http_vod_init_frame_processing: ngx_http_send_header failed %i", rc);
 		return rc;
 	}
 
@@ -462,7 +462,7 @@ init_frame_processing(ngx_http_vod_ctx_t *ctx)
 }
 
 static ngx_int_t 
-output_ts_response(ngx_http_vod_ctx_t *ctx)
+ngx_http_vod_output_ts_response(ngx_http_vod_ctx_t *ctx)
 {
 	ngx_http_request_t *r = ctx->r;
 	ngx_int_t    rc;
@@ -474,8 +474,8 @@ output_ts_response(ngx_http_vod_ctx_t *ctx)
 		if (rc != VOD_OK)
 		{
 			ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
-				"output_ts_response: aes_encrypt_flush failed %i", rc);
-			return vod_status_to_ngx_error(rc);
+				"ngx_http_vod_output_ts_response: aes_encrypt_flush failed %i", rc);
+			return ngx_http_vod_status_to_ngx_error(rc);
 		}
 	}
 
@@ -485,7 +485,7 @@ output_ts_response(ngx_http_vod_ctx_t *ctx)
 		if (ctx->write_ts_buffer_context.total_size != r->headers_out.content_length_n)
 		{
 			ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
-				"output_ts_response: actual content length %uD is different than reported length %O", 
+				"ngx_http_vod_output_ts_response: actual content length %uD is different than reported length %O", 
 				ctx->write_ts_buffer_context.total_size, r->headers_out.content_length_n);
 		}
 
@@ -493,7 +493,7 @@ output_ts_response(ngx_http_vod_ctx_t *ctx)
 		if (rc != NGX_OK && rc != NGX_AGAIN)
 		{
 			ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
-				"output_ts_response: ngx_http_send_special failed %i", rc);
+				"ngx_http_vod_output_ts_response: ngx_http_send_special failed %i", rc);
 			return rc;
 		}
 		return NGX_OK;
@@ -512,7 +512,7 @@ output_ts_response(ngx_http_vod_ctx_t *ctx)
 	if (rc != NGX_OK)
 	{
 		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
-			"output_ts_response: ngx_http_set_etag failed %i", rc);
+			"ngx_http_vod_output_ts_response: ngx_http_set_etag failed %i", rc);
 		return NGX_HTTP_INTERNAL_SERVER_ERROR;
 	}
 
@@ -521,7 +521,7 @@ output_ts_response(ngx_http_vod_ctx_t *ctx)
 	if (rc == NGX_ERROR || rc > NGX_OK)
 	{
 		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
-			"output_ts_response: ngx_http_send_header failed %i", rc);
+			"ngx_http_vod_output_ts_response: ngx_http_send_header failed %i", rc);
 		return rc;
 	}
 	
@@ -535,14 +535,14 @@ output_ts_response(ngx_http_vod_ctx_t *ctx)
 	if (rc != NGX_OK && rc != NGX_AGAIN)
 	{
 		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
-			"output_ts_response: ngx_http_output_filter failed %i", rc);
+			"ngx_http_vod_output_ts_response: ngx_http_output_filter failed %i", rc);
 		return rc;
 	}
 	return NGX_OK;
 }
 
 static ngx_int_t 
-process_mp4_frames(ngx_http_vod_ctx_t *ctx)
+ngx_http_vod_process_mp4_frames(ngx_http_vod_ctx_t *ctx)
 {
 	uint64_t required_offset;
 	uint64_t read_offset;
@@ -565,8 +565,8 @@ process_mp4_frames(ngx_http_vod_ctx_t *ctx)
 
 		default:
 			ngx_log_debug1(NGX_LOG_DEBUG_HTTP, ctx->request_context.log, 0,
-				"process_mp4_frames: muxer_process failed %i", rc);
-			return vod_status_to_ngx_error(rc);
+				"ngx_http_vod_process_mp4_frames: muxer_process failed %i", rc);
+			return ngx_http_vod_status_to_ngx_error(rc);
 		}
 
 		// get a buffer to read into
@@ -574,8 +574,8 @@ process_mp4_frames(ngx_http_vod_ctx_t *ctx)
 		if (rc != VOD_OK)
 		{
 			ngx_log_debug1(NGX_LOG_DEBUG_HTTP, ctx->request_context.log, 0,
-				"process_mp4_frames: read_cache_get_read_buffer failed %i", rc);
-			return vod_status_to_ngx_error(rc);
+				"ngx_http_vod_process_mp4_frames: read_cache_get_read_buffer failed %i", rc);
+			return ngx_http_vod_status_to_ngx_error(rc);
 		}
 
 		// perform the read
@@ -585,7 +585,7 @@ process_mp4_frames(ngx_http_vod_ctx_t *ctx)
 			if (rc != NGX_AGAIN)
 			{
 				ngx_log_debug1(NGX_LOG_DEBUG_HTTP, ctx->request_context.log, 0,
-					"process_mp4_frames: async_reader failed %i", rc);
+					"ngx_http_vod_process_mp4_frames: async_reader failed %i", rc);
 			}
 			return rc;
 		}
@@ -598,7 +598,7 @@ process_mp4_frames(ngx_http_vod_ctx_t *ctx)
 ////// Common
 
 static ngx_int_t 
-run_state_machine(ngx_http_vod_ctx_t *ctx)
+ngx_http_vod_run_state_machine(ngx_http_vod_ctx_t *ctx)
 {
 	ngx_http_vod_loc_conf_t *conf;
 	uint32_t duration_millis;
@@ -612,7 +612,7 @@ run_state_machine(ngx_http_vod_ctx_t *ctx)
 	{
 	case STATE_INITIAL_READ:
 		// read the entire atom
-		rc = read_moov_atom(ctx);
+		rc = ngx_http_vod_read_moov_atom(ctx);
 		if (rc == NGX_AGAIN)
 		{
 			return NGX_AGAIN;
@@ -621,7 +621,7 @@ run_state_machine(ngx_http_vod_ctx_t *ctx)
 		if (rc != NGX_OK)
 		{
 			ngx_log_debug1(NGX_LOG_DEBUG_HTTP, ctx->request_context.log, 0,
-				"run_state_machine: read_moov_atom failed %i", rc);
+				"ngx_http_vod_run_state_machine: ngx_http_vod_read_moov_atom failed %i", rc);
 			return rc;
 		}
 		// fallthrough
@@ -631,17 +631,17 @@ run_state_machine(ngx_http_vod_ctx_t *ctx)
 		if (ctx->buffer_size < ctx->moov_offset + ctx->moov_size)
 		{
 			ngx_log_error(NGX_LOG_ERR, ctx->request_context.log, 0,
-				"run_state_machine: buffer size %uD is smaller than moov end offset %uD", ctx->buffer_size, ctx->moov_offset + ctx->moov_size);
-			return vod_status_to_ngx_error(VOD_BAD_DATA);
+				"ngx_http_vod_run_state_machine: buffer size %uD is smaller than moov end offset %uD", ctx->buffer_size, ctx->moov_offset + ctx->moov_size);
+			return ngx_http_vod_status_to_ngx_error(VOD_BAD_DATA);
 		}
 
 		// parse the moov atom
-		rc = parse_moov_atom(ctx, ctx->read_buffer + ctx->moov_offset, ctx->moov_size);
+		rc = ngx_http_vod_parse_moov_atom(ctx, ctx->read_buffer + ctx->moov_offset, ctx->moov_size);
 		if (rc != VOD_OK)
 		{
 			ngx_log_debug1(NGX_LOG_DEBUG_HTTP, ctx->request_context.log, 0,
-				"run_state_machine: parse_moov_atom failed %i", rc);
-			return vod_status_to_ngx_error(rc);
+				"ngx_http_vod_run_state_machine: ngx_http_vod_parse_moov_atom failed %i", rc);
+			return ngx_http_vod_status_to_ngx_error(rc);
 		}
 
 		// save the moov atom to cache
@@ -654,12 +654,12 @@ run_state_machine(ngx_http_vod_ctx_t *ctx)
 				ctx->moov_size))
 			{
 				ngx_log_debug0(NGX_LOG_DEBUG_HTTP, ctx->request_context.log, 0,
-					"run_state_machine: stored moov atom in cache");
+					"ngx_http_vod_run_state_machine: stored moov atom in cache");
 			}
 			else
 			{
 				ngx_log_debug0(NGX_LOG_DEBUG_HTTP, ctx->request_context.log, 0,
-					"run_state_machine: failed to store moov atom in cache");
+					"ngx_http_vod_run_state_machine: failed to store moov atom in cache");
 			}
 		}
 
@@ -678,10 +678,10 @@ run_state_machine(ngx_http_vod_ctx_t *ctx)
 				// note: this type of requests can be served without even reading the file, however reading
 				// the file blocks the possibility of an attacker to get the server to sign arbitrary strings.
 				// also, the moov atom will usually return from cache
-				return process_encryption_key_request(ctx->r, ctx->file_key);
+				return ngx_http_vod_process_enc_key_request(ctx->r, ctx->file_key);
 
 			case REQUEST_TYPE_HLS_PLAYLIST:
-				rc = build_index_playlist_m3u8(
+				rc = m3u8_builder_build_index_playlist(
 					&ctx->request_context,
 					&conf->m3u8_config,
 					conf->segment_duration,
@@ -692,7 +692,7 @@ run_state_machine(ngx_http_vod_ctx_t *ctx)
 				break;
 
 			case REQUEST_TYPE_HLS_IFRAME_PLAYLIST:
-				rc = build_iframe_playlist_m3u8(
+				rc = m3u8_builder_build_iframe_playlist(
 					&ctx->request_context,
 					&conf->m3u8_config, conf->segment_duration,
 					&ctx->mpeg_metadata,
@@ -703,11 +703,11 @@ run_state_machine(ngx_http_vod_ctx_t *ctx)
 			if (rc != VOD_OK)
 			{
 				ngx_log_debug1(NGX_LOG_DEBUG_HTTP, ctx->request_context.log, 0,
-					"run_state_machine: build_playlist_m3u8 failed %i", rc);
-				return vod_status_to_ngx_error(rc);
+					"ngx_http_vod_run_state_machine: build_playlist_m3u8 failed %i", rc);
+				return ngx_http_vod_status_to_ngx_error(rc);
 			}
 
-			return send_single_buffer_response(ctx->r, &response, m3u8_content_type, sizeof(m3u8_content_type)-1);
+			return ngx_http_vod_send_response(ctx->r, &response, m3u8_content_type, sizeof(m3u8_content_type)-1);
 		}
 
 		// validate the requested segment index
@@ -716,7 +716,7 @@ run_state_machine(ngx_http_vod_ctx_t *ctx)
 		if (duration_millis <= ctx->request_params.clip_from)
 		{
 			ngx_log_error(NGX_LOG_ERR, ctx->request_context.log, 0,
-				"run_state_machine: clip from %uD exceeds video duration %uD", ctx->request_params.clip_from, duration_millis);
+				"ngx_http_vod_run_state_machine: clip from %uD exceeds video duration %uD", ctx->request_params.clip_from, duration_millis);
 			return NGX_HTTP_NOT_FOUND;
 		}
 
@@ -725,12 +725,12 @@ run_state_machine(ngx_http_vod_ctx_t *ctx)
 		if (ctx->request_params.segment_index >= segment_count)
 		{
 			ngx_log_error(NGX_LOG_ERR, ctx->request_context.log, 0,
-				"run_state_machine: requested segment index %uD exceeds the segment count %uD", ctx->request_params.segment_index, segment_count);
+				"ngx_http_vod_run_state_machine: requested segment index %uD exceeds the segment count %uD", ctx->request_params.segment_index, segment_count);
 			return NGX_HTTP_NOT_FOUND;
 		}
 
 		// initialize the processing of the video frames
-		rc = init_frame_processing(ctx);
+		rc = ngx_http_vod_init_frame_processing(ctx);
 		if (rc != NGX_OK)
 		{
 			if (rc == NGX_DONE)
@@ -740,7 +740,7 @@ run_state_machine(ngx_http_vod_ctx_t *ctx)
 			else
 			{
 				ngx_log_debug1(NGX_LOG_DEBUG_HTTP, ctx->request_context.log, 0,
-					"run_state_machine: init_frame_processing failed %i", rc);
+					"ngx_http_vod_run_state_machine: ngx_http_vod_init_frame_processing failed %i", rc);
 			}
 			return rc;
 		}
@@ -751,43 +751,43 @@ run_state_machine(ngx_http_vod_ctx_t *ctx)
 
 	case STATE_FRAME_DATA_READ:
 		// process some frames
-		rc = process_mp4_frames(ctx);
+		rc = ngx_http_vod_process_mp4_frames(ctx);
 		if (rc == NGX_OK)
 		{
 			// we're done
-			rc = output_ts_response(ctx);
+			rc = ngx_http_vod_output_ts_response(ctx);
 		}
 		else if (rc != NGX_AGAIN)
 		{
 			ngx_log_debug1(NGX_LOG_DEBUG_HTTP, ctx->request_context.log, 0,
-				"run_state_machine: process_mp4_frames failed %i", rc);
+				"ngx_http_vod_run_state_machine: ngx_http_vod_process_mp4_frames failed %i", rc);
 		}
 		return rc;
 
 	default:
 		ngx_log_error(NGX_LOG_ERR, ctx->request_context.log, 0,
-			"run_state_machine: invalid state %d", ctx->state);
+			"ngx_http_vod_run_state_machine: invalid state %d", ctx->state);
 		return NGX_HTTP_INTERNAL_SERVER_ERROR;
 	}
 }
 
 static void
-handle_read_completed(void* context, ngx_int_t rc, ssize_t bytes_read)
+ngx_http_vod_handle_read_completed(void* context, ngx_int_t rc, ssize_t bytes_read)
 {
 	ngx_http_vod_ctx_t *ctx = (ngx_http_vod_ctx_t *)context;
 
 	if (rc != NGX_OK)
 	{
 		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, ctx->request_context.log, 0,
-			"handle_read_completed: read failed %i", rc);
+			"ngx_http_vod_handle_read_completed: read failed %i", rc);
 		goto finalize_request;
 	}
 
 	if (bytes_read <= 0)
 	{
 		ngx_log_error(NGX_LOG_ERR, ctx->request_context.log, 0,
-			"handle_read_completed: bytes read is zero");
-		rc = vod_status_to_ngx_error(VOD_BAD_DATA);
+			"ngx_http_vod_handle_read_completed: bytes read is zero");
+		rc = ngx_http_vod_status_to_ngx_error(VOD_BAD_DATA);
 		goto finalize_request;
 	}
 	
@@ -808,7 +808,7 @@ handle_read_completed(void* context, ngx_int_t rc, ssize_t bytes_read)
 	}
 
 	// run the state machine
-	rc = run_state_machine(ctx);
+	rc = ngx_http_vod_run_state_machine(ctx);
 	if (rc == NGX_AGAIN)
 	{
 		return;
@@ -820,7 +820,7 @@ finalize_request:
 }
 
 static ngx_int_t 
-start_processing_mp4_file(ngx_http_request_t *r)
+ngx_http_vod_start_processing_mp4_file(ngx_http_request_t *r)
 {
 	ngx_http_vod_loc_conf_t   *conf;
 	ngx_http_vod_ctx_t        *ctx;
@@ -836,7 +836,7 @@ start_processing_mp4_file(ngx_http_request_t *r)
 	ctx = ngx_http_get_module_ctx(r, ngx_http_vod_module);
 	if (ctx->request_params.request_type == REQUEST_TYPE_SERVE_FILE)
 	{
-		return ctx->dump_request(ctx->async_reader_context);
+		return ctx->ngx_dump_request(ctx->async_reader_context);
 	}
 
 	// preliminary initialization of the request context
@@ -850,25 +850,25 @@ start_processing_mp4_file(ngx_http_request_t *r)
 		if (ngx_buffer_cache_fetch(conf->moov_cache_zone, ctx->file_key, &moov_buffer, &moov_size))
 		{
 			ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
-				"start_processing_mp4_file: moov atom cache hit, size is %uz", moov_size);
+				"ngx_http_vod_start_processing_mp4_file: moov atom cache hit, size is %uz", moov_size);
 
 			// parse the moov atom
-			rc = parse_moov_atom(ctx, moov_buffer, moov_size);
+			rc = ngx_http_vod_parse_moov_atom(ctx, moov_buffer, moov_size);
 			if (rc != VOD_OK)
 			{
 				ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
-					"start_processing_mp4_file: parse_moov_atom failed %i", rc);
-				return vod_status_to_ngx_error(rc);
+					"ngx_http_vod_start_processing_mp4_file: ngx_http_vod_parse_moov_atom failed %i", rc);
+				return ngx_http_vod_status_to_ngx_error(rc);
 			}
 
 			// run the state machine
 			ctx->state = STATE_MOOV_ATOM_PARSED;
-			return run_state_machine(ctx);
+			return ngx_http_vod_run_state_machine(ctx);
 		}
 		else
 		{
 			ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
-				"start_processing_mp4_file: moov atom cache miss");
+				"ngx_http_vod_start_processing_mp4_file: moov atom cache miss");
 		}
 	}
 
@@ -877,7 +877,7 @@ start_processing_mp4_file(ngx_http_request_t *r)
 	if (ctx->read_buffer == NULL)
 	{
 		ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
-			"start_processing_mp4_file: ngx_pmemalign failed");
+			"ngx_http_vod_start_processing_mp4_file: ngx_pmemalign failed");
 		return NGX_HTTP_INTERNAL_SERVER_ERROR;
 	}
 
@@ -890,18 +890,18 @@ start_processing_mp4_file(ngx_http_request_t *r)
 		if (rc != NGX_AGAIN)
 		{
 			ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
-				"start_processing_mp4_file: async_reader failed %i", rc);
+				"ngx_http_vod_start_processing_mp4_file: async_reader failed %i", rc);
 		}
 		return rc;
 	}
 
 	// read completed synchronously
 	ctx->buffer_size = rc;
-	return run_state_machine(ctx);
+	return ngx_http_vod_run_state_machine(ctx);
 }
 
 static void
-init_file_key(ngx_http_request_t* r, ngx_str_t* path1, ngx_str_t* path2)
+ngx_http_vod_init_file_key(ngx_http_request_t* r, ngx_str_t* path1, ngx_str_t* path2)
 {
 	ngx_http_vod_loc_conf_t   *conf;
 	ngx_http_vod_ctx_t        *ctx;
@@ -926,7 +926,7 @@ init_file_key(ngx_http_request_t* r, ngx_str_t* path1, ngx_str_t* path2)
 ////// Local & mapped modes
 
 static ngx_int_t
-init_file_reader(ngx_http_request_t *r, ngx_str_t* path)
+ngx_http_vod_init_file_reader(ngx_http_request_t *r, ngx_str_t* path)
 {
 	ngx_http_core_loc_conf_t  *clcf;
 	ngx_http_vod_ctx_t        *ctx;
@@ -936,28 +936,28 @@ init_file_reader(ngx_http_request_t *r, ngx_str_t* path)
 
 	clcf = ngx_http_get_module_loc_conf(r, ngx_http_core_module);
 
-	rc = file_reader_init(&ctx->file_reader, handle_read_completed, ctx, r, clcf, path);
+	rc = ngx_file_reader_init(&ctx->file_reader, ngx_http_vod_handle_read_completed, ctx, r, clcf, path);
 	if (rc != NGX_OK)
 	{
 		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
-			"init_file_reader: file_reader_init failed %i", rc);
+			"ngx_http_vod_init_file_reader: ngx_file_reader_init failed %i", rc);
 		return rc;
 	}
 
 	ctx->alignment = clcf->directio_alignment;
 
-	ctx->async_reader = (async_read_func_t)async_file_read;
-	ctx->dump_request = (dump_request_t)file_reader_dump_file;
+	ctx->async_reader = (ngx_http_vod_async_read_func_t)ngx_async_file_read;
+	ctx->ngx_dump_request = (ngx_http_vod_dump_request_t)ngx_file_reader_dump_file;
 	ctx->async_reader_context = &ctx->file_reader;
 
 	return NGX_OK;
 }
 
 static ngx_int_t
-dump_request_to_fallback_upstream(
+ngx_http_vod_dump_request_to_fallback(
 	ngx_http_request_t *r)
 {
-	child_request_params_t child_params;
+	ngx_child_request_params_t child_params;
 	ngx_http_vod_loc_conf_t *conf;
 	ngx_http_vod_ctx_t *ctx;
 	ngx_int_t rc;
@@ -967,14 +967,14 @@ dump_request_to_fallback_upstream(
 	if (conf->fallback_upstream.upstream == NULL)
 	{
 		ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
-			"dump_request_to_fallback_upstream: no fallback configured");
+			"ngx_http_vod_dump_request_to_fallback: no fallback configured");
 		return NGX_ERROR;
 	}
 
-	if (header_exists(r, &conf->proxy_header_name))
+	if (ngx_http_vod_header_exists(r, &conf->proxy_header_name))
 	{
 		ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
-			"dump_request_to_fallback_upstream: proxy header exists");
+			"ngx_http_vod_dump_request_to_fallback: proxy header exists");
 		return NGX_ERROR;
 	}
 
@@ -987,7 +987,7 @@ dump_request_to_fallback_upstream(
 	child_params.proxy_range = 1;
 	child_params.proxy_accept_encoding = 1;
 
-	rc = dump_request(
+	rc = ngx_dump_request(
 		r,
 		&conf->fallback_upstream,
 		&child_params);
@@ -997,7 +997,7 @@ dump_request_to_fallback_upstream(
 ////// Local mode only
 
 ngx_int_t
-local_request_handler(ngx_http_request_t *r)
+ngx_http_vod_local_request_handler(ngx_http_request_t *r)
 {
 	ngx_int_t                       rc;
 	u_char                    *last;
@@ -1008,17 +1008,17 @@ local_request_handler(ngx_http_request_t *r)
 	if (last == NULL) 
 	{
 		ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
-			"local_request_handler: ngx_http_map_uri_to_path failed");
+			"ngx_http_vod_local_request_handler: ngx_http_map_uri_to_path failed");
 		return NGX_HTTP_INTERNAL_SERVER_ERROR;
 	}
 
 	path.len = last - path.data;
 
-	rc = init_file_reader(r, &path);
+	rc = ngx_http_vod_init_file_reader(r, &path);
 	if (rc == NGX_HTTP_NOT_FOUND)
 	{
 		// try the fallback
-		rc = dump_request_to_fallback_upstream(r);
+		rc = ngx_http_vod_dump_request_to_fallback(r);
 		if (rc != NGX_AGAIN)
 		{
 			return NGX_HTTP_NOT_FOUND;
@@ -1034,19 +1034,19 @@ local_request_handler(ngx_http_request_t *r)
 	if (rc != NGX_OK)
 	{
 		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
-			"local_request_handler: init_file_reader failed %i", rc);
+			"ngx_http_vod_local_request_handler: ngx_http_vod_init_file_reader failed %i", rc);
 		return rc;
 	}
 
-	init_file_key(r, &path, NULL);
+	ngx_http_vod_init_file_key(r, &path, NULL);
 
-	rc = start_processing_mp4_file(r);
+	rc = ngx_http_vod_start_processing_mp4_file(r);
 	if (rc != NGX_AGAIN)
 	{
 		if (rc != NGX_OK)
 		{
 			ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
-				"local_request_handler: start_processing_mp4_file failed %i", rc);
+				"ngx_http_vod_local_request_handler: ngx_http_vod_start_processing_mp4_file failed %i", rc);
 		}
 		return rc;
 	}
@@ -1061,7 +1061,7 @@ local_request_handler(ngx_http_request_t *r)
 ////// Mapped mode only
 
 static void 
-path_request_finished(void* context, ngx_int_t rc, ngx_buf_t* response)
+ngx_http_vod_path_request_finished(void* context, ngx_int_t rc, ngx_buf_t* response)
 {
 	ngx_http_vod_loc_conf_t *conf;
 	ngx_http_vod_ctx_t *ctx;
@@ -1071,11 +1071,11 @@ path_request_finished(void* context, ngx_int_t rc, ngx_buf_t* response)
 	if (rc != NGX_OK)
 	{
 		ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
-			"path_request_finished: upstream request failed %i", rc);
+			"ngx_http_vod_path_request_finished: upstream request failed %i", rc);
 		goto finalize_request;
 	}
 
-	ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0, "path_request_finished: result %s", response->pos);
+	ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0, "ngx_http_vod_path_request_finished: result %s", response->pos);
 
 	path.data = response->pos;
 	path.len = response->last - path.data;
@@ -1083,7 +1083,7 @@ path_request_finished(void* context, ngx_int_t rc, ngx_buf_t* response)
 	if (path.len == 0)
 	{
 		ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
-			"path_request_finished: empty path mapping response");
+			"ngx_http_vod_path_request_finished: empty path mapping response");
 		rc = NGX_HTTP_NOT_FOUND;
 		goto finalize_request;
 	}
@@ -1095,7 +1095,7 @@ path_request_finished(void* context, ngx_int_t rc, ngx_buf_t* response)
 		ngx_memcmp(path.data + path.len - conf->path_response_postfix.len, conf->path_response_postfix.data, conf->path_response_postfix.len) != 0)
 	{
 		ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
-			"path_request_finished: unexpected path mapping response %V", &path);
+			"ngx_http_vod_path_request_finished: unexpected path mapping response %V", &path);
 		rc = NGX_HTTP_SERVICE_UNAVAILABLE;
 		goto finalize_request;
 	}
@@ -1108,10 +1108,10 @@ path_request_finished(void* context, ngx_int_t rc, ngx_buf_t* response)
 	{
 		// file not found
 		ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
-			"path_request_finished: empty path returned from upstream");
+			"ngx_http_vod_path_request_finished: empty path returned from upstream");
 
 		// try the fallback
-		rc = dump_request_to_fallback_upstream(r);
+		rc = ngx_http_vod_dump_request_to_fallback(r);
 		if (rc != NGX_AGAIN)
 		{
 			rc = NGX_HTTP_NOT_FOUND;
@@ -1121,7 +1121,7 @@ path_request_finished(void* context, ngx_int_t rc, ngx_buf_t* response)
 	}
 
 	ctx = ngx_http_get_module_ctx(r, ngx_http_vod_module);
-	child_request_free_buffers(r->pool, &ctx->child_request_buffers);
+	ngx_child_request_free_buffers(r->pool, &ctx->child_request_buffers);
 
 	if (conf->path_mapping_cache_zone != NULL)
 	{
@@ -1132,32 +1132,32 @@ path_request_finished(void* context, ngx_int_t rc, ngx_buf_t* response)
 			path.len))
 		{
 			ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
-				"path_request_finished: stored in path mapping cache");
+				"ngx_http_vod_path_request_finished: stored in path mapping cache");
 		}
 		else
 		{
 			ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
-				"path_request_finished: failed to store path mapping in cache");
+				"ngx_http_vod_path_request_finished: failed to store path mapping in cache");
 		}
 	}
 
-	rc = init_file_reader(r, &path);
+	rc = ngx_http_vod_init_file_reader(r, &path);
 	if (rc != NGX_OK)
 	{
 		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
-			"path_request_finished: init_file_reader failed %i", rc);
+			"ngx_http_vod_path_request_finished: ngx_http_vod_init_file_reader failed %i", rc);
 		goto finalize_request;
 	}
 
-	init_file_key(r, &path, NULL);
+	ngx_http_vod_init_file_key(r, &path, NULL);
 
-	rc = start_processing_mp4_file(r);
+	rc = ngx_http_vod_start_processing_mp4_file(r);
 	if (rc != NGX_AGAIN)
 	{
 		if (rc != NGX_OK)
 		{
 			ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
-				"path_request_finished: start_processing_mp4_file failed %i", rc);
+				"ngx_http_vod_path_request_finished: ngx_http_vod_start_processing_mp4_file failed %i", rc);
 		}
 		goto finalize_request;
 	}
@@ -1171,10 +1171,10 @@ finalize_request:
 }
 
 ngx_int_t
-mapped_request_handler(ngx_http_request_t *r)
+ngx_http_vod_mapped_request_handler(ngx_http_request_t *r)
 {
 	ngx_http_vod_loc_conf_t   *conf;
-	child_request_params_t child_params;
+	ngx_child_request_params_t child_params;
 	ngx_http_vod_ctx_t *ctx;
 	ngx_str_t path;
 	ngx_int_t rc;
@@ -1187,7 +1187,7 @@ mapped_request_handler(ngx_http_request_t *r)
 	// try to fetch the file path from cache
 	if (conf->path_mapping_cache_zone != NULL)
 	{
-		init_file_key(r, (r->headers_in.host != NULL ? &r->headers_in.host->value : NULL), &r->uri);
+		ngx_http_vod_init_file_key(r, (r->headers_in.host != NULL ? &r->headers_in.host->value : NULL), &r->uri);
 
 		if (ngx_buffer_cache_fetch(conf->path_mapping_cache_zone, ctx->file_key, &path_buffer, &path_size))
 		{
@@ -1197,7 +1197,7 @@ mapped_request_handler(ngx_http_request_t *r)
 			if (path.data == NULL)
 			{
 				ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
-					"mapped_request_handler: ngx_palloc failed");
+					"ngx_http_vod_mapped_request_handler: ngx_palloc failed");
 				return NGX_HTTP_INTERNAL_SERVER_ERROR;
 			}
 
@@ -1205,28 +1205,28 @@ mapped_request_handler(ngx_http_request_t *r)
 			path.data[path.len] = '\0';
 
 			ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
-				"mapped_request_handler: path mapping cache hit %V", &path);
+				"ngx_http_vod_mapped_request_handler: path mapping cache hit %V", &path);
 
 			// init the file reader
-			rc = init_file_reader(r, &path);
+			rc = ngx_http_vod_init_file_reader(r, &path);
 			if (rc != NGX_OK)
 			{
 				ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
-					"mapped_request_handler: init_file_reader failed %i", rc);
+					"ngx_http_vod_mapped_request_handler: ngx_http_vod_init_file_reader failed %i", rc);
 				return rc;
 			}
 
 			// recalculate the file key based on the path
-			init_file_key(r, &path, NULL);
+			ngx_http_vod_init_file_key(r, &path, NULL);
 
 			// start processing the file
-			rc = start_processing_mp4_file(r);
+			rc = ngx_http_vod_start_processing_mp4_file(r);
 			if (rc != NGX_AGAIN)
 			{
 				if (rc != NGX_OK)
 				{
 					ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
-						"mapped_request_handler: start_processing_mp4_file failed %i", rc);
+						"ngx_http_vod_mapped_request_handler: ngx_http_vod_start_processing_mp4_file failed %i", rc);
 				}
 				return rc;
 			}
@@ -1240,7 +1240,7 @@ mapped_request_handler(ngx_http_request_t *r)
 		else
 		{
 			ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
-				"mapped_request_handler: path mapping cache miss");
+				"ngx_http_vod_mapped_request_handler: path mapping cache miss");
 		}
 	}
 
@@ -1253,10 +1253,10 @@ mapped_request_handler(ngx_http_request_t *r)
 	child_params.extra_args = conf->upstream_extra_args;
 	child_params.host_name = conf->upstream_host_header;
 
-	rc = child_request_start(
+	rc = ngx_child_request_start(
 		r, 
 		&ctx->child_request_buffers,
-		path_request_finished, 
+		ngx_http_vod_path_request_finished, 
 		r, 
 		&conf->upstream,
 		&conf->child_request_location,
@@ -1266,7 +1266,7 @@ mapped_request_handler(ngx_http_request_t *r)
 	if (rc != NGX_AGAIN) 
 	{
 		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
-			"mapped_request_handler: child_request_start failed %i", rc);
+			"ngx_http_vod_mapped_request_handler: ngx_child_request_start failed %i", rc);
 		return rc;
 	}
 
@@ -1280,27 +1280,27 @@ mapped_request_handler(ngx_http_request_t *r)
 ////// Remote mode only
 
 static void
-async_http_read_complete(void* context, ngx_int_t rc, ngx_buf_t* response)
+ngx_http_vod_http_read_complete(void* context, ngx_int_t rc, ngx_buf_t* response)
 {
 	ngx_http_vod_ctx_t *ctx = (ngx_http_vod_ctx_t *)context;
 
 	if (rc != NGX_OK)
 	{
 		ngx_log_error(NGX_LOG_ERR, ctx->request_context.log, 0,
-			"async_http_read_complete: upstream request failed %i", rc);
+			"ngx_http_vod_http_read_complete: upstream request failed %i", rc);
 		ngx_http_finalize_request(ctx->r, rc);
 		return;
 	}
 
-	handle_read_completed(context, NGX_OK, response->last - response->pos);
+	ngx_http_vod_handle_read_completed(context, NGX_OK, response->last - response->pos);
 }
 
 static ngx_int_t
-async_http_read(ngx_http_request_t *r, u_char *buf, size_t size, off_t offset)
+ngx_http_vod_async_http_read(ngx_http_request_t *r, u_char *buf, size_t size, off_t offset)
 {
 	ngx_http_vod_loc_conf_t   *conf;
 	ngx_http_vod_ctx_t *ctx;
-	child_request_params_t child_params;
+	ngx_child_request_params_t child_params;
 
 	ctx = ngx_http_get_module_ctx(r, ngx_http_vod_module);
 
@@ -1314,10 +1314,10 @@ async_http_read(ngx_http_request_t *r, u_char *buf, size_t size, off_t offset)
 	child_params.range_start = offset;
 	child_params.range_end = offset + size;
 
-	return child_request_start(
+	return ngx_child_request_start(
 		r, 
 		&ctx->child_request_buffers,
-		async_http_read_complete, 
+		ngx_http_vod_http_read_complete, 
 		ctx,
 		&conf->upstream,
 		&conf->child_request_location,
@@ -1327,10 +1327,10 @@ async_http_read(ngx_http_request_t *r, u_char *buf, size_t size, off_t offset)
 }
 
 ngx_int_t 
-dump_http_request(ngx_http_request_t *r)
+ngx_http_vod_dump_http_request(ngx_http_request_t *r)
 {
 	ngx_http_vod_loc_conf_t *conf;
-	child_request_params_t child_params;
+	ngx_child_request_params_t child_params;
 
 	conf = ngx_http_get_module_loc_conf(r, ngx_http_vod_module);
 
@@ -1342,35 +1342,35 @@ dump_http_request(ngx_http_request_t *r)
 	child_params.proxy_range = 1;
 	child_params.proxy_accept_encoding = 1;
 
-	return dump_request(
+	return ngx_dump_request(
 		r,
 		&conf->upstream,
 		&child_params);
 }
 
 ngx_int_t
-remote_request_handler(ngx_http_request_t *r)
+ngx_http_vod_remote_request_handler(ngx_http_request_t *r)
 {
 	ngx_http_vod_ctx_t *ctx;
 	ngx_int_t rc;
 
 	ctx = ngx_http_get_module_ctx(r, ngx_http_vod_module);
 
-	ctx->async_reader = (async_read_func_t)async_http_read;
-	ctx->dump_request = (dump_request_t)dump_http_request;
+	ctx->async_reader = (ngx_http_vod_async_read_func_t)ngx_http_vod_async_http_read;
+	ctx->ngx_dump_request = (ngx_http_vod_dump_request_t)ngx_http_vod_dump_http_request;
 	ctx->async_reader_context = r;
 
 	ctx->alignment = sizeof(int64_t);		// don't care about alignment when working remote
 
-	init_file_key(r, (r->headers_in.host != NULL ? &r->headers_in.host->value : NULL), &r->uri);
+	ngx_http_vod_init_file_key(r, (r->headers_in.host != NULL ? &r->headers_in.host->value : NULL), &r->uri);
 
-	rc = start_processing_mp4_file(r);
+	rc = ngx_http_vod_start_processing_mp4_file(r);
 	if (rc != NGX_AGAIN)
 	{
 		if (rc != NGX_OK)
 		{
 			ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
-				"remote_request_handler: start_processing_mp4_file failed %i", rc);
+				"ngx_http_vod_remote_request_handler: ngx_http_vod_start_processing_mp4_file failed %i", rc);
 		}
 		return rc;
 	}
@@ -1389,7 +1389,7 @@ ngx_http_vod_handler(ngx_http_request_t *r)
 {
 	ngx_int_t                       rc;
 	ngx_http_vod_ctx_t        *ctx;
-	request_params_t request_params;
+	ngx_http_vod_request_params_t request_params;
 	ngx_http_vod_loc_conf_t   *conf;
 	ngx_str_t original_uri;
 

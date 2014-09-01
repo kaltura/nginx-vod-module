@@ -8,7 +8,7 @@
 #include <nginx.h>
 
 // typedefs
-typedef void (*async_read_callback_t)(void* context, ngx_int_t rc, ssize_t bytes_read);
+typedef void (*ngx_async_read_callback_t)(void* context, ngx_int_t rc, ssize_t bytes_read);
 
 typedef struct {
 	ngx_http_request_t *r;
@@ -18,24 +18,24 @@ typedef struct {
 	off_t file_size;
 #if (NGX_HAVE_FILE_AIO)
 	ngx_flag_t use_aio;
-	async_read_callback_t callback;
+	ngx_async_read_callback_t callback;
 	void* callback_context;
 #endif
-} file_reader_state_t;
+} ngx_file_reader_state_t;
 
 // functions
-ngx_int_t file_reader_init(
-	file_reader_state_t* state,
-	async_read_callback_t callback,
+ngx_int_t ngx_file_reader_init(
+	ngx_file_reader_state_t* state,
+	ngx_async_read_callback_t callback,
 	void* callback_context,
 	ngx_http_request_t *r,
 	ngx_http_core_loc_conf_t  *clcf,
 	ngx_str_t* path);
 
-ngx_int_t file_reader_dump_file(file_reader_state_t* state);
+ngx_int_t ngx_file_reader_dump_file(ngx_file_reader_state_t* state);
 
-ssize_t async_file_read(file_reader_state_t* state, u_char *buf, size_t size, off_t offset);
+ssize_t ngx_async_file_read(ngx_file_reader_state_t* state, u_char *buf, size_t size, off_t offset);
 
-ngx_int_t file_reader_enable_directio(file_reader_state_t* state);
+ngx_int_t ngx_file_reader_enable_directio(ngx_file_reader_state_t* state);
 
 #endif // _NGX_FILE_READER_H_INCLUDED_

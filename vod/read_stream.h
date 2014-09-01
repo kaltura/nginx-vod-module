@@ -25,7 +25,7 @@ typedef struct {
 
 // functions
 static vod_inline u_char 
-stream_get8(simple_read_stream_t* stream)
+read_stream_get_byte(simple_read_stream_t* stream)
 {
 	if (stream->cur_pos >= stream->end_pos)
 	{
@@ -36,7 +36,7 @@ stream_get8(simple_read_stream_t* stream)
 }
 
 static vod_inline void 
-stream_skip(simple_read_stream_t* stream, int bytes)
+read_stream_skip(simple_read_stream_t* stream, int bytes)
 {
 	if (stream->cur_pos + bytes > stream->end_pos)
 	{

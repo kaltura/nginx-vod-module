@@ -438,6 +438,18 @@ class BasicTestSuite(TestSuite):
         clippedResponse = urllib2.urlopen(self.getUrl('/clipFrom/10000' + HLS_IFRAMES_FILE)).read()
         assert(len(clippedResponse) < len(fullResponse))
 
+    def testRequiredTracksOptional(self):
+        for curRequest, contentType in HLS_REQUESTS:
+            # no tracks specification
+            url = self.getUrl(curRequest).replace('-a1-v1', '')
+            noTracksResponse = urllib2.urlopen(url).read()
+
+            # with tracks specification
+            url = '-a1-v1.'.join(url.rsplit('.', 1))    # replace only the last dot
+            withTracksResponse = urllib2.urlopen(url).read()
+
+            assert(noTracksResponse == withTracksResponse)
+
     # bad requests    
     def testPostRequest(self):
         assertRequestFails(self.getUrl('/seg-1-a1-v1.ts'), 405, postData='abcd')
@@ -494,7 +506,7 @@ class BasicNonLocalTestSuite(TestSuite):
         refBody = urllib2.urlopen(self.getUrl(HLS_PLAYLIST_FILE)).read()
         assert(testBody == refBody)
 
-    def testBadClipFrom(self):        # the error should be ignored
+    def testBadClipFrom(self):      # the error should be ignored
         testBody = urllib2.urlopen(self.getUrl('/clipFrom/abcd' + HLS_PLAYLIST_FILE)).read()
         refBody = urllib2.urlopen(self.getUrl(HLS_PLAYLIST_FILE)).read()
         assert(testBody == refBody)
