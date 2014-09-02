@@ -772,6 +772,17 @@ ngx_http_vod_run_state_machine(ngx_http_vod_ctx_t *ctx)
 }
 
 static void
+ngx_http_vod_finalize_request(ngx_http_request_t *r, ngx_int_t rc)
+{
+	if (r->header_sent && rc != NGX_OK)
+	{
+		rc = NGX_ERROR;
+	}
+
+	ngx_http_finalize_request(r, rc);
+}
+
+static void
 ngx_http_vod_handle_read_completed(void* context, ngx_int_t rc, ssize_t bytes_read)
 {
 	ngx_http_vod_ctx_t *ctx = (ngx_http_vod_ctx_t *)context;
@@ -816,7 +827,7 @@ ngx_http_vod_handle_read_completed(void* context, ngx_int_t rc, ssize_t bytes_re
 
 finalize_request:
 
-	ngx_http_finalize_request(ctx->r, rc);
+	ngx_http_vod_finalize_request(ctx->r, rc);
 }
 
 static ngx_int_t 
@@ -1166,7 +1177,7 @@ ngx_http_vod_path_request_finished(void* context, ngx_int_t rc, ngx_buf_t* respo
 
 finalize_request:
 
-	ngx_http_finalize_request(r, rc);
+	ngx_http_vod_finalize_request(r, rc);
 	return;
 }
 
@@ -1288,7 +1299,7 @@ ngx_http_vod_http_read_complete(void* context, ngx_int_t rc, ngx_buf_t* response
 	{
 		ngx_log_error(NGX_LOG_ERR, ctx->request_context.log, 0,
 			"ngx_http_vod_http_read_complete: upstream request failed %i", rc);
-		ngx_http_finalize_request(ctx->r, rc);
+		ngx_http_vod_finalize_request(ctx->r, rc);
 		return;
 	}
 
