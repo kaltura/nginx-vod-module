@@ -29,14 +29,17 @@ for curLine in sys.stdin:
     curLine = curLine.strip()
     if len(curLine) == 0:
         break
-    refId, uri, message = curLine.split(' ', 2)
+    refId, uri, expectedStatusCode, message = curLine.split(' ', 3)
     if refId == 'TRUNCATED_MDAT':
         continue        # hangs
     print 'testing %s %s' % (refId, uri)
     logTracker = LogTracker()
     try:
-        urllib2.urlopen(BASE_URL + uri).read()
+        f = urllib2.urlopen(BASE_URL + uri)
+        statusCode = f.getcode()
+        f.read()
     except urllib2.HTTPError, e:
-        pass
+        statusCode = e.getcode()
     if message != 'None':
         logTracker.assertContains(message)
+    assert(expectedStatusCode == str(statusCode))

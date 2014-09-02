@@ -178,70 +178,70 @@ def getTimeScaleOffset():
 
 # test definitions
 TEST_CASES = [
-    ('VIDEO_ONLY', lambda: convertWithFfmpeg('-vcodec copy -an'), None, 'index.m3u8'),
-    ('AUDIO_ONLY', lambda: convertWithFfmpeg('-acodec copy -vn'), None, 'index.m3u8'),
-    ('NON_AAC_AUDIO', lambda: convertWithFfmpeg('-vcodec copy -codec:a libmp3lame'), 'unsupported format - media type 2', 'index.m3u8'),
-    ('NON_H264_VIDEO', lambda: convertWithFfmpeg('-acodec copy -c:v mpeg4'), 'unsupported format - media type 1', 'index.m3u8'),
-    ('CANT_FIND_MOOV', lambda: applyPatch(getAtomPos('moov') + 4, 'blah'), 'failed to find moov atom start', 'index.m3u8'),
-    ('MOOV_TOO_BIG', lambda: applyPatch(getAtomPos('moov'), struct.pack('>L', 500000000)), 'moov size 499999992 exceeds the max', 'index.m3u8'),
-    ('TRUNCATED_MOOV', lambda: truncateFile(getAtomEndPos('moov') - 100), 'is smaller than moov end offset', 'index.m3u8'),
-    ('TRUNCATED_MDAT', lambda: truncateFile(getAtomPos('mdat') + 1000), 'no data was handled, probably a truncated file', 'seg-1.ts'),
-    ('NO_EXTRA_DATA', lambda: StringReader(inputData.replace('esds', 'blah').replace('avcC', 'blah')), 'no extra data was parsed for track', 'seg-1.ts'),
+    ('VIDEO_ONLY', lambda: convertWithFfmpeg('-vcodec copy -an'), None, 'index.m3u8', 200),
+    ('AUDIO_ONLY', lambda: convertWithFfmpeg('-acodec copy -vn'), None, 'index.m3u8', 200),
+    ('NON_AAC_AUDIO', lambda: convertWithFfmpeg('-vcodec copy -codec:a libmp3lame'), 'unsupported format - media type 2', 'index.m3u8', 200),
+    ('NON_H264_VIDEO', lambda: convertWithFfmpeg('-acodec copy -c:v mpeg4'), 'unsupported format - media type 1', 'index.m3u8', 200),
+    ('CANT_FIND_MOOV', lambda: applyPatch(getAtomPos('moov') + 4, 'blah'), 'failed to find moov atom start', 'index.m3u8', 404),
+    ('MOOV_TOO_BIG', lambda: applyPatch(getAtomPos('moov'), struct.pack('>L', 500000000)), 'moov size 499999992 exceeds the max', 'index.m3u8', 404),
+    ('TRUNCATED_MOOV', lambda: truncateFile(getAtomEndPos('moov') - 100), 'is smaller than moov end offset', 'index.m3u8', 404),
+    ('TRUNCATED_MDAT', lambda: truncateFile(getAtomPos('mdat') + 1000), 'no data was handled, probably a truncated file', 'seg-1.ts', 404),
+    ('NO_EXTRA_DATA', lambda: StringReader(inputData.replace('esds', 'blah').replace('avcC', 'blah')), 'no extra data was parsed for track', 'seg-1.ts', 404),
     # atom parsing
-    ('MISSING_64BIT_ATOM_SIZE', lambda: StringReader(struct.pack('>L', 1) + 'moov' + ('\0' * 7)), 'atom size is 1 but there is not enough room for the 64 bit size', 'index.m3u8'),
-    ('ATOM_SIZE_LESS_THAN_HEADER', lambda: StringReader(struct.pack('>L', 7) + 'moov'), 'atom size 7 is less than the atom header size', 'index.m3u8'),
-    ('ATOM_SIZE_OVERFLOW', lambda: StringReader(struct.pack('>L', 100) + 'ftyp'), 'atom size 92 overflows the input stream size', 'index.m3u8'),
+    ('MISSING_64BIT_ATOM_SIZE', lambda: StringReader(struct.pack('>L', 1) + 'moov' + ('\0' * 7)), 'atom size is 1 but there is not enough room for the 64 bit size', 'index.m3u8', 404),
+    ('ATOM_SIZE_LESS_THAN_HEADER', lambda: StringReader(struct.pack('>L', 7) + 'moov'), 'atom size 7 is less than the atom header size', 'index.m3u8', 404),
+    ('ATOM_SIZE_OVERFLOW', lambda: StringReader(struct.pack('>L', 100) + 'ftyp'), 'atom size 92 overflows the input stream size', 'index.m3u8', 404),
     # hdlr
-    ('HDLR_TOO_SMALL', lambda: truncateAtom('moov.trak.mdia.hdlr', 4), 'mp4_parser_parse_hdlr_atom: atom size 4 too small', 'index.m3u8'),
-    ('BAD_MEDIA_TYPE', lambda: applyPatch(getAtomDataPos('moov.trak.mdia.hdlr') + 8, 'blah'), 'unsupported format - media type 0', 'index.m3u8'),
+    ('HDLR_TOO_SMALL', lambda: truncateAtom('moov.trak.mdia.hdlr', 4), 'mp4_parser_parse_hdlr_atom: atom size 4 too small', 'index.m3u8', 404),
+    ('BAD_MEDIA_TYPE', lambda: applyPatch(getAtomDataPos('moov.trak.mdia.hdlr') + 8, 'blah'), 'unsupported format - media type 0', 'index.m3u8', 200),
     # mdhd
-    ('MDHD_TOO_SMALL', lambda: truncateAtom('moov.trak.mdia.mdhd', 4), 'mp4_parser_parse_mdhd_atom: atom size 4 too small', 'index.m3u8'),
-    ('ZERO_TIMESCALE', lambda: applyPatch(getTimeScaleOffset(), struct.pack('>L', 0)), 'time scale is zero', 'index.m3u8'),
+    ('MDHD_TOO_SMALL', lambda: truncateAtom('moov.trak.mdia.mdhd', 4), 'mp4_parser_parse_mdhd_atom: atom size 4 too small', 'index.m3u8', 404),
+    ('ZERO_TIMESCALE', lambda: applyPatch(getTimeScaleOffset(), struct.pack('>L', 0)), 'time scale is zero', 'index.m3u8', 404),
     # stts
-    ('STTS_TOO_SMALL', lambda: truncateAtom('moov.trak.mdia.minf.stbl.stts', 4), 'mp4_parser_parse_stts_atom: atom size 4 too small', 'seg-1.ts'),
-    ('STTS_ENTRIES_TOO_BIG', lambda: applyPatch(getAtomDataPos('moov.trak.mdia.minf.stbl.stts') + 4, struct.pack('>L', 1000000000)), 'mp4_parser_parse_stts_atom: number of entries 1000000000 too big', 'seg-1.ts'),
-    ('STTS_CANT_HOLD', lambda: applyPatch(getAtomDataPos('moov.trak.mdia.minf.stbl.stts') + 4, struct.pack('>L', 100000000)), 'too small to hold 100000000 entries', 'seg-1.ts'),
-    ('STTS_START_OFFSET_TOO_BIG', lambda: applyPatch(getTimeScaleOffset(), struct.pack('>L', 1000000000)), 'start offset 10000 too big', 'seg-2.ts'),
-    ('STTS_DURATION_ZERO', lambda: applyPatch(getAtomDataPos('moov.trak.mdia.minf.stbl.stts') + 12, struct.pack('>L', 0)), 'mp4_parser_parse_stts_atom: sample duration is zero', 'seg-1.ts'),
+    ('STTS_TOO_SMALL', lambda: truncateAtom('moov.trak.mdia.minf.stbl.stts', 4), 'mp4_parser_parse_stts_atom: atom size 4 too small', 'seg-1.ts', 404),
+    ('STTS_ENTRIES_TOO_BIG', lambda: applyPatch(getAtomDataPos('moov.trak.mdia.minf.stbl.stts') + 4, struct.pack('>L', 1000000000)), 'mp4_parser_parse_stts_atom: number of entries 1000000000 too big', 'seg-1.ts', 404),
+    ('STTS_CANT_HOLD', lambda: applyPatch(getAtomDataPos('moov.trak.mdia.minf.stbl.stts') + 4, struct.pack('>L', 100000000)), 'too small to hold 100000000 entries', 'seg-1.ts', 404),
+    ('STTS_START_OFFSET_TOO_BIG', lambda: applyPatch(getTimeScaleOffset(), struct.pack('>L', 1000000000)), 'start offset 10000 too big', 'seg-2.ts', 404),
+    ('STTS_DURATION_ZERO', lambda: applyPatch(getAtomDataPos('moov.trak.mdia.minf.stbl.stts') + 12, struct.pack('>L', 0)), 'mp4_parser_parse_stts_atom: sample duration is zero', 'seg-1.ts', 404),
     ('STTS_INITIAL_ALLOC_BIG', lambda: applyPatch(
-        getAtomDataPos('moov.trak.mdia.minf.stbl.stts') + 4, struct.pack('>LLL', 1, 100, 1),
-        getTimeScaleOffset(), struct.pack('>L', 100000)), 'initial alloc size 1000001 exceeds the max frame count', 'seg-1.ts'),
+        getAtomDataPos('moov.trak.mdia.minf.stbl.stts') + 4, struct.pack('>LLL', 1, 100, 1, 404),
+        getTimeScaleOffset(), struct.pack('>L', 100000)), 'initial alloc size 1000001 exceeds the max frame count', 'seg-1.ts', 404),
     # stco
-    ('STCO_TOO_SMALL', lambda: truncateAtom('moov.trak.mdia.minf.stbl.stco', 4), 'mp4_parser_parse_stco_atom: atom size 4 too small', 'seg-1.ts'),
-    ('STCO_ENTRIES_TOO_BIG', lambda: applyPatch(getAtomDataPos('moov.trak.mdia.minf.stbl.stco') + 4, struct.pack('>L', 1000000000)), 'mp4_parser_parse_stco_atom: number of entries 1000000000 too big', 'seg-1.ts'),
-    ('STCO_CANT_HOLD', lambda: applyPatch(getAtomDataPos('moov.trak.mdia.minf.stbl.stco') + 4, struct.pack('>L', 100000000)), 'too small to hold 100000000 entries', 'seg-1.ts'),
-    ('STCO_TOO_FEW_ENTRIES', lambda: applyPatch(getAtomDataPos('moov.trak.mdia.minf.stbl.stco') + 4, struct.pack('>L', 0)), 'number of entries 0 smaller than last', 'seg-1.ts'),
+    ('STCO_TOO_SMALL', lambda: truncateAtom('moov.trak.mdia.minf.stbl.stco', 4), 'mp4_parser_parse_stco_atom: atom size 4 too small', 'seg-1.ts', 404),
+    ('STCO_ENTRIES_TOO_BIG', lambda: applyPatch(getAtomDataPos('moov.trak.mdia.minf.stbl.stco') + 4, struct.pack('>L', 1000000000)), 'mp4_parser_parse_stco_atom: number of entries 1000000000 too big', 'seg-1.ts', 404),
+    ('STCO_CANT_HOLD', lambda: applyPatch(getAtomDataPos('moov.trak.mdia.minf.stbl.stco') + 4, struct.pack('>L', 100000000)), 'too small to hold 100000000 entries', 'seg-1.ts', 404),
+    ('STCO_TOO_FEW_ENTRIES', lambda: applyPatch(getAtomDataPos('moov.trak.mdia.minf.stbl.stco') + 4, struct.pack('>L', 0)), 'number of entries 0 smaller than last', 'seg-1.ts', 404),
     # stsc
-    ('STSC_TOO_SMALL', lambda: truncateAtom('moov.trak.mdia.minf.stbl.stsc', 4), 'mp4_parser_parse_stsc_atom: atom size 4 too small', 'seg-1.ts'),
-    ('STSC_ENTRIES_TOO_BIG', lambda: applyPatch(getAtomDataPos('moov.trak.mdia.minf.stbl.stsc') + 4, struct.pack('>L', 1000000000)), 'mp4_parser_parse_stsc_atom: number of entries 1000000000 too big', 'seg-1.ts'),
-    ('STSC_CANT_HOLD', lambda: applyPatch(getAtomDataPos('moov.trak.mdia.minf.stbl.stsc') + 4, struct.pack('>L', 100000000)), 'too small to hold 100000000 entries', 'seg-1.ts'),
-    ('STSC_ZERO_CHUNK_INDEX', lambda: applyPatch(getAtomDataPos('moov.trak.mdia.minf.stbl.stsc') + 8, struct.pack('>L', 0)), 'chunk index is zero', 'seg-1.ts'),
-    ('STSC_INVALID_SPC', lambda: applyPatch(getAtomDataPos('moov.trak.mdia.minf.stbl.stsc') + 4, struct.pack('>LLL', 1, 1, 0)), 'samples per chunk is zero', 'seg-1.ts'),
+    ('STSC_TOO_SMALL', lambda: truncateAtom('moov.trak.mdia.minf.stbl.stsc', 4), 'mp4_parser_parse_stsc_atom: atom size 4 too small', 'seg-1.ts', 404),
+    ('STSC_ENTRIES_TOO_BIG', lambda: applyPatch(getAtomDataPos('moov.trak.mdia.minf.stbl.stsc') + 4, struct.pack('>L', 1000000000)), 'mp4_parser_parse_stsc_atom: number of entries 1000000000 too big', 'seg-1.ts', 404),
+    ('STSC_CANT_HOLD', lambda: applyPatch(getAtomDataPos('moov.trak.mdia.minf.stbl.stsc') + 4, struct.pack('>L', 100000000)), 'too small to hold 100000000 entries', 'seg-1.ts', 404),
+    ('STSC_ZERO_CHUNK_INDEX', lambda: applyPatch(getAtomDataPos('moov.trak.mdia.minf.stbl.stsc') + 8, struct.pack('>L', 0)), 'chunk index is zero', 'seg-1.ts', 404),
+    ('STSC_INVALID_SPC', lambda: applyPatch(getAtomDataPos('moov.trak.mdia.minf.stbl.stsc') + 4, struct.pack('>LLL', 1, 1, 0)), 'samples per chunk is zero', 'seg-1.ts', 404),
     # stsz
-    ('STSZ_TOO_SMALL', lambda: truncateAtom('moov.trak.mdia.minf.stbl.stsz', 4), 'mp4_parser_parse_stsz_atom: atom size 4 too small', 'seg-1.ts'),
-    ('STSZ_UNIFORM_SIZE_BIG', lambda: applyPatch(getAtomDataPos('moov.trak.mdia.minf.stbl.stsz') + 4, struct.pack('>L', 100000000)), 'uniform size 100000000 is too big', 'seg-1.ts'),
-    ('STSZ_ENTRIES_TOO_SMALL', lambda: applyPatch(getAtomDataPos('moov.trak.mdia.minf.stbl.stsz') + 8, struct.pack('>L', 1)), 'number of entries 1 smaller than last frame', 'seg-1.ts'),
-    ('STSZ_ENTRIES_TOO_BIG', lambda: applyPatch(getAtomDataPos('moov.trak.mdia.minf.stbl.stsz') + 8, struct.pack('>L', 1000000000)), 'mp4_parser_parse_stsz_atom: number of entries 1000000000 too big', 'seg-1.ts'),
-    ('STSZ_CANT_HOLD', lambda: applyPatch(getAtomDataPos('moov.trak.mdia.minf.stbl.stsz') + 8, struct.pack('>L', 50000000)), 'too small to hold 50000000 entries', 'seg-1.ts'),
-    ('STSZ_FRAME_TOO_BIG', lambda: applyPatch(getAtomDataPos('moov.trak.mdia.minf.stbl.stsz') + 12, struct.pack('>L', 100000000)), 'frame size 100000000 too big', 'seg-1.ts'),
+    ('STSZ_TOO_SMALL', lambda: truncateAtom('moov.trak.mdia.minf.stbl.stsz', 4), 'mp4_parser_parse_stsz_atom: atom size 4 too small', 'seg-1.ts', 404),
+    ('STSZ_UNIFORM_SIZE_BIG', lambda: applyPatch(getAtomDataPos('moov.trak.mdia.minf.stbl.stsz') + 4, struct.pack('>L', 100000000)), 'uniform size 100000000 is too big', 'seg-1.ts', 404),
+    ('STSZ_ENTRIES_TOO_SMALL', lambda: applyPatch(getAtomDataPos('moov.trak.mdia.minf.stbl.stsz') + 8, struct.pack('>L', 1)), 'number of entries 1 smaller than last frame', 'seg-1.ts', 404),
+    ('STSZ_ENTRIES_TOO_BIG', lambda: applyPatch(getAtomDataPos('moov.trak.mdia.minf.stbl.stsz') + 8, struct.pack('>L', 1000000000)), 'mp4_parser_parse_stsz_atom: number of entries 1000000000 too big', 'seg-1.ts', 404),
+    ('STSZ_CANT_HOLD', lambda: applyPatch(getAtomDataPos('moov.trak.mdia.minf.stbl.stsz') + 8, struct.pack('>L', 50000000)), 'too small to hold 50000000 entries', 'seg-1.ts', 404),
+    ('STSZ_FRAME_TOO_BIG', lambda: applyPatch(getAtomDataPos('moov.trak.mdia.minf.stbl.stsz') + 12, struct.pack('>L', 100000000)), 'frame size 100000000 too big', 'seg-1.ts', 404),
     # stss
-    ('STSS_TOO_SMALL', lambda: truncateAtom('moov.trak.mdia.minf.stbl.stss', 4), 'mp4_parser_parse_stss_atom: atom size 4 too small', 'seg-1.ts'),
-    ('STSS_ENTRIES_TOO_BIG', lambda: applyPatch(getAtomDataPos('moov.trak.mdia.minf.stbl.stss') + 4, struct.pack('>L', 1000000000)), 'mp4_parser_parse_stss_atom: number of entries 1000000000 too big', 'seg-1.ts'),
-    ('STSS_CANT_HOLD', lambda: applyPatch(getAtomDataPos('moov.trak.mdia.minf.stbl.stss') + 4, struct.pack('>L', 100000000)), 'too small to hold 100000000 entries', 'seg-1.ts'),
+    ('STSS_TOO_SMALL', lambda: truncateAtom('moov.trak.mdia.minf.stbl.stss', 4), 'mp4_parser_parse_stss_atom: atom size 4 too small', 'seg-1.ts', 404),
+    ('STSS_ENTRIES_TOO_BIG', lambda: applyPatch(getAtomDataPos('moov.trak.mdia.minf.stbl.stss') + 4, struct.pack('>L', 1000000000)), 'mp4_parser_parse_stss_atom: number of entries 1000000000 too big', 'seg-1.ts', 404),
+    ('STSS_CANT_HOLD', lambda: applyPatch(getAtomDataPos('moov.trak.mdia.minf.stbl.stss') + 4, struct.pack('>L', 100000000)), 'too small to hold 100000000 entries', 'seg-1.ts', 404),
     # stsd
-    ('STSD_TOO_SMALL', lambda: truncateAtom('moov.trak.mdia.minf.stbl.stsd', 4), 'mp4_parser_parse_stsd_atom: atom size 4 too small', 'seg-1.ts'),
-    ('STSD_NO_ROOM_FOR_ENTRY', lambda: truncateAtom('moov.trak.mdia.minf.stbl.stsd', 12), 'not enough room for stsd entry', 'seg-1.ts'),
+    ('STSD_TOO_SMALL', lambda: truncateAtom('moov.trak.mdia.minf.stbl.stsd', 4), 'mp4_parser_parse_stsd_atom: atom size 4 too small', 'seg-1.ts', 404),
+    ('STSD_NO_ROOM_FOR_ENTRY', lambda: truncateAtom('moov.trak.mdia.minf.stbl.stsd', 12), 'not enough room for stsd entry', 'seg-1.ts', 404),
 ]
 
 if atomExists('moov.trak.mdia.minf.stbl.ctts'):
     TEST_CASES += [
         # ctts
-        ('CTTS_TOO_SMALL', lambda: truncateAtom('moov.trak.mdia.minf.stbl.ctts', 4), 'mp4_parser_parse_ctts_atom: atom size 4 too small', 'seg-1.ts'),
-        ('CTTS_ENTRIES_TOO_BIG', lambda: applyPatch(getAtomDataPos('moov.trak.mdia.minf.stbl.ctts') + 4, struct.pack('>L', 1000000000)), 'mp4_parser_parse_ctts_atom: number of entries 1000000000 too big', 'seg-1.ts'),
-        ('CTTS_CANT_HOLD', lambda: applyPatch(getAtomDataPos('moov.trak.mdia.minf.stbl.ctts') + 4, struct.pack('>L', 100000000)), 'too small to hold 100000000 entries', 'seg-1.ts'),
+        ('CTTS_TOO_SMALL', lambda: truncateAtom('moov.trak.mdia.minf.stbl.ctts', 4), 'mp4_parser_parse_ctts_atom: atom size 4 too small', 'seg-1.ts', 404),
+        ('CTTS_ENTRIES_TOO_BIG', lambda: applyPatch(getAtomDataPos('moov.trak.mdia.minf.stbl.ctts') + 4, struct.pack('>L', 1000000000)), 'mp4_parser_parse_ctts_atom: number of entries 1000000000 too big', 'seg-1.ts', 404),
+        ('CTTS_CANT_HOLD', lambda: applyPatch(getAtomDataPos('moov.trak.mdia.minf.stbl.ctts') + 4, struct.pack('>L', 100000000)), 'too small to hold 100000000 entries', 'seg-1.ts', 404),
     ]
 
-def getTestEntry(refId, generator, message, fileName):
+def getTestEntry(refId, generator):
     refId = REFERENCE_ID_PREFIX + refId
     listResult = client.media.list(filter=KalturaMediaEntryFilter(referenceIdEqual=refId))
     if len(listResult.objects) > 0:
@@ -257,14 +257,14 @@ def getTestEntry(refId, generator, message, fileName):
 
 # upload missing test files
 entryMap = {}
-for refId, generator, message, fileName in TEST_CASES:
-    entryId = getTestEntry(refId, generator, message, fileName)
-    entryMap[entryId] = (message, refId, fileName)
+for refId, generator, message, fileName, statusCode in TEST_CASES:
+    entryId = getTestEntry(refId, generator)
+    entryMap[entryId] = (refId, fileName, message, statusCode)
 
 # print the test uris
 print 'result:'
 flavors = client.flavorAsset.list(filter=KalturaFlavorAssetFilter(flavorParamsIdEqual=0, entryIdIn=','.join(entryMap.keys())),
                                   pager=KalturaFilterPager(pageSize=500)).objects
 for flavor in flavors:
-    message, refId, fileName = entryMap[flavor.entryId]
-    print '%s /p/%s/sp/%s00/serveFlavor/entryId/%s/v/%s/flavorId/%s/%s %s' % (refId, PARTNER_ID, PARTNER_ID, flavor.entryId, flavor.version, flavor.id, fileName, message)
+    refId, fileName, message, statusCode = entryMap[flavor.entryId]
+    print '%s /p/%s/sp/%s00/serveFlavor/entryId/%s/v/%s/flavorId/%s/%s %s %s' % (refId, PARTNER_ID, PARTNER_ID, flavor.entryId, flavor.version, flavor.id, fileName, statusCode, message)

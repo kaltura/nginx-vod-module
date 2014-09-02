@@ -36,7 +36,8 @@ verifies using ffprobe that the byte ranges returned in an EXT-X-I-FRAMES-ONLY m
 ### setup_test_entries.py / verify_test_entries.py
 
 setup_test_entries.py - crafts different types of corrupted mp4 files and uploads them to a Kaltura account
-verify_test_entries.py - feeds the entries created by setup_test_entries.py to nginx-vod-module and validates the result
+verify_test_entries.py - feeds the entries created by setup_test_entries.py to nginx-vod-module and validates the result.
+	gets the output of setup_test_entries.py as input (contains the test uris and their expected results).
 
 ### test_converage.py
 
