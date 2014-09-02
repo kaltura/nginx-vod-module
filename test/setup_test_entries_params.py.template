@@ -1,0 +1,9 @@
+PARTNER_ID = 1234
+ADMIN_SECRET = "abcd"
+SERVICE_URL = "http://www.kaltura.com"
+USER_NAME = "admin"
+TEST_FLAVOR_URL = 'http://www.kaltura.com/p/99/sp/9900/serveFlavor/entryId/0_ci8ffv43/v/1/flavorId/0_o2yj6rxx'
+TEMP_DOWNLOAD_PATH = '/tmp/temp.mp4'
+TEMP_CONVERT_PATH = '/tmp/convert.mp4'
+FFMPEG_BIN = '/path/to/ffmpeg'
+QTFASTSTART_BIN = 'python -m qtfaststart'       # install https://github.com/danielgtaylor/qtfaststart

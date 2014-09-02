@@ -33,6 +33,17 @@ compares the nginx-vod hls implementation to some reference implementation
 
 verifies using ffprobe that the byte ranges returned in an EXT-X-I-FRAMES-ONLY m3u8 indeed represent iframes
 
+### setup_test_entries.py / verify_test_entries.py
+
+setup_test_entries.py - crafts different types of corrupted mp4 files and uploads them to a Kaltura account
+verify_test_entries.py - feeds the entries created by setup_test_entries.py to nginx-vod-module and validates the result.
+	gets the output of setup_test_entries.py as input (contains the test uris and their expected results).
+
+### test_converage.py
+
+prints a list of nginx-vod-module log lines that do not appear in the provided log file.
+can be executed after running main.py and verify_test_entries.py to get a sense of missing test cases.
+
 ### buffer_cache
 
 this folder contains a stress test for the buffer cache module. in order to execute the test, run:

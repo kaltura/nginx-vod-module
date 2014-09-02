@@ -58,7 +58,7 @@ buffer_filter_start_frame(void* context, output_frame_t* frame)
 		
 	default:
 		vod_log_error(VOD_LOG_ERR, state->request_context->log, 0,
-			"buffer_filter_start_frame: invalid state %i", state->cur_state);
+			"buffer_filter_start_frame: invalid state %d", state->cur_state);
 		return VOD_UNEXPECTED;
 	}
 
@@ -142,7 +142,7 @@ buffer_filter_write(void* context, const u_char* buffer, uint32_t size)
 		
 	default:
 		vod_log_error(VOD_LOG_ERR, state->request_context->log, 0,
-			"buffer_filter_write: invalid state %i", state->cur_state);
+			"buffer_filter_write: invalid state %d", state->cur_state);
 		return VOD_UNEXPECTED;		// unexpected
 	}
 	
