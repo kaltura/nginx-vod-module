@@ -1,6 +1,7 @@
 from Crypto.Cipher import AES
 from StringIO import StringIO
 from construct import *
+from httplib import BadStatusLine
 import stress_base
 import commands
 import urllib2
@@ -165,6 +166,10 @@ class TestThread(stress_base.TestThreadBase):
 		except urllib2.URLError, e:
 			self.writeOutput('Error: request failed %s %s' % (url, e))
 			return 0
+		except BadStatusLine, e:
+			self.writeOutput('Error: bad status line %s' % (url))
+			return 0
+			
 		result = r.getcode()
 		with file(fileName, 'wb') as w:
 			shutil.copyfileobj(r,w)

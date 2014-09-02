@@ -287,6 +287,8 @@ muxer_process(muxer_state_t* state, uint64_t* required_offset)
 	uint32_t write_size;
 	uint64_t offset;
 	vod_status_t rc;
+	bool_t first_time = (state->cur_frame == NULL);
+	bool_t wrote_data = FALSE;
 
 	for (;;)
 	{
@@ -329,9 +331,17 @@ muxer_process(muxer_state_t* state, uint64_t* required_offset)
 		offset = state->cur_frame_offset + state->cur_frame_pos;
 		if (!read_cache_get_from_cache(state->read_cache_state, state->cache_slot_id, offset, &read_buffer, &read_size))
 		{
+			if (!wrote_data && !first_time)
+			{
+				vod_log_error(VOD_LOG_ERR, state->request_context->log, 0,
+					"muxer_process: no data was handled, probably a truncated file");
+				return VOD_BAD_DATA;
+			}
 			*required_offset = offset;
 			return VOD_AGAIN;
 		}
+
+		wrote_data = TRUE;
 		
 		// write the frame
 		write_size = MIN(state->cur_frame->size - state->cur_frame_pos, read_size);
@@ -352,7 +362,6 @@ muxer_process(muxer_state_t* state, uint64_t* required_offset)
 			}
 			
 			state->cur_frame = NULL;
-			continue;
 		}
 	}
 }

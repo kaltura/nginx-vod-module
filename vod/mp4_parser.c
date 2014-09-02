@@ -281,6 +281,7 @@ typedef struct {
 	uint32_t first_chunk_frame_index;
 	bool_t chunk_equals_sample;
 	uint64_t first_frame_chunk_offset;
+	uint8_t object_type_id;
 } trak_info_t;
 
 // implementation
@@ -1350,7 +1351,8 @@ mp4_parser_read_config_descriptor(trak_info_t* trak_info, simple_read_stream_t* 
 	unsigned len;
 	int tag;
 
-	read_stream_skip(stream, sizeof(config_descr_t));
+	trak_info->object_type_id = read_stream_get_byte(stream);
+	read_stream_skip(stream, sizeof(config_descr_t) - sizeof(uint8_t));
 
 	len = mp4_parser_read_descriptor(stream, &tag);
 	if (tag == MP4DecSpecificDescrTag)
@@ -1669,12 +1671,26 @@ mp4_parser_process_moov_atom_callback(void* ctx, atom_info_t* atom_info)
 		break;
 
 	case MEDIA_TYPE_AUDIO:
-		format_supported = (trak_info.format == FORMAT_MP4A);
+		if (trak_info.format == FORMAT_MP4A)
+		{
+			switch (trak_info.object_type_id)
+			{
+			case 0x40:
+			case 0x66:
+			case 0x67:
+			case 0x68:
+				format_supported = TRUE;
+				break;
+			}
+		}
 		break;
 	}
 
 	if (!format_supported)
 	{
+		vod_log_debug3(VOD_LOG_DEBUG_LEVEL, context->request_context->log, 0, 
+			"mp4_parser_process_moov_atom_callback: unsupported format - media type %d format 0x%uxD object type id 0x%uxD", 
+			trak_info.media_type, trak_info.format, (uint32_t)trak_info.object_type_id);
 		vod_free(context->request_context->pool, trak_info.extra_data);
 		return VOD_OK;
 	}

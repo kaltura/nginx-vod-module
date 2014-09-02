@@ -161,6 +161,7 @@ ngx_buffer_cache_init(ngx_shm_zone_t *shm_zone, void *data)
 	// initialize fixed cache fields
 	cache->entries_start = (ngx_buffer_cache_entry_t*)p;
 	cache->buffers_end = shm_zone->shm.addr + shm_zone->shm.size;
+	cache->access_time = 0;
 
 	// reset the stats
 	ngx_memzero(&cache->stats, sizeof(cache->stats));
