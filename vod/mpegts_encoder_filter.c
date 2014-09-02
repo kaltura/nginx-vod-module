@@ -341,7 +341,7 @@ mpegts_encoder_add_stream(mpegts_encoder_init_streams_state_t* stream_state, int
 
 	default:
 		vod_log_error(VOD_LOG_ERR, stream_state->request_context->log, 0,
-			"mpegts_encoder_add_stream: invalid media type %i", media_type);
+			"mpegts_encoder_add_stream: invalid media type %d", media_type);
 		return VOD_UNEXPECTED;
 	}
 

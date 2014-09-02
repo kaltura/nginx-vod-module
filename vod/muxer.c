@@ -480,7 +480,7 @@ muxer_simulate_get_iframes(muxer_state_t* state, uint32_t segment_duration, get_
 		if (cur_frame_start != mpegts_encoder_simulated_get_offset(&state->mpegts_encoder_state))
 		{
 			vod_log_debug4(VOD_LOG_DEBUG_LEVEL, state->request_context->log, 0,
-				"muxer_simulate_get_iframes: wrote frame segment %i packets %uD-%uD pts %L",
+				"muxer_simulate_get_iframes: wrote frame segment %uD packets %uD-%uD pts %L",
 				segment_index,
 				cur_frame_start / MPEGTS_PACKET_SIZE + 1,
 				mpegts_encoder_simulated_get_offset(&state->mpegts_encoder_state) / MPEGTS_PACKET_SIZE + 1,
