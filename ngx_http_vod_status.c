@@ -1,6 +1,7 @@
 // includes
 #include "ngx_http_vod_status.h"
 #include "ngx_http_vod_module.h"
+#include "ngx_http_vod_utils.h"
 #include "ngx_http_vod_conf.h"
 #include "ngx_buffer_cache.h"
 
