@@ -1,3 +1,4 @@
+from httplib import BadStatusLine
 from threading import Thread
 from Crypto.Cipher import AES
 import urlparse
@@ -793,7 +794,10 @@ class RemoteTestSuite(ModeTestSuite):
         urllib2.urlopen(url).read()
 
         cleanupStack.resetAndDestroy()  # terminate the server
-        urllib2.urlopen(url).read()
+        try:
+            urllib2.urlopen(url).read()
+        except BadStatusLine:
+            pass        # the error may be handled before the headers buffer is flushed
         self.logTracker.assertContains('upstream request failed')
 
     def testZeroBytesRead(self):
