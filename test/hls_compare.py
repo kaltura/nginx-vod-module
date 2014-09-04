@@ -3,6 +3,7 @@ from StringIO import StringIO
 from construct import *
 from httplib import BadStatusLine
 import stress_base
+import urlparse
 import commands
 import urllib2
 import shutil
@@ -349,8 +350,8 @@ class TestThread(stress_base.TestThreadBase):
 		for curIndex in xrange(max(minCount - MAX_TS_SEGMENTS_TO_COMPARE, 0), minCount, 1):
 			if os.path.exists(STOP_FILE):
 				return True
-			tsUrl1 = '%s/%s' % (url1, tsUris1[curIndex][0])
-			tsUrl2 = '%s/%s' % (url2, tsUris2[curIndex][0])
+			tsUrl1 = urlparse.urljoin(url1 + '/', tsUris1[curIndex][0])
+			tsUrl2 = urlparse.urljoin(url2 + '/', tsUris2[curIndex][0])
 			if not self.compareTsUris(tsUrl1, tsUrl2, curIndex + 1, aesKey, continuityCounters):
 				self.writeOutput('Error: ts comparison failed - url1=%s, url2=%s' % (tsUrl1, tsUrl2))
 				result = False
