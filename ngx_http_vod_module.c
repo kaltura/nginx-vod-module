@@ -18,6 +18,9 @@
 #include "vod/read_cache.h"
 #include "vod/muxer.h"
 
+// constants
+#define MAX_MOOV_START_READS (3)
+
 // enums
 enum {
 	STATE_INITIAL_READ,
@@ -43,8 +46,12 @@ typedef struct {
 	ngx_http_vod_dump_request_t ngx_dump_request;
 	void* async_reader_context;
 	ngx_child_request_buffers_t child_request_buffers;
+
 	u_char* read_buffer;
 	size_t buffer_size;
+	off_t read_offset;
+	off_t atom_start_offset;
+	int moov_start_reads;
 
 	// input params
 	ngx_http_request_t *r;
@@ -157,15 +164,70 @@ ngx_http_vod_read_moov_atom(ngx_http_vod_ctx_t *ctx)
 	ngx_http_vod_loc_conf_t   *conf;
 	u_char* new_read_buffer = NULL;
 	size_t new_buffer_size;
+	off_t absolute_moov_offset;
 	vod_status_t rc;
 
-	// get moov atom offset and size
-	rc = mp4_parser_get_moov_atom_info(&ctx->request_context, ctx->read_buffer, ctx->buffer_size, &ctx->moov_offset, &ctx->moov_size);
-	if (rc != VOD_OK)
+	conf = ngx_http_get_module_loc_conf(ctx->r, ngx_http_vod_module);
+
+	for (;;)
 	{
-		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, ctx->request_context.log, 0,
-			"ngx_http_vod_read_moov_atom: mp4_parser_get_moov_atom_info failed %i", rc);
-		return ngx_http_vod_status_to_ngx_error(rc);
+		if (ctx->buffer_size <= ctx->atom_start_offset)
+		{
+			ngx_log_error(NGX_LOG_ERR, ctx->request_context.log, 0,
+				"ngx_http_vod_read_moov_atom: read buffer size %uz is smaller than the atom start offset %O", ctx->buffer_size, ctx->atom_start_offset);
+			return ngx_http_vod_status_to_ngx_error(VOD_BAD_DATA);
+		}
+
+		// get moov atom offset and size
+		rc = mp4_parser_get_moov_atom_info(&ctx->request_context, ctx->read_buffer + ctx->atom_start_offset, ctx->buffer_size - ctx->atom_start_offset, &ctx->moov_offset, &ctx->moov_size);
+		if (rc != VOD_OK)
+		{
+			ngx_log_debug1(NGX_LOG_DEBUG_HTTP, ctx->request_context.log, 0,
+				"ngx_http_vod_read_moov_atom: mp4_parser_get_moov_atom_info failed %i", rc);
+			return ngx_http_vod_status_to_ngx_error(rc);
+		}
+
+		// moov offset is the atom start offset relative to the read buffer
+		ctx->moov_offset += ctx->atom_start_offset;
+
+		// check whether we found the moov atom start
+		if (ctx->moov_size > 0)
+		{
+			break;
+		}
+
+		if (ctx->moov_offset < ctx->buffer_size)
+		{
+			ngx_log_error(NGX_LOG_ERR, ctx->request_context.log, 0,
+				"ngx_http_vod_read_moov_atom: moov start offset %O is smaller than the buffer size %uz", ctx->moov_offset, ctx->buffer_size);
+			return ngx_http_vod_status_to_ngx_error(VOD_UNEXPECTED);
+		}
+
+		if (ctx->moov_start_reads <= 0)
+		{
+			ngx_log_error(NGX_LOG_ERR, ctx->request_context.log, 0,
+				"ngx_http_vod_read_moov_atom: exhausted all moov read attempts");
+			return ngx_http_vod_status_to_ngx_error(VOD_BAD_DATA);
+		}
+
+		ctx->moov_start_reads--;
+
+		// perform another read attempt
+		absolute_moov_offset = ctx->read_offset + ctx->moov_offset;
+		ctx->read_offset = absolute_moov_offset & (~(ctx->alignment - 1));
+		ctx->atom_start_offset = absolute_moov_offset - ctx->read_offset;
+		rc = ctx->async_reader(ctx->async_reader_context, ctx->read_buffer, conf->initial_read_size, ctx->read_offset);
+		if (rc < 0)		// inc. NGX_AGAIN
+		{
+			if (rc != NGX_AGAIN)
+			{
+				ngx_log_debug1(NGX_LOG_DEBUG_HTTP, ctx->request_context.log, 0,
+					"ngx_http_vod_read_moov_atom: async_reader failed %i", rc);
+			}
+			return rc;
+		}
+
+		ctx->buffer_size = rc;
 	}
 
 	// check whether we already have the whole atom
@@ -177,7 +239,6 @@ ngx_http_vod_read_moov_atom(ngx_http_vod_ctx_t *ctx)
 	}
 
 	// validate the moov size
-	conf = ngx_http_get_module_loc_conf(ctx->r, ngx_http_vod_module);
 	if (ctx->moov_size > conf->max_moov_size)
 	{
 		ngx_log_error(NGX_LOG_ERR, ctx->request_context.log, 0,
@@ -204,7 +265,7 @@ ngx_http_vod_read_moov_atom(ngx_http_vod_ctx_t *ctx)
 	// read the rest of the atom
 	ctx->request_context.log->action = "reading moov atom";
 	ctx->state = STATE_MOOV_ATOM_READ;
-	rc = ctx->async_reader(ctx->async_reader_context, ctx->read_buffer + ctx->buffer_size, new_buffer_size - ctx->buffer_size, ctx->buffer_size);
+	rc = ctx->async_reader(ctx->async_reader_context, ctx->read_buffer + ctx->buffer_size, new_buffer_size - ctx->buffer_size, ctx->read_offset + ctx->buffer_size);
 	if (rc < 0)
 	{
 		if (rc != NGX_AGAIN)
@@ -894,6 +955,7 @@ ngx_http_vod_start_processing_mp4_file(ngx_http_request_t *r)
 
 	// read the file header
 	r->connection->log->action = "reading mp4 header";
+	ctx->moov_start_reads = MAX_MOOV_START_READS;
 	ctx->state = STATE_INITIAL_READ;
 	rc = ctx->async_reader(ctx->async_reader_context, ctx->read_buffer, conf->initial_read_size, 0);
 	if (rc < 0)		// inc. NGX_AGAIN
@@ -936,6 +998,19 @@ ngx_http_vod_init_file_key(ngx_http_request_t* r, ngx_str_t* path1, ngx_str_t* p
 
 ////// Local & mapped modes
 
+static void
+ngx_http_vod_file_read_completed(void* context, ngx_int_t rc, ssize_t bytes_read)
+{
+	ngx_http_vod_ctx_t *ctx = (ngx_http_vod_ctx_t *)context;
+	ngx_connection_t *c;
+
+	c = ctx->r->connection;
+
+	ngx_http_vod_handle_read_completed(context, rc, bytes_read);
+
+	ngx_http_run_posted_requests(c);
+}
+
 static ngx_int_t
 ngx_http_vod_init_file_reader(ngx_http_request_t *r, ngx_str_t* path)
 {
@@ -947,7 +1022,7 @@ ngx_http_vod_init_file_reader(ngx_http_request_t *r, ngx_str_t* path)
 
 	clcf = ngx_http_get_module_loc_conf(r, ngx_http_core_module);
 
-	rc = ngx_file_reader_init(&ctx->file_reader, ngx_http_vod_handle_read_completed, ctx, r, clcf, path);
+	rc = ngx_file_reader_init(&ctx->file_reader, ngx_http_vod_file_read_completed, ctx, r, clcf, path);
 	if (rc != NGX_OK)
 	{
 		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
@@ -1291,14 +1366,14 @@ ngx_http_vod_mapped_request_handler(ngx_http_request_t *r)
 ////// Remote mode only
 
 static void
-ngx_http_vod_http_read_complete(void* context, ngx_int_t rc, ngx_buf_t* response)
+ngx_http_vod_http_read_completed(void* context, ngx_int_t rc, ngx_buf_t* response)
 {
 	ngx_http_vod_ctx_t *ctx = (ngx_http_vod_ctx_t *)context;
 
 	if (rc != NGX_OK)
 	{
 		ngx_log_error(NGX_LOG_ERR, ctx->request_context.log, 0,
-			"ngx_http_vod_http_read_complete: upstream request failed %i", rc);
+			"ngx_http_vod_http_read_completed: upstream request failed %i", rc);
 		ngx_http_vod_finalize_request(ctx->r, rc);
 		return;
 	}
@@ -1328,7 +1403,7 @@ ngx_http_vod_async_http_read(ngx_http_request_t *r, u_char *buf, size_t size, of
 	return ngx_child_request_start(
 		r, 
 		&ctx->child_request_buffers,
-		ngx_http_vod_http_read_complete, 
+		ngx_http_vod_http_read_completed, 
 		ctx,
 		&conf->upstream,
 		&conf->child_request_location,

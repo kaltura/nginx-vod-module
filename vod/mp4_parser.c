@@ -184,6 +184,24 @@ typedef struct {
 } stsd_audio_t;
 
 typedef struct {
+	u_char	samples_per_frame[4];
+	u_char	bytes_per_packet[4];
+	u_char	bytes_per_frame[4];
+	u_char	bytes_per_sample[4];
+} stsd_audio_qt_version_1_t;
+
+typedef struct {
+	u_char	sizeof_struct[4];
+	u_char	sample_rate[8];
+	u_char	channels[4];
+	u_char	fixed[4];
+	u_char	bits_per_sample[4];
+	u_char	flags[4];
+	u_char	bytes_per_frame[4];
+	u_char	samples_per_frame[4];
+} stsd_audio_qt_version_2_t;
+
+typedef struct {
 	u_char	color_start[4];
 	u_char	color_count[2];
 	u_char	color_end[2];
@@ -368,6 +386,7 @@ mp4_parser_find_atom_callback(void* ctx, atom_info_t* atom_info)
 	
 	if (atom_info->atom_name != context->atom_name)
 	{
+		context->ptr = atom_info->ptr + atom_info->size;
 		return VOD_OK;
 	}
 	
@@ -1470,14 +1489,27 @@ mp4_parser_skip_stsd_atom_video(const u_char* cur_pos, const u_char* end_pos)
 static const u_char* 
 mp4_parser_skip_stsd_atom_audio(const u_char* cur_pos, const u_char* end_pos)
 {
+	uint16_t version;
+
 	if (cur_pos + sizeof(stsd_audio_t) > end_pos)
 	{
 		return NULL;
 	}
-		
-	cur_pos += sizeof(stsd_audio_t);
 	
-	// TODO: support QT version 1/2 additional fields	
+	version = PARSE_BE16(((stsd_audio_t*)cur_pos)->version);
+	cur_pos += sizeof(stsd_audio_t);
+
+	switch (version)
+	{
+	case 1:
+		cur_pos += sizeof(stsd_audio_qt_version_1_t);
+		break;
+
+	case 2:
+		cur_pos += sizeof(stsd_audio_qt_version_2_t);
+		break;
+	}
+
 	return cur_pos;
 }
 
@@ -1763,7 +1795,7 @@ mp4_parser_get_moov_atom_info(request_context_t* request_context, const u_char* 
 	if (find_moov_context.ptr == NULL)
 	{
 		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-			"mp4_parser_get_moov_atom_info: failed to find moov atom start (file is not fast-start ?)");
+			"mp4_parser_get_moov_atom_info: failed to parse any atoms");
 		return VOD_BAD_DATA;
 	}
 		

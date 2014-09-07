@@ -124,10 +124,11 @@ class StringReader:
         return self.curPos
 
 # test file generators
-def convertWithFfmpeg(params):
+def convertWithFfmpeg(params, fastStart=True):
     cmdLine = '%s -i %s %s -f mp4 -y %s' % (FFMPEG_BIN, TEMP_DOWNLOAD_PATH, params, TEMP_CONVERT_PATH)
     os.system(cmdLine)
-    os.system('%s %s' % (QTFASTSTART_BIN, TEMP_CONVERT_PATH))
+    if fastStart:
+        os.system('%s %s' % (QTFASTSTART_BIN, TEMP_CONVERT_PATH))
     return file(TEMP_CONVERT_PATH, 'rb')
 
 def applyPatch(*args):
@@ -180,13 +181,16 @@ def getTimeScaleOffset():
 TEST_CASES = [
     ('VIDEO_ONLY', lambda: convertWithFfmpeg('-vcodec copy -an'), None, 'index.m3u8', 200),
     ('AUDIO_ONLY', lambda: convertWithFfmpeg('-acodec copy -vn'), None, 'index.m3u8', 200),
+    ('NON_FAST_START', lambda: convertWithFfmpeg('-acodec copy -vcodec copy', False), None, 'index.m3u8', 200),
     ('NON_AAC_AUDIO', lambda: convertWithFfmpeg('-vcodec copy -codec:a libmp3lame'), 'unsupported format - media type 2', 'index.m3u8', 200),
     ('NON_H264_VIDEO', lambda: convertWithFfmpeg('-acodec copy -c:v mpeg4'), 'unsupported format - media type 1', 'index.m3u8', 200),
-    ('CANT_FIND_MOOV', lambda: applyPatch(getAtomPos('moov') + 4, 'blah'), 'failed to find moov atom start', 'index.m3u8', 404),
+    ('CANT_FIND_MOOV', lambda: applyPatch(getAtomPos('moov') + 4, 'blah'), ' is smaller than the atom start offset ', 'index.m3u8', 404),
     ('MOOV_TOO_BIG', lambda: applyPatch(getAtomPos('moov'), struct.pack('>L', 500000000)), 'moov size 499999992 exceeds the max', 'index.m3u8', 404),
     ('TRUNCATED_MOOV', lambda: truncateFile(getAtomEndPos('moov') - 100), 'is smaller than moov end offset', 'index.m3u8', 404),
-    ('TRUNCATED_MDAT', lambda: truncateFile(getAtomPos('mdat') + 1000), 'no data was handled, probably a truncated file', 'seg-1.ts', 404),
+    ('TRUNCATED_MDAT', lambda: truncateFile(getAtomPos('mdat') + 1000), 'no data was handled, probably a truncated file', 'seg-1.ts', 0),
     ('NO_EXTRA_DATA', lambda: StringReader(inputData.replace('esds', 'blah').replace('avcC', 'blah')), 'no extra data was parsed for track', 'seg-1.ts', 404),
+    ('MOOV_READ_ATTEMPTS', lambda: StringReader((struct.pack('>L', 0x1008) + 'blah' + '\0' * 0x1000) * 5), 'exhausted all moov read attempts', 'seg-1.ts', 404),
+    
     # atom parsing
     ('MISSING_64BIT_ATOM_SIZE', lambda: StringReader(struct.pack('>L', 1) + 'moov' + ('\0' * 7)), 'atom size is 1 but there is not enough room for the 64 bit size', 'index.m3u8', 404),
     ('ATOM_SIZE_LESS_THAN_HEADER', lambda: StringReader(struct.pack('>L', 7) + 'moov'), 'atom size 7 is less than the atom header size', 'index.m3u8', 404),
