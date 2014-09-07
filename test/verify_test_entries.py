@@ -1,4 +1,5 @@
 import urllib2
+import httplib
 import sys
 import os
 
@@ -30,8 +31,6 @@ for curLine in sys.stdin:
     if len(curLine) == 0:
         break
     refId, uri, expectedStatusCode, message = curLine.split(' ', 3)
-    if refId == 'TRUNCATED_MDAT':
-        continue        # hangs
     print 'testing %s %s' % (refId, uri)
     logTracker = LogTracker()
     try:
@@ -40,6 +39,8 @@ for curLine in sys.stdin:
         f.read()
     except urllib2.HTTPError, e:
         statusCode = e.getcode()
+    except httplib.BadStatusLine:
+        statusCode = 0
     if message != 'None':
         logTracker.assertContains(message)
     assert(expectedStatusCode == str(statusCode))
