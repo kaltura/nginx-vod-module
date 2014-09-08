@@ -190,6 +190,7 @@ TEST_CASES = [
     ('TRUNCATED_MDAT', lambda: truncateFile(getAtomPos('mdat') + 1000), 'no data was handled, probably a truncated file', 'seg-1.ts', 0),
     ('NO_EXTRA_DATA', lambda: StringReader(inputData.replace('esds', 'blah').replace('avcC', 'blah')), 'no extra data was parsed for track', 'seg-1.ts', 404),
     ('MOOV_READ_ATTEMPTS', lambda: StringReader((struct.pack('>L', 0x1008) + 'blah' + '\0' * 0x1000) * 5), 'exhausted all moov read attempts', 'seg-1.ts', 404),
+    ('NO_ATOM_PARSED', lambda: StringReader(struct.pack('>L', 7) + 'moov'), 'failed to parse any atoms', 'seg-1.ts', 404),
     
     # atom parsing
     ('MISSING_64BIT_ATOM_SIZE', lambda: StringReader(struct.pack('>L', 1) + 'moov' + ('\0' * 7)), 'atom size is 1 but there is not enough room for the 64 bit size', 'index.m3u8', 404),
