@@ -179,7 +179,7 @@ mpegts_write_pes_header(u_char *p, output_frame_t* f, u_char* cur_packet_start, 
 		*p++ = 1 + SIZEOF_PCR;	/* size */
 		*p++ = 0x10; /* PCR */
 		
-		p = mpegts_write_pcr(p, f->dts + HLS_DELAY);
+		p = mpegts_write_pcr(p, f->dts + INITIAL_PCR);
 	}
 
 	/* PES header */
@@ -205,11 +205,11 @@ mpegts_write_pes_header(u_char *p, output_frame_t* f, u_char* cur_packet_start, 
 	*p++ = (u_char) flags;
 	*p++ = (u_char) header_size;
 
-	p = mpegts_write_pts(p, flags >> 6, f->pts + 2 * HLS_DELAY);
+	p = mpegts_write_pts(p, flags >> 6, f->pts + INITIAL_DTS);
 
 	if (write_dts) 
 	{
-		p = mpegts_write_pts(p, 1, f->dts + 2 * HLS_DELAY);
+		p = mpegts_write_pts(p, 1, f->dts + INITIAL_DTS);
 	}
 	
 	return p;

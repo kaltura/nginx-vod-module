@@ -7,7 +7,9 @@
 
 // constants
 #define MPEGTS_PACKET_SIZE (188)
-#define HLS_DELAY  63000			// 700 ms PCR delay
+#define HLS_DELAY (63000)			// 700 ms PCR delay
+#define INITIAL_DTS (9090)
+#define INITIAL_PCR (4590)
 
 // typedefs
 typedef struct {
