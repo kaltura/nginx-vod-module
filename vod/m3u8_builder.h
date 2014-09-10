@@ -29,6 +29,7 @@ typedef struct {
 vod_status_t m3u8_builder_build_index_playlist(
 	request_context_t* request_context,
 	m3u8_config_t* conf,
+	vod_str_t* base_url,
 	uint32_t segment_duration,
 	uint32_t clip_to,
 	uint32_t clip_from,
@@ -38,6 +39,7 @@ vod_status_t m3u8_builder_build_index_playlist(
 vod_status_t m3u8_builder_build_iframe_playlist(
 	request_context_t* request_context,
 	m3u8_config_t* conf,
+	vod_str_t* base_url,
 	uint32_t segment_duration,
 	mpeg_metadata_t* mpeg_metadata,
 	vod_str_t* result);

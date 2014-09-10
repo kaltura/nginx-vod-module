@@ -109,8 +109,14 @@ def validatePlaylistM3U8(buffer):
         if expectExtInf:
             assertStartsWith(curLine, M3U8_EXTINF)
         else:
-            assertStartsWith(curLine, M3U8_SEGMENT_PREFIX)
-            assertEndsWith(curLine, M3U8_SEGMENT_POSTFIX)
+            splittedLine = curLine.rsplit('/', 1)
+            if len(splittedLine) > 1:
+                baseUrl, fileName = splittedLine
+                # todo - validate baseUrl
+            else:
+                fileName = splittedLine[0]
+            assertStartsWith(fileName, M3U8_SEGMENT_PREFIX)
+            assertEndsWith(fileName, M3U8_SEGMENT_POSTFIX)
         expectExtInf = not expectExtInf    
 
 ### Cleanup stack - enables automatic cleanup after a test is run
@@ -365,8 +371,9 @@ class BasicTestSuite(TestSuite):
     # sanity
     def testHeadRequestSanity(self):
         for curRequest, contentType in VOD_REQUESTS:
-            fullResponse = urllib2.urlopen(self.getUrl(curRequest)).read()
-            request = urllib2.Request(self.getUrl(curRequest))
+            url = self.getUrl(curRequest)
+            fullResponse = urllib2.urlopen(url).read()
+            request = urllib2.Request(url)
             request.get_method = lambda : 'HEAD'
             headResponse = urllib2.urlopen(request)
             assertEquals(int(headResponse.info().getheader('Content-Length')), len(fullResponse))
@@ -381,8 +388,6 @@ class BasicTestSuite(TestSuite):
             for i in xrange(10):
                 startOffset = random.randint(0, len(fullResponse) - 1)
                 endOffset = random.randint(startOffset, len(fullResponse) - 1)
-                if not ENCRYPTED_PREFIX in url:         # the url must not change when enryption is enabled, since the key will change
-                    url = self.getUrl(curRequest)
                 request = urllib2.Request(url, headers={'Range': 'bytes=%s-%s' % (startOffset, endOffset)})
                 response = urllib2.urlopen(request)
                 assertEquals(response.info().getheader('Content-Type'), contentType)
@@ -503,14 +508,16 @@ class BasicNonLocalTestSuite(TestSuite):
         self.prepareTest = setupServer
 
     def testBadClipTo(self):        # the error should be ignored
-        testBody = urllib2.urlopen(self.getUrl('/clipTo/abcd' + HLS_PLAYLIST_FILE)).read()
-        refBody = urllib2.urlopen(self.getUrl(HLS_PLAYLIST_FILE)).read()
-        assert(testBody == refBody)
+        url = self.getUrl('/clipTo/abcd' + HLS_PLAYLIST_FILE)
+        testBody = urllib2.urlopen(url).read()
+        refBody = urllib2.urlopen(url.replace('/clipTo/abcd', '')).read()
+        assert(testBody.replace('/clipTo/abcd', '') == refBody)
 
     def testBadClipFrom(self):      # the error should be ignored
-        testBody = urllib2.urlopen(self.getUrl('/clipFrom/abcd' + HLS_PLAYLIST_FILE)).read()
-        refBody = urllib2.urlopen(self.getUrl(HLS_PLAYLIST_FILE)).read()
-        assert(testBody == refBody)
+        url = self.getUrl('/clipFrom/abcd' + HLS_PLAYLIST_FILE)
+        testBody = urllib2.urlopen(url).read()
+        refBody = urllib2.urlopen(url.replace('/clipFrom/abcd', '')).read()
+        assert(testBody.replace('/clipFrom/abcd', '') == refBody)
 
 class UpstreamTestSuite(TestSuite):
     def __init__(self, baseUrl, uri, serverPort, urlFile = HLS_PLAYLIST_FILE):
