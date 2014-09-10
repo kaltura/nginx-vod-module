@@ -369,7 +369,7 @@ mp4_parser_parse_atoms(request_context_t* request_context, const u_char* buffer,
 		
 		if (atom_size > (uint64_t)(end_pos - cur_pos))
 		{
-			vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+			vod_log_debug2(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
 				"mp4_parser_parse_atoms: atom size %uL overflows the input stream size %uL", atom_size, (uint64_t)(end_pos - cur_pos));
 			return VOD_BAD_DATA;
 		}
