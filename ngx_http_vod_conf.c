@@ -24,6 +24,8 @@ ngx_http_vod_create_loc_conf(ngx_conf_t *cf)
 	conf->request_parser = NGX_CONF_UNSET_PTR;
 	conf->request_handler = NGX_CONF_UNSET_PTR;
 	conf->segment_duration = NGX_CONF_UNSET_UINT;
+	conf->absolute_index_urls = NGX_CONF_UNSET;
+	conf->absolute_iframe_urls = NGX_CONF_UNSET;
 	conf->initial_read_size = NGX_CONF_UNSET_SIZE;
 	conf->max_moov_size = NGX_CONF_UNSET_SIZE;
 	conf->cache_buffer_size = NGX_CONF_UNSET_SIZE;
@@ -47,6 +49,9 @@ ngx_http_vod_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child)
 
 	ngx_conf_merge_uint_value(conf->segment_duration, prev->segment_duration, 10000);
 	ngx_conf_merge_str_value(conf->secret_key, prev->secret_key, "");
+	ngx_conf_merge_str_value(conf->https_header_name, prev->https_header_name, "");
+	ngx_conf_merge_value(conf->absolute_index_urls, prev->absolute_index_urls, 1);
+	ngx_conf_merge_value(conf->absolute_iframe_urls, prev->absolute_iframe_urls, 0);
 
 	if (conf->moov_cache_zone == NULL) 
 	{
@@ -373,6 +378,27 @@ ngx_command_t ngx_http_vod_commands[] = {
 	ngx_conf_set_str_slot,
 	NGX_HTTP_LOC_CONF_OFFSET,
 	offsetof(ngx_http_vod_loc_conf_t, secret_key),
+	NULL },
+
+	{ ngx_string("vod_https_header_name"),
+	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1,
+	ngx_conf_set_str_slot,
+	NGX_HTTP_LOC_CONF_OFFSET,
+	offsetof(ngx_http_vod_loc_conf_t, https_header_name),
+	NULL },
+
+	{ ngx_string("vod_absolute_index_urls"),
+	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1,
+	ngx_conf_set_flag_slot,
+	NGX_HTTP_LOC_CONF_OFFSET,
+	offsetof(ngx_http_vod_loc_conf_t, absolute_index_urls),
+	NULL },
+
+	{ ngx_string("vod_absolute_iframe_urls"),
+	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1,
+	ngx_conf_set_flag_slot,
+	NGX_HTTP_LOC_CONF_OFFSET,
+	offsetof(ngx_http_vod_loc_conf_t, absolute_iframe_urls),
 	NULL },
 
 	// mp4 reading parameters

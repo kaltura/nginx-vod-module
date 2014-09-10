@@ -17,6 +17,9 @@ typedef struct ngx_http_vod_loc_conf_s {
 	ngx_int_t(*request_handler)(ngx_http_request_t *r);
 	ngx_uint_t segment_duration;
 	ngx_str_t secret_key;
+	ngx_str_t https_header_name;
+	ngx_flag_t absolute_index_urls;
+	ngx_flag_t absolute_iframe_urls;
 	ngx_shm_zone_t* moov_cache_zone;
 	size_t initial_read_size;
 	size_t max_moov_size;

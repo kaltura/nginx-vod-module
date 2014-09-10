@@ -110,6 +110,29 @@ Sets the HLS segment duration in milliseconds.
 
 Sets the secret that is used to generate the TS encryption key, if empty, no encryption is performed.
 
+#### vod_https_header_name
+* **syntax**: `vod_https_header_name name`
+* **default**: `empty`
+* **context**: `http`, `server`, `location`
+
+Sets the name of an HTTP header whose existence determines whether the request was issued over HTTPS.
+If not set, the decision is made according to the protocol used to connect to the nginx server.
+A common scenario for using this setting is a load-balancer placed before the nginx that performs SSL-offloading.
+
+#### vod_absolute_index_urls
+* **syntax**: `vod_absolute_index_urls on/off`
+* **default**: `on`
+* **context**: `http`, `server`, `location`
+
+When enabled the server returns absolute segment URLs in media playlist requests
+
+#### vod_absolute_iframe_urls
+* **syntax**: `vod_absolute_iframe_urls on/off`
+* **default**: `off`
+* **context**: `http`, `server`, `location`
+
+When enabled the server returns absolute segment URLs in iframe playlist requests
+
 #### vod_moov_cache
 * **syntax**: `vod_moov_cache zone_name zone_size`
 * **default**: `off`

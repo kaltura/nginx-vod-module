@@ -13,6 +13,7 @@ static const char byte_range_tag_format[] = "#EXT-X-BYTERANGE:%uD@%uD\n";
 typedef struct {
 	u_char* p;
 	vod_str_t required_tracks;
+	vod_str_t* base_url;
 	vod_str_t* segment_file_name_prefix;
 } append_iframe_context_t;
 
@@ -115,8 +116,14 @@ m3u8_builder_build_required_tracks_string(request_context_t* request_context, mp
 }
 
 static u_char*
-m3u8_builder_append_segment_name(u_char* p, vod_str_t* segment_file_name_prefix, uint32_t segment_index, vod_str_t* required_tracks)
+m3u8_builder_append_segment_name(
+	u_char* p, 
+	vod_str_t* base_url,
+	vod_str_t* segment_file_name_prefix, 
+	uint32_t segment_index, 
+	vod_str_t* required_tracks)
 {
+	p = vod_copy(p, base_url->data, base_url->len);
 	p = vod_copy(p, segment_file_name_prefix->data, segment_file_name_prefix->len);
 	p = vod_sprintf(p, "%uD", segment_index);
 	p = vod_copy(p, required_tracks->data, required_tracks->len);
@@ -141,13 +148,19 @@ m3u8_builder_append_iframe_string(void* context, uint32_t segment_index, uint32_
 
 	ctx->p = m3u8_builder_append_extinf_tag(ctx->p, frame_duration, 1000);
 	ctx->p = vod_sprintf(ctx->p, byte_range_tag_format, frame_size, frame_start);
-	ctx->p = m3u8_builder_append_segment_name(ctx->p, ctx->segment_file_name_prefix, segment_index, &ctx->required_tracks);
+	ctx->p = m3u8_builder_append_segment_name(
+		ctx->p, 
+		ctx->base_url,
+		ctx->segment_file_name_prefix, 
+		segment_index, 
+		&ctx->required_tracks);
 }
 
 vod_status_t
 m3u8_builder_build_iframe_playlist(
 	request_context_t* request_context,
 	m3u8_config_t* conf,
+	vod_str_t* base_url,
 	uint32_t segment_duration,
 	mpeg_metadata_t* mpeg_metadata, 
 	vod_str_t* result)
@@ -155,8 +168,8 @@ m3u8_builder_build_iframe_playlist(
 	append_iframe_context_t append_iframe_context;
 	uint32_t duration_millis;
 	uint32_t segment_count;
-	uint32_t iframe_length;
-	uint32_t total_size;
+	size_t iframe_length;
+	size_t total_size;
 	muxer_state_t muxer_state;
 	bool_t simulation_supported;
 	vod_status_t rc;
@@ -189,7 +202,7 @@ m3u8_builder_build_iframe_playlist(
 
 	iframe_length = sizeof("#EXTINF:.000,\n") - 1 + m3u8_builder_get_int_print_len(DIV_CEIL(duration_millis, 1000)) +
 		sizeof(byte_range_tag_format) + VOD_INT32_LEN + m3u8_builder_get_int_print_len(MAX_FRAME_SIZE) - (sizeof("%uD%uD") - 1) +
-		conf->segment_file_name_prefix.len + m3u8_builder_get_int_print_len(segment_count) + append_iframe_context.required_tracks.len + sizeof(".ts\n") - 1;
+		base_url->len + conf->segment_file_name_prefix.len + m3u8_builder_get_int_print_len(segment_count) + append_iframe_context.required_tracks.len + sizeof(".ts\n") - 1;
 
 	total_size =
 		conf->iframes_m3u8_header_len +
@@ -207,6 +220,7 @@ m3u8_builder_build_iframe_playlist(
 
 	// fill out the buffer
 	append_iframe_context.p = vod_copy(result->data, conf->iframes_m3u8_header, conf->iframes_m3u8_header_len);
+	append_iframe_context.base_url = base_url;
 	append_iframe_context.segment_file_name_prefix = &conf->segment_file_name_prefix;
 
 	muxer_simulate_get_iframes(&muxer_state, segment_duration, m3u8_builder_append_iframe_string, &append_iframe_context);
@@ -228,6 +242,7 @@ vod_status_t
 m3u8_builder_build_index_playlist(
 	request_context_t* request_context,
 	m3u8_config_t* conf,
+	vod_str_t* base_url,
 	uint32_t segment_duration,
 	uint32_t clip_to,
 	uint32_t clip_from,
@@ -237,7 +252,8 @@ m3u8_builder_build_index_playlist(
 	vod_str_t required_tracks;
 	uint32_t segment_count;
 	uint32_t segment_index;
-	uint32_t total_size;
+	size_t segment_length;
+	size_t total_size;
 	uint32_t duration_millis;
 	u_char* p;
 	vod_status_t rc;
@@ -270,10 +286,12 @@ m3u8_builder_build_index_playlist(
 		return VOD_BAD_DATA;
 	}
 
+	segment_length = conf->m3u8_extinf_len + base_url->len + conf->segment_file_name_prefix.len + 
+		m3u8_builder_get_int_print_len(segment_count) + required_tracks.len + sizeof(".ts\n") - 1;
+
 	total_size =
 		conf->m3u8_header_len +
-		(conf->m3u8_extinf_len + 
-		conf->segment_file_name_prefix.len + m3u8_builder_get_int_print_len(segment_count) + required_tracks.len + sizeof(".ts\n") - 1) * segment_count +
+		segment_length * segment_count +
 		sizeof(m3u8_footer);
 
 	// allocate the buffer
@@ -307,7 +325,7 @@ m3u8_builder_build_index_playlist(
 			duration_millis = 0;
 		}
 
-		p = m3u8_builder_append_segment_name(p, &conf->segment_file_name_prefix, segment_index, &required_tracks);
+		p = m3u8_builder_append_segment_name(p, base_url, &conf->segment_file_name_prefix, segment_index, &required_tracks);
 	}
 
 	p = vod_copy(p, m3u8_footer, sizeof(m3u8_footer)-1);

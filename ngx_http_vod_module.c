@@ -658,6 +658,76 @@ ngx_http_vod_process_mp4_frames(ngx_http_vod_ctx_t *ctx)
 
 ////// Common
 
+static void
+ngx_http_vod_get_base_url(ngx_http_vod_ctx_t *ctx, ngx_str_t* base_url)
+{
+	ngx_http_vod_loc_conf_t *conf;
+	ngx_flag_t use_https;
+	ngx_str_t* host_name;
+	size_t uri_path_len;
+	size_t length;
+	u_char* last_slash;
+	u_char* p;
+
+	// when the request has no host header (HTTP 1.0), use relative URLs
+	if (ctx->r->headers_in.host == NULL)
+	{
+		return;
+	}
+
+	host_name = &ctx->r->headers_in.host->value;
+
+	last_slash = memrchr(ctx->original_uri.data, '/', ctx->original_uri.len);
+	if (last_slash == NULL)
+	{
+		return;
+	}
+
+	uri_path_len = last_slash - ctx->original_uri.data;
+
+	// allocate the base url
+	length = sizeof("https://") - 1 + host_name->len + uri_path_len + sizeof("/");
+	base_url->data = ngx_palloc(ctx->r->pool, length);
+	if (base_url->data == NULL)
+	{
+		return;
+	}
+
+	// decide whether to use http or https
+	conf = ngx_http_get_module_loc_conf(ctx->r, ngx_http_vod_module);
+	if (conf->https_header_name.len)
+	{
+		use_https = ngx_http_vod_header_exists(ctx->r, &conf->https_header_name);
+	}
+	else
+	{
+#if (NGX_HTTP_SSL)
+		use_https = (r->connection->ssl != NULL);
+#else
+		use_https = 0;
+#endif
+	}
+
+	// build the url
+	if (use_https)
+	{
+		p = ngx_copy(base_url->data, "https://", sizeof("https://") - 1);
+	}
+	else
+	{
+		p = ngx_copy(base_url->data, "http://", sizeof("http://") - 1);
+	}
+
+	p = ngx_copy(p, host_name->data, host_name->len);
+	p = ngx_copy(p, ctx->original_uri.data, uri_path_len);
+	*p++ = '/';
+	*p = '\0';
+
+	base_url->len = p - base_url->data;
+
+	return NGX_OK;
+}
+
 static ngx_int_t 
 ngx_http_vod_run_state_machine(ngx_http_vod_ctx_t *ctx)
 {
@@ -665,6 +735,7 @@ ngx_http_vod_run_state_machine(ngx_http_vod_ctx_t *ctx)
 	uint32_t duration_millis;
 	uint32_t segment_count;
 	ngx_str_t response;
+	ngx_str_t base_url = ngx_null_string;
 	ngx_int_t rc;
 
 	conf = ngx_http_get_module_loc_conf(ctx->r, ngx_http_vod_module);
@@ -742,9 +813,15 @@ ngx_http_vod_run_state_machine(ngx_http_vod_ctx_t *ctx)
 				return ngx_http_vod_process_enc_key_request(ctx->r, ctx->file_key);
 
 			case REQUEST_TYPE_HLS_PLAYLIST:
+				if (conf->absolute_index_urls)
+				{
+					ngx_http_vod_get_base_url(ctx, &base_url);
+				}
+
 				rc = m3u8_builder_build_index_playlist(
 					&ctx->request_context,
 					&conf->m3u8_config,
+					&base_url,
 					conf->segment_duration,
 					ctx->request_params.clip_to,
 					ctx->request_params.clip_from,
@@ -753,9 +830,16 @@ ngx_http_vod_run_state_machine(ngx_http_vod_ctx_t *ctx)
 				break;
 
 			case REQUEST_TYPE_HLS_IFRAME_PLAYLIST:
+				if (conf->absolute_iframe_urls)
+				{
+					ngx_http_vod_get_base_url(ctx, &base_url);
+				}
+
 				rc = m3u8_builder_build_iframe_playlist(
 					&ctx->request_context,
-					&conf->m3u8_config, conf->segment_duration,
+					&conf->m3u8_config, 
+					&base_url,
+					conf->segment_duration,
 					&ctx->mpeg_metadata,
 					&response);
 				break;
