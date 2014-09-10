@@ -171,7 +171,7 @@ ngx_http_vod_read_moov_atom(ngx_http_vod_ctx_t *ctx)
 
 	for (;;)
 	{
-		if (ctx->buffer_size <= ctx->atom_start_offset)
+		if (ctx->buffer_size <= (size_t)ctx->atom_start_offset)
 		{
 			ngx_log_error(NGX_LOG_ERR, ctx->request_context.log, 0,
 				"ngx_http_vod_read_moov_atom: read buffer size %uz is smaller than the atom start offset %O", ctx->buffer_size, ctx->atom_start_offset);
@@ -196,7 +196,7 @@ ngx_http_vod_read_moov_atom(ngx_http_vod_ctx_t *ctx)
 			break;
 		}
 
-		if (ctx->moov_offset < ctx->buffer_size)
+		if (ctx->moov_offset < (off_t)ctx->buffer_size)
 		{
 			ngx_log_error(NGX_LOG_ERR, ctx->request_context.log, 0,
 				"ngx_http_vod_read_moov_atom: moov start offset %O is smaller than the buffer size %uz", ctx->moov_offset, ctx->buffer_size);
@@ -725,7 +725,7 @@ ngx_http_vod_get_base_url(ngx_http_vod_ctx_t *ctx, ngx_str_t* base_url)
 
 	base_url->len = p - base_url->data;
 
-	return NGX_OK;
+	return;
 }
 
 static ngx_int_t 
