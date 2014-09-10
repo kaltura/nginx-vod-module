@@ -95,7 +95,8 @@ def assertRequestFails(url, statusCode, expectedBody = None, headers = {}, postD
         if expectedBody != None:
             assertEquals(expectedBody, e.read())
 
-def validatePlaylistM3U8(buffer):
+def validatePlaylistM3U8(buffer, expectedBaseUrl):
+    expectedBaseUrl = expectedBaseUrl.rsplit('/', 1)[0]
     if buffer.startswith(M3U8_PREFIX_ENCRYPTED):
         buffer = buffer[len(M3U8_PREFIX_ENCRYPTED):]
     else:
@@ -112,9 +113,10 @@ def validatePlaylistM3U8(buffer):
             splittedLine = curLine.rsplit('/', 1)
             if len(splittedLine) > 1:
                 baseUrl, fileName = splittedLine
-                # todo - validate baseUrl
             else:
                 fileName = splittedLine[0]
+                baseUrl = ''
+            assertEquals(expectedBaseUrl, baseUrl)
             assertStartsWith(fileName, M3U8_SEGMENT_PREFIX)
             assertEndsWith(fileName, M3U8_SEGMENT_POSTFIX)
         expectExtInf = not expectExtInf    
@@ -417,8 +419,9 @@ class BasicTestSuite(TestSuite):
         
     def testClipToSanity(self):
         # index
-        clippedResponse = urllib2.urlopen(self.getUrl('/clipTo/10000' + HLS_PLAYLIST_FILE)).read()
-        validatePlaylistM3U8(clippedResponse)
+        url = self.getUrl('/clipTo/10000' + HLS_PLAYLIST_FILE)
+        clippedResponse = urllib2.urlopen(url).read()
+        validatePlaylistM3U8(clippedResponse, url)
         assertEquals(clippedResponse.count(M3U8_EXTINF), 1)
 
         # segment
@@ -432,8 +435,9 @@ class BasicTestSuite(TestSuite):
     def testClipFromSanity(self):
         # index
         fullResponse = urllib2.urlopen(self.getUrl(HLS_PLAYLIST_FILE)).read()
-        clippedResponse = urllib2.urlopen(self.getUrl('/clipFrom/10000' + HLS_PLAYLIST_FILE)).read()
-        validatePlaylistM3U8(clippedResponse)
+        url = self.getUrl('/clipFrom/10000' + HLS_PLAYLIST_FILE)
+        clippedResponse = urllib2.urlopen(url).read()
+        validatePlaylistM3U8(clippedResponse, url)
         assertEquals(clippedResponse.count(M3U8_EXTINF) + 1, fullResponse.count(M3U8_EXTINF))
 
         # segment
@@ -588,20 +592,23 @@ class MemoryUpstreamTestSuite(UpstreamTestSuite):
 
     def testHeadersForwardedToUpstream(self):
         TcpServer(API_SERVER_PORT, lambda s: socketExpectHttpHeaderAndHandle(s, 'mukka: ukk', self.upstreamHandler))
-        request = urllib2.Request(getUniqueUrl(self.baseUrl, self.uri, HLS_PLAYLIST_FILE), headers={'mukka':'ukk'})
+        url = getUniqueUrl(self.baseUrl, self.uri, HLS_PLAYLIST_FILE)
+        request = urllib2.Request(url, headers={'mukka':'ukk'})
         response = urllib2.urlopen(request)
-        validatePlaylistM3U8(response.read())
+        validatePlaylistM3U8(response.read(), url)
 
     def testUpstreamHostHeader(self):
         TcpServer(API_SERVER_PORT, lambda s: socketExpectHttpHeaderAndHandle(s, 'Host: blabla.com', self.upstreamHandler))
-        request = urllib2.Request(getUniqueUrl(self.baseUrl, self.uri, HLS_PLAYLIST_FILE), headers={'Host': 'blabla.com'})
+        url = getUniqueUrl(self.baseUrl, self.uri, HLS_PLAYLIST_FILE)
+        request = urllib2.Request(url, headers={'Host': 'blabla.com'})
         response = urllib2.urlopen(request)
-        validatePlaylistM3U8(response.read())
+        validatePlaylistM3U8(response.read(), url.replace(NGINX_HOST, 'http://blabla.com'))
 
     def testUpstreamHostHeaderHttp10(self):
         TcpServer(API_SERVER_PORT, lambda s: socketExpectHttpHeaderAndHandle(s, 'Host: %s' % SERVER_NAME, self.upstreamHandler))
-        body = sendHttp10Request(getUniqueUrl(self.baseUrl, self.uri, HLS_PLAYLIST_FILE))
-        validatePlaylistM3U8(body)
+        url = getUniqueUrl(self.baseUrl, self.uri, HLS_PLAYLIST_FILE)
+        body = sendHttp10Request(url)
+        validatePlaylistM3U8(body, '')
 
 class DumpUpstreamTestSuite(UpstreamTestSuite):
     def testRangeForwarded(self):
