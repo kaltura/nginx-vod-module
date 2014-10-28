@@ -36,7 +36,10 @@ bool_t read_cache_get_from_cache(
 	uint64_t offset, 
 	u_char** buffer, 
 	uint32_t* size);
-	
+
+void read_cache_disable_buffer_reuse(
+	read_cache_state_t* state);
+
 vod_status_t read_cache_get_read_buffer(
 	read_cache_state_t* state, 
 	uint64_t offset, 
