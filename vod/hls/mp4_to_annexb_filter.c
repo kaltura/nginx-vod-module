@@ -1,5 +1,5 @@
 #include "mp4_to_annexb_filter.h"
-#include "read_stream.h"
+#include "../read_stream.h"
 
 // h264 NAL unit types
 enum {
@@ -39,106 +39,24 @@ mp4_to_annexb_init(
 	const media_filter_t* next_filter,
 	void* next_filter_context,
 	const u_char* extra_data, 
-	uint32_t extra_data_size)
+	uint32_t extra_data_size,
+	uint32_t nal_packet_size_length)
 {
-	const u_char* extra_data_end = extra_data + extra_data_size;
-	const u_char* cur_pos = extra_data;
-	u_char* sps_pps_pos;
-	uint16_t unit_size;
-	int unit_count;
-	int i;
+	if (nal_packet_size_length < 1 || nal_packet_size_length > 4)
+	{
+		vod_log_error(VOD_LOG_ERR, state->request_context->log, 0,
+			"mp4_to_annexb_init: invalid nal packet size length %uD", nal_packet_size_length);
+		return VOD_BAD_DATA;
+	}
 
 	state->request_context = request_context;
 	state->first_idr = TRUE;
 	state->next_filter = next_filter;
 	state->next_filter_context = next_filter_context;
-	
-	if (extra_data_size < 5)
-	{
-		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-			"mp4_to_annexb_init: extra data size %uD too small", extra_data_size);
-		return VOD_BAD_DATA;
-	}
+	state->sps_pps = extra_data;
+	state->sps_pps_size = extra_data_size;
+	state->nal_packet_size_length = nal_packet_size_length;
 
-	cur_pos += 4;
-	state->nal_packet_size_length = (*cur_pos++ & 0x3) + 1;
-	
-	// calculate total size of SPS & PPS
-	state->sps_pps_size = 0;
-	for (i = 0; i < 2; i++)		// once for SPS, once for PPS
-	{
-		if (cur_pos >= extra_data_end)
-		{
-			vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-				"mp4_to_annexb_init: extra data overflow while reading unit count");
-			return VOD_BAD_DATA;
-		}
-		
-		for (unit_count = (*cur_pos++ & 0x1f); unit_count; unit_count--)
-		{
-			if (cur_pos + sizeof(uint16_t) > extra_data_end)
-			{
-				vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-					"mp4_to_annexb_init: extra data overflow while reading unit size");
-				return VOD_BAD_DATA;
-			}
-			
-			unit_size = PARSE_BE16(cur_pos);
-			cur_pos += sizeof(uint16_t);
-			if (cur_pos + unit_size > extra_data_end)
-			{
-				vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-					"mp4_to_annexb_init: unit size %uD overflows the extra data buffer", (uint32_t)unit_size);
-				return VOD_BAD_DATA;
-			}
-			
-			cur_pos += unit_size;
-			state->sps_pps_size += sizeof(uint32_t) + unit_size;
-		}
-	}
-
-	if (request_context->simulation_only)
-	{
-		return VOD_OK;
-	}
-	
-	// allocate buffer
-	state->sps_pps = vod_alloc(request_context->pool, state->sps_pps_size);
-	if (state->sps_pps == NULL)
-	{
-		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
-			"mp4_to_annexb_init: vod_alloc failed");
-		return VOD_ALLOC_FAILED;
-	}
-	sps_pps_pos = state->sps_pps;
-	
-	// copy data
-	cur_pos = extra_data + 5;
-	for (i = 0; i < 2; i++)		// once for SPS, once for PPS
-	{
-		for (unit_count = *cur_pos++ & 0x1f; unit_count; unit_count--)
-		{
-			unit_size = PARSE_BE16(cur_pos);
-			cur_pos += sizeof(uint16_t);
-						
-			*((uint32_t*)sps_pps_pos) = 0x01000000;
-			sps_pps_pos += sizeof(uint32_t);
-			
-			vod_memcpy(sps_pps_pos, cur_pos, unit_size);
-			cur_pos += unit_size;
-			sps_pps_pos += unit_size;
-		}
-	}
-	
-	if (sps_pps_pos - state->sps_pps != state->sps_pps_size)
-	{
-		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-			"mp4_to_annexb_init: actual sps/pps size %uz is different than calculated size %uD", 
-			(size_t)(sps_pps_pos - state->sps_pps), state->sps_pps_size);
-		return VOD_UNEXPECTED;
-	}
-	
-	vod_log_buffer(VOD_LOG_DEBUG_LEVEL, request_context->log, 0, "mp4_to_annexb_init: parsed extra data ", state->sps_pps, state->sps_pps_size);
 	return VOD_OK;
 }
 
@@ -292,7 +210,7 @@ mp4_to_annexb_flush_frame(void* context, int32_t margin_size)
 	{
 		if (state->frame_size_left < 0)
 		{
-			ngx_log_error(NGX_LOG_ERR, state->request_context->log, 0,
+			vod_log_error(VOD_LOG_ERR, state->request_context->log, 0,
 				"mp4_to_annexb_flush_frame: frame exceeded the calculated size by %D bytes", -state->frame_size_left);
 			return VOD_UNEXPECTED;
 		}

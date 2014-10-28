@@ -88,6 +88,9 @@
 #define vod_pool_t ngx_pool_t
 #define vod_log_t ngx_log_t
 #define vod_str_t ngx_str_t
+#define vod_string(str) ngx_string(str)
+#define vod_encode_base64(base64, binary) ngx_encode_base64(base64, binary)
+#define vod_base64_encoded_length(len) ngx_base64_encoded_length(len)
 
 #define VOD_LOG_STDERR            NGX_LOG_STDERR 
 #define VOD_LOG_EMERG             NGX_LOG_EMERG  
@@ -171,12 +174,20 @@ enum {
 typedef int bool_t;
 typedef intptr_t vod_status_t;
 
+struct media_info_s;
+typedef struct media_info_s media_info_t;
+typedef bool_t(*stream_comparator_t)(void* context, const media_info_t* mi1, const media_info_t* mi2);
+
+typedef vod_status_t(*write_callback_t)(void* context, u_char* buffer, uint32_t size, bool_t* reuse_buffer);
+
 typedef struct {
 	vod_pool_t* pool;
 	vod_log_t *log;
 	int parse_type;
-	uint32_t start;		// millis
-	uint32_t end;		// millis
+	stream_comparator_t stream_comparator;
+	void* stream_comparator_context;
+	uint32_t start;
+	uint32_t end;
 	uint32_t max_frame_count;
 	bool_t simulation_only;
 } request_context_t;

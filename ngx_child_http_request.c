@@ -429,7 +429,7 @@ ngx_init_request_buffer(
 	// calculate the request size
 	len =
 		sizeof("HEAD ") - 1 + params->base_uri.len + sizeof("?") - 1 + params->extra_args.len + sizeof(" HTTP/1.1" CRLF) - 1 +
-		sizeof("Host: ") - 1 + params->host_name.len + sizeof(CRLF)-1 +
+		sizeof("Host: ") - 1 + params->host_name.len + sizeof(CRLF) - 1 +
 		params->extra_headers.len +
 		sizeof(CRLF);
 	if (range_request)
@@ -459,7 +459,7 @@ ngx_init_request_buffer(
 		}
 
 		len += header[i].key.len + sizeof(": ") - 1
-			+ header[i].value.len + sizeof(CRLF)-1;
+			+ header[i].value.len + sizeof(CRLF) - 1;
 	}
 
 	// get/allocate the request buffer

@@ -3,8 +3,8 @@
 
 // includes
 #include "bit_fields.h"
-#include "common.h"
 #include "media_filter.h"
+#include "../common.h"
 
 // typedefs
 typedef struct {

@@ -2,7 +2,7 @@
 #define __M3U8_BUILDER_H__
 
 // includes
-#include "mp4_parser.h"
+#include "../mp4_parser.h"
 
 // constants
 #define MAX_ENCRYPTION_KEY_FILE_NAME_LEN (32)
@@ -22,17 +22,25 @@ typedef struct {
 	size_t m3u8_extinf_len;
 	u_char iframes_m3u8_header[sizeof(iframes_m3u8_header_format) + VOD_INT64_LEN];
 	size_t iframes_m3u8_header_len;
+	vod_str_t index_file_name_prefix;
 	vod_str_t segment_file_name_prefix;
 } m3u8_config_t;
 
 // functions
+vod_status_t m3u8_builder_build_master_playlist(
+	request_context_t* request_context,
+	m3u8_config_t* conf,
+	vod_str_t* base_url,
+	bool_t include_file_index,
+	mpeg_metadata_t* mpeg_metadata,
+	vod_str_t* result);
+
 vod_status_t m3u8_builder_build_index_playlist(
 	request_context_t* request_context,
 	m3u8_config_t* conf,
 	vod_str_t* base_url,
+	bool_t include_file_index,
 	uint32_t segment_duration,
-	uint32_t clip_to,
-	uint32_t clip_from,
 	mpeg_metadata_t* mpeg_metadata,
 	vod_str_t* result);
 
@@ -40,6 +48,7 @@ vod_status_t m3u8_builder_build_iframe_playlist(
 	request_context_t* request_context,
 	m3u8_config_t* conf,
 	vod_str_t* base_url,
+	bool_t include_file_index,
 	uint32_t segment_duration,
 	mpeg_metadata_t* mpeg_metadata,
 	vod_str_t* result);

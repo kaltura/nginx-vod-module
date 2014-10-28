@@ -22,6 +22,38 @@ bit_read_stream_init(bit_reader_state_t* state, const u_char* buffer, int size)
 	state->cur_bit = -1;
 }
 
+static vod_inline int
+bit_read_stream_get_one(bit_reader_state_t* state)
+{
+	int result;
+
+	if (state->cur_bit < 0)
+	{
+		state->cur_byte = read_stream_get_byte(&state->stream);
+		state->cur_bit = 7;
+	}
+
+	result = ((state->cur_byte >> state->cur_bit) & 1);
+	state->cur_bit--;
+
+	return result;
+}
+
+static vod_inline void
+bit_read_stream_skip(bit_reader_state_t* state, int count)
+{
+	int skip_bytes;
+
+	state->cur_bit -= count - 1;
+	if (state->cur_bit < 0)
+	{
+		skip_bytes = ((-state->cur_bit + 7) >> 3);
+		read_stream_skip(&state->stream, skip_bytes);
+		state->cur_bit += (skip_bytes << 3);
+	}
+	state->cur_bit--;
+}
+
 static vod_inline int 
 bit_read_stream_get(bit_reader_state_t* state, int count)
 {
@@ -35,6 +67,25 @@ bit_read_stream_get(bit_reader_state_t* state, int count)
 			state->cur_bit = 7;
 		}
 	
+		result = (result << 1) | ((state->cur_byte >> state->cur_bit) & 1);
+		state->cur_bit--;
+	}
+	return result;
+}
+
+static vod_inline int64_t
+bit_read_stream_get_long(bit_reader_state_t* state, int count)
+{
+	int64_t result = 0;
+
+	for (; count; count--)
+	{
+		if (state->cur_bit < 0)
+		{
+			state->cur_byte = read_stream_get_byte(&state->stream);
+			state->cur_bit = 7;
+		}
+
 		result = (result << 1) | ((state->cur_byte >> state->cur_bit) & 1);
 		state->cur_bit--;
 	}

@@ -3,7 +3,7 @@
 #define BUFFER_SIZE (188 * 16 * 32)		// chosen to be a multiple of mpegTS packet size and AES block size
 
 void 
-buffer_queue_init(buffer_queue_t* queue, request_context_t* request_context)
+write_buffer_queue_init(write_buffer_queue_t* queue, request_context_t* request_context)
 {
 	initialize_list_head(&queue->buffers);
 	queue->cur_write_buffer = NULL;
@@ -11,7 +11,7 @@ buffer_queue_init(buffer_queue_t* queue, request_context_t* request_context)
 }
 
 u_char*
-buffer_queue_get_buffer(buffer_queue_t* queue, uint32_t size)
+write_buffer_queue_get_buffer(write_buffer_queue_t* queue, uint32_t size)
 {
 	buffer_header_t* write_buffer = queue->cur_write_buffer;
 	u_char* result;
@@ -75,7 +75,7 @@ buffer_queue_get_buffer(buffer_queue_t* queue, uint32_t size)
 }
 
 void 
-buffer_queue_send(buffer_queue_t* queue, u_char* ptr)
+write_buffer_queue_send(write_buffer_queue_t* queue, u_char* ptr)
 {
 	buffer_header_t* cur_buffer;
 	bool_t reuse_buffer;
@@ -111,7 +111,7 @@ buffer_queue_send(buffer_queue_t* queue, u_char* ptr)
 }
 
 void 
-buffer_queue_flush(buffer_queue_t* queue)
+write_buffer_queue_flush(write_buffer_queue_t* queue)
 {
 	buffer_header_t* cur_buffer;
 	bool_t reuse_buffer;

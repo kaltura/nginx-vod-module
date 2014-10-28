@@ -1,11 +1,10 @@
 #ifndef __AES_ENCRYPT_H__
 #define __AES_ENCRYPT_H__
 
-// XXXX TODO make it optional, like #if (NGX_OPENSSL)
+// TODO make it optional, like #if (NGX_OPENSSL)
 
 // includes
 #include <openssl/evp.h>
-#include "write_buffer_queue.h"
 #include "common.h"
 
 // macros
