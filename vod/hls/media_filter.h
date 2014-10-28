@@ -2,7 +2,7 @@
 #define __MEDIA_FILTER_H__
 
 // includes
-#include "common.h"
+#include "../common.h"
 
 // typedefs
 typedef struct {

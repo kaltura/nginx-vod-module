@@ -1,16 +1,16 @@
-#ifndef __MUXER_H__
-#define __MUXER_H__
+#ifndef __HLS_MUXER_H__
+#define __HLS_MUXER_H__
 
 // includes
 #include "mp4_to_annexb_filter.h"
 #include "adts_encoder_filter.h"
 #include "mpegts_encoder_filter.h"
 #include "buffer_filter.h"
-#include "mp4_parser.h"
-#include "read_cache.h"
+#include "../mp4_parser.h"
+#include "../read_cache.h"
 
 // typedefs
-typedef void(*get_iframe_positions_callback_t)(
+typedef void(*hls_get_iframe_positions_callback_t)(
 	void* context, 
 	uint32_t segment_index, 
 	uint32_t frame_duration, 
@@ -20,11 +20,17 @@ typedef void(*get_iframe_positions_callback_t)(
 typedef struct {
 	int media_type;
 	uint32_t stream_index;
+	uint32_t timescale;
 	
 	// input frames
 	input_frame_t* first_frame;
 	input_frame_t* cur_frame;
 	input_frame_t* last_frame;
+
+	// time offsets
+	uint32_t first_frame_time_offset;
+	uint32_t next_frame_time_offset;
+	uint64_t next_frame_dts;
 	
 	// frame offsets
 	uint64_t* first_frame_offset;
@@ -40,14 +46,14 @@ typedef struct {
 	
 	// buffer
 	buffer_filter_t* buffer_state;
-} muxer_stream_state_t;
+} hls_muxer_stream_state_t;
 
 typedef struct {
 	request_context_t* request_context;
 
 	// fixed
-	muxer_stream_state_t* first_stream;
-	muxer_stream_state_t* last_stream;
+	hls_muxer_stream_state_t* first_stream;
+	hls_muxer_stream_state_t* last_stream;
 	uint32_t video_duration;
 
 	// child states
@@ -61,11 +67,11 @@ typedef struct {
 	void* cur_writer_context;
 	uint32_t cur_frame_pos;
 	int cache_slot_id;
-} muxer_state_t;
+} hls_muxer_state_t;
 
 // functions
-vod_status_t muxer_init(
-	muxer_state_t* state,
+vod_status_t hls_muxer_init(
+	hls_muxer_state_t* state,
 	request_context_t* request_context,
 	uint32_t segment_index,
 	mpeg_metadata_t* mpeg_metadata,
@@ -74,12 +80,12 @@ vod_status_t muxer_init(
 	void* write_context,
 	bool_t* simulation_supported);
 
-vod_status_t muxer_process(muxer_state_t* state, uint64_t* required_offset);
+vod_status_t hls_muxer_process(hls_muxer_state_t* state, uint64_t* required_offset);
 
-void muxer_simulate_get_iframes(muxer_state_t* state, uint32_t segment_duration, get_iframe_positions_callback_t callback, void* context);
+void hls_muxer_simulate_get_iframes(hls_muxer_state_t* state, uint32_t segment_duration, hls_get_iframe_positions_callback_t callback, void* context);
 
-uint32_t muxer_simulate_get_segment_size(muxer_state_t* state);
+uint32_t hls_muxer_simulate_get_segment_size(hls_muxer_state_t* state);
 
-void muxer_simulation_reset(muxer_state_t* state);
+void hls_muxer_simulation_reset(hls_muxer_state_t* state);
 
-#endif // __MUXER_H__
+#endif // __HLS_MUXER_H__

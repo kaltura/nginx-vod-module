@@ -35,6 +35,22 @@ read_stream_get_byte(simple_read_stream_t* stream)
 	return *stream->cur_pos++;
 }
 
+static vod_inline uint32_t
+read_stream_get_be32(simple_read_stream_t* stream)
+{
+	uint32_t result;
+
+	if (stream->cur_pos + sizeof(uint32_t) > stream->end_pos)
+	{
+		stream->eof_reached = TRUE;
+		stream->cur_pos = stream->end_pos;
+		return 0;
+	}
+
+	READ_BE32(stream->cur_pos, result);
+	return result;
+}
+
 static vod_inline void 
 read_stream_skip(simple_read_stream_t* stream, int bytes)
 {

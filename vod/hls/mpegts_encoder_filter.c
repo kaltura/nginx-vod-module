@@ -1,7 +1,7 @@
 #include "mpegts_encoder_filter.h"
-#include "mp4_parser.h"		// for MEDIA_TYPE_XXX
 #include "bit_fields.h"
-#include "common.h"
+#include "../mp4_parser.h"		// for MEDIA_TYPE_XXX
+#include "../common.h"
 
 #define PCR_PID (0x100)
 #define FIRST_VIDEO_SID (0xE0)
@@ -265,16 +265,16 @@ mpegts_encoder_init(
 		return VOD_OK;
 	}
 
-	buffer_queue_init(&state->queue, request_context);
+	write_buffer_queue_init(&state->queue, request_context);
 	state->queue.write_callback = write_callback;
 	state->queue.write_context = write_context;	
 	
 	// append PAT packet
-	cur_packet = buffer_queue_get_buffer(&state->queue, MPEGTS_PACKET_SIZE);
+	cur_packet = write_buffer_queue_get_buffer(&state->queue, MPEGTS_PACKET_SIZE);
 	if (cur_packet == NULL)
 	{
 		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
-			"mpegts_encoder_init: buffer_queue_get_buffer failed");
+			"mpegts_encoder_init: write_buffer_queue_get_buffer failed");
 		return VOD_ALLOC_FAILED;
 	}
 
@@ -302,11 +302,11 @@ mpegts_encoder_init_streams(mpegts_encoder_state_t* state, mpegts_encoder_init_s
 	}
 
 	// append PMT packet
-	stream_state->pmt_packet_start = buffer_queue_get_buffer(&state->queue, MPEGTS_PACKET_SIZE);
+	stream_state->pmt_packet_start = write_buffer_queue_get_buffer(&state->queue, MPEGTS_PACKET_SIZE);
 	if (stream_state->pmt_packet_start == NULL)
 	{
 		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, state->request_context->log, 0,
-			"mpegts_encoder_init_streams: buffer_queue_get_buffer failed");
+			"mpegts_encoder_init_streams: write_buffer_queue_get_buffer failed");
 		return VOD_ALLOC_FAILED;
 	}
 	stream_state->pmt_packet_end = stream_state->pmt_packet_start + MPEGTS_PACKET_SIZE;
@@ -400,11 +400,11 @@ mpegts_encoder_finalize_streams(mpegts_encoder_init_streams_state_t* stream_stat
 static vod_status_t 
 mpegts_encoder_init_packet(mpegts_encoder_state_t* state, bool_t first)
 {
-	state->cur_packet_start = buffer_queue_get_buffer(&state->queue, MPEGTS_PACKET_SIZE);
+	state->cur_packet_start = write_buffer_queue_get_buffer(&state->queue, MPEGTS_PACKET_SIZE);
 	if (state->cur_packet_start == NULL)
 	{
 		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, state->request_context->log, 0,
-			"mpegts_encoder_init_packet: buffer_queue_get_buffer failed");
+			"mpegts_encoder_init_packet: write_buffer_queue_get_buffer failed");
 		return VOD_ALLOC_FAILED;
 	}
 	state->cur_packet_end = state->cur_packet_start + MPEGTS_PACKET_SIZE;
@@ -551,7 +551,7 @@ mpegts_encoder_flush_frame(void* context, int32_t margin_size)
 	}
 	
 	// send the buffer if it's full
-	buffer_queue_send(&state->queue, state->cur_packet_end);
+	write_buffer_queue_send(&state->queue, state->cur_packet_end);
 	
 	return VOD_OK;
 }
@@ -559,7 +559,7 @@ mpegts_encoder_flush_frame(void* context, int32_t margin_size)
 vod_status_t 
 mpegts_encoder_flush(mpegts_encoder_state_t* state)
 {
-	buffer_queue_flush(&state->queue);
+	write_buffer_queue_flush(&state->queue);
 	
 	return VOD_OK;
 }

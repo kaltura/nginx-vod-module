@@ -16,12 +16,12 @@ typedef struct {
 } ngx_http_vod_stat_def_t;
 
 // constants
-static u_char status_prefix[] = 
+static const u_char status_prefix[] = 
 	"<?xml version=\"1.0\" encoding=\"utf-8\" ?>\r\n"
 	"<vod>\r\n"
 	"<version>" NGINX_VOD_VERSION "</version>\r\n"
 	"<built>" __DATE__ " " __TIME__ "</built>\r\n";
-static u_char status_postfix[] = "</vod>\r\n";
+static const u_char status_postfix[] = "</vod>\r\n";
 
 static u_char xml_content_type[] = "text/xml";
 
@@ -88,7 +88,7 @@ ngx_http_vod_status_handler(ngx_http_request_t *r)
 		cache_stats_len += sizeof("<></>\r\n") - 1 + 2 * cur_stat->name_len + NGX_ATOMIC_T_LEN;
 	}
 
-	length = sizeof(status_prefix)-1;
+	length = sizeof(status_prefix) - 1;
 	if (conf->moov_cache_zone != NULL)
 	{
 		length += sizeof("<moov_cache>\r\n") + cache_stats_len + sizeof("</moov_cache>\r\n");
@@ -110,7 +110,7 @@ ngx_http_vod_status_handler(ngx_http_request_t *r)
 	}
 
 	// populate the buffer
-	p = ngx_copy(response.data, status_prefix, sizeof(status_prefix)-1);
+	p = ngx_copy(response.data, status_prefix, sizeof(status_prefix) - 1);
 
 	if (conf->moov_cache_zone != NULL)
 	{
@@ -130,7 +130,7 @@ ngx_http_vod_status_handler(ngx_http_request_t *r)
 		p = ngx_copy(p, "</path_mapping_cache>\r\n", sizeof("</path_mapping_cache>\r\n") - 1);
 	}
 
-	p = ngx_copy(p, status_postfix, sizeof(status_postfix)-1);
+	p = ngx_copy(p, status_postfix, sizeof(status_postfix) - 1);
 	
 	response.len = p - response.data;
 	
@@ -142,5 +142,5 @@ ngx_http_vod_status_handler(ngx_http_request_t *r)
 		return NGX_HTTP_INTERNAL_SERVER_ERROR;
 	}
 
-	return ngx_http_vod_send_response(r, &response, xml_content_type, sizeof(xml_content_type)-1);
+	return ngx_http_vod_send_response(r, &response, xml_content_type, sizeof(xml_content_type) - 1);
 }

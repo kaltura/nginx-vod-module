@@ -13,7 +13,7 @@ typedef struct {
 
 	// data parsed from extra data
 	uint32_t nal_packet_size_length;
-	u_char* sps_pps;
+	const u_char* sps_pps;
 	uint32_t sps_pps_size;
 	
 	// state
@@ -36,7 +36,8 @@ vod_status_t mp4_to_annexb_init(
 	const media_filter_t* next_filter,
 	void* next_filter_context,
 	const u_char* extra_data, 
-	uint32_t extra_data_size);
+	uint32_t extra_data_size,
+	uint32_t nal_packet_size_length);
 
 bool_t mp4_to_annexb_simulation_supported(mp4_to_annexb_state_t* state);
 

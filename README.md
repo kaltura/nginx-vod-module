@@ -3,7 +3,9 @@
 
 ### Features
 
-* On-the-fly repackaging of MP4 files to HLS
+* On-the-fly repackaging of MP4 files to DASH, HDS, HLS, MSS
+
+* Adaptive bitrate support
 
 * Working modes:
   1. Local - serve locally accessible files (local disk/NFS mounted)
@@ -12,31 +14,31 @@
 
 * Fallback support for file not found in local/mapped modes
   
-* H264/AAC support
+* Video codecs: H264, H265 (dash only)
+
+* Audio codecs: AAC
 
 * Audio only/video only files
 
 * Track selection for multi audio/video MP4 files
 
-* Generation of I-frames playlist (EXT-X-I-FRAMES-ONLY)
-
 * Source file clipping (only from I-Frame to P-frame)
-
-* AES-128 encryption support
 
 * Serving of files for progressive download playback
 
+* HLS: Generation of I-frames playlist (EXT-X-I-FRAMES-ONLY)
+
+* HLS: AES-128 encryption support
+
 ### Limitations
 
-* MP4 files have to be "fast start" (the moov atom must be before the mdat atom)
-
 * Only AAC audio is supported (MP3 audio is not)
+
+* Clipping is not supported in progressive download
 
 * I-frames playlist generation is not supported when encryption is enabled
 
 * SAMPLE-AES encryption is not supported
-
-* Clipping is not supported in progressive download
 
 * Tested on Linux only
 
@@ -70,7 +72,7 @@ To disable compiler optimizations (for debugging with gdb) add `CFLAGS="-g -O0"`
 
 	CFLAGS="-g -O0" ./configure ....
 
-### Configuration directives
+### Common configuration directives
 
 #### vod
 * **syntax**: `vod segmenter`
@@ -80,7 +82,10 @@ To disable compiler optimizations (for debugging with gdb) add `CFLAGS="-g -O0"`
 Enables the nginx-vod module on the enclosing location. 
 Currently the allowed values for `segmenter` are:
 1. `none` - serves the MP4 files as is
+2. `dash` - Dynamic Adaptive Streaming over HTTP packetizer
+2. `hds` - Adobe HTTP Dynamic Streaming packetizer
 2. `hls` - Apple HTTP Live Streaming packetizer
+2. `mss` - Microsoft Smooth Streaming packetizer
 
 #### vod_mode
 * **syntax**: `vod_mode mode`
@@ -96,6 +101,16 @@ Sets the file access mode - local, remote or mapped
 
 Enables the nginx-vod status page on the enclosing location. 
 
+#### vod_multi_uri_suffix
+* **syntax**: `vod_multi_uri_suffix suffix`
+* **default**: `.urlset`
+* **context**: `http`, `server`, `location`
+
+A URL suffix that is used to identify multi URLs. A multi URL is a way to encode several different URLs
+that should be played together as an adaptive streaming, under a single URL. When the default suffix is
+used, an HLS set URL may look like: 
+http://host/hls/common-prefix,bitrate1,bitrate2,common-suffix.urlset/master.m3u8
+
 #### vod_segment_duration
 * **syntax**: `vod_segment_duration duration`
 * **default**: `10s`
@@ -110,6 +125,14 @@ Sets the HLS segment duration in milliseconds.
 
 Sets the secret that is used to generate the TS encryption key, if empty, no encryption is performed.
 
+#### vod_duplicate_bitrate_threshold
+* **syntax**: `vod_duplicate_bitrate_threshold threshold`
+* **default**: `4096`
+* **context**: `http`, `server`, `location`
+
+The bitrate threshold for removing identical bitrates, streams whose bitrate differences are less than
+this value will be considered identical.
+
 #### vod_https_header_name
 * **syntax**: `vod_https_header_name name`
 * **default**: `empty`
@@ -118,20 +141,6 @@ Sets the secret that is used to generate the TS encryption key, if empty, no enc
 Sets the name of an HTTP header whose existence determines whether the request was issued over HTTPS.
 If not set, the decision is made according to the protocol used to connect to the nginx server.
 A common scenario for using this setting is a load-balancer placed before the nginx that performs SSL-offloading.
-
-#### vod_absolute_index_urls
-* **syntax**: `vod_absolute_index_urls on/off`
-* **default**: `on`
-* **context**: `http`, `server`, `location`
-
-When enabled the server returns absolute segment URLs in media playlist requests
-
-#### vod_absolute_iframe_urls
-* **syntax**: `vod_absolute_iframe_urls on/off`
-* **default**: `off`
-* **context**: `http`, `server`, `location`
-
-When enabled the server returns absolute segment URLs in iframe playlist requests
 
 #### vod_moov_cache
 * **syntax**: `vod_moov_cache zone_name zone_size`
@@ -303,33 +312,125 @@ The name of the clip to request parameter.
 
 The name of the clip from request parameter.
 
-#### vod_index_file_name_prefix
-* **syntax**: `vod_index_file_name_prefix name`
+#### vod_tracks_param_name
+* **syntax**: `vod_tracks_param_name name`
+* **default**: `tracks`
+* **context**: `http`, `server`, `location`
+
+The name of the clip from request parameter.
+
+### Configuration directives - DASH
+
+#### vod_dash_absolute_manifest_urls
+* **syntax**: `vod_dash_absolute_manifest_urls on/off`
+* **default**: `on`
+* **context**: `http`, `server`, `location`
+
+When enabled the server returns absolute URLs in MPD requests
+
+#### vod_dash_manifest_file_name_prefix
+* **syntax**: `vod_dash_manifest_file_name_prefix name`
+* **default**: `manifest`
+* **context**: `http`, `server`, `location`
+
+The name of the MPD file (an mpd extension is implied).
+
+#### vod_dash_init_file_name_prefix
+* **syntax**: `vod_dash_init_file_name_prefix name`
+* **default**: `init`
+* **context**: `http`, `server`, `location`
+
+The name of the MP4 initialization file (an mp4 extension is implied).
+
+#### vod_dash_fragment_file_name_prefix
+* **syntax**: `vod_dash_fragment_file_name_prefix name`
+* **default**: `frag`
+* **context**: `http`, `server`, `location`
+
+The name of the fragment files (an m4s extension is implied).
+
+### Configuration directives - HDS
+
+#### vod_hds_manifest_file_name_prefix
+* **syntax**: `vod_hds_manifest_file_name_prefix name`
+* **default**: `manifest`
+* **context**: `http`, `server`, `location`
+
+The name of the HDS manifest file (an f4m extension is implied).
+
+#### vod_hds_fragment_file_name_prefix
+* **syntax**: `vod_hds_fragment_file_name_prefix name`
+* **default**: `frag`
+* **context**: `http`, `server`, `location`
+
+The prefix of fragment file names, the actual file name is `frag-f<file-index>-v<video-track-index>-a<audio-track-index>-Seg1-Frag<index>`.
+
+### Configuration directives - HLS
+
+#### vod_hls_absolute_master_urls
+* **syntax**: `vod_hls_absolute_master_urls on/off`
+* **default**: `on`
+* **context**: `http`, `server`, `location`
+
+When enabled the server returns absolute playlist URLs in master playlist requests
+
+#### vod_hls_absolute_index_urls
+* **syntax**: `vod_hls_absolute_index_urls on/off`
+* **default**: `on`
+* **context**: `http`, `server`, `location`
+
+When enabled the server returns absolute segment URLs in media playlist requests
+
+#### vod_hls_absolute_iframe_urls
+* **syntax**: `vod_hls_absolute_iframe_urls on/off`
+* **default**: `off`
+* **context**: `http`, `server`, `location`
+
+When enabled the server returns absolute segment URLs in iframe playlist requests
+
+#### vod_hls_master_file_name_prefix
+* **syntax**: `vod_hls_master_file_name_prefix name`
+* **default**: `master`
+* **context**: `http`, `server`, `location`
+
+The name of the HLS master playlist file (an m3u8 extension is implied).
+
+#### vod_hls_index_file_name_prefix
+* **syntax**: `vod_hls_index_file_name_prefix name`
 * **default**: `index`
 * **context**: `http`, `server`, `location`
 
-The name of the HLS playlist file (an m3u8 extension is implied).
+The name of the HLS media playlist file (an m3u8 extension is implied).
 
-#### vod_iframes_file_name_prefix
-* **syntax**: `vod_iframes_file_name_prefix name`
+#### vod_hls_iframes_file_name_prefix
+* **syntax**: `vod_hls_iframes_file_name_prefix name`
 * **default**: `iframes`
 * **context**: `http`, `server`, `location`
 
 The name of the HLS I-frames playlist file (an m3u8 extension is implied).
 
-#### vod_segment_file_name_prefix
-* **syntax**: `vod_segment_file_name_prefix name`
-* **default**: `seg-`
+#### vod_hls_segment_file_name_prefix
+* **syntax**: `vod_hls_segment_file_name_prefix name`
+* **default**: `seg`
 * **context**: `http`, `server`, `location`
 
 The prefix of segment file names, the actual file name is `seg-<index>-v<video-track-index>-a<audio-track-index>.ts`.
 
-#### vod_encryption_key_file_name
-* **syntax**: `vod_encryption_key_file_name name`
+#### vod_hls_encryption_key_file_name
+* **syntax**: `vod_hls_encryption_key_file_name name`
 * **default**: `encryption.key`
 * **context**: `http`, `server`, `location`
 
 The name of the encryption key file name (only relevant when vod_secret_key is used).
+
+### Configuration directives - MSS
+
+#### vod_mss_manifest_file_name_prefix
+* **syntax**: `vod_mss_manifest_file_name_prefix name`
+* **default**: `manifest`
+* **context**: `http`, `server`, `location`
+
+The name of the manifest file (has no extension).
 
 ### Sample configurations
 

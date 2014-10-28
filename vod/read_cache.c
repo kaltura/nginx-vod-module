@@ -33,6 +33,12 @@ read_cache_get_from_cache(read_cache_state_t* state, int cache_slot_id, uint64_t
 	return FALSE;
 }
 
+void
+read_cache_disable_buffer_reuse(read_cache_state_t* state)
+{
+	vod_memzero(state->target_buffer, sizeof(*state->target_buffer));
+}
+
 vod_status_t 
 read_cache_get_read_buffer(read_cache_state_t* state, uint64_t offset, uint64_t* out_offset, u_char** buffer, uint32_t* size)
 {

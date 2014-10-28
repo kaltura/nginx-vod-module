@@ -1,5 +1,5 @@
 #include "adts_encoder_filter.h"
-#include "bit_read_stream.h"
+#include "../bit_read_stream.h"
 
 #define AOT_ESCAPE (31)
 

@@ -1,6 +1,7 @@
 #include "ngx_http_vod_conf.h"
 #include "ngx_http_vod_request_parse.h"
 #include "ngx_child_http_request.h"
+#include "ngx_http_vod_submodule.h"
 #include "ngx_http_vod_module.h"
 #include "ngx_http_vod_status.h"
 #include "ngx_buffer_cache.h"
@@ -10,6 +11,7 @@ static void *
 ngx_http_vod_create_loc_conf(ngx_conf_t *cf)
 {
     ngx_http_vod_loc_conf_t  *conf;
+	const ngx_http_vod_submodule_t** cur_module;
 
     conf = ngx_pcalloc(cf->pool, sizeof(ngx_http_vod_loc_conf_t));
     if (conf == NULL) 
@@ -19,17 +21,24 @@ ngx_http_vod_create_loc_conf(ngx_conf_t *cf)
 		return NGX_CONF_ERROR;
     }
 
+	// base params
 	ngx_init_upstream_conf(&conf->upstream);
 	ngx_init_upstream_conf(&conf->fallback_upstream);
-	conf->request_parser = NGX_CONF_UNSET_PTR;
+	conf->parse_uri_file_name = NGX_CONF_UNSET_PTR;
+	conf->get_file_path_components = NGX_CONF_UNSET_PTR;
 	conf->request_handler = NGX_CONF_UNSET_PTR;
 	conf->segment_duration = NGX_CONF_UNSET_UINT;
-	conf->absolute_index_urls = NGX_CONF_UNSET;
-	conf->absolute_iframe_urls = NGX_CONF_UNSET;
+	conf->duplicate_bitrate_threshold = NGX_CONF_UNSET_UINT;
 	conf->initial_read_size = NGX_CONF_UNSET_SIZE;
 	conf->max_moov_size = NGX_CONF_UNSET_SIZE;
 	conf->cache_buffer_size = NGX_CONF_UNSET_SIZE;
 	conf->max_path_length = NGX_CONF_UNSET_SIZE;
+
+	// submodules
+	for (cur_module = submodules; *cur_module != NULL; cur_module++)
+	{
+		(*cur_module)->create_loc_conf(cf, (u_char*)conf + (*cur_module)->conf_offset);
+	}
 
     return conf;
 }
@@ -39,19 +48,23 @@ ngx_http_vod_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child)
 {
     ngx_http_vod_loc_conf_t *prev = parent;
     ngx_http_vod_loc_conf_t *conf = child;
+	const ngx_http_vod_submodule_t** cur_module;
+	ngx_int_t rc;
 	size_t proxy_header_len;
 	u_char* p;
 	char* err;
 
+	// base params
 	ngx_conf_merge_str_value(conf->child_request_location, prev->child_request_location, "");
-	ngx_conf_merge_ptr_value(conf->request_parser, prev->request_parser, ngx_http_vod_parse_hls_uri);
+	ngx_conf_merge_ptr_value(conf->parse_uri_file_name, prev->parse_uri_file_name, NULL);
+	ngx_conf_merge_ptr_value(conf->get_file_path_components, prev->get_file_path_components, NULL);
 	ngx_conf_merge_ptr_value(conf->request_handler, prev->request_handler, ngx_http_vod_local_request_handler);
+	ngx_conf_merge_str_value(conf->multi_uri_suffix, prev->multi_uri_suffix, ".urlset");
 
 	ngx_conf_merge_uint_value(conf->segment_duration, prev->segment_duration, 10000);
 	ngx_conf_merge_str_value(conf->secret_key, prev->secret_key, "");
+	ngx_conf_merge_uint_value(conf->duplicate_bitrate_threshold, prev->duplicate_bitrate_threshold, 4096);
 	ngx_conf_merge_str_value(conf->https_header_name, prev->https_header_name, "");
-	ngx_conf_merge_value(conf->absolute_index_urls, prev->absolute_index_urls, 1);
-	ngx_conf_merge_value(conf->absolute_iframe_urls, prev->absolute_iframe_urls, 0);
 
 	if (conf->moov_cache_zone == NULL) 
 	{
@@ -91,17 +104,7 @@ ngx_http_vod_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child)
 
 	ngx_conf_merge_str_value(conf->clip_to_param_name, prev->clip_to_param_name, "clipTo");
 	ngx_conf_merge_str_value(conf->clip_from_param_name, prev->clip_from_param_name, "clipFrom");
-	ngx_conf_merge_str_value(conf->index_file_name_prefix, prev->index_file_name_prefix, "index");
-	ngx_conf_merge_str_value(conf->iframes_file_name_prefix, prev->iframes_file_name_prefix, "iframes");
-	ngx_conf_merge_str_value(conf->m3u8_config.segment_file_name_prefix, prev->m3u8_config.segment_file_name_prefix, "seg-");
-	ngx_conf_merge_str_value(conf->encryption_key_file_name, prev->encryption_key_file_name, "encryption.key");
-
-	if (conf->encryption_key_file_name.len > MAX_ENCRYPTION_KEY_FILE_NAME_LEN)
-	{
-		ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
-			"\"encryption_key_file_name\" should not be more than %d characters", MAX_ENCRYPTION_KEY_FILE_NAME_LEN);
-		return NGX_CONF_ERROR;
-	}
+	ngx_conf_merge_str_value(conf->tracks_param_name, prev->tracks_param_name, "tracks");
 
 	// validate vod_upstream / vod_upstream_host_header used when needed
 	if (conf->request_handler == ngx_http_vod_remote_request_handler || conf->request_handler == ngx_http_vod_mapped_request_handler)
@@ -154,10 +157,27 @@ ngx_http_vod_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child)
 		return NGX_CONF_ERROR;
 	}
 
-	m3u8_builder_init_config(
-		&conf->m3u8_config,
-		conf->segment_duration,
-		conf->secret_key.len > 0 ? (char*)conf->encryption_key_file_name.data : NULL);
+	// validate the lengths of uri parameters
+	if (conf->clip_to_param_name.len > MAX_URI_PARAM_NAME_LEN)
+	{
+		ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
+			"\"clip_to_param_name\" should not be more than %d characters", MAX_URI_PARAM_NAME_LEN);
+		return NGX_CONF_ERROR;
+	}
+
+	if (conf->clip_from_param_name.len > MAX_URI_PARAM_NAME_LEN)
+	{
+		ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
+			"\"clip_from_param_name\" should not be more than %d characters", MAX_URI_PARAM_NAME_LEN);
+		return NGX_CONF_ERROR;
+	}
+
+	if (conf->tracks_param_name.len > MAX_URI_PARAM_NAME_LEN)
+	{
+		ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
+			"\"tracks_param_name\" should not be more than %d characters", MAX_URI_PARAM_NAME_LEN);
+		return NGX_CONF_ERROR;
+	}
 
 	// combine the proxy header name and value to a single line
 	proxy_header_len = conf->proxy_header_name.len + sizeof(": ") - 1 + conf->proxy_header_value.len + sizeof(CRLF);
@@ -174,6 +194,31 @@ ngx_http_vod_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child)
 	*p = '\0';
 
 	conf->proxy_header.len = p - conf->proxy_header.data;
+
+	// init the hash table of the uri params (clipTo, clipFrom etc.)
+	rc = ngx_http_vod_init_uri_params_hash(cf, conf);
+	if (rc != NGX_OK)
+	{
+		ngx_log_debug0(NGX_LOG_DEBUG_HTTP, cf->log, 0,
+			"ngx_http_vod_merge_loc_conf: ngx_http_vod_init_uri_params_hash failed");
+		return NGX_CONF_ERROR;
+	}
+
+	// merge the submodules configuration
+	for (cur_module = submodules; *cur_module != NULL; cur_module++)
+	{
+		err = (*cur_module)->merge_loc_conf(
+			cf, 
+			conf, 
+			(u_char*)conf + (*cur_module)->conf_offset, 
+			(u_char*)prev + (*cur_module)->conf_offset);
+		if (err != NGX_CONF_OK)
+		{
+			ngx_log_debug0(NGX_LOG_DEBUG_HTTP, cf->log, 0,
+				"ngx_http_vod_merge_loc_conf: submodule merge_loc_conf failed");
+			return err;
+		}
+	}
 
     return NGX_CONF_OK;
 }
@@ -290,29 +335,67 @@ ngx_http_upstream_command(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
 static char *
 ngx_http_vod(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
 {
+	const ngx_http_vod_submodule_t** cur_module;
 	ngx_http_vod_loc_conf_t *vod_conf = conf;
 	ngx_http_core_loc_conf_t *clcf;
+	ngx_flag_t found_module;
 	ngx_str_t *value;
+	ngx_str_t module_names;
+	size_t module_names_size;
+	u_char* p;
 
 	clcf = ngx_http_conf_get_module_loc_conf(cf, ngx_http_core_module);
 	clcf->handler = ngx_http_vod_handler;
 
 	value = cf->args->elts;
 
+	// file serve
 	if (ngx_strcasecmp(value[1].data, (u_char *) "none") == 0)
 	{
-		vod_conf->request_parser = ngx_http_vod_parse_serve_file_uri;
+		vod_conf->parse_uri_file_name = NULL;
+		vod_conf->get_file_path_components = NULL;
+		return NGX_CONF_OK;
 	}
-	else if (ngx_strcasecmp(value[1].data, (u_char *) "hls") == 0)
+
+	// submodule
+	found_module = 0;
+	module_names_size = 1;
+	for (cur_module = submodules; *cur_module != NULL; cur_module++)
 	{
-		vod_conf->request_parser = ngx_http_vod_parse_hls_uri;
+		if (ngx_strcasecmp(value[1].data, (*cur_module)->name) == 0)
+		{
+			vod_conf->parse_uri_file_name = (*cur_module)->parse_uri_file_name;
+			vod_conf->get_file_path_components = (*cur_module)->get_file_path_components;
+			found_module = 1;
+			break;
+		}
+		module_names_size += (*cur_module)->name_len + 1;
 	}
-	else
+
+	if (!found_module)
 	{
+		// combine the module names
+		module_names.data = ngx_palloc(cf->pool, module_names_size);
+		if (module_names.data == NULL)
+		{
+			ngx_conf_log_error(NGX_LOG_EMERG, cf, 0, "failed to allocate modules names");
+			return NGX_CONF_ERROR;
+		}
+
+		p = module_names.data;
+		for (cur_module = submodules; *cur_module != NULL; cur_module++)
+		{
+			*p++ = ',';
+			p = ngx_copy(p, (*cur_module)->name, (*cur_module)->name_len);
+		}
+		*p = '\0';
+		module_names.len = p - module_names.data;
+
+		// print the error message
 		ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
 			"invalid value \"%s\" in \"%s\" directive, "
-			"it must be either \"hls\" or \"none\"",
-			value[1].data, cmd->name.data);
+			"it must be one of: none%V",
+			value[1].data, cmd->name.data, &module_names);
 		return NGX_CONF_ERROR;
 	}
 
@@ -366,6 +449,13 @@ ngx_command_t ngx_http_vod_commands[] = {
 	NULL },
 
 	// output generation parameters
+	{ ngx_string("vod_multi_uri_suffix"),
+	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1,
+	ngx_conf_set_str_slot,
+	NGX_HTTP_LOC_CONF_OFFSET,
+	offsetof(ngx_http_vod_loc_conf_t, multi_uri_suffix),
+	NULL },
+
 	{ ngx_string("vod_segment_duration"),
 	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1,
 	ngx_conf_set_num_slot,
@@ -380,25 +470,18 @@ ngx_command_t ngx_http_vod_commands[] = {
 	offsetof(ngx_http_vod_loc_conf_t, secret_key),
 	NULL },
 
+	{ ngx_string("vod_duplicate_bitrate_threshold"),
+	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1,
+	ngx_conf_set_num_slot,
+	NGX_HTTP_LOC_CONF_OFFSET,
+	offsetof(ngx_http_vod_loc_conf_t, duplicate_bitrate_threshold),
+	NULL },
+
 	{ ngx_string("vod_https_header_name"),
 	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1,
 	ngx_conf_set_str_slot,
 	NGX_HTTP_LOC_CONF_OFFSET,
 	offsetof(ngx_http_vod_loc_conf_t, https_header_name),
-	NULL },
-
-	{ ngx_string("vod_absolute_index_urls"),
-	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1,
-	ngx_conf_set_flag_slot,
-	NGX_HTTP_LOC_CONF_OFFSET,
-	offsetof(ngx_http_vod_loc_conf_t, absolute_index_urls),
-	NULL },
-
-	{ ngx_string("vod_absolute_iframe_urls"),
-	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1,
-	ngx_conf_set_flag_slot,
-	NGX_HTTP_LOC_CONF_OFFSET,
-	offsetof(ngx_http_vod_loc_conf_t, absolute_iframe_urls),
 	NULL },
 
 	// mp4 reading parameters
@@ -574,33 +657,17 @@ ngx_command_t ngx_http_vod_commands[] = {
 	offsetof(ngx_http_vod_loc_conf_t, clip_from_param_name),
 	NULL },
 
-	{ ngx_string("vod_index_file_name_prefix"),
+	{ ngx_string("vod_tracks_param_name"),
 	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1,
 	ngx_conf_set_str_slot,
 	NGX_HTTP_LOC_CONF_OFFSET,
-	offsetof(ngx_http_vod_loc_conf_t, index_file_name_prefix),
+	offsetof(ngx_http_vod_loc_conf_t, tracks_param_name),
 	NULL },
 
-	{ ngx_string("vod_iframes_file_name_prefix"),
-	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1,
-	ngx_conf_set_str_slot,
-	NGX_HTTP_LOC_CONF_OFFSET,
-	offsetof(ngx_http_vod_loc_conf_t, iframes_file_name_prefix),
-	NULL },
-
-	{ ngx_string("vod_segment_file_name_prefix"),
-	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1,
-	ngx_conf_set_str_slot,
-	NGX_HTTP_LOC_CONF_OFFSET,
-	offsetof(ngx_http_vod_loc_conf_t, m3u8_config.segment_file_name_prefix),
-	NULL },
-
-	{ ngx_string("vod_encryption_key_file_name"),
-	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1,
-	ngx_conf_set_str_slot,
-	NGX_HTTP_LOC_CONF_OFFSET,
-	offsetof(ngx_http_vod_loc_conf_t, encryption_key_file_name),
-	NULL },
+#include "ngx_http_vod_dash_commands.h"
+#include "ngx_http_vod_hds_commands.h"
+#include "ngx_http_vod_hls_commands.h"
+#include "ngx_http_vod_mss_commands.h"
 
 	ngx_null_command
 };

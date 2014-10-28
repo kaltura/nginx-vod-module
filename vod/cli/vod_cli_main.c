@@ -36,7 +36,7 @@ int
 main(int argc, const char *argv[])
 {
 	read_cache_state_t read_cache_state;
-	muxer_state_t muxer;
+	hls_muxer_state_t muxer;
 	mpeg_metadata_t mpeg_metadata;
 	input_params_t input_params;
 	int output_fd;
@@ -64,11 +64,11 @@ main(int argc, const char *argv[])
 	{
 	}
 
-	if (!muxer_init(&muxer, &mpeg_metadata, &read_cache_state, write_file, &output_fd))
+	if (!hls_muxer_init(&muxer, &mpeg_metadata, &read_cache_state, write_file, &output_fd))
 	{
 	}
 	
-	muxer_process(&muxer);
+	hls_muxer_process(&muxer);
 	
 	close(output_fd);
 	close(input_fd);

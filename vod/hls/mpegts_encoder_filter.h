@@ -2,8 +2,8 @@
 #define __MPEGTS_ENCODER_FILTER_H__
 
 // includes
-#include "write_buffer_queue.h"
 #include "media_filter.h"
+#include "../write_buffer_queue.h"
 
 // constants
 #define MPEGTS_PACKET_SIZE (188)
@@ -16,7 +16,7 @@ typedef struct {
 	request_context_t* request_context;
 
 	// buffer queue
-	buffer_queue_t queue;
+	write_buffer_queue_t queue;
 
 	// packet state
 	u_char* cur_packet_start;
