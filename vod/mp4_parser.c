@@ -805,7 +805,7 @@ mp4_parser_parse_stts_atom(atom_info_t* atom_info, frames_parse_context_t* conte
 	if (sample_duration == 0)
 	{
 		vod_log_error(VOD_LOG_ERR, context->request_context->log, 0,
-			"mp4_parser_parse_stts_atom: sample duration is zero (3)");
+			"mp4_parser_parse_stts_atom: sample duration is zero (2)");
 		return VOD_BAD_DATA;
 	}
 
@@ -873,7 +873,7 @@ mp4_parser_parse_stts_atom(atom_info_t* atom_info, frames_parse_context_t* conte
 		if (sample_duration == 0)
 		{
 			vod_log_error(VOD_LOG_ERR, context->request_context->log, 0,
-				"mp4_parser_parse_stts_atom: sample duration is zero (3)");
+				"mp4_parser_parse_stts_atom: sample duration is zero (4)");
 			return VOD_BAD_DATA;
 		}
 
@@ -940,7 +940,7 @@ mp4_parser_parse_stts_atom(atom_info_t* atom_info, frames_parse_context_t* conte
 		if (sample_duration == 0)
 		{
 			vod_log_error(VOD_LOG_ERR, context->request_context->log, 0,
-				"mp4_parser_parse_stts_atom: sample duration is zero (3)");
+				"mp4_parser_parse_stts_atom: sample duration is zero (5)");
 			return VOD_BAD_DATA;
 		}
 
@@ -1040,10 +1040,7 @@ mp4_parser_parse_ctts_atom(atom_info_t* atom_info, frames_parse_context_t* conte
 	}
 
 	// skip to the first frame
-	if (context->first_frame > frame_index)
-	{
-		sample_count -= (context->first_frame - frame_index);
-	}
+	sample_count -= (context->first_frame - frame_index);
 
 	// parse the pts delay of the frames
 	for (;;)
