@@ -212,6 +212,8 @@ vod_status_t mp4_parser_parse_basic_metadata(
 vod_status_t mp4_parser_parse_frames(
 	request_context_t* request_context,
 	mpeg_base_metadata_t* base,
+	uint32_t clip_from,
+	uint32_t clip_to,
 	mpeg_metadata_t* result);
 
 vod_status_t mp4_parser_finalize_mpeg_metadata(
