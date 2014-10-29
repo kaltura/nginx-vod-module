@@ -369,6 +369,8 @@ ngx_http_vod_parse_moov_atom(ngx_http_vod_ctx_t *ctx, u_char* moov_buffer, size_
 	rc = mp4_parser_parse_frames(
 		&ctx->submodule_context.request_context,
 		&mpeg_base_metadata,
+		suburi_params->clip_from,
+		suburi_params->clip_to,
 		&ctx->submodule_context.mpeg_metadata);
 	if (rc != VOD_OK)
 	{
