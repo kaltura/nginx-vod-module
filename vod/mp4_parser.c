@@ -540,6 +540,10 @@ mp4_parser_parse_hdlr_atom(atom_info_t* atom_info, metadata_parse_context_t* con
 	case HDLR_TYPE_SOUN:
 		context->media_info.media_type = MEDIA_TYPE_AUDIO;
 		break;
+
+	default:
+		context->media_info.media_type = MEDIA_TYPE_NONE;
+		break;
 	}
 	
 	return VOD_OK;

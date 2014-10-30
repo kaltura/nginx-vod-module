@@ -4,6 +4,9 @@
 
 // macros
 #define MAX_SEGMENT_COUNT (10 * 1024)			// more than 1 day when using 10 sec segments
+#define M3U8_HEADER_PART1 "#EXTM3U\n#EXT-X-TARGETDURATION:%d\n#EXT-X-ALLOW-CACHE:YES\n#EXT-X-PLAYLIST-TYPE:VOD\n"
+#define M3U8_HEADER_PART2 "#EXT-X-VERSION:%d\n#EXT-X-MEDIA-SEQUENCE:1\n"
+
 
 // constants
 static const u_char m3u8_header[] = "#EXTM3U\n";
@@ -262,6 +265,7 @@ m3u8_builder_build_index_playlist(
 	m3u8_config_t* conf,
 	vod_str_t* base_url,
 	bool_t include_file_index,
+	bool_t encryption_enabled,
 	uint32_t segment_duration,
 	mpeg_metadata_t* mpeg_metadata,
 	vod_str_t* result)
@@ -300,9 +304,19 @@ m3u8_builder_build_index_playlist(
 		m3u8_builder_get_int_print_len(segment_count) + required_tracks.len + sizeof(".ts\n") - 1;
 
 	result_size =
-		conf->m3u8_header_len +
+		sizeof(M3U8_HEADER_PART1) + VOD_INT64_LEN + 
+		sizeof(M3U8_HEADER_PART2) + VOD_INT64_LEN + 
 		segment_length * segment_count +
 		sizeof(m3u8_footer);
+
+	if (encryption_enabled)
+	{
+		result_size +=
+			sizeof(encryption_key_tag_prefix) - 1 +
+			conf->encryption_key_file_name.len + 
+			sizeof("-f") - 1 + VOD_INT32_LEN + 
+			sizeof(encryption_key_tag_postfix) - 1;
+	}
 
 	// allocate the buffer
 	result->data = vod_alloc(request_context->pool, result_size);
@@ -313,8 +327,29 @@ m3u8_builder_build_index_playlist(
 		return VOD_ALLOC_FAILED;
 	}
 
-	// fill out the buffer
-	p = vod_copy(result->data, conf->m3u8_header, conf->m3u8_header_len);	//sizeof(m3u8_header) - 1);
+	// write the header
+	p = vod_sprintf(
+		result->data,
+		M3U8_HEADER_PART1,
+		(segment_duration + 500) / 1000);
+	
+	if (encryption_enabled)
+	{
+		p = vod_copy(p, encryption_key_tag_prefix, sizeof(encryption_key_tag_prefix) - 1);
+		p = vod_copy(p, conf->encryption_key_file_name.data, conf->encryption_key_file_name.len);
+		if (include_file_index)
+		{
+			p = vod_sprintf(p, "-f%uD", mpeg_metadata->first_stream->file_info.file_index + 1);
+		}
+		p = vod_copy(p, encryption_key_tag_postfix, sizeof(encryption_key_tag_postfix)-1);
+	}
+
+	p = vod_sprintf(
+		p,
+		M3U8_HEADER_PART2,
+		conf->m3u8_version);
+
+	// write the segments
 	for (segment_index = 1; duration > 0; segment_index++)
 	{
 		if (duration >= segment_duration)
@@ -491,8 +526,7 @@ m3u8_builder_build_master_playlist(
 void 
 m3u8_builder_init_config(
 	m3u8_config_t* conf, 
-	uint32_t segment_duration, 
-	const char* encryption_key_file_name)
+	uint32_t segment_duration)
 {
 	conf->m3u8_version = 3;
 
@@ -510,16 +544,6 @@ m3u8_builder_init_config(
 			(segment_duration + 500) / 1000,
 			1) - conf->m3u8_extinf;
 	}
-
-	conf->m3u8_header_len = vod_snprintf(
-		conf->m3u8_header,
-		sizeof(conf->m3u8_header) - 1,
-		m3u8_header_format,
-		(segment_duration + 500) / 1000,		// EXT-X-TARGETDURATION should be the segment duration rounded to nearest second
-		encryption_key_file_name ? encryption_key_tag_prefix : "",
-		encryption_key_file_name ? encryption_key_file_name : "",
-		encryption_key_file_name ? encryption_key_tag_postfix : "",
-		conf->m3u8_version) - conf->m3u8_header;
 
 	conf->iframes_m3u8_header_len = vod_snprintf(
 		conf->iframes_m3u8_header,

@@ -10,6 +10,7 @@ static u_char encryption_key_content_type[] = "application/octet-stream";
 
 static const u_char ts_file_ext[] = ".ts";
 static const u_char m3u8_file_ext[] = ".m3u8";
+static const u_char key_file_ext[] = ".key";
 
 // constants
 static ngx_str_t empty_string = ngx_null_string;
@@ -67,6 +68,7 @@ ngx_http_vod_hls_handle_index_playlist(
 		&submodule_context->conf->hls.m3u8_config,
 		&base_url,
 		submodule_context->request_params.uses_multi_uri,
+		submodule_context->conf->secret_key.len != 0,
 		submodule_context->conf->segment_duration,
 		&submodule_context->mpeg_metadata,
 		response);
@@ -275,19 +277,11 @@ ngx_http_vod_hls_merge_loc_conf(
 	ngx_conf_merge_str_value(conf->m3u8_config.index_file_name_prefix, prev->m3u8_config.index_file_name_prefix, "index");	
 	ngx_conf_merge_str_value(conf->iframes_file_name_prefix, prev->iframes_file_name_prefix, "iframes");
 	ngx_conf_merge_str_value(conf->m3u8_config.segment_file_name_prefix, prev->m3u8_config.segment_file_name_prefix, "seg");
-	ngx_conf_merge_str_value(conf->encryption_key_file_name, prev->encryption_key_file_name, "encryption.key");
-
-	if (conf->encryption_key_file_name.len > MAX_ENCRYPTION_KEY_FILE_NAME_LEN)
-	{
-		ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
-			"\"encryption_key_file_name\" should not be more than %d characters", MAX_ENCRYPTION_KEY_FILE_NAME_LEN);
-		return NGX_CONF_ERROR;
-	}
+	ngx_conf_merge_str_value(conf->m3u8_config.encryption_key_file_name, prev->m3u8_config.encryption_key_file_name, "encryption");
 
 	m3u8_builder_init_config(
 		&conf->m3u8_config,
-		base->segment_duration,
-		base->secret_key.len > 0 ? (char*)conf->encryption_key_file_name.data : NULL);
+		base->segment_duration);
 
 	return NGX_CONF_OK;
 }
@@ -348,12 +342,12 @@ ngx_http_vod_hls_parse_uri_file_name(
 		expect_segment_index = FALSE;
 	}
 	// encryption key
-	else if (conf->secret_key.len > 0 &&
-		end_pos - start_pos == (int)conf->hls.encryption_key_file_name.len &&
-		ngx_memcmp(start_pos, conf->hls.encryption_key_file_name.data, conf->hls.encryption_key_file_name.len) == 0)
+	else if (ngx_http_vod_match_prefix_postfix(start_pos, end_pos, &conf->hls.m3u8_config.encryption_key_file_name, key_file_ext))
 	{
+		start_pos += conf->hls.m3u8_config.encryption_key_file_name.len;
+		end_pos -= (sizeof(key_file_ext)-1);
 		request_params->request = &hls_enc_key_request;
-		return NGX_OK;
+		expect_segment_index = FALSE;
 	}
 	else
 	{

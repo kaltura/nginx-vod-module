@@ -182,8 +182,8 @@ TEST_CASES = [
     ('VIDEO_ONLY', lambda: convertWithFfmpeg('-vcodec copy -an'), None, 'index.m3u8', 200),
     ('AUDIO_ONLY', lambda: convertWithFfmpeg('-acodec copy -vn'), None, 'index.m3u8', 200),
     ('NON_FAST_START', lambda: convertWithFfmpeg('-acodec copy -vcodec copy', False), None, 'index.m3u8', 200),
-    ('NON_AAC_AUDIO', lambda: convertWithFfmpeg('-vcodec copy -codec:a libmp3lame'), 'unsupported format - media type 2', 'index.m3u8', 200),
-    ('NON_H264_VIDEO', lambda: convertWithFfmpeg('-acodec copy -c:v mpeg4'), 'unsupported format - media type 1', 'index.m3u8', 200),
+    ('NON_AAC_AUDIO', lambda: convertWithFfmpeg('-vcodec copy -codec:a libmp3lame'), 'unsupported format - media type 1', 'index.m3u8', 200),
+    ('NON_H264_VIDEO', lambda: convertWithFfmpeg('-acodec copy -c:v mpeg4'), 'unsupported format - media type 0', 'index.m3u8', 200),
     ('CANT_FIND_MOOV', lambda: applyPatch(getAtomPos('moov') + 4, 'blah'), ' is smaller than the atom start offset ', 'index.m3u8', 404),
     ('MOOV_TOO_BIG', lambda: applyPatch(getAtomPos('moov'), struct.pack('>L', 500000000)), 'moov size 499999992 exceeds the max', 'index.m3u8', 404),
     ('TRUNCATED_MOOV', lambda: truncateFile(getAtomEndPos('moov') - 100), 'is smaller than moov end offset', 'index.m3u8', 404),
@@ -198,7 +198,7 @@ TEST_CASES = [
     ('ATOM_SIZE_OVERFLOW', lambda: StringReader(struct.pack('>L', 100) + 'ftyp'), 'atom size 92 overflows the input stream size', 'index.m3u8', 404),
     # hdlr
     ('HDLR_TOO_SMALL', lambda: truncateAtom('moov.trak.mdia.hdlr', 4), 'mp4_parser_parse_hdlr_atom: atom size 4 too small', 'index.m3u8', 404),
-    ('BAD_MEDIA_TYPE', lambda: applyPatch(getAtomDataPos('moov.trak.mdia.hdlr') + 8, 'blah'), 'unsupported format - media type 0', 'index.m3u8', 200),
+    ('BAD_MEDIA_TYPE', lambda: applyPatch(getAtomDataPos('moov.trak.mdia.hdlr') + 8, 'blah'), 'unsupported format - media type 3', 'index.m3u8', 200),
     # mdhd
     ('MDHD_TOO_SMALL', lambda: truncateAtom('moov.trak.mdia.mdhd', 4), 'mp4_parser_parse_mdhd_atom: atom size 4 too small', 'index.m3u8', 404),
     ('ZERO_TIMESCALE', lambda: applyPatch(getTimeScaleOffset(), struct.pack('>L', 0)), 'time scale is zero', 'index.m3u8', 404),
@@ -223,10 +223,10 @@ TEST_CASES = [
     ('STSC_ZERO_CHUNK_INDEX', lambda: applyPatch(getAtomDataPos('moov.trak.mdia.minf.stbl.stsc') + 8, struct.pack('>L', 0)), 'chunk index is zero', 'seg-1.ts', 404),
     ('STSC_INVALID_SPC', lambda: applyPatch(getAtomDataPos('moov.trak.mdia.minf.stbl.stsc') + 4, struct.pack('>LLL', 1, 1, 0)), 'samples per chunk is zero', 'seg-1.ts', 404),
     # stsz
-    ('STSZ_TOO_SMALL', lambda: truncateAtom('moov.trak.mdia.minf.stbl.stsz', 4), 'mp4_parser_parse_stsz_atom: atom size 4 too small', 'seg-1.ts', 404),
+    ('STSZ_TOO_SMALL', lambda: truncateAtom('moov.trak.mdia.minf.stbl.stsz', 4), 'mp4_parser_validate_stsz_atom: atom size 4 too small', 'seg-1.ts', 404),
     ('STSZ_UNIFORM_SIZE_BIG', lambda: applyPatch(getAtomDataPos('moov.trak.mdia.minf.stbl.stsz') + 4, struct.pack('>L', 100000000)), 'uniform size 100000000 is too big', 'seg-1.ts', 404),
     ('STSZ_ENTRIES_TOO_SMALL', lambda: applyPatch(getAtomDataPos('moov.trak.mdia.minf.stbl.stsz') + 8, struct.pack('>L', 1)), 'number of entries 1 smaller than last frame', 'seg-1.ts', 404),
-    ('STSZ_ENTRIES_TOO_BIG', lambda: applyPatch(getAtomDataPos('moov.trak.mdia.minf.stbl.stsz') + 8, struct.pack('>L', 1000000000)), 'mp4_parser_parse_stsz_atom: number of entries 1000000000 too big', 'seg-1.ts', 404),
+    ('STSZ_ENTRIES_TOO_BIG', lambda: applyPatch(getAtomDataPos('moov.trak.mdia.minf.stbl.stsz') + 8, struct.pack('>L', 1000000000)), 'mp4_parser_validate_stsz_atom: number of entries 1000000000 too big', 'seg-1.ts', 404),
     ('STSZ_CANT_HOLD', lambda: applyPatch(getAtomDataPos('moov.trak.mdia.minf.stbl.stsz') + 8, struct.pack('>L', 50000000)), 'too small to hold 50000000 entries', 'seg-1.ts', 404),
     ('STSZ_FRAME_TOO_BIG', lambda: applyPatch(getAtomDataPos('moov.trak.mdia.minf.stbl.stsz') + 12, struct.pack('>L', 100000000)), 'frame size 100000000 too big', 'seg-1.ts', 404),
     # stss
