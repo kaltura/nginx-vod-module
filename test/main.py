@@ -425,7 +425,7 @@ class BasicTestSuite(TestSuite):
         assertEquals(clippedResponse.count(M3U8_EXTINF), 1)
 
         # segment
-        assertRequestFails(self.getUrl('/clipTo/10000/seg-2-a1-v1.ts'), 400)
+        assertRequestFails(self.getUrl('/clipTo/10000/seg-2-a1-v1.ts'), 404)
 
         # iframes
         fullResponse = urllib2.urlopen(self.getUrl(HLS_IFRAMES_FILE)).read()
@@ -469,9 +469,13 @@ class BasicTestSuite(TestSuite):
         assertRequestFails(self.getUrl('/seg-3600-a1-v1.ts'), 404)
         self.logTracker.assertContains('requested segment index 3599 exceeds the segment count')
 
-    def testNonExistingTracks(self):
-        assertRequestFails(self.getUrl('/seg-1-a10-v10.ts'), 400)
+    def testNonExistingTracksM3U8(self):
+        assertRequestFails(self.getUrl('/index-a10-v10.m3u8'), 400)
         self.logTracker.assertContains('no matching streams were found')
+        
+    def testNonExistingTracksTS(self):
+        assertRequestFails(self.getUrl('/seg-1-a10-v10.ts'), 404)
+        self.logTracker.assertContains('requested segment index 0 exceeds the segment count 0')
 
     def testClipToLargerThanClipFrom(self):
         assertRequestFails(self.getUrl('/clipFrom/10000/clipTo/1000/index.m3u8'), 400)
@@ -479,49 +483,45 @@ class BasicTestSuite(TestSuite):
 
     def testClipFromLargerThanVideoDurationTS(self):
         assertRequestFails(self.getUrl('/clipFrom/9999999' + HLS_SEGMENT_FILE), 404)
-        self.logTracker.assertContains('clip from 9999999 exceeds video duration')
+        self.logTracker.assertContains('requested segment index 0 exceeds the segment count 0')
 
     def testClipFromLargerThanVideoDurationM3U8(self):
         assertRequestFails(self.getUrl('/clipFrom/9999999' + HLS_PLAYLIST_FILE), 400)
-        self.logTracker.assertContains('clip from 9999999 exceeds the file duration')
+        self.logTracker.assertContains('no matching streams were found')
 
     def testBadSegmentIndex(self):
         assertRequestFails(self.getUrl('/seg-abc-a1-v1.ts'), 400)
-        self.logTracker.assertContains('failed to parse the segment index')
+        self.logTracker.assertContains('ngx_http_vod_extract_uint32_token failed')
     
     def testBadStreamIndex(self):
         assertRequestFails(self.getUrl('/seg-1-aabc-v1.ts'), 400)
-        self.logTracker.assertContains('failed to parse a stream index')
+        self.logTracker.assertContains('did not consume the whole name')
     
     def testBadStreamType(self):
         assertRequestFails(self.getUrl('/seg-1-a1-x1.ts'), 400)
-        self.logTracker.assertContains('failed to parse stream type')
+        self.logTracker.assertContains('did not consume the whole name')
 
     def testUnrecognizedTSRequest(self):
         assertRequestFails(self.getUrl('/bla-1-a1-v1.ts'), 400)
-        self.logTracker.assertContains('unidentified ts request')
+        self.logTracker.assertContains('unidentified request')
 
     def testUnrecognizedM3U8Request(self):
         assertRequestFails(self.getUrl('/bla.m3u8'), 400)
         self.logTracker.assertContains('unidentified m3u8 request')
 
+    def testBadClipTo(self):
+        assertRequestFails(self.getUrl('/clipTo/abcd' + HLS_PLAYLIST_FILE), 400)
+        self.logTracker.assertContains('clipTo parser failed')
+
+    def testBadClipFrom(self):
+        assertRequestFails(self.getUrl('/clipFrom/abcd' + HLS_PLAYLIST_FILE), 400)
+        self.logTracker.assertContains('clipFrom parser failed')
+        
 class BasicNonLocalTestSuite(TestSuite):
     def __init__(self, getUrl, setupServer):
         super(BasicNonLocalTestSuite, self).__init__()
         self.getUrl = getUrl
         self.prepareTest = setupServer
-
-    def testBadClipTo(self):        # the error should be ignored
-        url = self.getUrl('/clipTo/abcd' + HLS_PLAYLIST_FILE)
-        testBody = urllib2.urlopen(url).read()
-        refBody = urllib2.urlopen(url.replace('/clipTo/abcd', '')).read()
-        assert(testBody.replace('/clipTo/abcd', '') == refBody)
-
-    def testBadClipFrom(self):      # the error should be ignored
-        url = self.getUrl('/clipFrom/abcd' + HLS_PLAYLIST_FILE)
-        testBody = urllib2.urlopen(url).read()
-        refBody = urllib2.urlopen(url.replace('/clipFrom/abcd', '')).read()
-        assert(testBody.replace('/clipFrom/abcd', '') == refBody)
 
 class UpstreamTestSuite(TestSuite):
     def __init__(self, baseUrl, uri, serverPort, urlFile = HLS_PLAYLIST_FILE):

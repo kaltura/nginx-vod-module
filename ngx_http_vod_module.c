@@ -1706,6 +1706,20 @@ ngx_http_vod_handler(ngx_http_request_t *r)
 			return rc;
 		}
 	}
+	else
+	{
+		request_params.required_files = 1;
+		request_params.required_tracks[MEDIA_TYPE_VIDEO] = 0xffffffff;
+		request_params.required_tracks[MEDIA_TYPE_AUDIO] = 0xffffffff;
+
+		rc = ngx_http_vod_parse_uri_path(r, conf, &r->uri, &request_params);
+		if (rc != NGX_OK)
+		{
+			ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+				"ngx_http_vod_handler: ngx_http_vod_parse_uri_path failed %i", rc);
+			return rc;
+		}
+	}
 
 	// initialize the context
 	ctx = ngx_pcalloc(r->pool, sizeof(ngx_http_vod_ctx_t));

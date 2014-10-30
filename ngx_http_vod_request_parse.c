@@ -473,9 +473,9 @@ ngx_http_vod_extract_uri_params(
 	}
 	suburi->stripped_uri.data = p;
 
-	for (cur_pos = suburi->uri.data; cur_pos < end_pos; cur_pos++)
+	for (cur_pos = suburi->uri.data; cur_pos <= end_pos; cur_pos++)
 	{
-		if (*cur_pos != '/')
+		if (cur_pos < end_pos && *cur_pos != '/')
 		{
 			if (param_name_pos < param_name_end)
 			{
@@ -515,7 +515,8 @@ ngx_http_vod_extract_uri_params(
 				if (rc != NGX_OK)
 				{
 					ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
-						"ngx_http_vod_extract_uri_params: parser failed %i", rc);
+						"ngx_http_vod_extract_uri_params: %V parser failed %i", 
+							(ngx_str_t*)((u_char*)conf + param_def->name_conf_offset), rc);
 					return rc;
 				}
 			}

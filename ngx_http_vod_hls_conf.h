@@ -12,7 +12,6 @@ typedef struct
 	ngx_flag_t absolute_iframe_urls;
 	ngx_str_t master_file_name_prefix;
 	ngx_str_t iframes_file_name_prefix;
-	ngx_str_t encryption_key_file_name;
 
 	// derived fields
 	m3u8_config_t m3u8_config;
