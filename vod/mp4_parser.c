@@ -15,7 +15,7 @@
 
 // constants
 #define MAX_FRAMERATE_TEST_SAMPLES (20)
-#define MAX_TOTAL_SIZE_TEST_SAMPLES (1000)
+#define MAX_TOTAL_SIZE_TEST_SAMPLES (10000)
 
 // these constants can be generated with python - 'moov'[::-1].encode('hex')
 #define ATOM_NAME_MOOV (0x766f6f6d)		// movie header
@@ -37,6 +37,7 @@
 #define ATOM_NAME_AVCC (0x43637661)		// advanced video codec configuration
 #define ATOM_NAME_HVCC (0x43637668)		// high efficiency video codec configuration
 #define ATOM_NAME_ESDS (0x73647365)		// elementary stream description
+#define ATOM_NAME_WAVE (0x65766177)		// 
 #define ATOM_NAME_DINF (0x666e6964)		// data information
 #define ATOM_NAME_TKHD (0x64686b74)		// track header
 #define ATOM_NAME_MVHD (0x6468766d)		// movie header
@@ -1707,7 +1708,7 @@ mp4_parser_read_config_descriptor(metadata_parse_context_t* context, simple_read
 }
 
 static vod_status_t 
-mp4_parser_parse_audio_extra_data_atom(void* ctx, atom_info_t* atom_info)
+mp4_parser_parse_audio_esds_atom(void* ctx, atom_info_t* atom_info)
 {
 	metadata_parse_context_t* context = (metadata_parse_context_t*)ctx;
 	simple_read_stream_t stream;
@@ -1744,6 +1745,30 @@ mp4_parser_parse_audio_extra_data_atom(void* ctx, atom_info_t* atom_info)
 	}
 	
 	return VOD_OK;
+}
+
+static vod_status_t
+mp4_parser_parse_audio_extra_data_atom(void* ctx, atom_info_t* atom_info)
+{
+	metadata_parse_context_t* context = (metadata_parse_context_t*)ctx;
+	vod_status_t rc;
+
+	if (atom_info->name == ATOM_NAME_WAVE && atom_info->size > 8)
+	{
+		rc = mp4_parser_parse_atoms(
+			context->request_context, 
+			atom_info->ptr, 
+			atom_info->size, 
+			TRUE, 
+			mp4_parser_parse_audio_esds_atom, 
+			context);
+	}
+	else
+	{
+		rc = mp4_parser_parse_audio_esds_atom(ctx, atom_info);
+	}
+
+	return rc;
 }
 
 static const u_char* 
