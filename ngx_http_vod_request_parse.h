@@ -55,7 +55,7 @@ typedef struct {
 typedef struct ngx_http_vod_request_params_s {
 	const struct ngx_http_vod_request_s* request;
 	ngx_http_vod_suburi_params_t* suburis;
-	int suburi_count;
+	uint32_t suburi_count;
 	ngx_flag_t uses_multi_uri;
 	uint32_t segment_index;
 	uint32_t required_files;

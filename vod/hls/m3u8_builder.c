@@ -400,7 +400,7 @@ m3u8_builder_build_master_playlist(
 	WALK_STREAMS_BY_FILES_VARS(cur_file_streams);
 	mpeg_stream_metadata_t* stream;
 	media_info_t* video;
-	media_info_t* audio;
+	media_info_t* audio = NULL;
 	uint32_t bitrate;
 	u_char* p;
 	size_t max_video_stream_inf;

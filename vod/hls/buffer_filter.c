@@ -221,7 +221,7 @@ buffer_filter_flush_frame(void* context, int32_t margin_size)
 }
 
 bool_t 
-buffer_filter_get_dts(buffer_filter_t* state, int64_t* dts)
+buffer_filter_get_dts(buffer_filter_t* state, uint64_t* dts)
 {
 	if (state->cur_state == STATE_INITIAL)
 	{

@@ -40,7 +40,7 @@ ngx_http_vod_parse_string(
 			return start_pos == end_pos;
 
 		case MATCH_FIXED_STRING:
-			if (end_pos - start_pos < match_def->string.len ||
+			if (end_pos - start_pos < (ssize_t)match_def->string.len ||
 				ngx_memcmp(start_pos, match_def->string.data, match_def->string.len) != 0)
 			{
 				return FALSE;
@@ -409,7 +409,7 @@ ngx_http_vod_init_uri_params_hash(ngx_conf_t *cf, ngx_http_vod_loc_conf_t* conf)
 	ngx_hash_init_t hash;
 	ngx_str_t* param_name;
 	ngx_int_t rc;
-	int i;
+	unsigned i;
 
 	for (i = 0; i < sizeof(hash_keys) / sizeof(hash_keys[0]); i++)
 	{
