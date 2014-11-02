@@ -12,13 +12,13 @@ typedef struct {
 
 // constants
 static const ngx_http_vod_match_definition_t fragment_match_definition[] = {
-	{ MATCH_FIXED_STRING, 0, 0, { sizeof("QualityLevels(") - 1, (u_char*)"QualityLevels(" } },
-	{ MATCH_NUMBER, offsetof(fragment_params_t, bitrate) },
-	{ MATCH_FIXED_STRING, 0, 0, { sizeof(")/Fragments(") - 1, (u_char*)")/Fragments(" } },
-	{ MATCH_DELIM_STRING, offsetof(fragment_params_t, media_type), '=', },
-	{ MATCH_NUMBER, offsetof(fragment_params_t, time) },
-	{ MATCH_FIXED_STRING, 0, 0, { sizeof(")") - 1, (u_char*)")" } },
-	{ MATCH_END },
+	{ MATCH_FIXED_STRING,	0,											0,	ngx_string("QualityLevels(") },
+	{ MATCH_NUMBER,			offsetof(fragment_params_t, bitrate),		0,	ngx_null_string },
+	{ MATCH_FIXED_STRING,	0,											0,	ngx_string(")/Fragments(") },
+	{ MATCH_DELIM_STRING,	offsetof(fragment_params_t, media_type),	'=',ngx_null_string },
+	{ MATCH_NUMBER,			offsetof(fragment_params_t, time),			0,	ngx_null_string },
+	{ MATCH_FIXED_STRING,	0,											0,	ngx_string(")") },
+	{ MATCH_END,			0,											0,	ngx_null_string },
 };
 
 // content types

@@ -226,7 +226,7 @@ hls_muxer_start_frame(hls_muxer_state_t* state)
 	output_frame_t* output_frame;
 	uint32_t cur_frame_time_offset;
 	uint64_t cur_frame_dts;
-	int64_t buffer_dts;
+	uint64_t buffer_dts;
 	vod_status_t rc;
 
 	selected_stream = hls_muxer_choose_stream(state);
@@ -404,10 +404,10 @@ hls_muxer_simulation_flush(hls_muxer_state_t* state)
 }
 
 static void 
-hls_muxer_simulation_flush_delayed_streams(hls_muxer_state_t* state, hls_muxer_stream_state_t* selected_stream, int64_t frame_dts)
+hls_muxer_simulation_flush_delayed_streams(hls_muxer_state_t* state, hls_muxer_stream_state_t* selected_stream, uint64_t frame_dts)
 {
 	hls_muxer_stream_state_t* cur_stream;
-	int64_t buffer_dts;
+	uint64_t buffer_dts;
 
 	for (cur_stream = state->first_stream; cur_stream < state->last_stream; cur_stream++)
 	{
@@ -455,7 +455,7 @@ hls_muxer_simulate_get_iframes(hls_muxer_state_t* state, uint32_t segment_durati
 	uint32_t frame_start_time = 0;
 	uint32_t first_frame_time = 0;
 	uint32_t end_time;
-	int64_t segment_end_dts;
+	uint64_t segment_end_dts;
 	uint32_t frame_segment_index = 0;
 	uint32_t segment_index = 1;
 	uint64_t cur_frame_dts;

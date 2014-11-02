@@ -72,7 +72,7 @@ ngx_http_vod_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child)
 	}
 	ngx_conf_merge_size_value(conf->initial_read_size, prev->initial_read_size, 4096);
 	ngx_conf_merge_size_value(conf->max_moov_size, prev->max_moov_size, 32 * 1024 * 1024);
-	ngx_conf_merge_size_value(conf->cache_buffer_size, prev->cache_buffer_size, 64 * 1024);
+	ngx_conf_merge_size_value(conf->cache_buffer_size, prev->cache_buffer_size, 256 * 1024);
 
 	err = ngx_merge_upstream_conf(cf, &conf->upstream, &prev->upstream);
 	if (err != NGX_CONF_OK)

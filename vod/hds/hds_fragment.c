@@ -700,7 +700,6 @@ static vod_status_t
 hds_muxer_start_frame(hds_muxer_state_t* state)
 {
 	hds_muxer_stream_state_t* selected_stream;
-	uint32_t cur_frame_time_offset;
 	uint64_t cur_frame_dts;
 	uint32_t alloc_size;
 	u_char* p;
@@ -719,7 +718,6 @@ hds_muxer_start_frame(hds_muxer_state_t* state)
 	selected_stream->cur_frame_input_offset++;
 	selected_stream->cur_frame_output_offset++;
 
-	cur_frame_time_offset = selected_stream->next_frame_time_offset;
 	selected_stream->next_frame_time_offset += state->cur_frame->duration;
 	cur_frame_dts = selected_stream->next_frame_dts;
 	selected_stream->next_frame_dts = rescale_time(selected_stream->next_frame_time_offset, selected_stream->timescale, HDS_TIMESCALE);

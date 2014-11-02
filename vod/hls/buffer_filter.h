@@ -36,7 +36,7 @@ vod_status_t buffer_filter_init(
 	void* next_filter_context,
 	uint32_t size);
 vod_status_t buffer_filter_force_flush(buffer_filter_t* state);
-bool_t buffer_filter_get_dts(buffer_filter_t* state, int64_t* dts);
+bool_t buffer_filter_get_dts(buffer_filter_t* state, uint64_t* dts);
 
 void buffer_filter_simulated_force_flush(buffer_filter_t* state);
 
