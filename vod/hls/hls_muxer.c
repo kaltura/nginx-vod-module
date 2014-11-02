@@ -326,7 +326,7 @@ hls_muxer_process(hls_muxer_state_t* state, uint64_t* required_offset)
 		
 		// read some data from the frame
 		offset = state->cur_frame_offset + state->cur_frame_pos;
-		if (!read_cache_get_from_cache(state->read_cache_state, state->cache_slot_id, offset, TRUE, &read_buffer, &read_size))
+		if (!read_cache_get_from_cache(state->read_cache_state, state->cache_slot_id, offset, &read_buffer, &read_size))
 		{
 			if (!wrote_data && !first_time)
 			{
@@ -404,7 +404,7 @@ hls_muxer_simulation_flush(hls_muxer_state_t* state)
 }
 
 static void 
-hls_muxer_simulation_flush_delayed_streams(hls_muxer_state_t* state, hls_muxer_stream_state_t* selected_stream, int64_t frame_dts)
+hls_muxer_simulation_flush_delayed_streams(hls_muxer_state_t* state, hls_muxer_stream_state_t* selected_stream, uint64_t frame_dts)
 {
 	hls_muxer_stream_state_t* cur_stream;
 	uint64_t buffer_dts;
