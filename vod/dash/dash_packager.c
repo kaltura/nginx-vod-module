@@ -522,6 +522,18 @@ dash_packager_build_init_mp4(
 
 // fragment writing code
 
+static uint32_t 
+dash_packager_get_earliest_pres_time(mpeg_stream_metadata_t* stream_metadata)
+{
+	uint32_t result = stream_metadata->first_frame_time_offset;
+
+	if (stream_metadata->frame_count > 0)
+	{
+		result += stream_metadata->frames[0].pts_delay;
+	}
+	return result;
+}
+
 static u_char*
 dash_packager_write_sidx_atom(
 	u_char* p,
@@ -534,18 +546,12 @@ dash_packager_write_sidx_atom(
 	write_atom_header(p, atom_size, 's', 'i', 'd', 'x');
 	write_dword(p, 0);					// version + flags
 	write_dword(p, 1);					// reference id
-	write_dword(p, 1000);				// timescale
-	write_dword(p, rescale_time(		// earliest presentation time
-		stream_metadata->first_frame_time_offset + stream_metadata->frames[0].pts_delay,
-		stream_metadata->media_info.timescale,
-		1000));
+	write_dword(p, stream_metadata->media_info.timescale);				// timescale
+	write_dword(p, dash_packager_get_earliest_pres_time(stream_metadata));	// earliest presentation time
 	write_dword(p, 0);					// first offset
 	write_dword(p, 1);					// reserved + reference count
 	write_dword(p, reference_size);		// referenced size
-	write_dword(p, rescale_time(		// subsegment duration
-		stream_metadata->total_frames_duration,
-		stream_metadata->media_info.timescale,
-		1000));
+	write_dword(p, stream_metadata->total_frames_duration);		// subsegment duration
 	write_dword(p, 0x90000000);			// starts with SAP / SAP type
 	return p;
 }
@@ -646,7 +652,7 @@ dash_packager_build_fragment_header(
 	p = dash_packager_write_tfhd_atom(p, stream_metadata->media_info.track_id);
 
 	// moof.traf.tfdt
-	p = dash_packager_write_tfdt_atom(p, stream_metadata->first_frame_time_offset + stream_metadata->frames[0].pts_delay);
+	p = dash_packager_write_tfdt_atom(p, dash_packager_get_earliest_pres_time(stream_metadata));
 
 	// moof.traf.trun
 	p = mp4_builder_write_trun_atom(

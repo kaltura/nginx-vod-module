@@ -278,7 +278,6 @@ ngx_http_vod_parse_moov_atom(ngx_http_vod_ctx_t *ctx, u_char* moov_buffer, size_
 	vod_status_t rc;
 	file_info_t file_info;
 	uint32_t segment_count;
-	uint32_t max_segment_duration;
 
 	// init the request context
 	request_context->parse_type = request->parse_type;
@@ -306,6 +305,7 @@ ngx_http_vod_parse_moov_atom(ngx_http_vod_ctx_t *ctx, u_char* moov_buffer, size_
 		return ngx_http_vod_status_to_ngx_error(rc);
 	}
 
+	request_context->timescale = 1000;
 	if (request->request_class == REQUEST_CLASS_MANIFEST)
 	{
 		request_context->max_frame_count = 1024 * 1024;
@@ -319,20 +319,24 @@ ngx_http_vod_parse_moov_atom(ngx_http_vod_ctx_t *ctx, u_char* moov_buffer, size_
 		request_context->simulation_only = FALSE;
 
 		// validate the requested segment index
-		if (request->request_class == REQUEST_CLASS_SEGMENT_LAST_SHORT)
+		switch (request->request_class)
 		{
+		case REQUEST_CLASS_SEGMENT_LAST_SHORT:
 			segment_count = DIV_CEIL(mpeg_base_metadata.duration_millis, ctx->submodule_context.conf->segment_duration);
+			break;
+
+		case REQUEST_CLASS_SEGMENT_LAST_LONG:
+			segment_count = mpeg_base_metadata.duration_millis / ctx->submodule_context.conf->segment_duration;
+			break;
+
+		case REQUEST_CLASS_SEGMENT_LAST_ROUNDED:
+			segment_count = (mpeg_base_metadata.duration_millis + 1000) / ctx->submodule_context.conf->segment_duration;
+			break;
 		}
-		else
+
+		if (segment_count < 1)
 		{
-			if (mpeg_base_metadata.duration_millis > ctx->submodule_context.conf->segment_duration)
-			{
-				segment_count = mpeg_base_metadata.duration_millis / ctx->submodule_context.conf->segment_duration;
-			}
-			else
-			{
-				segment_count = 1;
-			}
+			segment_count = 1;
 		}
 
 		if (ctx->submodule_context.request_params.segment_index >= segment_count)
@@ -343,19 +347,18 @@ ngx_http_vod_parse_moov_atom(ngx_http_vod_ctx_t *ctx, u_char* moov_buffer, size_
 		}
 
 		// get the start / end offsets
+		request_context->start = suburi_params->clip_from + ctx->submodule_context.request_params.segment_index * ctx->submodule_context.conf->segment_duration;
 		if (ctx->submodule_context.request_params.segment_index + 1 < segment_count)
 		{
 			// not the last segment
-			max_segment_duration = ctx->submodule_context.conf->segment_duration;
+			request_context->end = MIN(request_context->start + ctx->submodule_context.conf->segment_duration, suburi_params->clip_to);
 		}
 		else
 		{
 			// last segment
-			max_segment_duration = 2 * ctx->submodule_context.conf->segment_duration;
+			request_context->end = UINT_MAX;
 		}
 		
-		request_context->start = suburi_params->clip_from + ctx->submodule_context.request_params.segment_index * ctx->submodule_context.conf->segment_duration;
-		request_context->end = MIN(request_context->start + max_segment_duration, suburi_params->clip_to);
 		if (request_context->end <= request_context->start)
 		{
 			vod_log_error(VOD_LOG_ERR, request_context->log, 0,
@@ -369,6 +372,9 @@ ngx_http_vod_parse_moov_atom(ngx_http_vod_ctx_t *ctx, u_char* moov_buffer, size_
 	rc = mp4_parser_parse_frames(
 		&ctx->submodule_context.request_context,
 		&mpeg_base_metadata,
+		suburi_params->clip_from,
+		suburi_params->clip_to,
+		ctx->submodule_context.conf->align_segments_to_key_frames,
 		&ctx->submodule_context.mpeg_metadata);
 	if (rc != VOD_OK)
 	{

@@ -24,6 +24,7 @@ struct ngx_http_vod_loc_conf_s {
 	ngx_int_t(*request_handler)(ngx_http_request_t *r);
 	ngx_str_t multi_uri_suffix;
 	ngx_uint_t segment_duration;
+	ngx_flag_t align_segments_to_key_frames;
 	ngx_str_t secret_key;
 	ngx_uint_t duplicate_bitrate_threshold;
 	ngx_str_t https_header_name;

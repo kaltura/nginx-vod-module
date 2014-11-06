@@ -116,7 +116,15 @@ http://host/hls/common-prefix,bitrate1,bitrate2,common-suffix.urlset/master.m3u8
 * **default**: `10s`
 * **context**: `http`, `server`, `location`
 
-Sets the HLS segment duration in milliseconds.
+Sets the segment duration in milliseconds.
+
+#### vod_align_segments_to_key_frames
+* **syntax**: `vod_align_segments_to_key_frames on/off`
+* **default**: `off`
+* **context**: `http`, `server`, `location`
+
+When enabled, the module forces all segments to start with a key frame. Enabling this setting can lead to differences
+between the actual segment durations and the durations reported in the manifest.
 
 #### vod_secret_key
 * **syntax**: `vod_secret_key string`
