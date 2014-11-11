@@ -182,6 +182,9 @@ hds_get_sound_info(request_context_t* request_context, media_info_t* media_info,
 	}
 
 	*result = (SOUND_FORMAT_AAC << 4) | (sound_rate << 2) | (sound_size << 1) | (sound_type);
+
+	*result = 0xAF;		// XXXXXXX remove this
+
 	return VOD_OK;
 }
 
@@ -595,17 +598,17 @@ hds_muxer_init_fragment(
 		moof_atom_size +
 		ATOM_HEADER_SIZE;		// mdat
 
-	*total_fragment_size =
-		afra_atom_size +
-		moof_atom_size +
-		mdat_atom_size;
-
 	// audio only - output the codec config up front, video - output the codec config before every key frame
 	if (mpeg_metadata->video_key_frame_count == 0)
 	{
 		result_size += state->codec_config_size;
-		*total_fragment_size += state->codec_config_size;
+		mdat_atom_size += state->codec_config_size;
 	}
+
+	*total_fragment_size =
+		afra_atom_size +
+		moof_atom_size +
+		mdat_atom_size;
 
 	// head request optimization
 	if (size_only)
@@ -677,6 +680,14 @@ hds_muxer_init_fragment(
 	}
 
 	header->len = p - header->data;
+
+	if (header->len != result_size)
+	{
+		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+			"hds_muxer_init_fragment: result length %uz exceeded allocated length %uz",
+			header->len, result_size);
+		return VOD_UNEXPECTED;
+	}
 
 	*processor_state = state;
 

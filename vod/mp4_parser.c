@@ -649,7 +649,7 @@ mp4_parser_validate_stss_atom(atom_info_t* atom_info, frames_parse_context_t* co
 	if (atom_info->size < sizeof(*atom))
 	{
 		vod_log_error(VOD_LOG_ERR, context->request_context->log, 0,
-			"mp4_parser_parse_stss_atom: atom size %uL too small", atom_info->size);
+			"mp4_parser_validate_stss_atom: atom size %uL too small", atom_info->size);
 		return VOD_BAD_DATA;
 	}
 
@@ -657,14 +657,14 @@ mp4_parser_validate_stss_atom(atom_info_t* atom_info, frames_parse_context_t* co
 	if (*entries >= (INT_MAX - sizeof(*atom)) / sizeof(uint32_t))			// integer overflow protection
 	{
 		vod_log_error(VOD_LOG_ERR, context->request_context->log, 0,
-			"mp4_parser_parse_stss_atom: number of entries %uD too big ", *entries);
+			"mp4_parser_validate_stss_atom: number of entries %uD too big ", *entries);
 		return VOD_BAD_DATA;
 	}
 
 	if (atom_info->size < sizeof(*atom) + *entries * sizeof(uint32_t))
 	{
 		vod_log_error(VOD_LOG_ERR, context->request_context->log, 0,
-			"mp4_parser_parse_stss_atom: atom size %uL too small to hold %uD entries", atom_info->size, *entries);
+			"mp4_parser_validate_stss_atom: atom size %uL too small to hold %uD entries", atom_info->size, *entries);
 		return VOD_BAD_DATA;
 	}
 
@@ -777,13 +777,13 @@ mp4_parser_parse_stts_atom(atom_info_t* atom_info, frames_parse_context_t* conte
 	uint32_t sample_count;
 	uint32_t sample_duration;
 	uint32_t entries;
-	uint32_t clip_from;
-	uint32_t start_time;
-	uint32_t end_time;
+	uint64_t clip_from;
+	uint64_t start_time;
+	uint64_t end_time;
 	uint64_t clip_from_accum_duration = 0;
-	uint32_t cur_count;
 	uint64_t accum_duration = 0;
 	uint64_t next_accum_duration;
+	uint32_t cur_count;
 	uint32_t skip_count;
 	uint32_t initial_alloc_size;
 	input_frame_t* cur_frame_limit;
@@ -818,13 +818,6 @@ mp4_parser_parse_stts_atom(atom_info_t* atom_info, frames_parse_context_t* conte
 		return VOD_BAD_DATA;
 	}
 	
-	if (context->request_context->start / context->request_context->timescale + 1 > UINT_MAX / timescale)			// integer overflow protection
-	{
-		vod_log_error(VOD_LOG_ERR, context->request_context->log, 0,
-			"mp4_parser_parse_stts_atom: start offset %uD too big", context->request_context->start);
-		return VOD_BAD_DATA;
-	}
-	
 	// parse the first sample
 	cur_entry = (const stts_entry_t*)(atom_info->ptr + sizeof(*atom));
 	last_entry = cur_entry + entries;
@@ -844,8 +837,7 @@ mp4_parser_parse_stts_atom(atom_info_t* atom_info, frames_parse_context_t* conte
 
 	if (context->clip_from > 0)
 	{
-		// Note: no need to check for integer overflow here since clip_from <= start
-		clip_from = (uint32_t)(((uint64_t)context->clip_from * timescale) / 1000);
+		clip_from = (((uint64_t)context->clip_from * timescale) / 1000);
 
 		for (;;)
 		{
@@ -875,12 +867,13 @@ mp4_parser_parse_stts_atom(atom_info_t* atom_info, frames_parse_context_t* conte
 			next_accum_duration = accum_duration + sample_duration * sample_count;
 		}
 
+		// calculate the clip from duration
 		skip_count = DIV_CEIL(clip_from - accum_duration, sample_duration);
 		clip_from_accum_duration = accum_duration + skip_count * sample_duration;
 	}
 
 	// skip to the sample containing the start time
-	start_time = (uint32_t)(((uint64_t)context->request_context->start * timescale) / context->request_context->timescale);
+	start_time = (((uint64_t)context->request_context->start * timescale) / context->request_context->timescale);
 
 	for (;;)
 	{
@@ -899,7 +892,10 @@ mp4_parser_parse_stts_atom(atom_info_t* atom_info, frames_parse_context_t* conte
 		{
 			if (context->stss_entries != 0)
 			{
-				context->first_frame_time_offset = context->media_info->duration - clip_from_accum_duration;
+				if (context->media_info->duration > clip_from_accum_duration)
+				{
+					context->first_frame_time_offset = context->media_info->duration - clip_from_accum_duration;
+				}
 				context->request_context->start = 0;
 				context->request_context->end = 0;
 			}
@@ -927,7 +923,10 @@ mp4_parser_parse_stts_atom(atom_info_t* atom_info, frames_parse_context_t* conte
 		if (context->stss_start_index >= context->stss_entries)
 		{
 			// can't find any key frame after the start pos
-			context->first_frame_time_offset = context->media_info->duration - clip_from_accum_duration;
+			if (context->media_info->duration > clip_from_accum_duration)
+			{
+				context->first_frame_time_offset = context->media_info->duration - clip_from_accum_duration;
+			}
 			context->request_context->start = 0;
 			context->request_context->end = 0;
 			return VOD_OK;
@@ -936,6 +935,7 @@ mp4_parser_parse_stts_atom(atom_info_t* atom_info, frames_parse_context_t* conte
 		stss_entry = context->stss_start_pos + context->stss_start_index;
 		key_frame_index = PARSE_BE32(stss_entry) - 1;
 
+		// skip to the sample containing the key frame
 		while (key_frame_index >= frame_index + sample_count)
 		{
 			frame_index += sample_count;
@@ -955,6 +955,7 @@ mp4_parser_parse_stts_atom(atom_info_t* atom_info, frames_parse_context_t* conte
 			next_accum_duration = accum_duration + sample_duration * sample_count;
 		}
 
+		// skip to the key frame within the current entry
 		skip_count = key_frame_index - frame_index;
 		sample_count -= skip_count;
 		frame_index = key_frame_index;
@@ -970,7 +971,7 @@ mp4_parser_parse_stts_atom(atom_info_t* atom_info, frames_parse_context_t* conte
 
 	if (context->request_context->end == UINT_MAX)
 	{
-		end_time = UINT_MAX;
+		end_time = ULLONG_MAX;
 
 		if (entries == 1)
 		{
@@ -980,14 +981,7 @@ mp4_parser_parse_stts_atom(atom_info_t* atom_info, frames_parse_context_t* conte
 	}
 	else
 	{
-		if (context->request_context->end / context->request_context->timescale + 1 > UINT_MAX / timescale)			// integer overflow protection
-		{
-			vod_log_error(VOD_LOG_ERR, context->request_context->log, 0,
-				"mp4_parser_parse_stts_atom: end offset %uD too big", context->request_context->end);
-			return VOD_BAD_DATA;
-		}
-
-		end_time = (uint32_t)(((uint64_t)context->request_context->end * timescale) / context->request_context->timescale);
+		end_time = (((uint64_t)context->request_context->end * timescale) / context->request_context->timescale);
 
 		if (entries == 1)
 		{
@@ -1137,7 +1131,7 @@ mp4_parser_parse_stts_atom(atom_info_t* atom_info, frames_parse_context_t* conte
 		}
 
 		// adjust the start / end parameters so that next streams will align according to this one
-		context->request_context->timescale = context->media_info->timescale;
+		context->request_context->timescale = timescale;
 		context->request_context->start = context->first_frame_time_offset;
 		if (key_frame_index != UINT_MAX)
 		{

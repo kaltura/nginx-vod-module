@@ -69,7 +69,9 @@ def getMdatAtom(buffer):
 
 def stripSequenceHeaders(mdatAtom):
 	resultVideo = ''
+	resultVideoNoTS = ''
 	resultAudio = ''
+	resultAudioNoTS = ''
 	seqHeaders = {}
 	curPos = 0
 	while curPos + ADOBE_MUX_PACKET_SIZE <= len(mdatAtom):
@@ -85,15 +87,17 @@ def stripSequenceHeaders(mdatAtom):
 		packetData = mdatAtom[curPos:(curPos + packetSize)]
 		curPos += ADOBE_MUX_PACKET_SIZE + dataSize + 4
 		
+		packetDataNoTimestamp = packetData[:4] + '\0' * 4 + packetData[8:]
 		if isSequenceHeader:
-			packetData = packetData[:4] + '\0' * 4 + packetData[8:]		# strip the timestamp
-			seqHeaders.setdefault(tagType, packetData)
+			seqHeaders.setdefault(tagType, packetDataNoTimestamp)
 		else:
 			if tagType == TAG_TYPE_VIDEO:
 				resultVideo += packetData
+				resultVideoNoTS += packetDataNoTimestamp
 			elif tagType == TAG_TYPE_AUDIO:
 				resultAudio += packetData
-	return tuple(seqHeaders.items()), resultVideo, resultAudio
+				resultAudioNoTS += packetDataNoTimestamp
+	return tuple(seqHeaders.items()), resultVideo, resultAudio, resultVideoNoTS, resultAudioNoTS
 
 def formatBinaryString(info):
 	return commands.getoutput('echo %s | base64 --decode | xxd' % base64.b64encode(info))
@@ -203,10 +207,10 @@ class TestThread(stress_base.TestThreadBase):
 			if BOOTSTRAP_THRESHOLDS.has_key(key):
 				threshold = BOOTSTRAP_THRESHOLDS[key]
 				if value2 > (value1 * (100 + threshold)) / 100.0 or value2 < (value1 * (100 - threshold)) / 100.0:
-					self.writeOutput('Error: bootstrap field value mismatch %s %s %s' % (key, value1, value2))
+					self.writeOutput('Error: bootstrap field value mismatch %s %s %s %s %s' % (key, value1, value2, parsedInfo1, parsedInfo2))
 					return False
 			elif value1 != value2:
-				self.writeOutput('Error: bootstrap field value mismatch %s %s %s' % (key, value1, value2))
+				self.writeOutput('Error: bootstrap field value mismatch %s %s %s %s %s' % (key, value1, value2, parsedInfo1, parsedInfo2))
 				return False
 		return True
 		
@@ -274,6 +278,34 @@ class TestThread(stress_base.TestThreadBase):
 			self.writeOutput('Error: %s content-length %s is different than the resulting file size %s' % (url, r.info().getheader('content-length'), len(result)))
 			return 0, ''
 		return (code, result)
+
+	def compareStream(self, url1, url2, streamName, stream1, stream2, lastChance):
+		if stream1 == stream2:
+			return True
+		if stream1.startswith(stream2):
+			self.writeOutput('Notice: %s second mdat is a prefix of the first mdat len1=%s len2=%s diff=%s' % (streamName, len(stream1), len(stream2), abs(len(stream1) - len(stream2))))
+		elif stream2.startswith(stream1):
+			self.writeOutput('Notice: %s first mdat is a prefix of the second mdat len1=%s len2=%s diff=%s' % (streamName, len(stream1), len(stream2), abs(len(stream1) - len(stream2))))
+		elif stream1.endswith(stream2):
+			self.writeOutput('Notice: %s second mdat is a postfix of the first mdat len1=%s len2=%s diff=%s' % (streamName, len(stream1), len(stream2), abs(len(stream1) - len(stream2))))
+		elif stream2.endswith(stream1):
+			self.writeOutput('Notice: %s first mdat is a postfix of the second mdat len1=%s len2=%s diff=%s' % (streamName, len(stream1), len(stream2), abs(len(stream1) - len(stream2))))
+		elif stream1 in stream2:
+			self.writeOutput('Notice: %s first mdat is contained inside the second mdat len1=%s len2=%s diff=%s' % (streamName, len(stream1), len(stream2), abs(len(stream1) - len(stream2))))
+		elif stream2 in stream1:
+			self.writeOutput('Notice: %s second mdat is contained inside the second mdat len1=%s len2=%s diff=%s' % (streamName, len(stream1), len(stream2), abs(len(stream1) - len(stream2))))
+		else:
+			stream1Offset = stream1.find(stream2[:0x1000])
+			stream2Offset = stream2.find(stream1[:0x1000])
+			if stream1Offset > 0 and stream2.startswith(stream1[stream1Offset:]):
+				self.writeOutput('Notice: %s mdat shift len1=%s len2=%s diff=%s commonsize=%s' % (streamName, len(stream1), len(stream2), abs(len(stream1) - len(stream2)), len(stream1) - stream1Offset))
+			elif stream2Offset > 0 and stream1.startswith(stream2[stream2Offset:]):
+				self.writeOutput('Notice: %s mdat shift len1=%s len2=%s diff=%s commonsize=%s' % (streamName, len(stream1), len(stream2), abs(len(stream1) - len(stream2)), len(stream2) - stream2Offset))
+			else:
+				if lastChance:
+					self.writeOutput('Error: %s fragment test failed %s %s len1=%s len2=%s diff=%s' % (streamName, url1, url2, len(stream1), len(stream2), abs(len(stream1) - len(stream2))))
+				return False
+		return True
 		
 	def compareFragments(self, manifestUrl1, manifest1, manifestUrl2, manifest2):
 		baseUrl1 = manifestUrl1.rsplit('/', 1)[0] + '/'
@@ -307,34 +339,18 @@ class TestThread(stress_base.TestThreadBase):
 				if mdatAtom2 == False:
 					self.writeOutput('Error: failed to get mdat atoms %s %s' % (url1, url2))
 					return False
-				seqHeaders1, video1, audio1 = stripSequenceHeaders(mdatAtom1)
-				seqHeaders2, video2, audio2 = stripSequenceHeaders(mdatAtom2)
+				seqHeaders1, video1, audio1, videoNoTS1, audioNoTS1 = stripSequenceHeaders(mdatAtom1)
+				seqHeaders2, video2, audio2, videoNoTS2, audioNoTS2 = stripSequenceHeaders(mdatAtom2)
 				if seqHeaders1 != seqHeaders2:
 					self.writeOutput('Error: non matching sequence headers %s %s' % (repr(seqHeaders1), repr(seqHeaders2)))
 					return False
-				if video1 != video2:
-					if video1.startswith(video2):
-						self.writeOutput('Notice: video second mdat is a prefix of the first mdat len1=%s len2=%s diff=%s' % (len(video1), len(video2), abs(len(video1) - len(video2))))
-					elif video2.startswith(video1):
-						self.writeOutput('Notice: video first mdat is a prefix of the second mdat len1=%s len2=%s diff=%s' % (len(video1), len(video2), abs(len(video1) - len(video2))))
-					elif video1.endswith(video2):
-						self.writeOutput('Notice: video second mdat is a postfix of the first mdat len1=%s len2=%s diff=%s' % (len(video1), len(video2), abs(len(video1) - len(video2))))
-					elif video2.endswith(video1):
-						self.writeOutput('Notice: video first mdat is a postfix of the second mdat len1=%s len2=%s diff=%s' % (len(video1), len(video2), abs(len(video1) - len(video2))))
-					else:
-						self.writeOutput('Error: video fragment test failed %s %s len1=%s len2=%s diff=%s' % (url1, url2, len(video1), len(video2), abs(len(video1) - len(video2))))
+				
+				if not self.compareStream(url1, url2, 'video', video1, video2, False):
+					if not self.compareStream(url1, url2, 'video-ignore-ts', videoNoTS1, videoNoTS2, True):
 						return False
-				if audio1 != audio2:
-					if audio1.startswith(audio2):
-						self.writeOutput('Notice: audio second mdat is a prefix of the first mdat len1=%s len2=%s diff=%s' % (len(audio1), len(audio2), abs(len(audio1) - len(audio2))))
-					elif audio2.startswith(audio1):
-						self.writeOutput('Notice: audio first mdat is a prefix of the second mdat len1=%s len2=%s diff=%s' % (len(audio1), len(audio2), abs(len(audio1) - len(audio2))))
-					elif audio1.endswith(audio2):
-						self.writeOutput('Notice: audio second mdat is a postfix of the first mdat len1=%s len2=%s diff=%s' % (len(audio1), len(audio2), abs(len(audio1) - len(audio2))))
-					elif audio2.endswith(audio1):
-						self.writeOutput('Notice: audio first mdat is a postfix of the second mdat len1=%s len2=%s diff=%s' % (len(audio1), len(audio2), abs(len(audio1) - len(audio2))))
-					else:
-						self.writeOutput('Error: audio fragment test failed %s %s len1=%s len2=%s diff=%s' % (url1, url2, len(audio1), len(audio2), abs(len(audio1) - len(audio2))))
+
+				if not self.compareStream(url1, url2, 'audio', audio1, audio2, False):
+					if not self.compareStream(url1, url2, 'audio-ignore-ts', audioNoTS1, audioNoTS2, True):
 						return False
 		return True
 
