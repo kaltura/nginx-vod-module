@@ -72,7 +72,7 @@ def stripSequenceHeaders(mdatAtom):
 	resultAudio = ''
 	seqHeaders = {}
 	curPos = 0
-	while curPos < len(mdatAtom):
+	while curPos + ADOBE_MUX_PACKET_SIZE <= len(mdatAtom):
 		(tagType, dataSize, timestamp, streamId) = unpackAdobeMuxPacket(mdatAtom[curPos:(curPos + ADOBE_MUX_PACKET_SIZE)])
 		
 		isSequenceHeader = False
@@ -99,22 +99,35 @@ def formatBinaryString(info):
 	return commands.getoutput('echo %s | base64 --decode | xxd' % base64.b64encode(info))
 	
 
-BOOTSTRAP_INFO_FORMAT = [
+BOOTSTRAP_INFO_FORMAT1 = [
 	'0000 008b 6162 7374 0000 0000 0000 0001 0000 0003 e8',
 	(8, 'duration'),
 	'00 0000 0000 0000 0000 0000 0000 0100 0000 1961 7372 7400 0000 0000 0000 0001 0000 0001 ',
 	(4, 'segmentCount'),
-	'0100 0000 4661 6672 7400 0000 0000 0003 e800 0000 0003 0000 0001 0000 0000 0000 0000 0000 1770',
+	'0100 0000 4661 6672 7400 0000 0000 0003 e800 0000 0003 0000 0001 0000 0000 0000 0000 ',
+	(4, 'segmentDuration'),
 	(4, 'lastSegmentIndex'),
 	(8, 'lastSegmentTimestamp'),
 	(4, 'lastSegmentDuration'),
 	'0000 0000 0000 0000 0000 0000 0000 0000 00',
 ]
 
-def parseBootstrapInfo(info):
+BOOTSTRAP_INFO_FORMAT2 = [
+	'0000 007b 6162 7374 0000 0000 0000 0001 0000 0003 e8',
+	(8, 'duration'),
+	'00 0000 0000 0000 0000 0000 0000 0100 0000 1961 7372 7400 0000 0000 0000 0001 0000 0001 ',
+	(4, 'segmentCount'),
+	'0100 0000 3661 6672 7400 0000 0000 0003 e800 0000 0002 ',
+	(4, 'lastSegmentIndex'),
+	(8, 'lastSegmentTimestamp'),
+	(4, 'lastSegmentDuration'),
+	'0000 0000 0000 0000 0000 0000 0000 0000 00'
+]
+
+def parseFormat(info, format):
 	result = {}
 	curPos = 0
-	for curFormat in BOOTSTRAP_INFO_FORMAT:
+	for curFormat in format:
 		if type(curFormat) == tuple:
 			curValue = info[curPos:(curPos + curFormat[0])]
 			curPos += len(curValue)
@@ -128,6 +141,12 @@ def parseBootstrapInfo(info):
 			if info[curPos:(curPos + len(expectedStr))] != expectedStr:
 				return False
 			curPos += len(expectedStr)
+	return result
+
+def parseBootstrapInfo(info):
+	result = parseFormat(info, BOOTSTRAP_INFO_FORMAT1)
+	if result == False:
+		result = parseFormat(info, BOOTSTRAP_INFO_FORMAT2)
 	return result
 	
 class ManifestMedia:

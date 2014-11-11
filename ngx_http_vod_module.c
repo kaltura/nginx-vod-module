@@ -315,7 +315,7 @@ ngx_http_vod_parse_moov_atom(ngx_http_vod_ctx_t *ctx, u_char* moov_buffer, size_
 	}
 	else
 	{
-		request_context->max_frame_count = 16 * 1024;
+		request_context->max_frame_count = 64 * 1024;
 		request_context->simulation_only = FALSE;
 
 		// validate the requested segment index
@@ -1428,7 +1428,7 @@ ngx_http_vod_path_request_finished(void* context, ngx_int_t rc, ngx_buf_t* respo
 	{
 		// file not found
 		ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
-			"ngx_http_vod_path_request_finished: empty path returned from upstream");
+			"ngx_http_vod_path_request_finished: empty path returned from upstream %V", &ctx->submodule_context.cur_suburi->stripped_uri);
 
 		// try the fallback
 		rc = ngx_http_vod_dump_request_to_fallback(r);

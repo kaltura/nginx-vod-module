@@ -600,7 +600,8 @@ hds_muxer_init_fragment(
 		moof_atom_size +
 		mdat_atom_size;
 
-	if (mpeg_metadata->stream_count[MEDIA_TYPE_VIDEO] == 0)
+	// audio only - output the codec config up front, video - output the codec config before every key frame
+	if (mpeg_metadata->video_key_frame_count == 0)
 	{
 		result_size += state->codec_config_size;
 		*total_fragment_size += state->codec_config_size;
@@ -670,7 +671,7 @@ hds_muxer_init_fragment(
 	// mdat
 	write_atom_header(p, mdat_atom_size, 'm', 'd', 'a', 't');
 
-	if (mpeg_metadata->stream_count[MEDIA_TYPE_VIDEO] == 0)
+	if (mpeg_metadata->video_key_frame_count == 0)
 	{
 		p = hds_muxer_write_codec_config(p, state, state->first_stream->next_frame_dts);
 	}

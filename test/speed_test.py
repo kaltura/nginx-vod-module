@@ -2,9 +2,7 @@ import urllib2
 import time
 import sys
 
-# zgrep /hls /data/logs/investigate/2014/10/30/vod/??-nginx-*-access_log* | awk '{print $7}' > /tmp/nginxVodUris.txt
-
-BASE_URL = 'http://localhost:8001/mapped'
+from speed_test_params import *
 
 def getUrl(url):
 	request = urllib2.Request(url)

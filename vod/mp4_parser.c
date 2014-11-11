@@ -966,6 +966,8 @@ mp4_parser_parse_stts_atom(atom_info_t* atom_info, frames_parse_context_t* conte
 	context->first_frame_time_offset = accum_duration;
 
 	// calculate the end time and initial alloc size
+	initial_alloc_size = 128;
+
 	if (context->request_context->end == UINT_MAX)
 	{
 		end_time = UINT_MAX;
@@ -2708,7 +2710,7 @@ mp4_parser_parse_frames(
 	result->mvhd_atom = base->mvhd_atom;
 
 	// sort the streams - video first
-	qsort(first_stream, last_stream - first_stream, sizeof(*first_stream), mp4_parser_compare_streams);
+	qsort(first_stream, base->streams.nelts, sizeof(*first_stream), mp4_parser_compare_streams);
 
 	for (cur_stream = first_stream; cur_stream < last_stream; cur_stream++)
 	{

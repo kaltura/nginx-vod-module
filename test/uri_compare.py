@@ -2,12 +2,7 @@ import stress_base
 import urllib2
 import re
 
-# zgrep /hls /data/logs/investigate/2014/10/30/vod/??-nginx-*-access_log* | awk '{print $7}' > /tmp/nginxVodUris.txt
-
-STOP_FILE = '/tmp/uri_compare_stop'
-URL1_BASE = 'http://pa-reports:8001/mapped'
-URL2_BASE = 'http://pa-nginx-vod1'
-TEST_PARTNER_ID = 437481
+from uri_compare_params import *
 
 class TestThread(stress_base.TestThreadBase):
 	def __init__(self, index, increment, stopFile):
