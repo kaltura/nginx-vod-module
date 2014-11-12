@@ -328,7 +328,7 @@ hds_packager_build_manifest(
 	if (result->len > result_size)
 	{
 		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-			"hds_packager_build_manifest: result length %uz exceeded allocated length %uD",
+			"hds_packager_build_manifest: result length %uz exceeded allocated length %uz",
 			result->len, result_size);
 		return VOD_UNEXPECTED;
 	}

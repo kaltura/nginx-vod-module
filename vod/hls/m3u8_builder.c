@@ -79,14 +79,14 @@ m3u8_builder_build_required_tracks_string(
 {
 	mpeg_stream_metadata_t* cur_stream;
 	u_char* p;
-	size_t length;
+	size_t result_size;
 
-	length = mpeg_metadata->streams.nelts * (sizeof("-v") - 1 + m3u8_builder_get_int_print_len(mpeg_metadata->max_track_index + 1));
+	result_size = mpeg_metadata->streams.nelts * (sizeof("-v") - 1 + m3u8_builder_get_int_print_len(mpeg_metadata->max_track_index + 1));
 	if (include_file_index)
 	{
-		length += sizeof("-f") - 1 + m3u8_builder_get_int_print_len(mpeg_metadata->first_stream->file_info.file_index + 1);
+		result_size += sizeof("-f") - 1 + m3u8_builder_get_int_print_len(mpeg_metadata->first_stream->file_info.file_index + 1);
 	}
-	p = vod_alloc(request_context->pool, length + 1);
+	p = vod_alloc(request_context->pool, result_size + 1);
 	if (p == NULL)
 	{
 		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
@@ -122,11 +122,11 @@ m3u8_builder_build_required_tracks_string(
 	
 	required_tracks->len = p - required_tracks->data;
 
-	if (required_tracks->len > length)
+	if (required_tracks->len > result_size)
 	{
 		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
 			"m3u8_builder_build_required_tracks_string: result length %uz exceeded allocated length %uz", 
-			required_tracks->len, length);
+			required_tracks->len, result_size);
 		return VOD_UNEXPECTED;
 	}
 
@@ -246,12 +246,13 @@ m3u8_builder_build_iframe_playlist(
 
 	hls_muxer_simulate_get_iframes(&muxer_state, segment_duration, m3u8_builder_append_iframe_string, &append_iframe_context);
 
-	result->len = vod_copy(append_iframe_context.p, m3u8_footer, sizeof(m3u8_footer) - 1) - result->data;
+	append_iframe_context.p = vod_copy(append_iframe_context.p, m3u8_footer, sizeof(m3u8_footer) - 1);
+	result->len = append_iframe_context.p - result->data;
 
 	if (result->len > result_size)
 	{
 		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-			"m3u8_builder_build_iframe_playlist: result length %uz exceeded allocated length %uD", 
+			"m3u8_builder_build_iframe_playlist: result length %uz exceeded allocated length %uz", 
 			result->len, result_size);
 		return VOD_UNEXPECTED;
 	}
@@ -380,7 +381,7 @@ m3u8_builder_build_index_playlist(
 	if (result->len > result_size)
 	{
 		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-			"m3u8_builder_build_index_playlist: result length %uz exceeded allocated length %uD", 
+			"m3u8_builder_build_index_playlist: result length %uz exceeded allocated length %uz", 
 			result->len, result_size);
 		return VOD_UNEXPECTED;
 	}
@@ -515,7 +516,7 @@ m3u8_builder_build_master_playlist(
 	if (result->len > result_size)
 	{
 		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-			"m3u8_builder_build_master_playlist: result length %uz exceeded allocated length %uD",
+			"m3u8_builder_build_master_playlist: result length %uz exceeded allocated length %uz",
 			result->len, result_size);
 		return VOD_UNEXPECTED;
 	}

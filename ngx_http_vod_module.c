@@ -37,7 +37,7 @@ typedef ngx_int_t(*ngx_http_vod_dump_request_t)(void* context);
 typedef struct {
 	ngx_http_request_t* r;
 	ngx_chain_t* chain_end;
-	uint32_t total_size;
+	size_t total_size;
 } ngx_http_vod_write_segment_context_t;
 
 typedef struct {
@@ -622,7 +622,7 @@ ngx_http_vod_finalize_segment_response(ngx_http_vod_ctx_t *ctx)
 	// if we already sent the headers and all the buffers, just signal completion and return
 	if (r->header_sent)
 	{
-		if (ctx->write_segment_buffer_context.total_size != r->headers_out.content_length_n)
+		if ((off_t)ctx->write_segment_buffer_context.total_size != r->headers_out.content_length_n)
 		{
 			ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
 				"ngx_http_vod_finalize_segment_response: actual content length %uD is different than reported length %O", 

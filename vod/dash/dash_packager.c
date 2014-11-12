@@ -119,6 +119,21 @@ typedef struct {
 typedef struct {
 	u_char version[1];
 	u_char flags[3];
+	u_char reference_id[4];
+	u_char timescale[4];
+	u_char earliest_pres_time[8];
+	u_char first_offset[8];
+	u_char reserved[2];
+	u_char reference_count[2];
+	u_char reference_size[4];			// Note: from this point forward, assuming reference_count == 1
+	u_char subsegment_duration[4];
+	u_char sap_type[1];
+	u_char sap_delta_time[3];
+} sidx64_atom_t;
+
+typedef struct {
+	u_char version[1];
+	u_char flags[3];
 	u_char track_id[4];
 } tfhd_atom_t;
 
@@ -127,6 +142,12 @@ typedef struct {
 	u_char flags[3];
 	u_char earliest_pres_time[4];
 } tfdt_atom_t;
+
+typedef struct {
+	u_char version[1];
+	u_char flags[3];
+	u_char earliest_pres_time[8];
+} tfdt64_atom_t;
 
 // fixed init mp4 atoms
 
@@ -522,10 +543,10 @@ dash_packager_build_init_mp4(
 
 // fragment writing code
 
-static uint32_t 
+static uint64_t 
 dash_packager_get_earliest_pres_time(mpeg_stream_metadata_t* stream_metadata)
 {
-	uint32_t result = stream_metadata->first_frame_time_offset;
+	uint64_t result = stream_metadata->first_frame_time_offset;
 
 	if (stream_metadata->frame_count > 0)
 	{
@@ -538,8 +559,8 @@ static u_char*
 dash_packager_write_sidx_atom(
 	u_char* p,
 	mpeg_stream_metadata_t* stream_metadata,
-	uint32_t reference_size,
-	uint32_t segment_duration)
+	uint32_t earliest_pres_time,
+	uint32_t reference_size)
 {
 	size_t atom_size = ATOM_HEADER_SIZE + sizeof(sidx_atom_t);
 
@@ -547,8 +568,30 @@ dash_packager_write_sidx_atom(
 	write_dword(p, 0);					// version + flags
 	write_dword(p, 1);					// reference id
 	write_dword(p, stream_metadata->media_info.timescale);				// timescale
-	write_dword(p, dash_packager_get_earliest_pres_time(stream_metadata));	// earliest presentation time
+	write_dword(p, earliest_pres_time);	// earliest presentation time
 	write_dword(p, 0);					// first offset
+	write_dword(p, 1);					// reserved + reference count
+	write_dword(p, reference_size);		// referenced size
+	write_dword(p, stream_metadata->total_frames_duration);		// subsegment duration
+	write_dword(p, 0x90000000);			// starts with SAP / SAP type
+	return p;
+}
+
+static u_char*
+dash_packager_write_sidx64_atom(
+	u_char* p,
+	mpeg_stream_metadata_t* stream_metadata,
+	uint64_t earliest_pres_time,
+	uint32_t reference_size)
+{
+	size_t atom_size = ATOM_HEADER_SIZE + sizeof(sidx64_atom_t);
+
+	write_atom_header(p, atom_size, 's', 'i', 'd', 'x');
+	write_dword(p, 0x01000000);			// version + flags
+	write_dword(p, 1);					// reference id
+	write_dword(p, stream_metadata->media_info.timescale);				// timescale
+	write_qword(p, earliest_pres_time);	// earliest presentation time
+	write_qword(p, 0LL);					// first offset
 	write_dword(p, 1);					// reserved + reference count
 	write_dword(p, reference_size);		// referenced size
 	write_dword(p, stream_metadata->total_frames_duration);		// subsegment duration
@@ -578,6 +621,17 @@ dash_packager_write_tfdt_atom(u_char* p, uint32_t earliest_pres_time)
 	return p;
 }
 
+static u_char*
+dash_packager_write_tfdt64_atom(u_char* p, uint64_t earliest_pres_time)
+{
+	size_t atom_size = ATOM_HEADER_SIZE + sizeof(tfdt64_atom_t);
+
+	write_atom_header(p, atom_size, 't', 'f', 'd', 't');
+	write_dword(p, 0x01000000);			// version = 1
+	write_qword(p, earliest_pres_time);
+	return p;
+}
+
 vod_status_t
 dash_packager_build_fragment_header(
 	request_context_t* request_context,
@@ -588,6 +642,7 @@ dash_packager_build_fragment_header(
 	vod_str_t* result,
 	size_t* total_fragment_size)
 {
+	uint64_t earliest_pres_time = dash_packager_get_earliest_pres_time(stream_metadata);
 	size_t mdat_atom_size;
 	size_t trun_atom_size;
 	size_t moof_atom_size;
@@ -602,7 +657,7 @@ dash_packager_build_fragment_header(
 	traf_atom_size =
 		ATOM_HEADER_SIZE +
 		ATOM_HEADER_SIZE + sizeof(tfhd_atom_t)+
-		ATOM_HEADER_SIZE + sizeof(tfdt_atom_t)+
+		ATOM_HEADER_SIZE + (earliest_pres_time > UINT_MAX ? sizeof(tfdt64_atom_t) : sizeof(tfdt_atom_t)) +
 		trun_atom_size;
 
 	moof_atom_size =
@@ -612,7 +667,7 @@ dash_packager_build_fragment_header(
 
 	result_size =
 		sizeof(styp_atom)+
-		ATOM_HEADER_SIZE + sizeof(sidx_atom_t)+
+		ATOM_HEADER_SIZE + (earliest_pres_time > UINT_MAX ? sizeof(sidx64_atom_t) : sizeof(sidx_atom_t)) + 
 		moof_atom_size +
 		ATOM_HEADER_SIZE;		// mdat
 
@@ -637,7 +692,14 @@ dash_packager_build_fragment_header(
 	p = vod_copy(result->data, styp_atom, sizeof(styp_atom));
 
 	// sidx
-	p = dash_packager_write_sidx_atom(p, stream_metadata, moof_atom_size + mdat_atom_size, segment_duration);
+	if (earliest_pres_time > UINT_MAX)
+	{
+		p = dash_packager_write_sidx64_atom(p, stream_metadata, earliest_pres_time, moof_atom_size + mdat_atom_size);
+	}
+	else
+	{
+		p = dash_packager_write_sidx_atom(p, stream_metadata, (uint32_t)earliest_pres_time, moof_atom_size + mdat_atom_size);
+	}
 
 	// moof
 	write_atom_header(p, moof_atom_size, 'm', 'o', 'o', 'f');
@@ -652,7 +714,14 @@ dash_packager_build_fragment_header(
 	p = dash_packager_write_tfhd_atom(p, stream_metadata->media_info.track_id);
 
 	// moof.traf.tfdt
-	p = dash_packager_write_tfdt_atom(p, dash_packager_get_earliest_pres_time(stream_metadata));
+	if (earliest_pres_time > UINT_MAX)
+	{
+		p = dash_packager_write_tfdt64_atom(p, earliest_pres_time);
+	}
+	else
+	{
+		p = dash_packager_write_tfdt_atom(p, (uint32_t)earliest_pres_time);
+	}
 
 	// moof.traf.trun
 	p = mp4_builder_write_trun_atom(

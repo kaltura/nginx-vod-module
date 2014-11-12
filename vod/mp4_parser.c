@@ -16,6 +16,7 @@
 // constants
 #define MAX_FRAMERATE_TEST_SAMPLES (20)
 #define MAX_TOTAL_SIZE_TEST_SAMPLES (100000)
+#define MAX_STREAM_COUNT (1024)
 
 // these constants can be generated with python - 'moov'[::-1].encode('hex')
 #define ATOM_NAME_MOOV (0x766f6f6d)		// movie header
@@ -1017,7 +1018,7 @@ mp4_parser_parse_stts_atom(atom_info_t* atom_info, frames_parse_context_t* conte
 	{
 		for (;;)
 		{
-			if (sample_duration != 0)
+			if (sample_duration != 0 && end_time != ULLONG_MAX)
 			{
 				cur_count = DIV_CEIL(end_time - accum_duration, sample_duration);
 				cur_count = MIN(cur_count, sample_count);
@@ -2465,6 +2466,13 @@ mp4_parser_process_moov_atom_callback(void* ctx, atom_info_t* atom_info)
 	}
 
 	// add to the result array
+	if (result->streams.nelts >= MAX_STREAM_COUNT)
+	{
+		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, context->request_context->log, 0,
+			"mp4_parser_process_moov_atom_callback: stream count exceeded the limit");
+		return VOD_BAD_REQUEST;
+	}
+
 	result_stream = vod_array_push(&result->streams);
 	if (result_stream == NULL)
 	{

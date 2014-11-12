@@ -122,7 +122,7 @@ ngx_http_vod_get_base_url(
 	ngx_flag_t use_https;
 	ngx_str_t* host_name;
 	size_t uri_path_len;
-	size_t length;
+	size_t result_size;
 	u_char* last_slash;
 	u_char* p;
 
@@ -150,8 +150,8 @@ ngx_http_vod_get_base_url(
 	}
 
 	// allocate the base url
-	length = sizeof("https://") - 1 + host_name->len + uri_path_len + sizeof("/");
-	base_url->data = ngx_palloc(r->pool, length);
+	result_size = sizeof("https://") - 1 + host_name->len + uri_path_len + sizeof("/");
+	base_url->data = ngx_palloc(r->pool, result_size);
 	if (base_url->data == NULL)
 	{
 		return;
@@ -187,7 +187,12 @@ ngx_http_vod_get_base_url(
 
 	base_url->len = p - base_url->data;
 
-	return;
+	if (base_url->len > result_size)
+	{
+		vod_log_error(VOD_LOG_ERR, r->connection->log, 0,
+			"ngx_http_vod_get_base_url: result length %uz exceeded allocated length %uz",
+			base_url->len, result_size);
+	}
 }
 
 ngx_int_t
