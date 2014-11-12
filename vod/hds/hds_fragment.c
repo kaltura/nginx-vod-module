@@ -183,8 +183,6 @@ hds_get_sound_info(request_context_t* request_context, media_info_t* media_info,
 
 	*result = (SOUND_FORMAT_AAC << 4) | (sound_rate << 2) | (sound_size << 1) | (sound_type);
 
-	*result = 0xAF;		// XXXXXXX remove this
-
 	return VOD_OK;
 }
 

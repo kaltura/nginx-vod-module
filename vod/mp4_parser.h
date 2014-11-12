@@ -5,7 +5,7 @@
 #include "common.h"
 
 // macros
-#define rescale_time(time, cur_scale, new_scale) ((((uint64_t)(time)) * (new_scale)/* + (cur_scale) / 2*/) / (cur_scale))
+#define rescale_time(time, cur_scale, new_scale) ((((uint64_t)(time)) * (new_scale) + (cur_scale) / 2) / (cur_scale))
 
 // macros for walking the mpeg streams grouped by files
 #define WALK_STREAMS_BY_FILES_VARS(cur_file_streams)				\

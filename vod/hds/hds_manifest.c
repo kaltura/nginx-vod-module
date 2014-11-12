@@ -102,7 +102,7 @@ hds_write_abst_atom(u_char* p, uint64_t duration, uint32_t timescale, uint32_t s
 	size_t asrt_atom_size = ASRT_ATOM_SIZE;
 	size_t abst_atom_size = ABST_ATOM_SIZE;
 
-	segment_count = (duration_millis + 999) / segment_duration;
+	segment_count = (duration_millis + segment_duration / 2) / segment_duration;
 	if (segment_count <= 1)
 	{
 		segment_count = 1;

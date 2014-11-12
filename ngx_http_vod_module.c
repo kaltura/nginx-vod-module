@@ -330,7 +330,7 @@ ngx_http_vod_parse_moov_atom(ngx_http_vod_ctx_t *ctx, u_char* moov_buffer, size_
 			break;
 
 		case REQUEST_CLASS_SEGMENT_LAST_ROUNDED:
-			segment_count = (mpeg_base_metadata.duration_millis + 999) / ctx->submodule_context.conf->segment_duration;
+			segment_count = (mpeg_base_metadata.duration_millis + ctx->submodule_context.conf->segment_duration / 2) / ctx->submodule_context.conf->segment_duration;
 			break;
 		}
 
