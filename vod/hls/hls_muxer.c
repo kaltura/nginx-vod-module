@@ -20,7 +20,6 @@ hls_muxer_init(
 	mpegts_encoder_init_streams_state_t init_streams_state;
 	mpeg_stream_metadata_t* cur_stream_metadata;
 	hls_muxer_stream_state_t* cur_stream;
-	int64_t video_duration = 0;
 	vod_status_t rc;
 
 	*simulation_supported = TRUE;
@@ -45,7 +44,7 @@ hls_muxer_init(
 
 	state->read_cache_state = read_cache_state;
 	state->cur_frame = NULL;
-
+	state->video_duration = 0;
 	
 	cur_stream_metadata = mpeg_metadata->first_stream;
 	for (cur_stream = state->first_stream; cur_stream < state->last_stream; cur_stream++, cur_stream_metadata++)
@@ -68,9 +67,9 @@ hls_muxer_init(
 		switch (cur_stream_metadata->media_info.media_type)
 		{
 		case MEDIA_TYPE_VIDEO:
-			if (cur_stream_metadata->media_info.duration_millis > video_duration)
+			if (cur_stream_metadata->media_info.duration_millis > state->video_duration)
 			{
-				video_duration = cur_stream_metadata->media_info.duration_millis;
+				state->video_duration = cur_stream_metadata->media_info.duration_millis;
 			}
 
 			cur_stream->buffer_state = NULL;
@@ -196,7 +195,7 @@ hls_muxer_start_frame(hls_muxer_state_t* state)
 	hls_muxer_stream_state_t* cur_stream;
 	hls_muxer_stream_state_t* selected_stream;
 	output_frame_t* output_frame;
-	uint32_t cur_frame_time_offset;
+	uint64_t cur_frame_time_offset;
 	uint64_t cur_frame_dts;
 	uint64_t buffer_dts;
 	vod_status_t rc;
@@ -431,7 +430,7 @@ hls_muxer_simulate_get_iframes(hls_muxer_state_t* state, uint32_t segment_durati
 	uint32_t frame_segment_index = 0;
 	uint32_t segment_index = 1;
 	uint64_t cur_frame_dts;
-	uint32_t cur_frame_time_offset;
+	uint64_t cur_frame_time_offset;
 
 	segment_duration *= 90;			// convert to 90KHz
 	segment_end_dts = segment_duration;

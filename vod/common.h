@@ -187,8 +187,8 @@ typedef struct {
 	int parse_type;
 	stream_comparator_t stream_comparator;
 	void* stream_comparator_context;
-	uint32_t start;
-	uint32_t end;
+	uint64_t start;
+	uint64_t end;
 	uint32_t timescale;
 	uint32_t max_frame_count;
 	bool_t simulation_only;

@@ -87,8 +87,8 @@ typedef struct {
 	uint8_t sound_info;
 	uint32_t timescale;
 
-	uint32_t first_frame_time_offset;
-	uint32_t next_frame_time_offset;
+	uint64_t first_frame_time_offset;
+	uint64_t next_frame_time_offset;
 	uint64_t next_frame_dts;
 
 	// input frames

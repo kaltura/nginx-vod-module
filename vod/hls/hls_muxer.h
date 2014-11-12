@@ -28,8 +28,8 @@ typedef struct {
 	input_frame_t* last_frame;
 
 	// time offsets
-	uint32_t first_frame_time_offset;
-	uint32_t next_frame_time_offset;
+	uint64_t first_frame_time_offset;
+	uint64_t next_frame_time_offset;
 	uint64_t next_frame_dts;
 	
 	// frame offsets

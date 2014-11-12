@@ -258,7 +258,7 @@ mpegts_encoder_init(
 {
 	u_char* cur_packet;
 
-	vod_memzero(state, sizeof(state));
+	vod_memzero(state, sizeof(*state));
 	state->request_context = request_context;
 	if (request_context->simulation_only)
 	{
