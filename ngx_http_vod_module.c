@@ -328,16 +328,16 @@ ngx_http_vod_parse_moov_atom(ngx_http_vod_ctx_t *ctx, u_char* moov_buffer, size_
 		// validate the requested segment index
 		switch (request->request_class)
 		{
-		case REQUEST_CLASS_SEGMENT_LAST_SHORT:
-			segment_count = DIV_CEIL(mpeg_base_metadata.duration_millis, ctx->submodule_context.conf->segment_duration);
-			break;
-
 		case REQUEST_CLASS_SEGMENT_LAST_LONG:
 			segment_count = mpeg_base_metadata.duration_millis / ctx->submodule_context.conf->segment_duration;
 			break;
 
 		case REQUEST_CLASS_SEGMENT_LAST_ROUNDED:
 			segment_count = (mpeg_base_metadata.duration_millis + ctx->submodule_context.conf->segment_duration / 2) / ctx->submodule_context.conf->segment_duration;
+			break;
+
+		default: //	REQUEST_CLASS_SEGMENT_LAST_SHORT
+			segment_count = DIV_CEIL(mpeg_base_metadata.duration_millis, ctx->submodule_context.conf->segment_duration);
 			break;
 		}
 
