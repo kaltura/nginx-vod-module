@@ -2,7 +2,7 @@
 #define _NGX_BUFFER_CACHE_H_INCLUDED_
 
 // includes
-#include <ngx_cycle.h>
+#include <ngx_core.h>
 
 // constants
 #define BUFFER_CACHE_KEY_SIZE (16)

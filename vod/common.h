@@ -6,8 +6,13 @@
 #include <sys/types.h>
 
 // constants
+#ifndef TRUE
 #define TRUE (1)
+#endif // TRUE
+
+#ifndef FALSE
 #define FALSE (0)
+#endif // FALSE
 
 // macros
 #define DIV_CEIL(x, y) (((x) + (y) - 1) / (y))
