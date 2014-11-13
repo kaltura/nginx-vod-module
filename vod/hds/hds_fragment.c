@@ -87,8 +87,8 @@ typedef struct {
 	uint8_t sound_info;
 	uint32_t timescale;
 
-	uint32_t first_frame_time_offset;
-	uint32_t next_frame_time_offset;
+	uint64_t first_frame_time_offset;
+	uint64_t next_frame_time_offset;
 	uint64_t next_frame_dts;
 
 	// input frames
@@ -136,24 +136,21 @@ hds_get_sound_info(request_context_t* request_context, media_info_t* media_info,
 	int sound_size;
 	int sound_type;
 
-	switch (media_info->u.audio.sample_rate / 1000)
+	if (media_info->u.audio.sample_rate <= 8000)
 	{
-	case 5:
 		sound_rate = SOUND_RATE_5_5_KHZ;
-		break;
-	case 11:
+	}
+	else if (media_info->u.audio.sample_rate <= 16000)
+	{
 		sound_rate = SOUND_RATE_11_KHZ;
-		break;
-	case 22:
+	}
+	else if (media_info->u.audio.sample_rate <= 32000)
+	{
 		sound_rate = SOUND_RATE_22_KHZ;
-		break;
-	case 44:
+	}
+	else
+	{
 		sound_rate = SOUND_RATE_44_KHZ;
-		break;
-	default:
-		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-			"hds_get_sound_info: unsupported sample rate %uD", media_info->u.audio.sample_rate);
-		return VOD_BAD_DATA;
 	}
 
 	switch (media_info->u.audio.bits_per_sample)
@@ -185,6 +182,7 @@ hds_get_sound_info(request_context_t* request_context, media_info_t* media_info,
 	}
 
 	*result = (SOUND_FORMAT_AAC << 4) | (sound_rate << 2) | (sound_size << 1) | (sound_type);
+
 	return VOD_OK;
 }
 
@@ -494,6 +492,46 @@ hds_muxer_init_state(
 	return VOD_OK;
 }
 
+static u_char*
+hds_muxer_write_codec_config(u_char* p, hds_muxer_state_t* state, uint64_t cur_frame_dts)
+{
+	mpeg_stream_metadata_t* cur_stream;
+	hds_muxer_stream_state_t* stream_state;
+	size_t packet_size;
+
+	for (stream_state = state->first_stream; stream_state < state->last_stream; stream_state++)
+	{
+		cur_stream = stream_state->metadata;
+		packet_size = sizeof(adobe_mux_packet_header_t)+cur_stream->media_info.extra_data_size;
+		switch (cur_stream->media_info.media_type)
+		{
+		case MEDIA_TYPE_VIDEO:
+			p = hds_write_video_tag_header(
+				p,
+				cur_stream->media_info.extra_data_size,
+				cur_frame_dts,
+				FRAME_TYPE_KEY_FRAME,
+				AVC_PACKET_TYPE_SEQUENCE_HEADER,
+				0);
+			packet_size += sizeof(video_tag_header_avc);
+			break;
+
+		case MEDIA_TYPE_AUDIO:
+			p = hds_write_audio_tag_header(
+				p,
+				cur_stream->media_info.extra_data_size,
+				cur_frame_dts,
+				stream_state->sound_info,
+				AAC_PACKET_TYPE_SEQUENCE_HEADER);
+			packet_size += sizeof(audio_tag_header_aac);
+			break;
+		}
+		p = vod_copy(p, cur_stream->media_info.extra_data, cur_stream->media_info.extra_data_size);
+		write_dword(p, packet_size);
+	}
+	return p;
+}
+
 vod_status_t
 hds_muxer_init_fragment(
 	request_context_t* request_context,
@@ -557,6 +595,13 @@ hds_muxer_init_fragment(
 		afra_atom_size +
 		moof_atom_size +
 		ATOM_HEADER_SIZE;		// mdat
+
+	// audio only - output the codec config up front, video - output the codec config before every key frame
+	if (mpeg_metadata->video_key_frame_count == 0)
+	{
+		result_size += state->codec_config_size;
+		mdat_atom_size += state->codec_config_size;
+	}
 
 	*total_fragment_size =
 		afra_atom_size +
@@ -627,7 +672,20 @@ hds_muxer_init_fragment(
 	// mdat
 	write_atom_header(p, mdat_atom_size, 'm', 'd', 'a', 't');
 
+	if (mpeg_metadata->video_key_frame_count == 0)
+	{
+		p = hds_muxer_write_codec_config(p, state, state->first_stream->next_frame_dts);
+	}
+
 	header->len = p - header->data;
+
+	if (header->len != result_size)
+	{
+		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+			"hds_muxer_init_fragment: result length %uz exceeded allocated length %uz",
+			header->len, result_size);
+		return VOD_UNEXPECTED;
+	}
 
 	*processor_state = state;
 
@@ -654,46 +712,6 @@ hds_muxer_get_min_output_offset_stream(hds_muxer_state_t* state)
 	}
 
 	return result;
-}
-
-static u_char*
-hds_muxer_write_codec_config(u_char* p, hds_muxer_state_t* state)
-{
-	mpeg_stream_metadata_t* cur_stream;
-	hds_muxer_stream_state_t* stream_state;
-	size_t packet_size;
-
-	for (stream_state = state->first_stream; stream_state < state->last_stream; stream_state++)
-	{
-		cur_stream = stream_state->metadata;
-		packet_size = sizeof(adobe_mux_packet_header_t)+cur_stream->media_info.extra_data_size;
-		switch (cur_stream->media_info.media_type)
-		{
-		case MEDIA_TYPE_VIDEO:
-			p = hds_write_video_tag_header(
-				p,
-				cur_stream->media_info.extra_data_size,
-				stream_state->next_frame_dts,
-				FRAME_TYPE_KEY_FRAME,
-				AVC_PACKET_TYPE_SEQUENCE_HEADER,
-				0);
-			packet_size += sizeof(video_tag_header_avc);
-			break;
-
-		case MEDIA_TYPE_AUDIO:
-			p = hds_write_audio_tag_header(
-				p,
-				cur_stream->media_info.extra_data_size,
-				stream_state->next_frame_dts,
-				stream_state->sound_info,
-				AAC_PACKET_TYPE_SEQUENCE_HEADER);
-			packet_size += sizeof(audio_tag_header_aac);
-			break;
-		}
-		p = vod_copy(p, cur_stream->media_info.extra_data, cur_stream->media_info.extra_data_size);
-		write_dword(p, packet_size);
-	}
-	return p;
 }
 
 static vod_status_t
@@ -744,7 +762,7 @@ hds_muxer_start_frame(hds_muxer_state_t* state)
 	// write the mux packet header and optionally codec config
 	if (selected_stream->media_type == MEDIA_TYPE_VIDEO && state->cur_frame->key_frame)
 	{
-		p = hds_muxer_write_codec_config(p, state);
+		p = hds_muxer_write_codec_config(p, state, cur_frame_dts);
 	}
 
 	switch (selected_stream->media_type)

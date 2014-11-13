@@ -37,7 +37,7 @@ typedef ngx_int_t(*ngx_http_vod_dump_request_t)(void* context);
 typedef struct {
 	ngx_http_request_t* r;
 	ngx_chain_t* chain_end;
-	uint32_t total_size;
+	size_t total_size;
 } ngx_http_vod_write_segment_context_t;
 
 typedef struct {
@@ -278,7 +278,6 @@ ngx_http_vod_parse_moov_atom(ngx_http_vod_ctx_t *ctx, u_char* moov_buffer, size_
 	vod_status_t rc;
 	file_info_t file_info;
 	uint32_t segment_count;
-	uint32_t max_segment_duration;
 
 	// init the request context
 	request_context->parse_type = request->parse_type;
@@ -306,33 +305,45 @@ ngx_http_vod_parse_moov_atom(ngx_http_vod_ctx_t *ctx, u_char* moov_buffer, size_
 		return ngx_http_vod_status_to_ngx_error(rc);
 	}
 
+	request_context->timescale = 1000;
 	if (request->request_class == REQUEST_CLASS_MANIFEST)
 	{
 		request_context->max_frame_count = 1024 * 1024;
 		request_context->simulation_only = TRUE;
 		request_context->start = suburi_params->clip_from;
-		request_context->end = suburi_params->clip_to;
-	}
-	else
-	{
-		request_context->max_frame_count = 16 * 1024;
-		request_context->simulation_only = FALSE;
-
-		// validate the requested segment index
-		if (request->request_class == REQUEST_CLASS_SEGMENT_LAST_SHORT)
+		if (suburi_params->clip_to == UINT_MAX)
 		{
-			segment_count = DIV_CEIL(mpeg_base_metadata.duration_millis, ctx->submodule_context.conf->segment_duration);
+			request_context->end = ULLONG_MAX;
 		}
 		else
 		{
-			if (mpeg_base_metadata.duration_millis > ctx->submodule_context.conf->segment_duration)
-			{
-				segment_count = mpeg_base_metadata.duration_millis / ctx->submodule_context.conf->segment_duration;
-			}
-			else
-			{
-				segment_count = 1;
-			}
+			request_context->end = suburi_params->clip_to;
+		}
+	}
+	else
+	{
+		request_context->max_frame_count = 64 * 1024;
+		request_context->simulation_only = FALSE;
+
+		// validate the requested segment index
+		switch (request->request_class)
+		{
+		case REQUEST_CLASS_SEGMENT_LAST_SHORT:
+			segment_count = DIV_CEIL(mpeg_base_metadata.duration_millis, ctx->submodule_context.conf->segment_duration);
+			break;
+
+		case REQUEST_CLASS_SEGMENT_LAST_LONG:
+			segment_count = mpeg_base_metadata.duration_millis / ctx->submodule_context.conf->segment_duration;
+			break;
+
+		case REQUEST_CLASS_SEGMENT_LAST_ROUNDED:
+			segment_count = (mpeg_base_metadata.duration_millis + ctx->submodule_context.conf->segment_duration / 2) / ctx->submodule_context.conf->segment_duration;
+			break;
+		}
+
+		if (segment_count < 1)
+		{
+			segment_count = 1;
 		}
 
 		if (ctx->submodule_context.request_params.segment_index >= segment_count)
@@ -343,19 +354,18 @@ ngx_http_vod_parse_moov_atom(ngx_http_vod_ctx_t *ctx, u_char* moov_buffer, size_
 		}
 
 		// get the start / end offsets
+		request_context->start = suburi_params->clip_from + ctx->submodule_context.request_params.segment_index * ctx->submodule_context.conf->segment_duration;
 		if (ctx->submodule_context.request_params.segment_index + 1 < segment_count)
 		{
 			// not the last segment
-			max_segment_duration = ctx->submodule_context.conf->segment_duration;
+			request_context->end = MIN(request_context->start + ctx->submodule_context.conf->segment_duration, suburi_params->clip_to);
 		}
 		else
 		{
 			// last segment
-			max_segment_duration = 2 * ctx->submodule_context.conf->segment_duration;
+			request_context->end = ULLONG_MAX;
 		}
 		
-		request_context->start = suburi_params->clip_from + ctx->submodule_context.request_params.segment_index * ctx->submodule_context.conf->segment_duration;
-		request_context->end = MIN(request_context->start + max_segment_duration, suburi_params->clip_to);
 		if (request_context->end <= request_context->start)
 		{
 			vod_log_error(VOD_LOG_ERR, request_context->log, 0,
@@ -369,6 +379,9 @@ ngx_http_vod_parse_moov_atom(ngx_http_vod_ctx_t *ctx, u_char* moov_buffer, size_
 	rc = mp4_parser_parse_frames(
 		&ctx->submodule_context.request_context,
 		&mpeg_base_metadata,
+		suburi_params->clip_from,
+		suburi_params->clip_to,
+		ctx->submodule_context.conf->align_segments_to_key_frames,
 		&ctx->submodule_context.mpeg_metadata);
 	if (rc != VOD_OK)
 	{
@@ -616,7 +629,7 @@ ngx_http_vod_finalize_segment_response(ngx_http_vod_ctx_t *ctx)
 	// if we already sent the headers and all the buffers, just signal completion and return
 	if (r->header_sent)
 	{
-		if (ctx->write_segment_buffer_context.total_size != r->headers_out.content_length_n)
+		if ((off_t)ctx->write_segment_buffer_context.total_size != r->headers_out.content_length_n)
 		{
 			ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
 				"ngx_http_vod_finalize_segment_response: actual content length %uD is different than reported length %O", 
@@ -1422,7 +1435,7 @@ ngx_http_vod_path_request_finished(void* context, ngx_int_t rc, ngx_buf_t* respo
 	{
 		// file not found
 		ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
-			"ngx_http_vod_path_request_finished: empty path returned from upstream");
+			"ngx_http_vod_path_request_finished: empty path returned from upstream %V", &ctx->submodule_context.cur_suburi->stripped_uri);
 
 		// try the fallback
 		rc = ngx_http_vod_dump_request_to_fallback(r);

@@ -78,7 +78,7 @@ ngx_http_vod_status_handler(ngx_http_request_t *r)
 	ngx_str_t response;
 	u_char* p;
 	size_t cache_stats_len = 0;
-	size_t length;
+	size_t result_size;
 
 	conf = ngx_http_get_module_loc_conf(r, ngx_http_vod_module);
 
@@ -88,20 +88,20 @@ ngx_http_vod_status_handler(ngx_http_request_t *r)
 		cache_stats_len += sizeof("<></>\r\n") - 1 + 2 * cur_stat->name_len + NGX_ATOMIC_T_LEN;
 	}
 
-	length = sizeof(status_prefix) - 1;
+	result_size = sizeof(status_prefix) - 1;
 	if (conf->moov_cache_zone != NULL)
 	{
-		length += sizeof("<moov_cache>\r\n") + cache_stats_len + sizeof("</moov_cache>\r\n");
+		result_size += sizeof("<moov_cache>\r\n") + cache_stats_len + sizeof("</moov_cache>\r\n");
 	}
 
 	if (conf->path_mapping_cache_zone != NULL)
 	{
-		length += sizeof("<path_mapping_cache>\r\n") + cache_stats_len + sizeof("</path_mapping_cache>\r\n");
+		result_size += sizeof("<path_mapping_cache>\r\n") + cache_stats_len + sizeof("</path_mapping_cache>\r\n");
 	}
-	length += sizeof(status_postfix);
+	result_size += sizeof(status_postfix);
 
 	// allocate the buffer
-	response.data = ngx_palloc(r->pool, length);
+	response.data = ngx_palloc(r->pool, result_size);
 	if (response.data == NULL)
 	{
 		ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
@@ -134,11 +134,11 @@ ngx_http_vod_status_handler(ngx_http_request_t *r)
 	
 	response.len = p - response.data;
 	
-	if (response.len > length)
+	if (response.len > result_size)
 	{
 		ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
 			"ngx_http_vod_status_handler: response length %uz exceeded allocated length %uz", 
-			response.len, length);
+			response.len, result_size);
 		return NGX_HTTP_INTERNAL_SERVER_ERROR;
 	}
 

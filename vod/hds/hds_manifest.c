@@ -102,11 +102,8 @@ hds_write_abst_atom(u_char* p, uint64_t duration, uint32_t timescale, uint32_t s
 	size_t asrt_atom_size = ASRT_ATOM_SIZE;
 	size_t abst_atom_size = ABST_ATOM_SIZE;
 
-	if (duration_millis >= 2 * segment_duration)
-	{
-		segment_count = duration_millis / segment_duration;
-	}
-	else
+	segment_count = (duration_millis + segment_duration / 2) / segment_duration;
+	if (segment_count <= 1)
 	{
 		segment_count = 1;
 		afrt_atom_size -= sizeof(afrt_entry_t);
@@ -331,7 +328,7 @@ hds_packager_build_manifest(
 	if (result->len > result_size)
 	{
 		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-			"hds_packager_build_manifest: result length %uz exceeded allocated length %uD",
+			"hds_packager_build_manifest: result length %uz exceeded allocated length %uz",
 			result->len, result_size);
 		return VOD_UNEXPECTED;
 	}

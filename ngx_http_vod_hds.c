@@ -98,7 +98,7 @@ static const ngx_http_vod_request_t hds_fragment_request = {
 	PARSE_ALL | EXTRA_DATA_SAVE_DATA,
 	NULL,
 	0,
-	REQUEST_CLASS_SEGMENT_LAST_LONG,
+	REQUEST_CLASS_SEGMENT_LAST_ROUNDED,
 	NULL,
 	ngx_http_vod_hds_init_frame_processor,
 };

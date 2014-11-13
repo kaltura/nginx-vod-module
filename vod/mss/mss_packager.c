@@ -287,6 +287,15 @@ mss_packager_build_manifest(
 	p = vod_copy(p, MSS_MANIFEST_FOOTER, sizeof(MSS_MANIFEST_FOOTER) - 1);
 
 	result->len = p - result->data;
+	
+	if (result->len > result_size)
+	{
+		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+			"mss_packager_build_manifest: result length %uz exceeded allocated length %uz",
+			result->len, result_size);
+		return VOD_UNEXPECTED;
+	}
+	
 	return VOD_OK;
 }
 

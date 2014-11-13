@@ -170,7 +170,7 @@ typedef struct {
 	uint32_t key_frame_count;
 	uint64_t total_frames_size;
 	uint64_t total_frames_duration;
-	uint32_t first_frame_time_offset;
+	uint64_t first_frame_time_offset;
 	raw_atom_t raw_atoms[RTA_COUNT];
 } mpeg_stream_metadata_t;
 
@@ -212,6 +212,9 @@ vod_status_t mp4_parser_parse_basic_metadata(
 vod_status_t mp4_parser_parse_frames(
 	request_context_t* request_context,
 	mpeg_base_metadata_t* base,
+	uint32_t clip_from,
+	uint32_t clip_to,
+	bool_t align_segments_to_key_frames,
 	mpeg_metadata_t* result);
 
 vod_status_t mp4_parser_finalize_mpeg_metadata(

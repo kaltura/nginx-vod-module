@@ -6,20 +6,6 @@
 #define DEFAULT_PES_HEADER_FREQ 16
 #define DEFAULT_PES_PAYLOAD_SIZE ((DEFAULT_PES_HEADER_FREQ - 1) * 184 + 170)
 
-static int 
-hls_muxer_compare_streams(const void *s1, const void *s2)
-{
-	hls_muxer_stream_state_t* stream1 = (hls_muxer_stream_state_t*)s1;
-	hls_muxer_stream_state_t* stream2 = (hls_muxer_stream_state_t*)s2;
-
-	if (stream1->media_type != stream2->media_type)
-	{
-		return stream1->media_type - stream2->media_type;
-	}
-
-	return stream1->stream_index - stream2->stream_index;
-}
-
 vod_status_t 
 hls_muxer_init(
 	hls_muxer_state_t* state, 
@@ -34,8 +20,6 @@ hls_muxer_init(
 	mpegts_encoder_init_streams_state_t init_streams_state;
 	mpeg_stream_metadata_t* cur_stream_metadata;
 	hls_muxer_stream_state_t* cur_stream;
-	int64_t cur_stream_duration;
-	int64_t video_duration = 0;
 	vod_status_t rc;
 
 	*simulation_supported = TRUE;
@@ -60,7 +44,7 @@ hls_muxer_init(
 
 	state->read_cache_state = read_cache_state;
 	state->cur_frame = NULL;
-
+	state->video_duration = 0;
 	
 	cur_stream_metadata = mpeg_metadata->first_stream;
 	for (cur_stream = state->first_stream; cur_stream < state->last_stream; cur_stream++, cur_stream_metadata++)
@@ -83,10 +67,9 @@ hls_muxer_init(
 		switch (cur_stream_metadata->media_info.media_type)
 		{
 		case MEDIA_TYPE_VIDEO:
-			cur_stream_duration = rescale_time(cur_stream_metadata->media_info.duration, cur_stream_metadata->media_info.timescale, 1000);
-			if (cur_stream_duration > video_duration)
+			if (cur_stream_metadata->media_info.duration_millis > state->video_duration)
 			{
-				video_duration = cur_stream_duration;
+				state->video_duration = cur_stream_metadata->media_info.duration_millis;
 			}
 
 			cur_stream->buffer_state = NULL;
@@ -159,9 +142,6 @@ hls_muxer_init(
 		}
 	}
 
-	// place the video streams before the audio streams (usually there will only one video and one audio)
-	qsort(state->first_stream, state->last_stream - state->first_stream, sizeof(*state->first_stream), hls_muxer_compare_streams);
-
 	// init the packetizer streams and get the packet ids / stream ids
 	rc = mpegts_encoder_init_streams(&state->mpegts_encoder_state, &init_streams_state, segment_index);
 	if (rc != VOD_OK)
@@ -183,15 +163,6 @@ hls_muxer_init(
 	}
 
 	mpegts_encoder_finalize_streams(&init_streams_state);
-
-	if (state->video_duration > request_context->start)
-	{
-		state->video_duration = MIN(video_duration, request_context->end) - request_context->start;
-	}
-	else
-	{
-		state->video_duration = 0;
-	}
 
 	return VOD_OK;
 }
@@ -224,7 +195,7 @@ hls_muxer_start_frame(hls_muxer_state_t* state)
 	hls_muxer_stream_state_t* cur_stream;
 	hls_muxer_stream_state_t* selected_stream;
 	output_frame_t* output_frame;
-	uint32_t cur_frame_time_offset;
+	uint64_t cur_frame_time_offset;
 	uint64_t cur_frame_dts;
 	uint64_t buffer_dts;
 	vod_status_t rc;
@@ -459,7 +430,7 @@ hls_muxer_simulate_get_iframes(hls_muxer_state_t* state, uint32_t segment_durati
 	uint32_t frame_segment_index = 0;
 	uint32_t segment_index = 1;
 	uint64_t cur_frame_dts;
-	uint32_t cur_frame_time_offset;
+	uint64_t cur_frame_time_offset;
 
 	segment_duration *= 90;			// convert to 90KHz
 	segment_end_dts = segment_duration;
@@ -518,7 +489,7 @@ hls_muxer_simulate_get_iframes(hls_muxer_state_t* state, uint32_t segment_durati
 
 		if (selected_stream->media_type == MEDIA_TYPE_VIDEO && cur_frame->key_frame)
 		{
-			cur_frame_time = (((cur_frame_time_offset + cur_frame->pts_delay) * 1000) / selected_stream->timescale);		// in millis
+			cur_frame_time = rescale_time(cur_frame_time_offset + cur_frame->pts_delay, selected_stream->timescale, 1000);		// in millis
 			if (frame_size != 0)
 			{
 				callback(context, frame_segment_index, cur_frame_time - frame_start_time, frame_start, frame_size);

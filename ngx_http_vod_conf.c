@@ -28,6 +28,7 @@ ngx_http_vod_create_loc_conf(ngx_conf_t *cf)
 	conf->get_file_path_components = NGX_CONF_UNSET_PTR;
 	conf->request_handler = NGX_CONF_UNSET_PTR;
 	conf->segment_duration = NGX_CONF_UNSET_UINT;
+	conf->align_segments_to_key_frames = NGX_CONF_UNSET;
 	conf->duplicate_bitrate_threshold = NGX_CONF_UNSET_UINT;
 	conf->initial_read_size = NGX_CONF_UNSET_SIZE;
 	conf->max_moov_size = NGX_CONF_UNSET_SIZE;
@@ -62,6 +63,7 @@ ngx_http_vod_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child)
 	ngx_conf_merge_str_value(conf->multi_uri_suffix, prev->multi_uri_suffix, ".urlset");
 
 	ngx_conf_merge_uint_value(conf->segment_duration, prev->segment_duration, 10000);
+	ngx_conf_merge_value(conf->align_segments_to_key_frames, prev->align_segments_to_key_frames, 0);
 	ngx_conf_merge_str_value(conf->secret_key, prev->secret_key, "");
 	ngx_conf_merge_uint_value(conf->duplicate_bitrate_threshold, prev->duplicate_bitrate_threshold, 4096);
 	ngx_conf_merge_str_value(conf->https_header_name, prev->https_header_name, "");
@@ -71,7 +73,7 @@ ngx_http_vod_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child)
 		conf->moov_cache_zone = prev->moov_cache_zone;
 	}
 	ngx_conf_merge_size_value(conf->initial_read_size, prev->initial_read_size, 4096);
-	ngx_conf_merge_size_value(conf->max_moov_size, prev->max_moov_size, 32 * 1024 * 1024);
+	ngx_conf_merge_size_value(conf->max_moov_size, prev->max_moov_size, 128 * 1024 * 1024);
 	ngx_conf_merge_size_value(conf->cache_buffer_size, prev->cache_buffer_size, 256 * 1024);
 
 	err = ngx_merge_upstream_conf(cf, &conf->upstream, &prev->upstream);
@@ -461,6 +463,13 @@ ngx_command_t ngx_http_vod_commands[] = {
 	ngx_conf_set_num_slot,
 	NGX_HTTP_LOC_CONF_OFFSET,
 	offsetof(ngx_http_vod_loc_conf_t, segment_duration),
+	NULL },
+
+	{ ngx_string("vod_align_segments_to_key_frames"),
+	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1,
+	ngx_conf_set_flag_slot,
+	NGX_HTTP_LOC_CONF_OFFSET,
+	offsetof(ngx_http_vod_loc_conf_t, align_segments_to_key_frames),
 	NULL },
 
 	{ ngx_string("vod_secret_key"),

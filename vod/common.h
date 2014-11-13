@@ -81,6 +81,7 @@
 // array functions
 #define vod_array_init(array, pool, n, size) ngx_array_init(array, pool, n, size)
 #define vod_array_push(array) ngx_array_push(array)
+#define vod_array_push_n(array, count) ngx_array_push_n(array, count)
 #define vod_array_destroy(a) ngx_array_destroy(array)
 
 // types
@@ -186,8 +187,9 @@ typedef struct {
 	int parse_type;
 	stream_comparator_t stream_comparator;
 	void* stream_comparator_context;
-	uint32_t start;
-	uint32_t end;
+	uint64_t start;
+	uint64_t end;
+	uint32_t timescale;
 	uint32_t max_frame_count;
 	bool_t simulation_only;
 } request_context_t;
