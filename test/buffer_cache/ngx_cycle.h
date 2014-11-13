@@ -3,9 +3,9 @@
 #ifndef _NGX_CYCLE_H_INCLUDED_
 #define _NGX_CYCLE_H_INCLUDED_
 
-#include <ngx_core.h>
-
 typedef struct ngx_shm_zone_s  ngx_shm_zone_t;
+
+#include <ngx_core.h>
 
 typedef ngx_int_t (*ngx_shm_zone_init_pt) (ngx_shm_zone_t *zone, void *data);
 
