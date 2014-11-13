@@ -970,7 +970,7 @@ mp4_parser_parse_stts_atom(atom_info_t* atom_info, frames_parse_context_t* conte
 	// calculate the end time and initial alloc size
 	initial_alloc_size = 128;
 
-	if (context->request_context->end == UINT_MAX)
+	if (context->request_context->end == ULLONG_MAX)
 	{
 		end_time = ULLONG_MAX;
 
@@ -1140,7 +1140,7 @@ mp4_parser_parse_stts_atom(atom_info_t* atom_info, frames_parse_context_t* conte
 		}
 		else
 		{
-			context->request_context->end = UINT_MAX;
+			context->request_context->end = ULLONG_MAX;
 		}
 	}
 

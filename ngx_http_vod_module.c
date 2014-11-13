@@ -311,7 +311,14 @@ ngx_http_vod_parse_moov_atom(ngx_http_vod_ctx_t *ctx, u_char* moov_buffer, size_
 		request_context->max_frame_count = 1024 * 1024;
 		request_context->simulation_only = TRUE;
 		request_context->start = suburi_params->clip_from;
-		request_context->end = suburi_params->clip_to;
+		if (suburi_params->clip_to == UINT_MAX)
+		{
+			request_context->end = ULLONG_MAX;
+		}
+		else
+		{
+			request_context->end = suburi_params->clip_to;
+		}
 	}
 	else
 	{
@@ -356,7 +363,7 @@ ngx_http_vod_parse_moov_atom(ngx_http_vod_ctx_t *ctx, u_char* moov_buffer, size_
 		else
 		{
 			// last segment
-			request_context->end = UINT_MAX;
+			request_context->end = ULLONG_MAX;
 		}
 		
 		if (request_context->end <= request_context->start)

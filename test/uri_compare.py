@@ -37,6 +37,8 @@ class TestThread(stress_base.TestThreadBase):
 		
 		if url1.rsplit('.', 1)[-1] in set(['m3u8']):
 			body1 = body1.replace(URL1_BASE, URL2_BASE)
+			body1 = body1.replace('-a1-v1', '-v1-a1')
+			body2 = body2.replace('-a1-v1', '-v1-a1')
 			
 		if body1 != body2:
 			self.writeOutput('Error: comparison failed - url1=%s, url2=%s' % (url1, url2))
