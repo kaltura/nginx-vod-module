@@ -363,7 +363,14 @@ ngx_http_vod_parse_moov_atom(ngx_http_vod_ctx_t *ctx, u_char* moov_buffer, size_
 		else
 		{
 			// last segment
-			request_context->end = ULLONG_MAX;
+			if (suburi_params->clip_to == UINT_MAX)
+			{
+				request_context->end = ULLONG_MAX;
+			}
+			else
+			{
+				request_context->end = suburi_params->clip_to;
+			}
 		}
 		
 		if (request_context->end <= request_context->start)
