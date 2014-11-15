@@ -5,6 +5,7 @@ import stress_base
 import commands
 import operator
 import urllib2
+import socket
 import struct
 import base64
 import pyamf
@@ -271,7 +272,11 @@ class TestThread(stress_base.TestThreadBase):
 			return 0, ''
 		
 		code = r.getcode()
-		result = r.read()
+		try:
+			result = r.read()
+		except socket.error, e:
+			self.writeOutput('Error: got socket error %s %s' % (url, e))
+			return 0, ''
 		
 		self.writeOutput('Info: get %s took %s' % (url, time.time() - startTime))
 		if r.info().getheader('content-length') != '%s' % len(result):
