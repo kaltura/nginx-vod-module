@@ -118,7 +118,6 @@ mss_packager_build_manifest(
 {
 	mpeg_stream_metadata_t* cur_stream;
 	segment_durations_t segment_durations[MEDIA_TYPE_COUNT];
-	uint32_t segment_count[MEDIA_TYPE_COUNT];
 	uint64_t duration_100ns;
 	uint32_t media_type;
 	uint32_t stream_index;
@@ -138,15 +137,11 @@ mss_packager_build_manifest(
 			continue;
 		}
 
-		segment_count[media_type] = segmenter_conf->get_segment_count(
-			segmenter_conf,
-			mpeg_metadata->longest_stream[media_type]->media_info.duration_millis);
-
 		rc = segmenter_conf->get_segment_durations(
 			request_context,
 			segmenter_conf,
-			mpeg_metadata->longest_stream[media_type],
-			segment_count[media_type],
+			&mpeg_metadata->longest_stream[media_type],
+			1,
 			&segment_durations[media_type]);
 		if (rc != VOD_OK)
 		{
@@ -157,7 +152,7 @@ mss_packager_build_manifest(
 			sizeof(MSS_STREAM_INDEX_HEADER) - 1 + 2 * sizeof(MSS_STREAM_TYPE_VIDEO) + 2 * VOD_INT32_LEN +
 			sizeof(MSS_STREAM_INDEX_FOOTER);
 
-		result_size += segment_count[media_type] * (sizeof(MSS_CHUNK_TAG) + VOD_INT32_LEN + VOD_INT64_LEN);
+		result_size += segment_durations[media_type].segment_count * (sizeof(MSS_CHUNK_TAG)+VOD_INT32_LEN + VOD_INT64_LEN);
 	}
 
 	for (cur_stream = mpeg_metadata->first_stream; cur_stream < mpeg_metadata->last_stream; cur_stream++)
@@ -196,7 +191,7 @@ mss_packager_build_manifest(
 			MSS_STREAM_INDEX_HEADER, 
 			MSS_STREAM_TYPE_VIDEO,
 			mpeg_metadata->stream_count[MEDIA_TYPE_VIDEO],
-			segment_count[MEDIA_TYPE_VIDEO],
+			segment_durations[MEDIA_TYPE_VIDEO].segment_count,
 			MSS_STREAM_TYPE_VIDEO);
 
 		stream_index = 0;
@@ -230,7 +225,7 @@ mss_packager_build_manifest(
 		p = vod_sprintf(p, MSS_STREAM_INDEX_HEADER, 
 			MSS_STREAM_TYPE_AUDIO,
 			mpeg_metadata->stream_count[MEDIA_TYPE_AUDIO],
-			segment_count[MEDIA_TYPE_AUDIO],
+			segment_durations[MEDIA_TYPE_AUDIO].segment_count,
 			MSS_STREAM_TYPE_AUDIO);
 
 		stream_index = 0;
@@ -292,12 +287,14 @@ static u_char*
 mss_write_uuid_tfxd_atom(u_char* p, mpeg_stream_metadata_t* stream_metadata)
 {
 	size_t atom_size = ATOM_HEADER_SIZE + sizeof(uuid_tfxd_atom_t);
+	uint64_t timestamp = rescale_time(stream_metadata->first_frame_time_offset, stream_metadata->media_info.timescale, MSS_TIMESCALE);
+	uint64_t duration = rescale_time(stream_metadata->total_frames_duration, stream_metadata->media_info.timescale, MSS_TIMESCALE);
 
 	write_atom_header(p, atom_size, 'u', 'u', 'i', 'd');
 	p = vod_copy(p, tfxd_uuid, sizeof(tfxd_uuid));
 	write_dword(p, 0x01000000);		// version / flags
-	write_qword(p, rescale_time(stream_metadata->first_frame_time_offset, stream_metadata->media_info.timescale, MSS_TIMESCALE));
-	write_qword(p, rescale_time(stream_metadata->total_frames_duration, stream_metadata->media_info.timescale, MSS_TIMESCALE));
+	write_qword(p, timestamp);
+	write_qword(p, duration);
 	return p;
 }
 

@@ -220,6 +220,12 @@ m3u8_builder_build_iframe_playlist(
 
 	// calculate the required buffer length
 	segment_count = segmenter_conf->get_segment_count(segmenter_conf, mpeg_metadata->duration_millis);
+	if (segment_count == INVALID_SEGMENT_COUNT)
+	{
+		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+			"m3u8_builder_build_iframe_playlist: segment count is invalid");
+		return VOD_BAD_DATA;
+	}
 
 	iframe_length = sizeof("#EXTINF:.000,\n") - 1 + m3u8_builder_get_int_print_len(DIV_CEIL(mpeg_metadata->duration_millis, 1000)) +
 		sizeof(byte_range_tag_format) + VOD_INT32_LEN + m3u8_builder_get_int_print_len(MAX_FRAME_SIZE) - (sizeof("%uD%uD") - 1) +
@@ -278,7 +284,6 @@ m3u8_builder_build_index_playlist(
 	uint32_t segment_index;
 	uint32_t last_segment_index;
 	vod_str_t required_tracks;
-	uint32_t segment_count;
 	uint32_t scale;
 	size_t segment_length;
 	size_t result_size;
@@ -297,13 +302,11 @@ m3u8_builder_build_index_playlist(
 	}
 
 	// get the segment durations
-	segment_count = segmenter_conf->get_segment_count(segmenter_conf, mpeg_metadata->duration_millis);
-
 	rc = segmenter_conf->get_segment_durations(
 		request_context,
 		segmenter_conf,
-		mpeg_metadata->longest_stream[MEDIA_TYPE_VIDEO] ? mpeg_metadata->longest_stream[MEDIA_TYPE_VIDEO] : mpeg_metadata->longest_stream[MEDIA_TYPE_AUDIO],
-		segment_count,
+		mpeg_metadata->longest_stream,
+		MEDIA_TYPE_COUNT,
 		&segment_durations);
 	if (rc != VOD_OK)
 	{
@@ -312,12 +315,12 @@ m3u8_builder_build_index_playlist(
 
 	// get the required buffer length
 	segment_length = sizeof("#EXTINF:.000,\n") - 1 + m3u8_builder_get_int_print_len(DIV_CEIL(mpeg_metadata->duration_millis, 1000)) +
-		base_url->len + conf->segment_file_name_prefix.len + 1 + m3u8_builder_get_int_print_len(segment_count) + required_tracks.len + sizeof(".ts\n") - 1;
+		base_url->len + conf->segment_file_name_prefix.len + 1 + m3u8_builder_get_int_print_len(segment_durations.segment_count) + required_tracks.len + sizeof(".ts\n") - 1;
 
 	result_size =
 		sizeof(M3U8_HEADER_PART1) + VOD_INT64_LEN + 
 		sizeof(M3U8_HEADER_PART2) + VOD_INT64_LEN + 
-		segment_length * segment_count +
+		segment_length * segment_durations.segment_count +
 		sizeof(m3u8_footer);
 
 	if (encryption_enabled)

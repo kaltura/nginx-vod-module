@@ -24,8 +24,6 @@ static const uint32_t amf0_max_total_size =
 #undef AMF0_FIELD
 
 // functions
-void hds_get_max_duration(mpeg_stream_metadata_t** streams, uint64_t* duration, uint32_t* timescale);
-
 u_char* hds_amf0_write_base64_metadata(u_char* p, u_char* temp_buffer, mpeg_stream_metadata_t** streams);
 
 #endif //__HDS_AMF0_ENCODER_H__

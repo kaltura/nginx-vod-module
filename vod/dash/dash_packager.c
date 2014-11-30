@@ -244,8 +244,6 @@ dash_packager_write_segment_template(
 	u_char* p, 
 	dash_manifest_config_t* conf,
 	vod_str_t* base_url,
-	segmenter_conf_t* segmenter_conf, 
-	mpeg_stream_metadata_t* stream,
 	segment_durations_t* segment_durations)
 {
 	segment_duration_item_t* cur_item;
@@ -295,7 +293,6 @@ dash_packager_build_mpd(
 	uint32_t max_height = 0;
 	uint32_t max_framerate_duration = 0;
 	uint32_t max_framerate_timescale = 0;
-	uint32_t segment_count;
 	uint32_t media_type;
 	vod_status_t rc;
 	u_char* p;
@@ -320,13 +317,11 @@ dash_packager_build_mpd(
 			continue;
 		}
 
-		segment_count = segmenter_conf->get_segment_count(segmenter_conf, mpeg_metadata->longest_stream[media_type]->media_info.duration_millis);
-
 		rc = segmenter_conf->get_segment_durations(
 			request_context,
 			segmenter_conf,
-			mpeg_metadata->longest_stream[media_type],
-			segment_count,
+			&mpeg_metadata->longest_stream[media_type],
+			1,
 			&segment_durations[media_type]);
 		if (rc != VOD_OK)
 		{
@@ -352,7 +347,7 @@ dash_packager_build_mpd(
 	p = vod_sprintf(result->data, VOD_DASH_MANIFEST_HEADER,
 		(uint32_t)(mpeg_metadata->duration_millis / 1000),
 		(uint32_t)(mpeg_metadata->duration_millis % 1000),
-		(uint32_t)(segmenter_conf->segment_duration / 1000));
+		(uint32_t)(segmenter_conf->max_segment_duration / 1000));
 
 	// video adaptation set
 	if (mpeg_metadata->stream_count[MEDIA_TYPE_VIDEO])
@@ -396,8 +391,6 @@ dash_packager_build_mpd(
 			p,
 			conf,
 			base_url,
-			segmenter_conf,
-			mpeg_metadata->longest_stream[MEDIA_TYPE_VIDEO],
 			&segment_durations[MEDIA_TYPE_VIDEO]);
 			
 		// print the representations
@@ -435,8 +428,6 @@ dash_packager_build_mpd(
 			p,
 			conf,
 			base_url,
-			segmenter_conf,
-			mpeg_metadata->longest_stream[MEDIA_TYPE_AUDIO],
 			&segment_durations[MEDIA_TYPE_AUDIO]);
 
 		// print the representations

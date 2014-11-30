@@ -94,14 +94,13 @@ typedef struct {
 static u_char*
 hds_write_abst_atom(
 	u_char* p, 
-	segmenter_conf_t* segmenter_conf, 
-	mpeg_stream_metadata_t* stream, 
-	uint32_t segment_count, 
 	segment_durations_t* segment_durations)
 {
 	segment_duration_item_t* cur_item;
 	segment_duration_item_t* last_item = segment_durations->items + segment_durations->item_count;
 	uint64_t start_offset = 0;
+	uint64_t timestamp;
+	uint32_t duration;
 	size_t afrt_atom_size = AFRT_BASE_ATOM_SIZE;
 	size_t asrt_atom_size = ASRT_ATOM_SIZE;
 	size_t abst_atom_size = ABST_BASE_ATOM_SIZE;
@@ -116,7 +115,7 @@ hds_write_abst_atom(
 	*p++ = 0;							// profile, live, update
 	write_dword(p, HDS_TIMESCALE);		// timescale
 	write_dword(p, 0);					// current media time - high
-	write_dword(p, stream->media_info.duration_millis);	// current media time - low
+	write_dword(p, segment_durations->duration_millis);	// current media time - low
 	write_qword(p, 0LL);				// smpte offset
 	*p++ = 0;							// movie identifier
 	*p++ = 0;							// server entries
@@ -132,7 +131,7 @@ hds_write_abst_atom(
 	write_dword(p, 1);					// segment run entries
 	// entry #1
 	write_dword(p, 1);					// first segment
-	write_dword(p, segment_count);		// fragments per segment
+	write_dword(p, segment_durations->segment_count);		// fragments per segment
 
 	// abst
 	*p++ = 1;							// fragment run table count
@@ -147,9 +146,12 @@ hds_write_abst_atom(
 	// write the afrt entries
 	for (cur_item = segment_durations->items; cur_item < last_item; cur_item++)
 	{
+		timestamp = rescale_time(start_offset, segment_durations->timescale, HDS_TIMESCALE);
+		duration = rescale_time(cur_item->duration, segment_durations->timescale, HDS_TIMESCALE);
+
 		write_dword(p, cur_item->segment_index + 1);		// first fragment
-		write_qword(p, rescale_time(start_offset, segment_durations->timescale, HDS_TIMESCALE));	// first fragment timestamp
-		write_dword(p, rescale_time(cur_item->duration, segment_durations->timescale, HDS_TIMESCALE));			// fragment duration
+		write_qword(p, timestamp);	// first fragment timestamp
+		write_dword(p, duration);			// fragment duration
 		start_offset += cur_item->duration * cur_item->repeat_count;
 	}
 
@@ -163,13 +165,13 @@ hds_write_abst_atom(
 }
 
 static u_char*
-hds_write_base64_abst_atom(u_char* p, u_char* temp_buffer, segmenter_conf_t* segmenter_conf, mpeg_stream_metadata_t* stream, uint32_t segment_count, segment_durations_t* segment_durations)
+hds_write_base64_abst_atom(u_char* p, u_char* temp_buffer, segment_durations_t* segment_durations)
 {
 	vod_str_t binary;
 	vod_str_t base64;
 	
 	binary.data = temp_buffer;
-	binary.len = hds_write_abst_atom(binary.data, segmenter_conf, stream, segment_count, segment_durations) - binary.data;
+	binary.len = hds_write_abst_atom(binary.data, segment_durations) - binary.data;
 
 	base64.data = p;
 
@@ -190,32 +192,26 @@ hds_packager_build_manifest(
 {
 	WALK_STREAMS_BY_FILES_VARS(cur_file_streams);
 	mpeg_stream_metadata_t* stream;
-	uint64_t duration;
-	uint32_t timescale;
+	segment_durations_t* segment_durations;
 	uint32_t bitrate;
 	uint32_t index;
-	size_t result_size;
-	u_char* temp_buffer;
-	u_char* p;
-
-
-	uint32_t* segment_count;
-	segment_durations_t* segment_durations;
 	uint32_t abst_atom_size;
 	uint32_t max_abst_atom_size = 0;
 	uint32_t total_stream_count = mpeg_metadata->stream_count[MEDIA_TYPE_VIDEO] + mpeg_metadata->stream_count[MEDIA_TYPE_AUDIO];
+	size_t result_size;
 	vod_status_t rc;
+	u_char* temp_buffer;
+	u_char* p;
 
-	segment_count = vod_alloc(
+	segment_durations = vod_alloc(
 		request_context->pool, 
-		total_stream_count * (sizeof(*segment_count) + sizeof(*segment_durations)));
-	if (segment_count == NULL)
+		total_stream_count * sizeof(*segment_durations));
+	if (segment_durations == NULL)
 	{
 		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
 			"hds_packager_build_manifest: vod_alloc failed (1)");
 		return VOD_ALLOC_FAILED;
 	}
-	segment_durations = (segment_durations_t*)(segment_count + total_stream_count);
 
 	// calculate the result size
 	result_size = 
@@ -225,13 +221,11 @@ hds_packager_build_manifest(
 	index = 0;
 	WALK_STREAMS_BY_FILES_START(cur_file_streams, mpeg_metadata)
 
-		stream = cur_file_streams[MEDIA_TYPE_VIDEO] ? cur_file_streams[MEDIA_TYPE_VIDEO] : cur_file_streams[MEDIA_TYPE_AUDIO];
-		segment_count[index] = segmenter_conf->get_segment_count(segmenter_conf, stream->media_info.duration_millis);
 		rc = segmenter_conf->get_segment_durations(
 			request_context,
 			segmenter_conf,
-			stream,
-			segment_count[index],
+			cur_file_streams,
+			MEDIA_TYPE_COUNT,
 			&segment_durations[index]);
 		if (rc != VOD_OK)
 		{
@@ -287,13 +281,9 @@ hds_packager_build_manifest(
 	index = 0;
 	WALK_STREAMS_BY_FILES_START(cur_file_streams, mpeg_metadata)
 
-		stream = cur_file_streams[MEDIA_TYPE_VIDEO] ? cur_file_streams[MEDIA_TYPE_VIDEO] : cur_file_streams[MEDIA_TYPE_AUDIO];
-
 		p = vod_sprintf(p, HDS_BOOTSTRAP_HEADER, index);
 
-		hds_get_max_duration(cur_file_streams, &duration, &timescale);
-
-		p = hds_write_base64_abst_atom(p, temp_buffer, segmenter_conf, stream, segment_count[index], &segment_durations[index]);
+		p = hds_write_base64_abst_atom(p, temp_buffer, &segment_durations[index]);
 
 		p = vod_copy(p, HDS_BOOTSTRAP_FOOTER, sizeof(HDS_BOOTSTRAP_FOOTER) - 1);
 

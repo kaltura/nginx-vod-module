@@ -439,7 +439,6 @@ hls_muxer_simulate_get_iframes(
 	uint64_t cur_frame_dts;
 	uint64_t cur_frame_time_offset;
 
-	// TODO: add support for align_to_key_frames
 	segmenter_boundary_iterator_init(&iterator, segmenter_conf, segment_count);
 
 	next_boundary = segmenter_boundary_iterator_next(&iterator);
@@ -464,7 +463,8 @@ hls_muxer_simulate_get_iframes(
 		selected_stream->next_frame_dts = rescale_time(selected_stream->next_frame_time_offset, selected_stream->timescale, HLS_TIMESCALE);
 
 		// check whether we completed a segment
-		if (cur_frame_dts >= segment_end_dts)
+		if (cur_frame_dts >= segment_end_dts &&
+			(!segmenter_conf->align_to_key_frames || cur_frame->key_frame))
 		{
 			// flush all buffered frames
 			hls_muxer_simulation_flush(state);

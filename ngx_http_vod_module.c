@@ -331,6 +331,12 @@ ngx_http_vod_parse_moov_atom(ngx_http_vod_ctx_t *ctx, u_char* moov_buffer, size_
 		request_context->simulation_only = FALSE;
 
 		segment_count = segmenter->get_segment_count(segmenter, mpeg_base_metadata.duration_millis);
+		if (segment_count == INVALID_SEGMENT_COUNT)
+		{
+			ngx_log_error(NGX_LOG_ERR, request_context->log, 0,
+				"ngx_http_vod_parse_moov_atom: segment count is invalid");
+			return ngx_http_vod_status_to_ngx_error(VOD_BAD_DATA);
+		}
 
 		if (ctx->submodule_context.request_params.segment_index >= segment_count)
 		{

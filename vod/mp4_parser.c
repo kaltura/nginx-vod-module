@@ -17,6 +17,7 @@
 #define MAX_FRAMERATE_TEST_SAMPLES (20)
 #define MAX_TOTAL_SIZE_TEST_SAMPLES (100000)
 #define MAX_STREAM_COUNT (1024)
+#define MAX_DURATION_SEC (1000000)
 
 // these constants can be generated with python - 'moov'[::-1].encode('hex')
 #define ATOM_NAME_MOOV (0x766f6f6d)		// movie header
@@ -635,6 +636,13 @@ mp4_parser_parse_mdhd_atom(atom_info_t* atom_info, metadata_parse_context_t* con
 	{
 		vod_log_error(VOD_LOG_ERR, context->request_context->log, 0,
 			"mp4_parser_parse_mdhd_atom: time scale is zero");
+		return VOD_BAD_DATA;
+	}
+
+	if (context->media_info.duration > (uint64_t)MAX_DURATION_SEC * context->media_info.timescale)
+	{
+		vod_log_error(VOD_LOG_ERR, context->request_context->log, 0,
+			"mp4_parser_parse_mdhd_atom: media duration %uL too big", context->media_info.duration);
 		return VOD_BAD_DATA;
 	}
 
@@ -2529,9 +2537,9 @@ static const trak_atom_parser_t trak_atom_parsers[] = {
 	{ mp4_parser_parse_stts_atom,							offsetof(trak_atom_infos_t, stts), PARSE_FLAG_FRAMES_DURATION },
 	{ mp4_parser_parse_stts_atom_frame_duration_only,		offsetof(trak_atom_infos_t, stts), PARSE_FLAG_DURATION_LIMITS },
 	{ mp4_parser_parse_ctts_atom,							offsetof(trak_atom_infos_t, ctts), PARSE_FLAG_FRAMES_PTS_DELAY },
+	{ mp4_parser_parse_stsc_atom,							offsetof(trak_atom_infos_t, stsc), PARSE_FLAG_FRAMES_OFFSET },
 	{ mp4_parser_parse_stsz_atom,							offsetof(trak_atom_infos_t, stsz), PARSE_FLAG_FRAMES_SIZE },
 	{ mp4_parser_parse_stsz_atom_total_size_estimate_only,	offsetof(trak_atom_infos_t, stsz), PARSE_FLAG_TOTAL_SIZE_ESTIMATE },
-	{ mp4_parser_parse_stsc_atom,							offsetof(trak_atom_infos_t, stsc), PARSE_FLAG_FRAMES_OFFSET },
 	{ mp4_parser_parse_stco_atom,							offsetof(trak_atom_infos_t, stco), PARSE_FLAG_FRAMES_OFFSET},
 	{ mp4_parser_parse_stss_atom,							offsetof(trak_atom_infos_t, stss), PARSE_FLAG_FRAMES_IS_KEY },
 	{ NULL, 0, 0 }
@@ -2707,7 +2715,7 @@ mp4_parser_parse_frames(
 				continue;
 			}
 
-			vod_log_debug1(VOD_LOG_DEBUG_LEVEL, request_context->log, 0, "mp4_parser_parse_frames: running parser 0x%x", cur_parser->flag);
+			vod_log_debug1(VOD_LOG_DEBUG_LEVEL, request_context->log, 0, "mp4_parser_parse_frames: running parser 0x%xD", cur_parser->flag);
 			rc = cur_parser->parse((atom_info_t*)((u_char*)&cur_stream->trak_atom_infos + cur_parser->offset), &context);
 			if (rc != VOD_OK)
 			{

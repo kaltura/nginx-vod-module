@@ -1,3 +1,4 @@
+from httplib import BadStatusLine
 import stress_base
 import urllib2
 import re
@@ -15,6 +16,9 @@ class TestThread(stress_base.TestThreadBase):
 		except urllib2.HTTPError, e:
 			return e.getcode(), e.read()			
 		except urllib2.URLError, e:
+			self.writeOutput('Error: request failed %s %s' % (url, e))
+			return 0, ''
+		except BadStatusLine, e:
 			self.writeOutput('Error: request failed %s %s' % (url, e))
 			return 0, ''
 		return f.getcode(), f.read()
@@ -35,7 +39,7 @@ class TestThread(stress_base.TestThreadBase):
 			self.writeOutput('Error: got different status codes %s vs %s' % (code1, code2))
 			return False
 		
-		if url1.rsplit('.', 1)[-1] in set(['m3u8']):
+		if url1.split('?')[0].rsplit('.', 1)[-1] in set(['m3u8']):
 			body1 = body1.replace(URL1_BASE, URL2_BASE)
 			body1 = body1.replace('-a1-v1', '-v1-a1')
 			body2 = body2.replace('-a1-v1', '-v1-a1')

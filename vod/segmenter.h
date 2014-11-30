@@ -5,6 +5,9 @@
 #include "mp4_parser.h"
 #include "common.h"
 
+// constants
+#define INVALID_SEGMENT_COUNT UINT_MAX
+
 // typedefs
 struct segmenter_conf_s;
 typedef struct segmenter_conf_s segmenter_conf_t;
@@ -18,7 +21,9 @@ typedef struct {
 typedef struct {
 	segment_duration_item_t* items;
 	uint32_t item_count;
+	uint32_t segment_count;
 	uint32_t timescale;
+	uint32_t duration_millis;
 } segment_durations_t;
 
 typedef uint32_t(*segmenter_get_segment_count_t)(segmenter_conf_t* conf, uint32_t duration_millis);
@@ -26,8 +31,8 @@ typedef uint32_t(*segmenter_get_segment_count_t)(segmenter_conf_t* conf, uint32_
 typedef vod_status_t (*segmenter_get_segment_durations_t)(
 	request_context_t* request_context,
 	segmenter_conf_t* conf,
-	mpeg_stream_metadata_t* cur_stream,
-	uint32_t segment_count,
+	mpeg_stream_metadata_t** streams,
+	uint32_t stream_count,
 	segment_durations_t* result);
 
 struct segmenter_conf_s {
@@ -73,20 +78,22 @@ vod_status_t
 segmenter_get_segment_durations_estimate(
 	request_context_t* request_context,
 	segmenter_conf_t* conf,
-	mpeg_stream_metadata_t* cur_stream,
-	uint32_t segment_count,
+	mpeg_stream_metadata_t** streams,
+	uint32_t stream_count,
 	segment_durations_t* result);
 
 vod_status_t
 segmenter_get_segment_durations_accurate(
 	request_context_t* request_context,
 	segmenter_conf_t* conf,
-	mpeg_stream_metadata_t* cur_stream,
-	uint32_t segment_count,
+	mpeg_stream_metadata_t** streams,
+	uint32_t stream_count,
 	segment_durations_t* result);
 
 void segmenter_boundary_iterator_init(segmenter_boundary_iterator_context_t* context, segmenter_conf_t* conf, uint32_t segment_count);
 
 uint32_t segmenter_boundary_iterator_next(segmenter_boundary_iterator_context_t* context);
+
+void segmenter_boundary_iterator_skip(segmenter_boundary_iterator_context_t* context, uint32_t count);
 
 #endif // __SEGMENTER_H__
