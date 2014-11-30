@@ -27,8 +27,11 @@ ngx_http_vod_create_loc_conf(ngx_conf_t *cf)
 	conf->parse_uri_file_name = NGX_CONF_UNSET_PTR;
 	conf->get_file_path_components = NGX_CONF_UNSET_PTR;
 	conf->request_handler = NGX_CONF_UNSET_PTR;
-	conf->segment_duration = NGX_CONF_UNSET_UINT;
-	conf->align_segments_to_key_frames = NGX_CONF_UNSET;
+	conf->segmenter.segment_duration = NGX_CONF_UNSET_UINT;
+	conf->segmenter.bootstrap_segments = NGX_CONF_UNSET_PTR;
+	conf->segmenter.align_to_key_frames = NGX_CONF_UNSET;
+	conf->segmenter.get_segment_count = NGX_CONF_UNSET_PTR;
+	conf->segmenter.get_segment_durations = NGX_CONF_UNSET_PTR;
 	conf->duplicate_bitrate_threshold = NGX_CONF_UNSET_UINT;
 	conf->initial_read_size = NGX_CONF_UNSET_SIZE;
 	conf->max_moov_size = NGX_CONF_UNSET_SIZE;
@@ -62,8 +65,12 @@ ngx_http_vod_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child)
 	ngx_conf_merge_ptr_value(conf->request_handler, prev->request_handler, ngx_http_vod_local_request_handler);
 	ngx_conf_merge_str_value(conf->multi_uri_suffix, prev->multi_uri_suffix, ".urlset");
 
-	ngx_conf_merge_uint_value(conf->segment_duration, prev->segment_duration, 10000);
-	ngx_conf_merge_value(conf->align_segments_to_key_frames, prev->align_segments_to_key_frames, 0);
+	ngx_conf_merge_uint_value(conf->segmenter.segment_duration, prev->segmenter.segment_duration, 10000);
+	ngx_conf_merge_ptr_value(conf->segmenter.bootstrap_segments, prev->segmenter.bootstrap_segments, NULL);
+	ngx_conf_merge_value(conf->segmenter.align_to_key_frames, prev->segmenter.align_to_key_frames, 0);
+	ngx_conf_merge_ptr_value(conf->segmenter.get_segment_count, prev->segmenter.get_segment_count, segmenter_get_segment_count_last_short);
+	ngx_conf_merge_ptr_value(conf->segmenter.get_segment_durations, prev->segmenter.get_segment_durations, segmenter_get_segment_durations_estimate);
+
 	ngx_conf_merge_str_value(conf->secret_key, prev->secret_key, "");
 	ngx_conf_merge_uint_value(conf->duplicate_bitrate_threshold, prev->duplicate_bitrate_threshold, 4096);
 	ngx_conf_merge_str_value(conf->https_header_name, prev->https_header_name, "");
@@ -152,10 +159,18 @@ ngx_http_vod_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child)
 		}
 	}
 
-	if (conf->segment_duration <= 0)
+	if (conf->segmenter.segment_duration <= 0)
 	{
 		ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
 			"\"segment_duration\" must be positive");
+		return NGX_CONF_ERROR;
+	}
+
+	rc = segmenter_init_config(&conf->segmenter, cf->pool);
+	if (rc != VOD_OK)
+	{
+		ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
+			"failed to initialize the segmenter %i", rc);
 		return NGX_CONF_ERROR;
 	}
 
@@ -183,7 +198,7 @@ ngx_http_vod_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child)
 
 	// combine the proxy header name and value to a single line
 	proxy_header_len = conf->proxy_header_name.len + sizeof(": ") - 1 + conf->proxy_header_value.len + sizeof(CRLF);
-	conf->proxy_header.data = ngx_alloc(proxy_header_len, cf->log);
+	conf->proxy_header.data = ngx_palloc(cf->pool, proxy_header_len);
 	if (conf->proxy_header.data == NULL)
 	{
 		return NGX_CONF_ERROR;
@@ -250,6 +265,66 @@ ngx_http_vod_mode_command(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
 		ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
 			"invalid value \"%s\" in \"%s\" directive, "
 			"it must be \"local\", \"remote\" or \"mapped\"",
+			value[1].data, cmd->name.data);
+		return NGX_CONF_ERROR;
+	}
+
+	return NGX_CONF_OK;
+}
+
+static char *
+ngx_http_vod_segment_count_policy_command(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
+{
+	ngx_http_vod_loc_conf_t    *vod_conf = conf;
+	ngx_str_t                       *value;
+
+	value = cf->args->elts;
+
+	if (ngx_strcasecmp(value[1].data, (u_char *) "last_short") == 0)
+	{
+		vod_conf->segmenter.get_segment_count = segmenter_get_segment_count_last_short;
+	}
+	else if (ngx_strcasecmp(value[1].data, (u_char *) "last_long") == 0)
+	{
+		vod_conf->segmenter.get_segment_count = segmenter_get_segment_count_last_long;
+	}
+	else if (ngx_strcasecmp(value[1].data, (u_char *) "last_rounded") == 0)
+	{
+		vod_conf->segmenter.get_segment_count = segmenter_get_segment_count_last_rounded;
+	}
+	else
+	{
+		ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
+			"invalid value \"%s\" in \"%s\" directive, "
+			"it must be \"last_short\", \"last_long\" or \"last_rounded\"",
+			value[1].data, cmd->name.data);
+		return NGX_CONF_ERROR;
+	}
+
+	return NGX_CONF_OK;
+}
+
+static char *
+ngx_http_vod_manifest_segment_durations_mode_command(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
+{
+	ngx_http_vod_loc_conf_t    *vod_conf = conf;
+	ngx_str_t                       *value;
+
+	value = cf->args->elts;
+
+	if (ngx_strcasecmp(value[1].data, (u_char *) "estimate") == 0)
+	{
+		vod_conf->segmenter.get_segment_durations = segmenter_get_segment_durations_estimate;
+	}
+	else if (ngx_strcasecmp(value[1].data, (u_char *) "accurate") == 0)
+	{
+		vod_conf->segmenter.get_segment_durations = segmenter_get_segment_durations_accurate;
+	}
+	else
+	{
+		ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
+			"invalid value \"%s\" in \"%s\" directive, "
+			"it must be \"estimate\" or \"accurate\"",
 			value[1].data, cmd->name.data);
 		return NGX_CONF_ERROR;
 	}
@@ -462,14 +537,35 @@ ngx_command_t ngx_http_vod_commands[] = {
 	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1,
 	ngx_conf_set_num_slot,
 	NGX_HTTP_LOC_CONF_OFFSET,
-	offsetof(ngx_http_vod_loc_conf_t, segment_duration),
+	offsetof(ngx_http_vod_loc_conf_t, segmenter.segment_duration),
+	NULL },
+
+	{ ngx_string("vod_bootstrap_segment_durations"),
+	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1,
+	ngx_conf_set_str_array_slot,
+	NGX_HTTP_LOC_CONF_OFFSET,
+	offsetof(ngx_http_vod_loc_conf_t, segmenter.bootstrap_segments),
 	NULL },
 
 	{ ngx_string("vod_align_segments_to_key_frames"),
 	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1,
 	ngx_conf_set_flag_slot,
 	NGX_HTTP_LOC_CONF_OFFSET,
-	offsetof(ngx_http_vod_loc_conf_t, align_segments_to_key_frames),
+	offsetof(ngx_http_vod_loc_conf_t, segmenter.align_to_key_frames),
+	NULL },
+
+	{ ngx_string("vod_segment_count_policy"),
+	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1,
+	ngx_http_vod_segment_count_policy_command,
+	NGX_HTTP_LOC_CONF_OFFSET,
+	0,
+	NULL },
+
+	{ ngx_string("vod_manifest_segment_durations_mode"),
+	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1,
+	ngx_http_vod_manifest_segment_durations_mode_command,
+	NGX_HTTP_LOC_CONF_OFFSET,
+	0,
 	NULL },
 
 	{ ngx_string("vod_secret_key"),

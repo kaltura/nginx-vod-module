@@ -215,7 +215,7 @@ ngx_http_vod_read_moov_atom(ngx_http_vod_ctx_t *ctx)
 	}
 
 	// check whether we already have the whole atom
-	if (ctx->moov_offset + ctx->moov_size < ctx->buffer_size)
+	if (ctx->moov_offset + ctx->moov_size <= ctx->buffer_size)
 	{
 		ngx_log_debug0(NGX_LOG_DEBUG_HTTP, ctx->submodule_context.request_context.log, 0,
 			"ngx_http_vod_read_moov_atom: already read the full moov atom");
@@ -275,12 +275,17 @@ ngx_http_vod_parse_moov_atom(ngx_http_vod_ctx_t *ctx, u_char* moov_buffer, size_
 	const ngx_http_vod_request_t* request = ctx->submodule_context.request_params.request;
 	ngx_http_vod_suburi_params_t* suburi_params = ctx->submodule_context.cur_suburi;
 	request_context_t* request_context = &ctx->submodule_context.request_context;
+	segmenter_conf_t* segmenter = &ctx->submodule_context.conf->segmenter;
 	vod_status_t rc;
 	file_info_t file_info;
 	uint32_t segment_count;
 
 	// init the request context
 	request_context->parse_type = request->parse_type;
+	if (request->request_class == REQUEST_CLASS_MANIFEST)
+	{
+		request_context->parse_type |= segmenter->parse_type;
+	}
 	request_context->stream_comparator = request->stream_comparator;
 	request_context->stream_comparator_context = 
 		(u_char*)ctx->submodule_context.conf + request->stream_comparator_conf_offset;
@@ -306,7 +311,7 @@ ngx_http_vod_parse_moov_atom(ngx_http_vod_ctx_t *ctx, u_char* moov_buffer, size_
 	}
 
 	request_context->timescale = 1000;
-	if (request->request_class == REQUEST_CLASS_MANIFEST)
+	if (request->request_class != REQUEST_CLASS_SEGMENT)
 	{
 		request_context->max_frame_count = 1024 * 1024;
 		request_context->simulation_only = TRUE;
@@ -325,26 +330,7 @@ ngx_http_vod_parse_moov_atom(ngx_http_vod_ctx_t *ctx, u_char* moov_buffer, size_
 		request_context->max_frame_count = 64 * 1024;
 		request_context->simulation_only = FALSE;
 
-		// validate the requested segment index
-		switch (request->request_class)
-		{
-		case REQUEST_CLASS_SEGMENT_LAST_LONG:
-			segment_count = mpeg_base_metadata.duration_millis / ctx->submodule_context.conf->segment_duration;
-			break;
-
-		case REQUEST_CLASS_SEGMENT_LAST_ROUNDED:
-			segment_count = (mpeg_base_metadata.duration_millis + ctx->submodule_context.conf->segment_duration / 2) / ctx->submodule_context.conf->segment_duration;
-			break;
-
-		default: //	REQUEST_CLASS_SEGMENT_LAST_SHORT
-			segment_count = DIV_CEIL(mpeg_base_metadata.duration_millis, ctx->submodule_context.conf->segment_duration);
-			break;
-		}
-
-		if (segment_count < 1)
-		{
-			segment_count = 1;
-		}
+		segment_count = segmenter->get_segment_count(segmenter, mpeg_base_metadata.duration_millis);
 
 		if (ctx->submodule_context.request_params.segment_index >= segment_count)
 		{
@@ -354,13 +340,15 @@ ngx_http_vod_parse_moov_atom(ngx_http_vod_ctx_t *ctx, u_char* moov_buffer, size_
 		}
 
 		// get the start / end offsets
-		request_context->start = suburi_params->clip_from + ctx->submodule_context.request_params.segment_index * ctx->submodule_context.conf->segment_duration;
-		if (ctx->submodule_context.request_params.segment_index + 1 < segment_count)
-		{
-			// not the last segment
-			request_context->end = MIN(request_context->start + ctx->submodule_context.conf->segment_duration, suburi_params->clip_to);
-		}
-		else
+		segmenter_get_start_end_offsets(
+			segmenter, 
+			ctx->submodule_context.request_params.segment_index, 
+			&request_context->start, 
+			&request_context->end);
+
+		request_context->start += suburi_params->clip_from;
+
+		if (ctx->submodule_context.request_params.segment_index + 1 >= segment_count)
 		{
 			// last segment
 			if (suburi_params->clip_to == UINT_MAX)
@@ -388,7 +376,7 @@ ngx_http_vod_parse_moov_atom(ngx_http_vod_ctx_t *ctx, u_char* moov_buffer, size_
 		&mpeg_base_metadata,
 		suburi_params->clip_from,
 		suburi_params->clip_to,
-		ctx->submodule_context.conf->align_segments_to_key_frames,
+		segmenter->align_to_key_frames,
 		&ctx->submodule_context.mpeg_metadata);
 	if (rc != VOD_OK)
 	{

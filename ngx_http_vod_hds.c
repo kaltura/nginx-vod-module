@@ -23,7 +23,7 @@ ngx_http_vod_hds_handle_manifest(
 		&submodule_context->request_context,
 		&submodule_context->conf->hds.manifest_config,
 		&submodule_context->r->uri,
-		submodule_context->conf->segment_duration,
+		&submodule_context->conf->segmenter,
 		submodule_context->request_params.uses_multi_uri,
 		&submodule_context->mpeg_metadata,
 		response);
@@ -85,7 +85,7 @@ ngx_http_vod_hds_init_frame_processor(
 
 static const ngx_http_vod_request_t hds_manifest_request = {
 	0,
-	PARSE_DURATION_LIMITS_AND_TOTAL_SIZE,
+	PARSE_FLAG_DURATION_LIMITS_AND_TOTAL_SIZE,
 	NULL,
 	0,
 	REQUEST_CLASS_MANIFEST,
@@ -95,10 +95,10 @@ static const ngx_http_vod_request_t hds_manifest_request = {
 
 static const ngx_http_vod_request_t hds_fragment_request = {
 	REQUEST_FLAG_SINGLE_FILE,
-	PARSE_ALL | EXTRA_DATA_SAVE_DATA,
+	PARSE_FLAG_FRAMES_ALL | PARSE_FLAG_EXTRA_DATA,
 	NULL,
 	0,
-	REQUEST_CLASS_SEGMENT_LAST_ROUNDED,
+	REQUEST_CLASS_SEGMENT,
 	NULL,
 	ngx_http_vod_hds_init_frame_processor,
 };

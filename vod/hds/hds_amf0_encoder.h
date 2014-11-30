@@ -15,7 +15,7 @@
 
 #define AMF0_FIELD(group, name, type) sizeof(uint16_t) + sizeof(#name) - 1 + type +
 
-static const int amf0_max_total_size =
+static const uint32_t amf0_max_total_size =
 	sizeof(u_char)+sizeof(uint16_t)+sizeof("onMetaData") - 1 +		// on metadata string
 	sizeof(u_char)+sizeof(uint32_t)+									// array header
 #include "hds_amf0_fields_x.h"

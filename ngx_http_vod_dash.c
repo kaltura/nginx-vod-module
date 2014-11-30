@@ -31,7 +31,7 @@ ngx_http_vod_dash_handle_manifest(
 		&submodule_context->request_context,
 		&submodule_context->conf->dash.mpd_config,
 		&base_url,
-		submodule_context->conf->segment_duration,
+		&submodule_context->conf->segmenter,
 		&submodule_context->mpeg_metadata,
 		response);
 	if (rc != VOD_OK)
@@ -102,7 +102,6 @@ ngx_http_vod_dash_init_frame_processor(
 		&submodule_context->request_context,
 		submodule_context->mpeg_metadata.first_stream,
 		submodule_context->request_params.segment_index,
-		submodule_context->conf->segment_duration,
 		size_only,
 		output_buffer,
 		response_size);
@@ -151,7 +150,7 @@ ngx_http_vod_dash_init_frame_processor(
 
 static const ngx_http_vod_request_t dash_manifest_request = {
 	0,
-	PARSE_DURATION_LIMITS_AND_TOTAL_SIZE | PARSE_FLAG_CODEC_NAME,
+	PARSE_FLAG_DURATION_LIMITS_AND_TOTAL_SIZE | PARSE_FLAG_CODEC_NAME,
 	dash_packager_compare_streams,
 	offsetof(ngx_http_vod_loc_conf_t, duplicate_bitrate_threshold),
 	REQUEST_CLASS_MANIFEST,
@@ -164,17 +163,17 @@ static const ngx_http_vod_request_t dash_init_request = {
 	PARSE_BASIC_METADATA_ONLY | PARSE_FLAG_SAVE_RAW_ATOMS,
 	NULL,
 	0,
-	REQUEST_CLASS_MANIFEST,
+	REQUEST_CLASS_OTHER,
 	ngx_http_vod_dash_handle_init_segment,
 	NULL,
 };
 
 static const ngx_http_vod_request_t dash_fragment_request = {
 	REQUEST_FLAG_SINGLE_STREAM,
-	PARSE_ALL,
+	PARSE_FLAG_FRAMES_ALL,
 	NULL,
 	0,
-	REQUEST_CLASS_SEGMENT_LAST_SHORT,
+	REQUEST_CLASS_SEGMENT,
 	NULL,
 	ngx_http_vod_dash_init_frame_processor,
 };

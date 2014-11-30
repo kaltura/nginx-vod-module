@@ -82,6 +82,7 @@
 // string functions
 #define vod_sprintf ngx_sprintf
 #define vod_snprintf ngx_snprintf
+#define vod_atoi(str, len) ngx_atoi(str, len)
 
 // array functions
 #define vod_array_init(array, pool, n, size) ngx_array_init(array, pool, n, size)
@@ -177,7 +178,7 @@ enum {
 	VOD_ERROR_LAST,
 };
 
-typedef int bool_t;
+typedef intptr_t bool_t;
 typedef intptr_t vod_status_t;
 
 struct media_info_s;

@@ -36,7 +36,7 @@ ngx_http_vod_mss_handle_manifest(
 
 	rc = mss_packager_build_manifest(
 		&submodule_context->request_context,
-		submodule_context->conf->segment_duration,
+		&submodule_context->conf->segmenter,
 		&submodule_context->mpeg_metadata,
 		response);
 	if (rc != VOD_OK)
@@ -120,7 +120,7 @@ ngx_http_vod_mss_init_frame_processor(
 
 static const ngx_http_vod_request_t mss_manifest_request = {
 	0,
-	PARSE_FRAME_DURATIONS_AND_TOTAL_SIZE | EXTRA_DATA_PARSE_DATA,
+	PARSE_FLAG_TOTAL_SIZE_ESTIMATE | PARSE_FLAG_PARSED_EXTRA_DATA,
 	mss_packager_compare_streams,
 	offsetof(ngx_http_vod_loc_conf_t, duplicate_bitrate_threshold),
 	REQUEST_CLASS_MANIFEST,
@@ -130,10 +130,10 @@ static const ngx_http_vod_request_t mss_manifest_request = {
 
 static const ngx_http_vod_request_t mss_fragment_request = {
 	REQUEST_FLAG_SINGLE_STREAM,
-	PARSE_ALL,
+	PARSE_FLAG_FRAMES_ALL,
 	NULL,
 	0,
-	REQUEST_CLASS_SEGMENT_LAST_SHORT,
+	REQUEST_CLASS_SEGMENT,
 	NULL,
 	ngx_http_vod_mss_init_frame_processor,
 };
@@ -182,7 +182,6 @@ ngx_http_vod_mss_parse_uri_file_name(
 {
 	fragment_params_t fragment_params;
 	ngx_int_t rc;
-	uint64_t segment_duration_100ns;
 
 	// fragment
 	if (end_pos[-1] == ')')
@@ -218,8 +217,7 @@ ngx_http_vod_mss_parse_uri_file_name(
 			return NGX_HTTP_BAD_REQUEST;
 		}
 
-		segment_duration_100ns = ((uint64_t)conf->segment_duration) * 10000;
-		request_params->segment_index = (fragment_params.time + segment_duration_100ns / 2) / segment_duration_100ns;
+		request_params->segment_index = segmenter_get_segment_index(&conf->segmenter, fragment_params.time / 10000);
 
 		request_params->request = &mss_fragment_request;
 

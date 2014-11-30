@@ -415,8 +415,14 @@ hls_muxer_simulation_write_frame(hls_muxer_stream_state_t* selected_stream, inpu
 }
 
 void 
-hls_muxer_simulate_get_iframes(hls_muxer_state_t* state, uint32_t segment_duration, hls_get_iframe_positions_callback_t callback, void* context)
+hls_muxer_simulate_get_iframes(
+	hls_muxer_state_t* state, 
+	segmenter_conf_t* segmenter_conf, 
+	uint32_t segment_count, 
+	hls_get_iframe_positions_callback_t callback, 
+	void* context)
 {
+	segmenter_boundary_iterator_context_t iterator;
 	hls_muxer_stream_state_t* selected_stream;
 	input_frame_t* cur_frame;
 	uint32_t cur_frame_time;
@@ -426,14 +432,18 @@ hls_muxer_simulate_get_iframes(hls_muxer_state_t* state, uint32_t segment_durati
 	uint32_t frame_start_time = 0;
 	uint32_t first_frame_time = 0;
 	uint32_t end_time;
+	uint32_t next_boundary;
 	uint64_t segment_end_dts;
 	uint32_t frame_segment_index = 0;
-	uint32_t segment_index = 1;
+	uint32_t segment_index = 0;
 	uint64_t cur_frame_dts;
 	uint64_t cur_frame_time_offset;
 
-	segment_duration *= 90;			// convert to 90KHz
-	segment_end_dts = segment_duration;
+	// TODO: add support for align_to_key_frames
+	segmenter_boundary_iterator_init(&iterator, segmenter_conf, segment_count);
+
+	next_boundary = segmenter_boundary_iterator_next(&iterator);
+	segment_end_dts = (next_boundary == UINT_MAX ? ULLONG_MAX : next_boundary * 90);		// convert to 90KHz
 
 	mpegts_encoder_simulated_start_segment(&state->mpegts_encoder_state);
 
@@ -461,7 +471,9 @@ hls_muxer_simulate_get_iframes(hls_muxer_state_t* state, uint32_t segment_durati
 
 			mpegts_encoder_simulated_start_segment(&state->mpegts_encoder_state);
 			segment_index++;
-			segment_end_dts += segment_duration;
+			
+			next_boundary = segmenter_boundary_iterator_next(&iterator);
+			segment_end_dts = (next_boundary == UINT_MAX ? ULLONG_MAX : next_boundary * 90);		// convert to 90KHz
 		}
 
 		// flush any buffered frames if their delay becomes too big

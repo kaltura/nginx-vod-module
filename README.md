@@ -118,6 +118,15 @@ http://host/hls/common-prefix,bitrate1,bitrate2,common-suffix.urlset/master.m3u8
 
 Sets the segment duration in milliseconds.
 
+#### vod_bootstrap_segment_durations
+* **syntax**: `vod_bootstrap_segment_durations duration`
+* **default**: `none`
+* **context**: `http`, `server`, `location`
+
+Adds a bootstrap segment duration in milliseconds. This setting can be used to make the first few segments
+shorter than the default segment duration, thus making the adaptive flavor selection kick-in earlier without 
+the overhead of short segments throughout the video.
+
 #### vod_align_segments_to_key_frames
 * **syntax**: `vod_align_segments_to_key_frames on/off`
 * **default**: `off`
@@ -125,6 +134,28 @@ Sets the segment duration in milliseconds.
 
 When enabled, the module forces all segments to start with a key frame. Enabling this setting can lead to differences
 between the actual segment durations and the durations reported in the manifest.
+
+#### vod_segment_count_policy
+* **syntax**: `vod_segment_count_policy last_short/last_long/last_rounded`
+* **default**: `last_short`
+* **context**: `http`, `server`, `location`
+
+Configures the policy for calculating the segment count:
+* last_short - a file of 33 sec is partitioned as - 10, 10, 10, 3
+* last_long - a file of 33 sec is partitioned as - 10, 10, 13
+* last_rounded - a file of 33 sec is partitioned as - 10, 10, 13, a file of 38 sec is partitioned as 10, 10, 10, 8
+
+#### vod_manifest_segment_durations_mode
+* **syntax**: `vod_manifest_segment_durations_mode estimate/accurate`
+* **default**: `estimate`
+* **context**: `http`, `server`, `location`
+
+Configures the calculation mode of segment durations within manifest requests:
+* estimate - reports the duration as configured in nginx.conf, e.g. if vod_segment_duration has the value 10000,
+an HLS manifest will contain #EXTINF:10
+* accurate - reports the exact duration of the segment, taking into account the frame durations, e.g. for a 
+frame rate of 29.97 and 10 second segments it will report the first segment as 10.01. accurate mode also
+takes into account the key frame alignment, in case vod_align_segments_to_key_frames is on
 
 #### vod_secret_key
 * **syntax**: `vod_secret_key string`

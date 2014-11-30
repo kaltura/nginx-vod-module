@@ -4,6 +4,7 @@
 // includes
 #include "../mp4_builder.h"
 #include "../mp4_parser.h"
+#include "../segmenter.h"
 #include "../common.h"
 
 // typedefs
@@ -16,7 +17,7 @@ vod_status_t hds_packager_build_manifest(
 	request_context_t* request_context,
 	hds_manifest_config_t* conf,
 	vod_str_t* manifest_id,
-	uint32_t segment_duration,
+	segmenter_conf_t* segmenter_conf,
 	bool_t include_file_index,
 	mpeg_metadata_t* mpeg_metadata,
 	vod_str_t* result);

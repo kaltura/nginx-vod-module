@@ -22,7 +22,7 @@
 #define MSS_QUALITY_LEVEL_FOOTER "\"></QualityLevel>\n"
 
 #define MSS_CHUNK_TAG \
-	"    <c n=\"%uD\" d=\"%uD\"></c>\n"
+	"    <c n=\"%uD\" d=\"%uL\"></c>\n"
 
 #define MSS_STREAM_INDEX_FOOTER \
 	"  </StreamIndex>\n"
@@ -67,36 +67,21 @@ mss_append_hex_string(u_char* p, const u_char* buffer, uint32_t buffer_size)
 }
 
 static u_char*
-mss_write_manifest_chunks(u_char* p, mpeg_stream_metadata_t* cur_stream, uint32_t segment_duration)
+mss_write_manifest_chunks(u_char* p, segment_durations_t* segment_durations)
 {
-	input_frame_t* last_frame = cur_stream->frames + cur_stream->frame_count;
-	input_frame_t* cur_frame;
-	uint32_t segment_index = 0;
-	uint64_t accum_duration = 0;
-	uint64_t segment_start = 0;
-	uint64_t segment_limit;
+	segment_duration_item_t* cur_item;
+	segment_duration_item_t* last_item = segment_durations->items + segment_durations->item_count;
+	uint32_t last_segment_index;
+	uint32_t segment_index;
 
-	segment_start = 0;
-	segment_limit = rescale_time(segment_duration, 1000, cur_stream->media_info.timescale);
-	for (cur_frame = cur_stream->frames; cur_frame < last_frame; cur_frame++)
+	for (cur_item = segment_durations->items; cur_item < last_item; cur_item++)
 	{
-		accum_duration += cur_frame->duration;
-		if (accum_duration >= segment_limit)
+		segment_index = cur_item->segment_index;
+		last_segment_index = segment_index + cur_item->repeat_count;
+		for (; segment_index < last_segment_index; segment_index++)
 		{
-			p = vod_sprintf(p, MSS_CHUNK_TAG, 
-				segment_index, 
-				(uint32_t)rescale_time(accum_duration - segment_start, cur_stream->media_info.timescale, MSS_TIMESCALE));
-			segment_index++;
-			segment_start = accum_duration;
-			segment_limit = rescale_time((uint64_t)segment_duration * (segment_index + 1), 1000, cur_stream->media_info.timescale);
+			p = vod_sprintf(p, MSS_CHUNK_TAG, segment_index, rescale_time(cur_item->duration, segment_durations->timescale, MSS_TIMESCALE));
 		}
-	}
-
-	if (accum_duration > segment_start)
-	{
-		p = vod_sprintf(p, MSS_CHUNK_TAG, 
-			segment_index, 
-			(uint32_t)rescale_time(accum_duration - segment_start, cur_stream->media_info.timescale, MSS_TIMESCALE));
 	}
 
 	return p;
@@ -127,35 +112,20 @@ mss_packager_compare_streams(void* context, const media_info_t* mi1, const media
 vod_status_t 
 mss_packager_build_manifest(
 	request_context_t* request_context, 
-	uint32_t segment_duration, 
+	segmenter_conf_t* segmenter_conf, 
 	mpeg_metadata_t* mpeg_metadata, 
 	vod_str_t* result)
 {
 	mpeg_stream_metadata_t* cur_stream;
-	mpeg_stream_metadata_t* streams_by_media_type[MEDIA_TYPE_COUNT];
+	segment_durations_t segment_durations[MEDIA_TYPE_COUNT];
+	uint32_t segment_count[MEDIA_TYPE_COUNT];
 	uint64_t duration_100ns;
 	uint32_t media_type;
 	uint32_t stream_index;
 	uint32_t bitrate;
+	vod_status_t rc;
 	size_t result_size;
-	uint64_t segment_duration_ts;
-	uint32_t segment_count;
 	u_char* p;
-
-	vod_memzero(&streams_by_media_type, sizeof(streams_by_media_type));
-
-	// find the longest stream in each media type
-	for (cur_stream = mpeg_metadata->first_stream; cur_stream < mpeg_metadata->last_stream; cur_stream++)
-	{
-		media_type = cur_stream->media_info.media_type;
-
-		if (streams_by_media_type[media_type] == NULL ||
-			streams_by_media_type[media_type]->media_info.duration * cur_stream->media_info.timescale <	
-			cur_stream->media_info.duration * streams_by_media_type[media_type]->media_info.timescale)
-		{
-			streams_by_media_type[media_type] = cur_stream;
-		}
-	}
 
 	// calculate the result size
 	result_size = 
@@ -163,18 +133,31 @@ mss_packager_build_manifest(
 		sizeof(MSS_MANIFEST_FOOTER);
 	for (media_type = 0; media_type < MEDIA_TYPE_COUNT; media_type++)
 	{
-		if (streams_by_media_type[media_type] == NULL)
+		if (mpeg_metadata->longest_stream[media_type] == NULL)
 		{
 			continue;
+		}
+
+		segment_count[media_type] = segmenter_conf->get_segment_count(
+			segmenter_conf,
+			mpeg_metadata->longest_stream[media_type]->media_info.duration_millis);
+
+		rc = segmenter_conf->get_segment_durations(
+			request_context,
+			segmenter_conf,
+			mpeg_metadata->longest_stream[media_type],
+			segment_count[media_type],
+			&segment_durations[media_type]);
+		if (rc != VOD_OK)
+		{
+			return rc;
 		}
 
 		result_size +=
 			sizeof(MSS_STREAM_INDEX_HEADER) - 1 + 2 * sizeof(MSS_STREAM_TYPE_VIDEO) + 2 * VOD_INT32_LEN +
 			sizeof(MSS_STREAM_INDEX_FOOTER);
 
-		segment_duration_ts = rescale_time(segment_duration, 1000, streams_by_media_type[media_type]->media_info.timescale);
-		segment_count = streams_by_media_type[media_type]->total_frames_duration / segment_duration_ts + 1;
-		result_size += segment_count * (sizeof(MSS_CHUNK_TAG) + 2 * VOD_INT32_LEN);
+		result_size += segment_count[media_type] * (sizeof(MSS_CHUNK_TAG) + VOD_INT32_LEN + VOD_INT64_LEN);
 	}
 
 	for (cur_stream = mpeg_metadata->first_stream; cur_stream < mpeg_metadata->last_stream; cur_stream++)
@@ -207,16 +190,13 @@ mss_packager_build_manifest(
 	duration_100ns = rescale_time(mpeg_metadata->duration, mpeg_metadata->timescale, MSS_TIMESCALE);
 	p = vod_sprintf(result->data, MSS_MANIFEST_HEADER, duration_100ns);
 
-	if (streams_by_media_type[MEDIA_TYPE_VIDEO] != NULL)
+	if (mpeg_metadata->longest_stream[MEDIA_TYPE_VIDEO] != NULL)
 	{
 		p = vod_sprintf(p, 
 			MSS_STREAM_INDEX_HEADER, 
 			MSS_STREAM_TYPE_VIDEO,
 			mpeg_metadata->stream_count[MEDIA_TYPE_VIDEO],
-			(uint32_t)DIV_CEIL(
-				rescale_time(streams_by_media_type[MEDIA_TYPE_VIDEO]->media_info.duration, 
-					streams_by_media_type[MEDIA_TYPE_VIDEO]->media_info.timescale, 1000), 
-				segment_duration),
+			segment_count[MEDIA_TYPE_VIDEO],
 			MSS_STREAM_TYPE_VIDEO);
 
 		stream_index = 0;
@@ -240,20 +220,17 @@ mss_packager_build_manifest(
 			p = vod_copy(p, MSS_QUALITY_LEVEL_FOOTER, sizeof(MSS_QUALITY_LEVEL_FOOTER) - 1);
 		}
 
-		p = mss_write_manifest_chunks(p, streams_by_media_type[MEDIA_TYPE_VIDEO], segment_duration);
+		p = mss_write_manifest_chunks(p, &segment_durations[MEDIA_TYPE_VIDEO]);
 
 		p = vod_copy(p, MSS_STREAM_INDEX_FOOTER, sizeof(MSS_STREAM_INDEX_FOOTER) - 1);
 	}
 
-	if (streams_by_media_type[MEDIA_TYPE_AUDIO] != NULL)
+	if (mpeg_metadata->longest_stream[MEDIA_TYPE_AUDIO] != NULL)
 	{
 		p = vod_sprintf(p, MSS_STREAM_INDEX_HEADER, 
 			MSS_STREAM_TYPE_AUDIO,
 			mpeg_metadata->stream_count[MEDIA_TYPE_AUDIO],
-			(uint32_t)DIV_CEIL(
-				rescale_time(streams_by_media_type[MEDIA_TYPE_AUDIO]->media_info.duration, 
-					streams_by_media_type[MEDIA_TYPE_AUDIO]->media_info.timescale, 1000), 
-				segment_duration),
+			segment_count[MEDIA_TYPE_AUDIO],
 			MSS_STREAM_TYPE_AUDIO);
 
 		stream_index = 0;
@@ -279,7 +256,7 @@ mss_packager_build_manifest(
 			p = vod_copy(p, MSS_QUALITY_LEVEL_FOOTER, sizeof(MSS_QUALITY_LEVEL_FOOTER) - 1);
 		}
 
-		p = mss_write_manifest_chunks(p, streams_by_media_type[MEDIA_TYPE_AUDIO], segment_duration);
+		p = mss_write_manifest_chunks(p, &segment_durations[MEDIA_TYPE_AUDIO]);
 
 		p = vod_copy(p, MSS_STREAM_INDEX_FOOTER, sizeof(MSS_STREAM_INDEX_FOOTER) - 1);
 	}

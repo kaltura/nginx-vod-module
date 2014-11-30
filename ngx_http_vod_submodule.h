@@ -27,9 +27,8 @@
 // request classes
 enum {
 	REQUEST_CLASS_MANIFEST,
-	REQUEST_CLASS_SEGMENT_LAST_SHORT,			// a file of 33 sec is partitioned as - 10, 10, 10, 3
-	REQUEST_CLASS_SEGMENT_LAST_LONG,			// a file of 33 sec is partitioned as - 10, 10, 13
-	REQUEST_CLASS_SEGMENT_LAST_ROUNDED,			// a file of 33 sec is partitioned as - 10, 10, 13, a file of 38 sec is partitioned as 10, 10, 10, 8
+	REQUEST_CLASS_SEGMENT,
+	REQUEST_CLASS_OTHER,		// dash init segment, hls iframes manifest, hls master manifest, hls encryption key
 };
 
 struct ngx_http_vod_loc_conf_s;

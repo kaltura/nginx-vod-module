@@ -343,6 +343,7 @@ typedef struct {
 typedef struct {
 	vod_status_t(*parse)(atom_info_t* atom_info, frames_parse_context_t* context);
 	int offset;
+	uint32_t flag;
 } trak_atom_parser_t;
 
 static const relevant_atom_t relevant_atoms_stbl[] = {
@@ -2523,54 +2524,17 @@ mp4_parser_get_moov_atom_info(request_context_t* request_context, const u_char* 
 	return VOD_OK;
 }
 
-static const trak_atom_parser_t trak_atom_parsers_all[] = {
+static const trak_atom_parser_t trak_atom_parsers[] = {
 	// order is important
-	{ mp4_parser_parse_stts_atom, offsetof(trak_atom_infos_t, stts), },
-	{ mp4_parser_parse_ctts_atom, offsetof(trak_atom_infos_t, ctts), },
-	{ mp4_parser_parse_stsc_atom, offsetof(trak_atom_infos_t, stsc), },
-	{ mp4_parser_parse_stsz_atom, offsetof(trak_atom_infos_t, stsz), },
-	{ mp4_parser_parse_stco_atom, offsetof(trak_atom_infos_t, stco), },
-	{ mp4_parser_parse_stss_atom, offsetof(trak_atom_infos_t, stss), },
-	{ NULL, 0 }
-};
-
-static const trak_atom_parser_t trak_atom_parsers_all_except_offsets[] = {
-	// order is important
-	{ mp4_parser_parse_stts_atom, offsetof(trak_atom_infos_t, stts), },
-	{ mp4_parser_parse_ctts_atom, offsetof(trak_atom_infos_t, ctts), },
-	{ mp4_parser_parse_stsz_atom, offsetof(trak_atom_infos_t, stsz), },
-	{ mp4_parser_parse_stss_atom, offsetof(trak_atom_infos_t, stss), },
-	{ NULL, 0 }
-};
-
-static const trak_atom_parser_t trak_atom_parsers_frame_durations_and_total_size[] = {
-	{ mp4_parser_parse_stts_atom, offsetof(trak_atom_infos_t, stts), },
-	{ mp4_parser_parse_stsz_atom_total_size_estimate_only, offsetof(trak_atom_infos_t, stsz), },
-	{ NULL, 0 }
-};
-
-static const trak_atom_parser_t trak_atom_parsers_duration_limits_and_total_size[] = {
-	{ mp4_parser_parse_stts_atom_frame_duration_only, offsetof(trak_atom_infos_t, stts), },
-	{ mp4_parser_parse_stsz_atom_total_size_estimate_only, offsetof(trak_atom_infos_t, stsz), },
-	{ NULL, 0 }
-};
-
-static const trak_atom_parser_t trak_atom_parsers_total_size[] = {
-	{ mp4_parser_parse_stsz_atom_total_size_estimate_only, offsetof(trak_atom_infos_t, stsz), },
-	{ NULL, 0 }
-};
-
-static const trak_atom_parser_t trak_atom_parsers_basic_metadata_only[] = {
-	{ NULL, 0 }
-};
-
-static const trak_atom_parser_t* parsers[] = {
-	trak_atom_parsers_all,
-	trak_atom_parsers_all_except_offsets,
-	trak_atom_parsers_frame_durations_and_total_size,
-	trak_atom_parsers_duration_limits_and_total_size,
-	trak_atom_parsers_total_size,
-	trak_atom_parsers_basic_metadata_only,
+	{ mp4_parser_parse_stts_atom,							offsetof(trak_atom_infos_t, stts), PARSE_FLAG_FRAMES_DURATION },
+	{ mp4_parser_parse_stts_atom_frame_duration_only,		offsetof(trak_atom_infos_t, stts), PARSE_FLAG_DURATION_LIMITS },
+	{ mp4_parser_parse_ctts_atom,							offsetof(trak_atom_infos_t, ctts), PARSE_FLAG_FRAMES_PTS_DELAY },
+	{ mp4_parser_parse_stsz_atom,							offsetof(trak_atom_infos_t, stsz), PARSE_FLAG_FRAMES_SIZE },
+	{ mp4_parser_parse_stsz_atom_total_size_estimate_only,	offsetof(trak_atom_infos_t, stsz), PARSE_FLAG_TOTAL_SIZE_ESTIMATE },
+	{ mp4_parser_parse_stsc_atom,							offsetof(trak_atom_infos_t, stsc), PARSE_FLAG_FRAMES_OFFSET },
+	{ mp4_parser_parse_stco_atom,							offsetof(trak_atom_infos_t, stco), PARSE_FLAG_FRAMES_OFFSET},
+	{ mp4_parser_parse_stss_atom,							offsetof(trak_atom_infos_t, stss), PARSE_FLAG_FRAMES_IS_KEY },
+	{ NULL, 0, 0 }
 };
 
 vod_status_t
@@ -2584,10 +2548,6 @@ mp4_parser_init_mpeg_metadata(
 			"mp4_parser_init_mpeg_metadata: vod_array_init failed");
 		return VOD_ALLOC_FAILED;
 	}
-
-	mpeg_metadata->duration = 0;
-	mpeg_metadata->max_track_index = 0;
-	mpeg_metadata->video_key_frame_count = 0;
 
 	return VOD_OK;
 }
@@ -2700,22 +2660,25 @@ mp4_parser_parse_frames(
 	mpeg_stream_metadata_t* result_stream;
 	input_frame_t* cur_frame;
 	input_frame_t* last_frame;
-	const trak_atom_parser_t* atom_parsers;
 	const trak_atom_parser_t* cur_parser;
 	vod_status_t rc;
-#if (VOD_DEBUG)
-	int parser_index = 0;
-#endif
-
-	atom_parsers = parsers[request_context->parse_type & PARSE_TYPE_MASK];
+	uint32_t media_type;
 
 	result->mvhd_atom = base->mvhd_atom;
+
+	// in case we need to parse the frame sizes, we already find the total size
+	if ((request_context->parse_type & PARSE_FLAG_FRAMES_SIZE) != 0)
+	{
+		request_context->parse_type &= ~PARSE_FLAG_TOTAL_SIZE_ESTIMATE;
+	}
 
 	// sort the streams - video first
 	qsort(first_stream, base->streams.nelts, sizeof(*first_stream), mp4_parser_compare_streams);
 
 	for (cur_stream = first_stream; cur_stream < last_stream; cur_stream++)
 	{
+		media_type = cur_stream->media_info.media_type;
+
 		// parse the rest of the trak atoms
 		vod_memzero(&context, sizeof(context));
 		context.request_context = request_context;
@@ -2724,7 +2687,7 @@ mp4_parser_parse_frames(
 		context.clip_to = clip_to;
 
 		if (cur_stream == first_stream &&
-			context.media_info->media_type == MEDIA_TYPE_VIDEO &&
+			media_type == MEDIA_TYPE_VIDEO &&
 			cur_stream->trak_atom_infos.stss.size != 0 &&
 			align_segments_to_key_frames)
 		{
@@ -2737,9 +2700,14 @@ mp4_parser_parse_frames(
 			context.stss_start_pos = (const uint32_t*)(cur_stream->trak_atom_infos.stss.ptr + sizeof(stss_atom_t));
 		}
 
-		for (cur_parser = atom_parsers; cur_parser->parse; cur_parser++)
+		for (cur_parser = trak_atom_parsers; cur_parser->parse; cur_parser++)
 		{
-			vod_log_debug1(VOD_LOG_DEBUG_LEVEL, request_context->log, 0, "mp4_parser_parse_frames: running parser %d", parser_index++);
+			if ((request_context->parse_type & cur_parser->flag) == 0)
+			{
+				continue;
+			}
+
+			vod_log_debug1(VOD_LOG_DEBUG_LEVEL, request_context->log, 0, "mp4_parser_parse_frames: running parser 0x%x", cur_parser->flag);
 			rc = cur_parser->parse((atom_info_t*)((u_char*)&cur_stream->trak_atom_infos + cur_parser->offset), &context);
 			if (rc != VOD_OK)
 			{
@@ -2805,12 +2773,18 @@ mp4_parser_parse_frames(
 		}
 
 		// update max duration / track index
-		if (result->duration == 0 ||
-			result->duration * cur_stream->media_info.timescale < cur_stream->media_info.duration * result->timescale)
+		if (result->longest_stream[media_type] == NULL ||
+			result->longest_stream[media_type]->media_info.duration * cur_stream->media_info.timescale < cur_stream->media_info.duration * result->longest_stream[media_type]->media_info.timescale)
 		{
-			result->duration_millis = cur_stream->media_info.duration_millis;
-			result->duration = cur_stream->media_info.duration;
-			result->timescale = cur_stream->media_info.timescale;
+			result->longest_stream[media_type] = result_stream;
+
+			if (result->duration == 0 ||
+				result->duration * cur_stream->media_info.timescale < cur_stream->media_info.duration * result->timescale)
+			{
+				result->duration_millis = cur_stream->media_info.duration_millis;
+				result->duration = cur_stream->media_info.duration;
+				result->timescale = cur_stream->media_info.timescale;
+			}
 		}
 
 		if (cur_stream->track_index > result->max_track_index)
@@ -2818,8 +2792,8 @@ mp4_parser_parse_frames(
 			result->max_track_index = cur_stream->track_index;
 		}
 
-		result->stream_count[cur_stream->media_info.media_type]++;
-		if (cur_stream->media_info.media_type == MEDIA_TYPE_VIDEO)
+		result->stream_count[media_type]++;
+		if (media_type == MEDIA_TYPE_VIDEO)
 		{
 			result->video_key_frame_count += context.key_frame_count;
 		}

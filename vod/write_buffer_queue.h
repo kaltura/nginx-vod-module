@@ -26,7 +26,7 @@ typedef struct {
 // functions
 void write_buffer_queue_init(write_buffer_queue_t* queue, request_context_t* request_context);
 u_char* write_buffer_queue_get_buffer(write_buffer_queue_t* queue, uint32_t size);
-void write_buffer_queue_send(write_buffer_queue_t* queue, u_char* ptr);
-void write_buffer_queue_flush(write_buffer_queue_t* queue);
+vod_status_t write_buffer_queue_send(write_buffer_queue_t* queue, u_char* ptr);
+vod_status_t write_buffer_queue_flush(write_buffer_queue_t* queue);
 
 #endif // __WRITE_BUFFER_QUEUE_H__

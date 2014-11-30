@@ -8,6 +8,7 @@
 #include "buffer_filter.h"
 #include "../mp4_parser.h"
 #include "../read_cache.h"
+#include "../segmenter.h"
 
 // typedefs
 typedef void(*hls_get_iframe_positions_callback_t)(
@@ -82,7 +83,12 @@ vod_status_t hls_muxer_init(
 
 vod_status_t hls_muxer_process(hls_muxer_state_t* state, uint64_t* required_offset);
 
-void hls_muxer_simulate_get_iframes(hls_muxer_state_t* state, uint32_t segment_duration, hls_get_iframe_positions_callback_t callback, void* context);
+void hls_muxer_simulate_get_iframes(
+	hls_muxer_state_t* state,
+	segmenter_conf_t* segmenter_conf,
+	uint32_t segment_count,
+	hls_get_iframe_positions_callback_t callback,
+	void* context);
 
 uint32_t hls_muxer_simulate_get_segment_size(hls_muxer_state_t* state);
 
