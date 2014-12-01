@@ -152,7 +152,7 @@ mss_packager_build_manifest(
 			sizeof(MSS_STREAM_INDEX_HEADER) - 1 + 2 * sizeof(MSS_STREAM_TYPE_VIDEO) + 2 * VOD_INT32_LEN +
 			sizeof(MSS_STREAM_INDEX_FOOTER);
 
-		result_size += segment_durations[media_type].segment_count * (sizeof(MSS_CHUNK_TAG)+VOD_INT32_LEN + VOD_INT64_LEN);
+		result_size += segment_durations[media_type].segment_count * (sizeof(MSS_CHUNK_TAG) + VOD_INT32_LEN + VOD_INT64_LEN);
 	}
 
 	for (cur_stream = mpeg_metadata->first_stream; cur_stream < mpeg_metadata->last_stream; cur_stream++)

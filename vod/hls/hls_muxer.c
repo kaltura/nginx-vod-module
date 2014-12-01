@@ -438,6 +438,8 @@ hls_muxer_simulate_get_iframes(
 	uint32_t segment_index = 0;
 	uint64_t cur_frame_dts;
 	uint64_t cur_frame_time_offset;
+	bool_t is_video_key_frame;
+	bool_t last_frame;
 
 	segmenter_boundary_iterator_init(&iterator, segmenter_conf, segment_count);
 
@@ -462,9 +464,11 @@ hls_muxer_simulate_get_iframes(
 		cur_frame_dts = selected_stream->next_frame_dts;
 		selected_stream->next_frame_dts = rescale_time(selected_stream->next_frame_time_offset, selected_stream->timescale, HLS_TIMESCALE);
 
+		is_video_key_frame = selected_stream->media_type == MEDIA_TYPE_VIDEO && cur_frame->key_frame;
+		
 		// check whether we completed a segment
-		if (cur_frame_dts >= segment_end_dts &&
-			(!segmenter_conf->align_to_key_frames || cur_frame->key_frame))
+		while (cur_frame_dts >= segment_end_dts &&
+			(!segmenter_conf->align_to_key_frames || is_video_key_frame))
 		{
 			// flush all buffered frames
 			hls_muxer_simulation_flush(state);
@@ -481,11 +485,28 @@ hls_muxer_simulate_get_iframes(
 
 		cur_frame_start = mpegts_encoder_simulated_get_offset(&state->mpegts_encoder_state);
 
+		// check whether this is the last frame in the segment
+		last_frame = FALSE;
+		if (selected_stream->next_frame_dts >= segment_end_dts)
+		{
+			if (!segmenter_conf->align_to_key_frames)
+			{
+				last_frame = TRUE;
+			}
+			else if (selected_stream->media_type == MEDIA_TYPE_VIDEO &&
+				selected_stream->cur_frame < selected_stream->last_frame &&
+				selected_stream->cur_frame->key_frame)
+			{
+				last_frame = TRUE;
+			}
+		}
+
+		// write the frame
 		hls_muxer_simulation_write_frame(
 			selected_stream,
 			cur_frame,
 			cur_frame_dts,
-			selected_stream->next_frame_dts >= segment_end_dts);
+			last_frame);
 
 #if (VOD_DEBUG)
 		if (cur_frame_start != mpegts_encoder_simulated_get_offset(&state->mpegts_encoder_state))
@@ -499,7 +520,7 @@ hls_muxer_simulate_get_iframes(
 		}
 #endif // VOD_DEBUG
 
-		if (selected_stream->media_type == MEDIA_TYPE_VIDEO && cur_frame->key_frame)
+		if (is_video_key_frame)
 		{
 			cur_frame_time = rescale_time(cur_frame_time_offset + cur_frame->pts_delay, selected_stream->timescale, 1000);		// in millis
 			if (frame_size != 0)

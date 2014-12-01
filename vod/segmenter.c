@@ -544,13 +544,11 @@ segmenter_boundary_iterator_next(segmenter_boundary_iterator_context_t* context)
 void
 segmenter_boundary_iterator_skip(segmenter_boundary_iterator_context_t* context, uint32_t count)
 {
-	uint32_t new_segment_index = MIN(context->segment_index + count, context->segment_count);
+	context->segment_index = MIN(context->segment_index + count, context->segment_count);
 
-	if (new_segment_index > context->conf->bootstrap_segments_count)
+	if (context->segment_index > context->conf->bootstrap_segments_count)
 	{
 		context->last_boundary = context->conf->bootstrap_segments_total_duration + 
-			(new_segment_index - context->conf->bootstrap_segments_count) * context->conf->segment_duration;
+			(context->segment_index - context->conf->bootstrap_segments_count) * context->conf->segment_duration;
 	}
-
-	context->segment_index = new_segment_index;
 }

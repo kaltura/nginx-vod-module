@@ -353,6 +353,7 @@ ngx_http_vod_parse_moov_atom(ngx_http_vod_ctx_t *ctx, u_char* moov_buffer, size_
 			&request_context->end);
 
 		request_context->start += suburi_params->clip_from;
+		request_context->end += suburi_params->clip_from;
 
 		if (ctx->submodule_context.request_params.segment_index + 1 >= segment_count)
 		{
@@ -372,7 +373,7 @@ ngx_http_vod_parse_moov_atom(ngx_http_vod_ctx_t *ctx, u_char* moov_buffer, size_
 			vod_log_error(VOD_LOG_ERR, request_context->log, 0,
 				"ngx_http_vod_parse_moov_atom: segment index %uD too big for clip from %uD and clip to %uD",
 				ctx->submodule_context.request_params.segment_index, suburi_params->clip_from, suburi_params->clip_to);
-			return VOD_BAD_REQUEST;
+			return NGX_HTTP_BAD_REQUEST;
 		}
 	}
 
@@ -443,7 +444,7 @@ ngx_http_vod_write_segment_buffer(void* ctx, u_char* buffer, uint32_t size, bool
 		// headers not sent yet, add the buffer to the chain
 		if (context->chain_end->buf != NULL)
 		{
-			chain = ngx_pcalloc(context->r->pool, sizeof(ngx_chain_t));
+			chain = ngx_alloc_chain_link(context->r->pool);
 			if (chain == NULL) 
 			{
 				ngx_log_debug0(NGX_LOG_DEBUG_HTTP, context->r->connection->log, 0,

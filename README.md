@@ -24,6 +24,9 @@
 
 * Source file clipping (only from I-Frame to P-frame)
 
+* Support for variable segment lengths - enabling the player to select the optimal bitrate fast,
+without the overhead of short segments for the whole duration of the video
+
 * Serving of files for progressive download playback
 
 * HLS: Generation of I-frames playlist (EXT-X-I-FRAMES-ONLY)

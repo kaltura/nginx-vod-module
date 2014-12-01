@@ -247,10 +247,14 @@ m3u8_builder_build_iframe_playlist(
 
 	// fill out the buffer
 	ctx.p = vod_copy(result->data, conf->iframes_m3u8_header, conf->iframes_m3u8_header_len);
-	ctx.base_url = base_url;
-	ctx.segment_file_name_prefix = &conf->segment_file_name_prefix;
 
-	hls_muxer_simulate_get_iframes(&muxer_state, segmenter_conf, segment_count, m3u8_builder_append_iframe_string, &ctx);
+	if (mpeg_metadata->video_key_frame_count > 0)
+	{
+		ctx.base_url = base_url;
+		ctx.segment_file_name_prefix = &conf->segment_file_name_prefix;
+	
+		hls_muxer_simulate_get_iframes(&muxer_state, segmenter_conf, segment_count, m3u8_builder_append_iframe_string, &ctx);
+	}
 
 	ctx.p = vod_copy(ctx.p, m3u8_footer, sizeof(m3u8_footer) - 1);
 	result->len = ctx.p - result->data;
@@ -280,7 +284,7 @@ m3u8_builder_build_index_playlist(
 	segment_durations_t segment_durations;
 	segment_duration_item_t* cur_item;
 	segment_duration_item_t* last_item;
-	ngx_str_t extinf;
+	vod_str_t extinf;
 	uint32_t segment_index;
 	uint32_t last_segment_index;
 	vod_str_t required_tracks;
