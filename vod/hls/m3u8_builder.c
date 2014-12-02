@@ -253,7 +253,11 @@ m3u8_builder_build_iframe_playlist(
 		ctx.base_url = base_url;
 		ctx.segment_file_name_prefix = &conf->segment_file_name_prefix;
 	
-		hls_muxer_simulate_get_iframes(&muxer_state, segmenter_conf, segment_count, m3u8_builder_append_iframe_string, &ctx);
+		rc = hls_muxer_simulate_get_iframes(&muxer_state, segmenter_conf, mpeg_metadata, m3u8_builder_append_iframe_string, &ctx);
+		if (rc != VOD_OK)
+		{
+			return rc;
+		}
 	}
 
 	ctx.p = vod_copy(ctx.p, m3u8_footer, sizeof(m3u8_footer) - 1);

@@ -390,6 +390,10 @@ hls_muxer_simulation_flush_delayed_streams(hls_muxer_state_t* state, hls_muxer_s
 		if (buffer_filter_get_dts(cur_stream->buffer_state, &buffer_dts) &&
 			frame_dts > buffer_dts + HLS_DELAY / 2)
 		{
+			vod_log_debug2(VOD_LOG_DEBUG_LEVEL, state->request_context->log, 0,
+				"hls_muxer_simulation_flush_delayed_streams: flushing buffered frames buffer dts %L frame dts %L",
+				buffer_dts,
+				frame_dts);
 			buffer_filter_simulated_force_flush(cur_stream->buffer_state);
 		}
 	}
@@ -414,16 +418,55 @@ hls_muxer_simulation_write_frame(hls_muxer_stream_state_t* selected_stream, inpu
 	selected_stream->top_filter->simulated_write(selected_stream->top_filter_context, output_frame);
 }
 
-void 
+static hls_muxer_stream_state_t*
+hls_muxer_iframes_choose_stream(hls_muxer_state_t* state)
+{
+	hls_muxer_stream_state_t* cur_stream;
+	hls_muxer_stream_state_t* result = NULL;
+
+	for (cur_stream = state->first_stream; cur_stream < state->last_stream; cur_stream++)
+	{
+		if (cur_stream->cur_frame >= cur_stream->last_frame || 
+			cur_stream->next_frame_time_offset >= cur_stream->segment_limit)
+		{
+			continue;
+		}
+
+		if (result == NULL || cur_stream->next_frame_dts < result->next_frame_dts)
+		{
+			result = cur_stream;
+		}
+	}
+
+	return result;
+}
+
+static void 
+hls_muxer_simulation_set_segment_limit(
+	hls_muxer_state_t* state,
+	uint64_t segment_end,
+	uint32_t timescale)
+{
+	hls_muxer_stream_state_t* cur_stream;
+
+	for (cur_stream = state->first_stream; cur_stream < state->last_stream; cur_stream++)
+	{
+		cur_stream->segment_limit = (segment_end * cur_stream->timescale) / timescale;
+	}
+}
+
+vod_status_t
 hls_muxer_simulate_get_iframes(
 	hls_muxer_state_t* state, 
 	segmenter_conf_t* segmenter_conf, 
-	uint32_t segment_count, 
-	hls_get_iframe_positions_callback_t callback, 
+	mpeg_metadata_t* mpeg_metadata,
+	hls_get_iframe_positions_callback_t callback,
 	void* context)
 {
-	segmenter_boundary_iterator_context_t iterator;
 	hls_muxer_stream_state_t* selected_stream;
+	segment_duration_item_t* cur_item;
+	segment_duration_item_t* last_item;
+	segment_durations_t segment_durations;
 	input_frame_t* cur_frame;
 	uint32_t cur_frame_time;
 	uint32_t cur_frame_start;
@@ -432,76 +475,109 @@ hls_muxer_simulate_get_iframes(
 	uint32_t frame_start_time = 0;
 	uint32_t first_frame_time = 0;
 	uint32_t end_time;
-	uint32_t next_boundary;
-	uint64_t segment_end_dts;
 	uint32_t frame_segment_index = 0;
 	uint32_t segment_index = 0;
 	uint64_t cur_frame_dts;
 	uint64_t cur_frame_time_offset;
-	bool_t is_video_key_frame;
+	uint32_t repeat_count;
+	uint64_t segment_end;
 	bool_t last_frame;
+	vod_status_t rc;
 
-	segmenter_boundary_iterator_init(&iterator, segmenter_conf, segment_count);
+	// get segment durations
+	if (segmenter_conf->align_to_key_frames)
+	{
+		rc = segmenter_get_segment_durations_accurate(
+			state->request_context, 
+			segmenter_conf, 
+			&mpeg_metadata->first_stream, 
+			1, 
+			&segment_durations);
+	}
+	else
+	{
+		rc = segmenter_get_segment_durations_estimate(
+			state->request_context,
+			segmenter_conf,
+			mpeg_metadata->longest_stream,
+			MEDIA_TYPE_COUNT,
+			&segment_durations);
+	}
 
-	next_boundary = segmenter_boundary_iterator_next(&iterator);
-	segment_end_dts = (next_boundary == UINT_MAX ? ULLONG_MAX : next_boundary * 90);		// convert to 90KHz
+	if (rc != VOD_OK)
+	{
+		return rc;
+	}
+	
+	cur_item = segment_durations.items;
+	last_item = segment_durations.items + segment_durations.item_count;
+	if (cur_item >= last_item)
+	{
+		return VOD_OK;
+	}
+
+
+	// initialize the repeat count, segment end, and the per stream limit
+	repeat_count = cur_item->repeat_count - 1;
+	segment_end = cur_item->duration;
+	hls_muxer_simulation_set_segment_limit(state, segment_end, segment_durations.timescale);
 
 	mpegts_encoder_simulated_start_segment(&state->mpegts_encoder_state);
 
 	for (;;)
 	{
 		// get a frame
-		selected_stream = hls_muxer_choose_stream(state);
-		if (selected_stream == NULL)
+		for (;;)
 		{
-			break;		// done
+			// choose a stream for the current frame
+			selected_stream = hls_muxer_iframes_choose_stream(state);
+			if (selected_stream != NULL)
+			{
+				break;
+			}
+
+			// finished a segment, flush all buffered frames
+			hls_muxer_simulation_flush(state);
+
+			// update the limit for the next segment
+			if (repeat_count <= 0)
+			{
+				cur_item++;
+				if (cur_item >= last_item)
+				{
+					goto done;
+				}
+
+				repeat_count = cur_item->repeat_count;
+			}
+
+			repeat_count--;
+			segment_end += cur_item->duration;
+			hls_muxer_simulation_set_segment_limit(state, segment_end, segment_durations.timescale);
+
+			// start the next segment
+			mpegts_encoder_simulated_start_segment(&state->mpegts_encoder_state);
+			segment_index++;
 		}
 
+		// update the stream state
 		cur_frame = selected_stream->cur_frame;
 		selected_stream->cur_frame++;
 		cur_frame_time_offset = selected_stream->next_frame_time_offset;
 		selected_stream->next_frame_time_offset += cur_frame->duration;
 		cur_frame_dts = selected_stream->next_frame_dts;
 		selected_stream->next_frame_dts = rescale_time(selected_stream->next_frame_time_offset, selected_stream->timescale, HLS_TIMESCALE);
-
-		is_video_key_frame = selected_stream->media_type == MEDIA_TYPE_VIDEO && cur_frame->key_frame;
 		
-		// check whether we completed a segment
-		while (cur_frame_dts >= segment_end_dts &&
-			(!segmenter_conf->align_to_key_frames || is_video_key_frame))
-		{
-			// flush all buffered frames
-			hls_muxer_simulation_flush(state);
-
-			mpegts_encoder_simulated_start_segment(&state->mpegts_encoder_state);
-			segment_index++;
-			
-			next_boundary = segmenter_boundary_iterator_next(&iterator);
-			segment_end_dts = (next_boundary == UINT_MAX ? ULLONG_MAX : next_boundary * 90);		// convert to 90KHz
-		}
-
 		// flush any buffered frames if their delay becomes too big
 		hls_muxer_simulation_flush_delayed_streams(state, selected_stream, cur_frame_dts);
 
-		cur_frame_start = mpegts_encoder_simulated_get_offset(&state->mpegts_encoder_state);
-
-		// check whether this is the last frame in the segment
-		last_frame = FALSE;
-		if (selected_stream->next_frame_dts >= segment_end_dts)
-		{
-			if (!segmenter_conf->align_to_key_frames)
-			{
-				last_frame = TRUE;
-			}
-			else if (selected_stream->media_type == MEDIA_TYPE_VIDEO &&
-				selected_stream->cur_frame < selected_stream->last_frame &&
-				selected_stream->cur_frame->key_frame)
-			{
-				last_frame = TRUE;
-			}
-		}
+		// check whether this is the last frame of the selected stream in this segment
+		last_frame = (selected_stream->cur_frame >= selected_stream->last_frame ||
+			selected_stream->next_frame_time_offset >= selected_stream->segment_limit);
 
 		// write the frame
+		cur_frame_start = mpegts_encoder_simulated_get_offset(&state->mpegts_encoder_state);
+
 		hls_muxer_simulation_write_frame(
 			selected_stream,
 			cur_frame,
@@ -513,40 +589,50 @@ hls_muxer_simulate_get_iframes(
 		{
 			vod_log_debug4(VOD_LOG_DEBUG_LEVEL, state->request_context->log, 0,
 				"hls_muxer_simulate_get_iframes: wrote frame segment %uD packets %uD-%uD dts %L",
-				segment_index,
+				segment_index + 1,
 				cur_frame_start / MPEGTS_PACKET_SIZE + 1,
 				mpegts_encoder_simulated_get_offset(&state->mpegts_encoder_state) / MPEGTS_PACKET_SIZE + 1,
 				cur_frame_dts);
 		}
 #endif // VOD_DEBUG
 
-		if (is_video_key_frame)
+		// only care about video key frames
+		if (selected_stream->media_type != MEDIA_TYPE_VIDEO || !cur_frame->key_frame)
 		{
-			cur_frame_time = rescale_time(cur_frame_time_offset + cur_frame->pts_delay, selected_stream->timescale, 1000);		// in millis
-			if (frame_size != 0)
-			{
-				callback(context, frame_segment_index, cur_frame_time - frame_start_time, frame_start, frame_size);
-			}
-			else
-			{
-				first_frame_time = cur_frame_time;
-			}
-
-			// output segment_index, ts_segment_offset
-			frame_start = cur_frame_start;
-			frame_size = mpegts_encoder_simulated_get_offset(&state->mpegts_encoder_state) - cur_frame_start;
-			frame_start_time = cur_frame_time;
-			frame_segment_index = segment_index;
+			continue;
 		}
+
+		// get the frame time
+		cur_frame_time = rescale_time(cur_frame_time_offset + cur_frame->pts_delay, selected_stream->timescale, 1000);		// in millis
+		if (frame_size != 0)
+		{
+			callback(context, frame_segment_index, cur_frame_time - frame_start_time, frame_start, frame_size);
+		}
+		else
+		{
+			first_frame_time = cur_frame_time;
+		}
+
+		// save the info of the current keyframe
+		frame_start = cur_frame_start;
+		frame_size = mpegts_encoder_simulated_get_offset(&state->mpegts_encoder_state) - cur_frame_start;
+		frame_start_time = cur_frame_time;
+		frame_segment_index = segment_index;
 	}
 
+done:
+
+	// done, flush buffers
 	hls_muxer_simulation_flush(state);
 
+	// call the callback for the last frame
 	end_time = first_frame_time + state->video_duration;
 	if (frame_size != 0 && end_time > frame_start_time)
 	{
 		callback(context, frame_segment_index, end_time - frame_start_time, frame_start, frame_size);
 	}
+
+	return VOD_OK;
 }
 
 uint32_t 

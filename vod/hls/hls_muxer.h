@@ -32,6 +32,7 @@ typedef struct {
 	uint64_t first_frame_time_offset;
 	uint64_t next_frame_time_offset;
 	uint64_t next_frame_dts;
+	uint64_t segment_limit;		// used only for iframes
 	
 	// frame offsets
 	uint64_t* first_frame_offset;
@@ -83,10 +84,10 @@ vod_status_t hls_muxer_init(
 
 vod_status_t hls_muxer_process(hls_muxer_state_t* state, uint64_t* required_offset);
 
-void hls_muxer_simulate_get_iframes(
+vod_status_t hls_muxer_simulate_get_iframes(
 	hls_muxer_state_t* state,
 	segmenter_conf_t* segmenter_conf,
-	uint32_t segment_count,
+	mpeg_metadata_t* mpeg_metadata,
 	hls_get_iframe_positions_callback_t callback,
 	void* context);
 
