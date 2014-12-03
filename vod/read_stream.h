@@ -5,7 +5,7 @@
 #include "common.h"
 
 // int parsing macros
-#define PARSE_LE32(p) (*(uint32_t*)(p))
+#define PARSE_LE32(p) ( ((uint32_t) ((u_char*)p)[3] << 24) | (((u_char*)p)[2] << 16) | (((u_char*)p)[1] << 8) | (((u_char*)p)[0]) )
 #define PARSE_BE16(p) ( ((uint16_t) ((u_char*)p)[0] << 8)  | (((u_char*)p)[1]) )
 #define PARSE_BE32(p) ( ((uint32_t) ((u_char*)p)[0] << 24) | (((u_char*)p)[1] << 16) | (((u_char*)p)[2] << 8) | (((u_char*)p)[3]) )
 #define PARSE_BE64(p) ((((uint64_t)PARSE_BE32(p)) << 32) | PARSE_BE32((p) + 4))
