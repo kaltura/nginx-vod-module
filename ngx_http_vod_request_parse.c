@@ -288,12 +288,13 @@ ngx_http_vod_parse_multi_uri(
 	u_char* last_comma_pos;
 	uint32_t part_index;
 
+	result->prefix.data = uri->data;
+	result->prefix.len = uri->len;
+
 	if (uri->len < multi_uri_suffix->len ||
 		ngx_memcmp(multi_uri_suffix->data, uri->data + uri->len - multi_uri_suffix->len, multi_uri_suffix->len) != 0)
 	{
 		// not a multi uri
-		result->prefix.data = uri->data;
-		result->prefix.len = uri->len;
 		result->postfix.data = NULL;
 		result->postfix.len = 0;
 		result->middle_parts[0].data = NULL;
@@ -316,7 +317,6 @@ ngx_http_vod_parse_multi_uri(
 
 		if (last_comma_pos == NULL)
 		{
-			result->prefix.data = uri->data;
 			result->prefix.len = cur_pos - uri->data;
 		}
 		else
@@ -339,8 +339,6 @@ ngx_http_vod_parse_multi_uri(
 	if (last_comma_pos == NULL)
 	{
 		// no commas at all
-		result->prefix.data = uri->data;
-		result->prefix.len = uri->len;
 		result->postfix.data = NULL;
 		result->postfix.len = 0;
 	}
