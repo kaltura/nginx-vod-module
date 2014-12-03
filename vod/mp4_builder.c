@@ -139,7 +139,7 @@ mp4_builder_frame_writer_process(fragment_writer_state_t* state, uint64_t* requi
 	u_char* read_buffer;
 	uint32_t read_size;
 	u_char* write_buffer = NULL;
-	uint32_t write_buffer_size;
+	uint32_t write_buffer_size = 0;
 	uint32_t cur_write_size;
 	uint64_t offset;
 	vod_status_t rc;
