@@ -45,6 +45,7 @@ typedef struct {
 	ngx_http_vod_submodule_context_t submodule_context;
 	off_t alignment;
 	int state;
+	u_char request_key[BUFFER_CACHE_KEY_SIZE];
 
 	// moov read state
 	u_char* read_buffer;
@@ -215,7 +216,7 @@ ngx_http_vod_read_moov_atom(ngx_http_vod_ctx_t *ctx)
 	}
 
 	// check whether we already have the whole atom
-	if (ctx->moov_offset + ctx->moov_size < ctx->buffer_size)
+	if (ctx->moov_offset + ctx->moov_size <= ctx->buffer_size)
 	{
 		ngx_log_debug0(NGX_LOG_DEBUG_HTTP, ctx->submodule_context.request_context.log, 0,
 			"ngx_http_vod_read_moov_atom: already read the full moov atom");
@@ -275,12 +276,17 @@ ngx_http_vod_parse_moov_atom(ngx_http_vod_ctx_t *ctx, u_char* moov_buffer, size_
 	const ngx_http_vod_request_t* request = ctx->submodule_context.request_params.request;
 	ngx_http_vod_suburi_params_t* suburi_params = ctx->submodule_context.cur_suburi;
 	request_context_t* request_context = &ctx->submodule_context.request_context;
+	segmenter_conf_t* segmenter = &ctx->submodule_context.conf->segmenter;
 	vod_status_t rc;
 	file_info_t file_info;
 	uint32_t segment_count;
 
 	// init the request context
 	request_context->parse_type = request->parse_type;
+	if (request->request_class == REQUEST_CLASS_MANIFEST)
+	{
+		request_context->parse_type |= segmenter->parse_type;
+	}
 	request_context->stream_comparator = request->stream_comparator;
 	request_context->stream_comparator_context = 
 		(u_char*)ctx->submodule_context.conf + request->stream_comparator_conf_offset;
@@ -306,7 +312,7 @@ ngx_http_vod_parse_moov_atom(ngx_http_vod_ctx_t *ctx, u_char* moov_buffer, size_
 	}
 
 	request_context->timescale = 1000;
-	if (request->request_class == REQUEST_CLASS_MANIFEST)
+	if (request->request_class != REQUEST_CLASS_SEGMENT)
 	{
 		request_context->max_frame_count = 1024 * 1024;
 		request_context->simulation_only = TRUE;
@@ -325,25 +331,12 @@ ngx_http_vod_parse_moov_atom(ngx_http_vod_ctx_t *ctx, u_char* moov_buffer, size_
 		request_context->max_frame_count = 64 * 1024;
 		request_context->simulation_only = FALSE;
 
-		// validate the requested segment index
-		switch (request->request_class)
+		segment_count = segmenter->get_segment_count(segmenter, mpeg_base_metadata.duration_millis);
+		if (segment_count == INVALID_SEGMENT_COUNT)
 		{
-		case REQUEST_CLASS_SEGMENT_LAST_LONG:
-			segment_count = mpeg_base_metadata.duration_millis / ctx->submodule_context.conf->segment_duration;
-			break;
-
-		case REQUEST_CLASS_SEGMENT_LAST_ROUNDED:
-			segment_count = (mpeg_base_metadata.duration_millis + ctx->submodule_context.conf->segment_duration / 2) / ctx->submodule_context.conf->segment_duration;
-			break;
-
-		default: //	REQUEST_CLASS_SEGMENT_LAST_SHORT
-			segment_count = DIV_CEIL(mpeg_base_metadata.duration_millis, ctx->submodule_context.conf->segment_duration);
-			break;
-		}
-
-		if (segment_count < 1)
-		{
-			segment_count = 1;
+			ngx_log_error(NGX_LOG_ERR, request_context->log, 0,
+				"ngx_http_vod_parse_moov_atom: segment count is invalid");
+			return ngx_http_vod_status_to_ngx_error(VOD_BAD_DATA);
 		}
 
 		if (ctx->submodule_context.request_params.segment_index >= segment_count)
@@ -354,13 +347,16 @@ ngx_http_vod_parse_moov_atom(ngx_http_vod_ctx_t *ctx, u_char* moov_buffer, size_
 		}
 
 		// get the start / end offsets
-		request_context->start = suburi_params->clip_from + ctx->submodule_context.request_params.segment_index * ctx->submodule_context.conf->segment_duration;
-		if (ctx->submodule_context.request_params.segment_index + 1 < segment_count)
-		{
-			// not the last segment
-			request_context->end = MIN(request_context->start + ctx->submodule_context.conf->segment_duration, suburi_params->clip_to);
-		}
-		else
+		segmenter_get_start_end_offsets(
+			segmenter, 
+			ctx->submodule_context.request_params.segment_index, 
+			&request_context->start, 
+			&request_context->end);
+
+		request_context->start += suburi_params->clip_from;
+		request_context->end += suburi_params->clip_from;
+
+		if (ctx->submodule_context.request_params.segment_index + 1 >= segment_count)
 		{
 			// last segment
 			if (suburi_params->clip_to == UINT_MAX)
@@ -378,7 +374,7 @@ ngx_http_vod_parse_moov_atom(ngx_http_vod_ctx_t *ctx, u_char* moov_buffer, size_
 			vod_log_error(VOD_LOG_ERR, request_context->log, 0,
 				"ngx_http_vod_parse_moov_atom: segment index %uD too big for clip from %uD and clip to %uD",
 				ctx->submodule_context.request_params.segment_index, suburi_params->clip_from, suburi_params->clip_to);
-			return VOD_BAD_REQUEST;
+			return NGX_HTTP_BAD_REQUEST;
 		}
 	}
 
@@ -388,7 +384,7 @@ ngx_http_vod_parse_moov_atom(ngx_http_vod_ctx_t *ctx, u_char* moov_buffer, size_
 		&mpeg_base_metadata,
 		suburi_params->clip_from,
 		suburi_params->clip_to,
-		ctx->submodule_context.conf->align_segments_to_key_frames,
+		segmenter->align_to_key_frames,
 		&ctx->submodule_context.mpeg_metadata);
 	if (rc != VOD_OK)
 	{
@@ -449,7 +445,7 @@ ngx_http_vod_write_segment_buffer(void* ctx, u_char* buffer, uint32_t size, bool
 		// headers not sent yet, add the buffer to the chain
 		if (context->chain_end->buf != NULL)
 		{
-			chain = ngx_pcalloc(context->r->pool, sizeof(ngx_chain_t));
+			chain = ngx_alloc_chain_link(context->r->pool);
 			if (chain == NULL) 
 			{
 				ngx_log_debug0(NGX_LOG_DEBUG_HTTP, context->r->connection->log, 0,
@@ -779,6 +775,7 @@ ngx_http_vod_run_state_machine(ngx_http_vod_ctx_t *ctx)
 {
 	ngx_http_vod_loc_conf_t* conf;
 	ngx_http_request_t* r = ctx->submodule_context.r;
+	ngx_str_t cache_buffers[3];
 	ngx_str_t content_type;
 	ngx_str_t response;
 	u_char* moov_buffer;
@@ -974,6 +971,25 @@ ngx_http_vod_run_state_machine(ngx_http_vod_ctx_t *ctx)
 			ngx_log_debug1(NGX_LOG_DEBUG_HTTP, ctx->submodule_context.request_context.log, 0,
 				"ngx_http_vod_run_state_machine: handle_metadata_request failed %i", rc);
 			return rc;
+		}
+
+		if (conf->response_cache_zone != NULL)
+		{
+			cache_buffers[0].data = (u_char*)&content_type.len;
+			cache_buffers[0].len = sizeof(content_type.len);
+			cache_buffers[1] = content_type;
+			cache_buffers[2] = response;
+
+			if (ngx_buffer_cache_store_gather(conf->response_cache_zone, ctx->request_key, cache_buffers, 3))
+			{
+				ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+					"ngx_http_vod_run_state_machine: stored in response cache");
+			}
+			else
+			{
+				ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+					"ngx_http_vod_run_state_machine: failed to store response in cache");
+			}
 		}
 
 		return ngx_http_vod_send_response(ctx->submodule_context.r, &response, content_type.data, content_type.len);
@@ -1688,10 +1704,16 @@ ngx_http_vod_parse_uri(ngx_http_request_t *r, ngx_http_vod_loc_conf_t *conf, ngx
 ngx_int_t
 ngx_http_vod_handler(ngx_http_request_t *r)
 {
-	ngx_int_t rc;
 	ngx_http_vod_ctx_t *ctx;
 	ngx_http_vod_request_params_t request_params;
 	ngx_http_vod_loc_conf_t *conf;
+	u_char request_key[BUFFER_CACHE_KEY_SIZE];
+	u_char* cache_buffer;
+	size_t cache_buffer_size;
+	ngx_md5_t md5;
+	ngx_str_t content_type;
+	ngx_str_t response;
+	ngx_int_t rc;
 
 	ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0, "ngx_http_vod_handler: started");
 
@@ -1741,6 +1763,52 @@ ngx_http_vod_handler(ngx_http_request_t *r)
 		}
 	}
 
+	if (request_params.request->handle_metadata_request != NULL &&
+		conf->response_cache_zone != NULL)
+	{
+		// calc request key from host + uri
+		ngx_md5_init(&md5);
+		if (r->headers_in.host != NULL)
+		{
+			ngx_md5_update(&md5, r->headers_in.host->value.data, r->headers_in.host->value.len);
+		}
+		ngx_md5_update(&md5, r->uri.data, r->uri.len);
+		ngx_md5_final(request_key, &md5);
+
+		// try to fetch from cache
+		if (ngx_buffer_cache_fetch(conf->response_cache_zone, request_key, &cache_buffer, &cache_buffer_size) &&
+			cache_buffer_size > sizeof(size_t))
+		{
+			ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+				"ngx_http_vod_handler: response cache hit, size is %uz", cache_buffer_size);
+
+			// extract the content type
+			content_type.len = *(size_t*)cache_buffer;
+			cache_buffer += sizeof(size_t);
+			cache_buffer_size -= sizeof(size_t);
+			content_type.data = cache_buffer;
+
+			if (cache_buffer_size >= content_type.len)
+			{
+				// extract the response buffer
+				response.data = cache_buffer + content_type.len;
+				response.len = cache_buffer_size - content_type.len;
+
+				// update request flags
+				r->root_tested = !r->error_page;
+				r->allow_ranges = 1;
+
+				// return the response
+				return ngx_http_vod_send_response(r, &response, content_type.data, content_type.len);
+			}
+		}
+		else
+		{
+			ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+				"ngx_http_vod_handler: response cache miss");
+		}
+	}
+
 	// initialize the context
 	ctx = ngx_pcalloc(r->pool, sizeof(ngx_http_vod_ctx_t));
 	if (ctx == NULL) 
@@ -1750,6 +1818,7 @@ ngx_http_vod_handler(ngx_http_request_t *r)
 		return NGX_HTTP_INTERNAL_SERVER_ERROR;
 	}
 
+	ngx_memcpy(ctx->request_key, request_key, sizeof(request_key));
 	ctx->submodule_context.r = r;
 	ctx->submodule_context.conf = conf;
 	ctx->submodule_context.request_params = request_params;

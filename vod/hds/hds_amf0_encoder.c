@@ -101,7 +101,7 @@ hds_amf0_append_array_end(u_char* p)
 	return p;
 }
 
-void
+static void
 hds_get_max_duration(mpeg_stream_metadata_t** streams, uint64_t* duration, uint32_t* timescale)
 {
 	if (streams[MEDIA_TYPE_VIDEO] != NULL &&

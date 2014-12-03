@@ -69,7 +69,7 @@ ngx_http_vod_hls_handle_index_playlist(
 		&base_url,
 		submodule_context->request_params.uses_multi_uri,
 		submodule_context->conf->secret_key.len != 0,
-		submodule_context->conf->segment_duration,
+		&submodule_context->conf->segmenter,
 		&submodule_context->mpeg_metadata,
 		response);
 	if (rc != VOD_OK)
@@ -104,7 +104,7 @@ ngx_http_vod_hls_handle_iframe_playlist(
 		&submodule_context->conf->hls.m3u8_config,
 		&base_url,
 		submodule_context->request_params.uses_multi_uri,
-		submodule_context->conf->segment_duration,
+		&submodule_context->conf->segmenter,
 		&submodule_context->mpeg_metadata,
 		response);
 	if (rc != VOD_OK)
@@ -204,10 +204,10 @@ ngx_http_vod_hls_init_frame_processor(
 
 static const ngx_http_vod_request_t hls_master_request = {
 	0,
-	PARSE_TOTAL_SIZE | PARSE_FLAG_CODEC_NAME,
+	PARSE_FLAG_TOTAL_SIZE_ESTIMATE | PARSE_FLAG_CODEC_NAME,
 	NULL,
 	0,
-	REQUEST_CLASS_MANIFEST,
+	REQUEST_CLASS_OTHER,
 	ngx_http_vod_hls_handle_master_playlist,
 	NULL,
 };
@@ -224,10 +224,10 @@ static const ngx_http_vod_request_t hls_index_request = {
 
 static const ngx_http_vod_request_t hls_iframes_request = {
 	REQUEST_FLAG_SINGLE_FILE,
-	PARSE_ALL_EXCEPT_OFFSETS | EXTRA_DATA_PARSE_SIZE,
+	PARSE_FLAG_FRAMES_ALL_EXCEPT_OFFSETS | PARSE_FLAG_PARSED_EXTRA_DATA_SIZE,
 	NULL,
 	0,
-	REQUEST_CLASS_MANIFEST,
+	REQUEST_CLASS_OTHER,
 	ngx_http_vod_hls_handle_iframe_playlist,
 	NULL,
 };
@@ -237,17 +237,17 @@ static const ngx_http_vod_request_t hls_enc_key_request = {
 	PARSE_BASIC_METADATA_ONLY,
 	NULL,
 	0,
-	REQUEST_CLASS_MANIFEST,
+	REQUEST_CLASS_OTHER,
 	ngx_http_vod_hls_handle_encryption_key,
 	NULL,
 };
 
 static const ngx_http_vod_request_t hls_segment_request = {
 	REQUEST_FLAG_SINGLE_FILE,
-	PARSE_ALL | EXTRA_DATA_PARSE_DATA,
+	PARSE_FLAG_FRAMES_ALL | PARSE_FLAG_PARSED_EXTRA_DATA,
 	NULL,
 	0,
-	REQUEST_CLASS_SEGMENT_LAST_SHORT,
+	REQUEST_CLASS_SEGMENT,
 	NULL,
 	ngx_http_vod_hls_init_frame_processor,
 };
@@ -281,7 +281,7 @@ ngx_http_vod_hls_merge_loc_conf(
 
 	m3u8_builder_init_config(
 		&conf->m3u8_config,
-		base->segment_duration);
+		base->segmenter.max_segment_duration);
 
 	return NGX_CONF_OK;
 }

@@ -74,11 +74,12 @@ write_buffer_queue_get_buffer(write_buffer_queue_t* queue, uint32_t size)
 	return result;
 }
 
-void 
+vod_status_t
 write_buffer_queue_send(write_buffer_queue_t* queue, u_char* ptr)
 {
 	buffer_header_t* cur_buffer;
 	bool_t reuse_buffer;
+	vod_status_t rc;
 
 	while (!is_list_empty(&queue->buffers))
 	{
@@ -99,7 +100,13 @@ write_buffer_queue_send(write_buffer_queue_t* queue, u_char* ptr)
 			queue->cur_write_buffer = NULL;
 		}
 
-		queue->write_callback(queue->write_context, cur_buffer->start_pos, cur_buffer->cur_pos - cur_buffer->start_pos, &reuse_buffer);
+		rc = queue->write_callback(queue->write_context, cur_buffer->start_pos, cur_buffer->cur_pos - cur_buffer->start_pos, &reuse_buffer);
+		if (rc != VOD_OK)
+		{
+			vod_log_debug1(VOD_LOG_DEBUG_LEVEL, queue->request_context->log, 0,
+				"write_buffer_queue_send: write_callback failed %i", rc);
+			return rc;
+		}
 
 		if (!reuse_buffer)
 		{
@@ -108,13 +115,16 @@ write_buffer_queue_send(write_buffer_queue_t* queue, u_char* ptr)
 		cur_buffer->cur_pos = cur_buffer->start_pos;
 		insert_tail_list(&queue->buffers, &cur_buffer->link);
 	}
+
+	return VOD_OK;
 }
 
-void 
+vod_status_t 
 write_buffer_queue_flush(write_buffer_queue_t* queue)
 {
 	buffer_header_t* cur_buffer;
 	bool_t reuse_buffer;
+	vod_status_t rc;
 
 	while (!is_list_empty(&queue->buffers))
 	{
@@ -126,9 +136,17 @@ write_buffer_queue_flush(write_buffer_queue_t* queue)
 			continue;
 		}
 
-		queue->write_callback(queue->write_context, cur_buffer->start_pos, cur_buffer->cur_pos - cur_buffer->start_pos, &reuse_buffer);
+		rc = queue->write_callback(queue->write_context, cur_buffer->start_pos, cur_buffer->cur_pos - cur_buffer->start_pos, &reuse_buffer);
+		if (rc != VOD_OK)
+		{
+			vod_log_debug1(VOD_LOG_DEBUG_LEVEL, queue->request_context->log, 0,
+				"write_buffer_queue_flush: write_callback failed %i", rc);
+			return rc;
+		}
 
 		// no reason to reuse the buffer here
 	}
+
+	return VOD_OK;
 }
 

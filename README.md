@@ -24,6 +24,9 @@
 
 * Source file clipping (only from I-Frame to P-frame)
 
+* Support for variable segment lengths - enabling the player to select the optimal bitrate fast,
+without the overhead of short segments for the whole duration of the video
+
 * Serving of files for progressive download playback
 
 * HLS: Generation of I-frames playlist (EXT-X-I-FRAMES-ONLY)
@@ -118,6 +121,15 @@ http://host/hls/common-prefix,bitrate1,bitrate2,common-suffix.urlset/master.m3u8
 
 Sets the segment duration in milliseconds.
 
+#### vod_bootstrap_segment_durations
+* **syntax**: `vod_bootstrap_segment_durations duration`
+* **default**: `none`
+* **context**: `http`, `server`, `location`
+
+Adds a bootstrap segment duration in milliseconds. This setting can be used to make the first few segments
+shorter than the default segment duration, thus making the adaptive flavor selection kick-in earlier without 
+the overhead of short segments throughout the video.
+
 #### vod_align_segments_to_key_frames
 * **syntax**: `vod_align_segments_to_key_frames on/off`
 * **default**: `off`
@@ -125,6 +137,28 @@ Sets the segment duration in milliseconds.
 
 When enabled, the module forces all segments to start with a key frame. Enabling this setting can lead to differences
 between the actual segment durations and the durations reported in the manifest.
+
+#### vod_segment_count_policy
+* **syntax**: `vod_segment_count_policy last_short/last_long/last_rounded`
+* **default**: `last_short`
+* **context**: `http`, `server`, `location`
+
+Configures the policy for calculating the segment count:
+* last_short - a file of 33 sec is partitioned as - 10, 10, 10, 3
+* last_long - a file of 33 sec is partitioned as - 10, 10, 13
+* last_rounded - a file of 33 sec is partitioned as - 10, 10, 13, a file of 38 sec is partitioned as 10, 10, 10, 8
+
+#### vod_manifest_segment_durations_mode
+* **syntax**: `vod_manifest_segment_durations_mode estimate/accurate`
+* **default**: `estimate`
+* **context**: `http`, `server`, `location`
+
+Configures the calculation mode of segment durations within manifest requests:
+* estimate - reports the duration as configured in nginx.conf, e.g. if vod_segment_duration has the value 10000,
+an HLS manifest will contain #EXTINF:10
+* accurate - reports the exact duration of the segment, taking into account the frame durations, e.g. for a 
+frame rate of 29.97 and 10 second segments it will report the first segment as 10.01. accurate mode also
+takes into account the key frame alignment, in case vod_align_segments_to_key_frames is on
 
 #### vod_secret_key
 * **syntax**: `vod_secret_key string`
@@ -156,6 +190,14 @@ A common scenario for using this setting is a load-balancer placed before the ng
 * **context**: `http`, `server`, `location`
 
 Configures the size and shared memory object name of the moov atom cache
+
+#### vod_response_cache
+* **syntax**: `vod_response_cache zone_name zone_size`
+* **default**: `off`
+* **context**: `http`, `server`, `location`
+
+Configures the size and shared memory object name of the response cache. The response cache holds manifests
+and other non-video content (like DASH init segment, HLS encryption key etc.). Video segments are not cached.
 
 #### vod_initial_read_size
 * **syntax**: `vod_initial_read_size size`
@@ -551,3 +593,20 @@ The name of the manifest file (has no extension).
 			}
 		}
 	}
+
+### Copyright & License
+
+Copyright (C) 2006-2014  Kaltura Inc.
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as
+published by the Free Software Foundation, either version 3 of the
+License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program.  If not, see <http://www.gnu.org/licenses/>.

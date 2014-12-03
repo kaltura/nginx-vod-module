@@ -551,17 +551,13 @@ mpegts_encoder_flush_frame(void* context, int32_t margin_size)
 	}
 	
 	// send the buffer if it's full
-	write_buffer_queue_send(&state->queue, state->cur_packet_end);
-	
-	return VOD_OK;
+	return write_buffer_queue_send(&state->queue, state->cur_packet_end);
 }
 
 vod_status_t 
 mpegts_encoder_flush(mpegts_encoder_state_t* state)
 {
-	write_buffer_queue_flush(&state->queue);
-	
-	return VOD_OK;
+	return write_buffer_queue_flush(&state->queue);
 }
 
 void 

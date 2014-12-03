@@ -3,12 +3,12 @@
 
 // includes
 #include "../mp4_parser.h"
+#include "../segmenter.h"
 
 // constants
 #define MAX_IFRAMES_M3U8_HEADER_SIZE (sizeof(iframes_m3u8_header_format) + VOD_INT64_LEN)
 #define MAX_EXTINF_SIZE (sizeof(m3u8_extinf_format) + 2 * VOD_INT64_LEN)
 	
-//static const char m3u8_header_format[] = "#EXTM3U\n#EXT-X-TARGETDURATION:%d\n#EXT-X-ALLOW-CACHE:YES\n#EXT-X-PLAYLIST-TYPE:VOD\n%s%s%s#EXT-X-VERSION:%d\n#EXT-X-MEDIA-SEQUENCE:1\n";
 static const char encryption_key_tag_prefix[] = "#EXT-X-KEY:METHOD=AES-128,URI=\"";
 static const char encryption_key_tag_postfix[] = ".key\"\n";
 static const char m3u8_extinf_format[] = "#EXTINF:%d.%d,\n";
@@ -17,8 +17,6 @@ static const char iframes_m3u8_header_format[] = "#EXTM3U\n#EXT-X-TARGETDURATION
 // typedefs
 typedef struct {
 	int m3u8_version;
-	u_char m3u8_extinf[MAX_EXTINF_SIZE];
-	size_t m3u8_extinf_len;
 	u_char iframes_m3u8_header[MAX_IFRAMES_M3U8_HEADER_SIZE];
 	size_t iframes_m3u8_header_len;
 	vod_str_t index_file_name_prefix;
@@ -41,7 +39,7 @@ vod_status_t m3u8_builder_build_index_playlist(
 	vod_str_t* base_url,
 	bool_t include_file_index,
 	bool_t encryption_enabled,
-	uint32_t segment_duration,
+	segmenter_conf_t* segmenter_conf,
 	mpeg_metadata_t* mpeg_metadata,
 	vod_str_t* result);
 
@@ -50,12 +48,12 @@ vod_status_t m3u8_builder_build_iframe_playlist(
 	m3u8_config_t* conf,
 	vod_str_t* base_url,
 	bool_t include_file_index,
-	uint32_t segment_duration,
+	segmenter_conf_t* segmenter_conf,
 	mpeg_metadata_t* mpeg_metadata,
 	vod_str_t* result);
 
 void m3u8_builder_init_config(
 	m3u8_config_t* conf,
-	uint32_t segment_duration);
+	uint32_t max_segment_duration);
 
 #endif // __M3U8_BUILDER_H__

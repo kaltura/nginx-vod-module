@@ -22,15 +22,7 @@
     "        segmentAlignment=\"true\"\n"										\
     "        maxWidth=\"%uD\"\n"												\
     "        maxHeight=\"%uD\"\n"												\
-    "        maxFrameRate=\"%uD.%03uD\">\n"										\
-	"        <SegmentTemplate\n"												\
-	"            presentationTimeOffset=\"0\"\n"								\
-	"            timescale=\"1000\"\n"											\
-	"            media=\"%V%V-$Number$-$RepresentationID$.m4s\"\n"				\
-	"            initialization=\"%V%V-$RepresentationID$.mp4\"\n"				\
-	"            duration=\"%uD\"\n"											\
-	"            startNumber=\"1\">\n"											\
-"        </SegmentTemplate>\n"
+    "        maxFrameRate=\"%uD.%03uD\">\n"
 
 #define VOD_DASH_MANIFEST_VIDEO													\
 	"      <Representation\n"													\
@@ -55,15 +47,7 @@
     "      <AudioChannelConfiguration\n"										\
     "          schemeIdUri=\"urn:mpeg:dash:"									\
                                 "23003:3:audio_channel_configuration:2011\"\n"	\
-    "          value=\"1\"/>\n"													\
-	"        <SegmentTemplate\n"												\
-	"            presentationTimeOffset=\"0\"\n"								\
-	"            timescale=\"1000\"\n"											\
-	"            media=\"%V%V-$Number$-$RepresentationID$.m4s\"\n"				\
-	"            initialization=\"%V%V-$RepresentationID$.mp4\"\n"				\
-	"            duration=\"%uD\"\n"											\
-	"            startNumber=\"1\">\n"											\
-	"        </SegmentTemplate>\n"
+    "          value=\"1\"/>\n"
 
 #define VOD_DASH_MANIFEST_AUDIO													\
 	"      <Representation\n"													\
@@ -77,6 +61,24 @@
 
 #define VOD_DASH_MANIFEST_AUDIO_FOOTER											\
     "    </AdaptationSet>\n"
+
+#define VOD_DASH_MANIFEST_SEGMENT_TEMPLATE_HEADER								\
+	"        <SegmentTemplate\n"												\
+	"            timescale=\"1000\"\n"											\
+	"            media=\"%V%V-$Number$-$RepresentationID$.m4s\"\n"				\
+	"            initialization=\"%V%V-$RepresentationID$.mp4\"\n"				\
+	"            startNumber=\"1\">\n"											\
+	"            <SegmentTimeline>\n"
+
+#define VOD_DASH_MANIFEST_SEGMENT_REPEAT                                        \
+	"                <S d=\"%uD\" r=\"%uD\"/>\n"
+
+#define VOD_DASH_MANIFEST_SEGMENT                                               \
+	"                <S d=\"%uD\"/>\n"
+
+#define VOD_DASH_MANIFEST_SEGMENT_TEMPLATE_FOOTER								\
+	"            </SegmentTimeline>\n"											\
+	"        </SegmentTemplate>\n"
 
 #define VOD_DASH_MANIFEST_FOOTER												\
     "  </Period>\n"																\
@@ -237,35 +239,100 @@ dash_packager_compare_streams(void* context, const media_info_t* mi1, const medi
 	return TRUE;
 }
 
+static u_char* 
+dash_packager_write_segment_template(
+	u_char* p, 
+	dash_manifest_config_t* conf,
+	vod_str_t* base_url,
+	segment_durations_t* segment_durations)
+{
+	segment_duration_item_t* cur_item;
+	segment_duration_item_t* last_item = segment_durations->items + segment_durations->item_count;
+	uint32_t duration;
+
+	p = vod_sprintf(p,
+		VOD_DASH_MANIFEST_SEGMENT_TEMPLATE_HEADER,
+		base_url,
+		&conf->fragment_file_name_prefix,
+		base_url,
+		&conf->init_file_name_prefix);
+
+	for (cur_item = segment_durations->items; cur_item < last_item; cur_item++)
+	{
+		duration = (uint32_t)rescale_time(cur_item->duration, segment_durations->timescale, 1000);
+
+		if (cur_item->repeat_count == 1)
+		{
+			p = vod_sprintf(p, VOD_DASH_MANIFEST_SEGMENT, duration);
+		}
+		else if (cur_item->repeat_count > 1)
+		{
+			p = vod_sprintf(p, VOD_DASH_MANIFEST_SEGMENT_REPEAT, duration, cur_item->repeat_count - 1);
+		}
+	}
+
+	p = vod_copy(p, VOD_DASH_MANIFEST_SEGMENT_TEMPLATE_FOOTER, sizeof(VOD_DASH_MANIFEST_SEGMENT_TEMPLATE_FOOTER) - 1);
+
+	return p;
+}
+
 vod_status_t 
 dash_packager_build_mpd(
 	request_context_t* request_context, 
 	dash_manifest_config_t* conf,
 	vod_str_t* base_url,
-	uint32_t segment_duration,
+	segmenter_conf_t* segmenter_conf,
 	mpeg_metadata_t* mpeg_metadata, 
 	vod_str_t* result)
 {
 	mpeg_stream_metadata_t* cur_stream;
+	segment_durations_t segment_durations[MEDIA_TYPE_COUNT];
 	size_t result_size;
 	size_t urls_length;
 	uint32_t max_width = 0;
 	uint32_t max_height = 0;
 	uint32_t max_framerate_duration = 0;
 	uint32_t max_framerate_timescale = 0;
+	uint32_t media_type;
+	vod_status_t rc;
 	u_char* p;
 
 	// calculate the total size
 	urls_length = 2 * base_url->len + conf->init_file_name_prefix.len + conf->fragment_file_name_prefix.len;
 	result_size =
 		sizeof(VOD_DASH_MANIFEST_HEADER) - 1 + 3 * VOD_INT32_LEN +
-			sizeof(VOD_DASH_MANIFEST_VIDEO_HEADER) - 1 + 5 * VOD_INT32_LEN + urls_length +
+			sizeof(VOD_DASH_MANIFEST_VIDEO_HEADER) - 1 + 4 * VOD_INT32_LEN + 
 				mpeg_metadata->stream_count[MEDIA_TYPE_VIDEO] * (sizeof(VOD_DASH_MANIFEST_VIDEO) - 1 + 7 * VOD_INT32_LEN + MAX_CODEC_NAME_SIZE) + 
 			sizeof(VOD_DASH_MANIFEST_VIDEO_FOOTER) - 1 +
-			sizeof(VOD_DASH_MANIFEST_AUDIO_HEADER) - 1 + 1 * VOD_INT32_LEN + urls_length +
+			sizeof(VOD_DASH_MANIFEST_AUDIO_HEADER) - 1 + 
 				mpeg_metadata->stream_count[MEDIA_TYPE_AUDIO] * (sizeof(VOD_DASH_MANIFEST_AUDIO) - 1 + 4 * VOD_INT32_LEN + MAX_CODEC_NAME_SIZE) +
 			sizeof(VOD_DASH_MANIFEST_AUDIO_FOOTER) - 1 +
 		sizeof(VOD_DASH_MANIFEST_FOOTER);
+
+	// get the segment count
+	for (media_type = 0; media_type < MEDIA_TYPE_COUNT; media_type++)
+	{
+		if (mpeg_metadata->longest_stream[media_type] == NULL)
+		{
+			continue;
+		}
+
+		rc = segmenter_conf->get_segment_durations(
+			request_context,
+			segmenter_conf,
+			&mpeg_metadata->longest_stream[media_type],
+			1,
+			&segment_durations[media_type]);
+		if (rc != VOD_OK)
+		{
+			return rc;
+		}
+
+		result_size += 
+			sizeof(VOD_DASH_MANIFEST_SEGMENT_TEMPLATE_HEADER) - 1 + urls_length +
+				(sizeof(VOD_DASH_MANIFEST_SEGMENT_REPEAT) - 1 + 2 * VOD_INT32_LEN) * segment_durations[media_type].item_count +
+			sizeof(VOD_DASH_MANIFEST_SEGMENT_TEMPLATE_FOOTER) - 1;
+	}
 
 	// allocate the buffer
 	result->data = vod_alloc(request_context->pool, result_size);
@@ -280,7 +347,7 @@ dash_packager_build_mpd(
 	p = vod_sprintf(result->data, VOD_DASH_MANIFEST_HEADER,
 		(uint32_t)(mpeg_metadata->duration_millis / 1000),
 		(uint32_t)(mpeg_metadata->duration_millis % 1000),
-		(uint32_t)(segment_duration / 1000));
+		(uint32_t)(segmenter_conf->max_segment_duration / 1000));
 
 	// video adaptation set
 	if (mpeg_metadata->stream_count[MEDIA_TYPE_VIDEO])
@@ -317,12 +384,14 @@ dash_packager_build_mpd(
 			max_width,
 			max_height,
 			(uint32_t)max_framerate_timescale / max_framerate_duration,
-			(uint32_t)(((uint64_t)max_framerate_timescale * 1000) / max_framerate_duration % 1000),
+			(uint32_t)(((uint64_t)max_framerate_timescale * 1000) / max_framerate_duration % 1000));
+
+		// print the segment template
+		p = dash_packager_write_segment_template(
+			p,
+			conf,
 			base_url,
-			&conf->fragment_file_name_prefix,
-			base_url,
-			&conf->init_file_name_prefix,
-			segment_duration);
+			&segment_durations[MEDIA_TYPE_VIDEO]);
 			
 		// print the representations
 		for (cur_stream = mpeg_metadata->first_stream; cur_stream < mpeg_metadata->last_stream; cur_stream++)
@@ -352,14 +421,15 @@ dash_packager_build_mpd(
 	if (mpeg_metadata->stream_count[MEDIA_TYPE_AUDIO])
 	{
 		// print the header
-		p = vod_sprintf(p,
-			VOD_DASH_MANIFEST_AUDIO_HEADER,
-			base_url, 
-			&conf->fragment_file_name_prefix,
-			base_url, 
-			&conf->init_file_name_prefix,
-			segment_duration);
-		
+		p = vod_copy(p, VOD_DASH_MANIFEST_AUDIO_HEADER, sizeof(VOD_DASH_MANIFEST_AUDIO_HEADER) - 1);
+
+		// print the segment template
+		p = dash_packager_write_segment_template(
+			p,
+			conf,
+			base_url,
+			&segment_durations[MEDIA_TYPE_AUDIO]);
+
 		// print the representations
 		for (cur_stream = mpeg_metadata->first_stream; cur_stream < mpeg_metadata->last_stream; cur_stream++)
 		{
@@ -637,7 +707,6 @@ dash_packager_build_fragment_header(
 	request_context_t* request_context,
 	mpeg_stream_metadata_t* stream_metadata,
 	uint32_t segment_index,
-	uint32_t segment_duration,
 	bool_t size_only,
 	vod_str_t* result,
 	size_t* total_fragment_size)

@@ -94,6 +94,11 @@ ngx_http_vod_status_handler(ngx_http_request_t *r)
 		result_size += sizeof("<moov_cache>\r\n") + cache_stats_len + sizeof("</moov_cache>\r\n");
 	}
 
+	if (conf->response_cache_zone != NULL)
+	{
+		result_size += sizeof("<response_cache>\r\n") + cache_stats_len + sizeof("</response_cache>\r\n");
+	}
+	
 	if (conf->path_mapping_cache_zone != NULL)
 	{
 		result_size += sizeof("<path_mapping_cache>\r\n") + cache_stats_len + sizeof("</path_mapping_cache>\r\n");
@@ -121,6 +126,15 @@ ngx_http_vod_status_handler(ngx_http_request_t *r)
 		p = ngx_copy(p, "</moov_cache>\r\n", sizeof("</moov_cache>\r\n") - 1);
 	}
 
+	if (conf->response_cache_zone != NULL)
+	{
+		ngx_buffer_cache_get_stats(conf->response_cache_zone, &stats);
+
+		p = ngx_copy(p, "<response_cache>\r\n", sizeof("<response_cache>\r\n") - 1);
+		p = ngx_http_vod_append_cache_stats(p, &stats);
+		p = ngx_copy(p, "</response_cache>\r\n", sizeof("</response_cache>\r\n") - 1);
+	}
+	
 	if (conf->path_mapping_cache_zone != NULL)
 	{
 		ngx_buffer_cache_get_stats(conf->path_mapping_cache_zone, &stats);

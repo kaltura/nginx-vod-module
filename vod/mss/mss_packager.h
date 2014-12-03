@@ -4,6 +4,7 @@
 // includes
 #include "../mp4_builder.h"
 #include "../mp4_parser.h"
+#include "../segmenter.h"
 #include "../common.h"
 
 // constants
@@ -23,7 +24,7 @@ bool_t mss_packager_compare_streams(void* context, const media_info_t* mi1, cons
 
 vod_status_t mss_packager_build_manifest(
 	request_context_t* request_context,
-	uint32_t segment_duration,
+	segmenter_conf_t* segmenter_conf,
 	mpeg_metadata_t* mpeg_metadata,
 	vod_str_t* result);
 
