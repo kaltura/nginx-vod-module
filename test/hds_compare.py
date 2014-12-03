@@ -270,6 +270,9 @@ class TestThread(stress_base.TestThreadBase):
 		except BadStatusLine, e:
 			self.writeOutput('Error: bad status line %s' % (url))
 			return 0, ''
+		except socket.error, e:
+			self.writeOutput('Error: got socket error %s %s' % (url, e))
+			return 0, ''
 		
 		code = r.getcode()
 		try:
