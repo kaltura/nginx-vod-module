@@ -29,6 +29,7 @@ struct ngx_http_vod_loc_conf_s {
 	ngx_uint_t duplicate_bitrate_threshold;
 	ngx_str_t https_header_name;
 	ngx_shm_zone_t* moov_cache_zone;
+	ngx_shm_zone_t* response_cache_zone;
 	size_t initial_read_size;
 	size_t max_moov_size;
 	size_t cache_buffer_size;

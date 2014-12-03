@@ -361,15 +361,18 @@ ngx_buffer_cache_fetch(
 }
 
 ngx_flag_t
-ngx_buffer_cache_store(
+ngx_buffer_cache_store_gather(
 	ngx_shm_zone_t *shm_zone, 
 	u_char* key, 
-	const u_char* source_buffer, 
-	size_t buffer_size)
+	ngx_str_t* buffers,
+	size_t buffer_count)
 {
 	ngx_buffer_cache_entry_t* entry;
 	ngx_buffer_cache_t *cache;
 	ngx_slab_pool_t *shpool;
+	ngx_str_t* cur_buffer;
+	ngx_str_t* last_buffer;
+	size_t buffer_size;
 	uint32_t hash;
 	u_char* target_buffer;
 
@@ -418,6 +421,14 @@ ngx_buffer_cache_store(
 		goto error;
 	}
 
+	// calculate the buffer size
+	last_buffer = buffers + buffer_count;
+	buffer_size = 0;
+	for (cur_buffer = buffers; cur_buffer < last_buffer; cur_buffer++)
+	{
+		buffer_size += cur_buffer->len;
+	}
+
 	// allocate a buffer to hold the data
 	target_buffer = ngx_buffer_cache_get_free_buffer(cache, buffer_size);
 	if (target_buffer == NULL)
@@ -453,7 +464,10 @@ ngx_buffer_cache_store(
 	cache->reset = 0;
 	ngx_shmtx_unlock(&shpool->mutex);
 
-	ngx_memcpy(target_buffer, source_buffer, buffer_size);
+	for (cur_buffer = buffers; cur_buffer < last_buffer; cur_buffer++)
+	{
+		target_buffer = ngx_copy(target_buffer, cur_buffer->data, cur_buffer->len);
+	}
 
 	// Note: no need to obtain the lock since state is ngx_atomic_t
 	entry->state = CES_READY;
@@ -465,6 +479,21 @@ error:
 	cache->reset = 0;
 	ngx_shmtx_unlock(&shpool->mutex);
 	return 0;
+}
+
+ngx_flag_t
+ngx_buffer_cache_store(
+	ngx_shm_zone_t *shm_zone,
+	u_char* key,
+	u_char* source_buffer,
+	size_t buffer_size)
+{
+	ngx_str_t buffer;
+
+	buffer.data = source_buffer;
+	buffer.len = buffer_size;
+
+	return ngx_buffer_cache_store_gather(shm_zone, key, &buffer, 1);
 }
 
 void

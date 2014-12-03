@@ -79,6 +79,12 @@ ngx_http_vod_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child)
 	{
 		conf->moov_cache_zone = prev->moov_cache_zone;
 	}
+
+	if (conf->response_cache_zone == NULL)
+	{
+		conf->response_cache_zone = prev->response_cache_zone;
+	}
+	
 	ngx_conf_merge_size_value(conf->initial_read_size, prev->initial_read_size, 4096);
 	ngx_conf_merge_size_value(conf->max_moov_size, prev->max_moov_size, 128 * 1024 * 1024);
 	ngx_conf_merge_size_value(conf->cache_buffer_size, prev->cache_buffer_size, 256 * 1024);
@@ -333,7 +339,7 @@ ngx_http_vod_manifest_segment_durations_mode_command(ngx_conf_t *cf, ngx_command
 }
 
 static char *
-ngx_http_vod_moov_cache(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
+ngx_http_vod_cache_command(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
 {
 	ngx_shm_zone_t **zone = (ngx_shm_zone_t **)((u_char*)conf + cmd->offset);
 	ngx_str_t  *value;
@@ -592,9 +598,16 @@ ngx_command_t ngx_http_vod_commands[] = {
 	// mp4 reading parameters
 	{ ngx_string("vod_moov_cache"),
 	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1 | NGX_CONF_TAKE2,
-	ngx_http_vod_moov_cache,
+	ngx_http_vod_cache_command,
 	NGX_HTTP_LOC_CONF_OFFSET,
 	offsetof(ngx_http_vod_loc_conf_t, moov_cache_zone),
+	NULL },
+
+	{ ngx_string("vod_response_cache"),
+	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1 | NGX_CONF_TAKE2,
+	ngx_http_vod_cache_command,
+	NGX_HTTP_LOC_CONF_OFFSET,
+	offsetof(ngx_http_vod_loc_conf_t, response_cache_zone),
 	NULL },
 
 	{ ngx_string("vod_initial_read_size"),
@@ -678,7 +691,7 @@ ngx_command_t ngx_http_vod_commands[] = {
 	// path request parameters - mapped mode only
 	{ ngx_string("vod_path_mapping_cache"),
 	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1 | NGX_CONF_TAKE2,
-	ngx_http_vod_moov_cache,
+	ngx_http_vod_cache_command,
 	NGX_HTTP_LOC_CONF_OFFSET,
 	offsetof(ngx_http_vod_loc_conf_t, path_mapping_cache_zone),
 	NULL },

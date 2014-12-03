@@ -191,6 +191,14 @@ A common scenario for using this setting is a load-balancer placed before the ng
 
 Configures the size and shared memory object name of the moov atom cache
 
+#### vod_response_cache
+* **syntax**: `vod_response_cache zone_name zone_size`
+* **default**: `off`
+* **context**: `http`, `server`, `location`
+
+Configures the size and shared memory object name of the response cache. The response cache holds manifests
+and other non-video content (like DASH init segment, HLS encryption key etc.). Video segments are not cached.
+
 #### vod_initial_read_size
 * **syntax**: `vod_initial_read_size size`
 * **default**: `4K`
