@@ -49,6 +49,7 @@ typedef struct {
 	u_char request_key[BUFFER_CACHE_KEY_SIZE];
 	ngx_perf_counters_t* perf_counters;
 	ngx_perf_counter_context(perf_counter_context);
+	ngx_perf_counter_context(total_perf_counter_context);
 
 	// moov read state
 	u_char* read_buffer;
@@ -1127,14 +1128,16 @@ process_frames:
 }
 
 static void
-ngx_http_vod_finalize_request(ngx_http_request_t *r, ngx_int_t rc)
+ngx_http_vod_finalize_request(ngx_http_vod_ctx_t *ctx, ngx_int_t rc)
 {
-	if (r->header_sent && rc != NGX_OK)
+	if (ctx->submodule_context.r->header_sent && rc != NGX_OK)
 	{
 		rc = NGX_ERROR;
 	}
 
-	ngx_http_finalize_request(r, rc);
+	ngx_perf_counter_end(ctx->perf_counters, ctx->total_perf_counter_context, PC_TOTAL);
+
+	ngx_http_finalize_request(ctx->submodule_context.r, rc);
 }
 
 static void
@@ -1184,7 +1187,7 @@ ngx_http_vod_handle_read_completed(void* context, ngx_int_t rc, ssize_t bytes_re
 
 finalize_request:
 
-	ngx_http_vod_finalize_request(ctx->submodule_context.r, rc);
+	ngx_http_vod_finalize_request(ctx, rc);
 }
 
 static ngx_int_t
@@ -1625,7 +1628,7 @@ ngx_http_vod_path_request_finished(void* context, ngx_int_t rc, ngx_buf_t* respo
 
 finalize_request:
 
-	ngx_http_vod_finalize_request(r, rc);
+	ngx_http_vod_finalize_request(ctx, rc);
 }
 
 ngx_int_t
@@ -1662,7 +1665,7 @@ ngx_http_vod_http_read_completed(void* context, ngx_int_t rc, ngx_buf_t* respons
 	{
 		ngx_log_error(NGX_LOG_ERR, ctx->submodule_context.request_context.log, 0,
 			"ngx_http_vod_http_read_completed: upstream request failed %i", rc);
-		ngx_http_vod_finalize_request(ctx->submodule_context.r, rc);
+		ngx_http_vod_finalize_request(ctx, rc);
 		return;
 	}
 
@@ -1817,6 +1820,7 @@ ngx_http_vod_parse_uri(ngx_http_request_t *r, ngx_http_vod_loc_conf_t *conf, ngx
 ngx_int_t
 ngx_http_vod_handler(ngx_http_request_t *r)
 {
+	ngx_perf_counter_context(pcctx);
 	ngx_perf_counters_t* perf_counters;
 	ngx_http_vod_ctx_t *ctx;
 	ngx_http_vod_request_params_t request_params;
@@ -1831,12 +1835,17 @@ ngx_http_vod_handler(ngx_http_request_t *r)
 
 	ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0, "ngx_http_vod_handler: started");
 
+	ngx_perf_counter_start(pcctx);
+	conf = ngx_http_get_module_loc_conf(r, ngx_http_vod_module);
+	perf_counters = ngx_perf_counter_get_state(conf->perf_counters_zone);
+
 	// we respond to 'GET' and 'HEAD' requests only
 	if (!(r->method & (NGX_HTTP_GET | NGX_HTTP_HEAD))) 
 	{
 		ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
 			"ngx_http_vod_handler: unsupported method %ui", r->method);
-		return NGX_HTTP_NOT_ALLOWED;
+		rc = NGX_HTTP_NOT_ALLOWED;
+		goto done;
 	}
 
 	// discard request body, since we don't need it here
@@ -1845,12 +1854,10 @@ ngx_http_vod_handler(ngx_http_request_t *r)
 	{
 		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
 			"ngx_http_vod_handler: ngx_http_discard_request_body failed %i", rc);
-		return rc;
+		goto done;
 	}
 
 	// parse the uri
-	conf = ngx_http_get_module_loc_conf(r, ngx_http_vod_module);
-
 	ngx_memzero(&request_params, sizeof(request_params));
 	if (conf->parse_uri_file_name != NULL)
 	{
@@ -1859,7 +1866,7 @@ ngx_http_vod_handler(ngx_http_request_t *r)
 		{
 			ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
 				"ngx_http_vod_handler: ngx_http_vod_parse_uri failed %i", rc);
-			return rc;
+			goto done;
 		}
 	}
 	else
@@ -1873,11 +1880,9 @@ ngx_http_vod_handler(ngx_http_request_t *r)
 		{
 			ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
 				"ngx_http_vod_handler: ngx_http_vod_parse_uri_path failed %i", rc);
-			return rc;
+			goto done;
 		}
 	}
-
-	perf_counters = ngx_perf_counter_get_state(conf->perf_counters_zone);
 
 	if (request_params.request->handle_metadata_request != NULL &&
 		conf->response_cache_zone != NULL)
@@ -1915,7 +1920,8 @@ ngx_http_vod_handler(ngx_http_request_t *r)
 				r->allow_ranges = 1;
 
 				// return the response
-				return ngx_http_vod_send_response(r, &response, content_type.data, content_type.len);
+				rc = ngx_http_vod_send_response(r, &response, content_type.data, content_type.len);
+				goto done;
 			}
 		}
 		else
@@ -1931,7 +1937,8 @@ ngx_http_vod_handler(ngx_http_request_t *r)
 	{
 		ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
 			"ngx_http_vod_handler: ngx_pcalloc failed");
-		return NGX_HTTP_INTERNAL_SERVER_ERROR;
+		rc = NGX_HTTP_INTERNAL_SERVER_ERROR;
+		goto done;
 	}
 
 	ngx_memcpy(ctx->request_key, request_key, sizeof(request_key));
@@ -1941,11 +1948,19 @@ ngx_http_vod_handler(ngx_http_request_t *r)
 	ctx->submodule_context.cur_suburi = request_params.suburis;
 	ctx->submodule_context.cur_file_index = 0;
 	ctx->perf_counters = perf_counters;
+	ngx_perf_counter_copy(ctx->total_perf_counter_context, pcctx);
 
 	ngx_http_set_ctx(r, ctx, ngx_http_vod_module);
 
 	// call the mode specific handler (remote/mapped/local)
 	rc = conf->request_handler(r);
+
+done:
+
+	if (rc != NGX_DONE)
+	{
+		ngx_perf_counter_end(perf_counters, pcctx, PC_TOTAL);
+	}
 
 	ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0, "ngx_http_vod_handler: done");
 

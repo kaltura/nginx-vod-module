@@ -53,6 +53,8 @@ typedef struct timeval ngx_tick_count_t;
 		ngx_atomic_fetch_add(&state->counters[type].count, 1);		\
 	}
 
+#define ngx_perf_counter_copy(target, source)	target = source
+
 // typedefs
 enum {
 #define PC(id, name) PC_##id,
@@ -73,6 +75,7 @@ typedef struct {
 #define ngx_perf_counter_context(ctx)
 #define ngx_perf_counter_start(ctx)
 #define ngx_perf_counter_end(state, ctx, type)
+#define ngx_perf_counter_copy(target, source)
 
 #define PC_COUNT (0)
 

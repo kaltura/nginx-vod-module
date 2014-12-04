@@ -632,7 +632,6 @@ ngx_command_t ngx_http_vod_commands[] = {
 	NULL },
 
 	// mp4 reading parameters
-
 	{ ngx_string("vod_moov_cache"),
 	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1 | NGX_CONF_TAKE2,
 	ngx_http_vod_cache_command,
