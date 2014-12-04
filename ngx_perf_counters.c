@@ -57,7 +57,7 @@ ngx_perf_counters_create_zone(ngx_conf_t *cf, ngx_str_t *name, void *tag)
 {
 	ngx_shm_zone_t* result;
 
-	result = ngx_shared_memory_add(cf, name, sizeof(ngx_slab_pool_t) + sizeof(LOG_CONTEXT_FORMAT) + name->len + PC_COUNT * sizeof(ngx_atomic_t), tag);
+	result = ngx_shared_memory_add(cf, name, sizeof(ngx_slab_pool_t) + sizeof(LOG_CONTEXT_FORMAT) + name->len + sizeof(ngx_perf_counters_t), tag);
 	if (result == NULL)
 	{
 		return NULL;
