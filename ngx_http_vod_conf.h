@@ -48,6 +48,8 @@ struct ngx_http_vod_loc_conf_s {
 	ngx_str_t clip_from_param_name;
 	ngx_str_t tracks_param_name;
 
+	ngx_shm_zone_t* perf_counters_zone;
+
 	// derived fields
 	ngx_str_t proxy_header;
 	ngx_hash_t uri_params_hash;

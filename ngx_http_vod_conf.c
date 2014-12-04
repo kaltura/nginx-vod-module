@@ -4,6 +4,7 @@
 #include "ngx_http_vod_submodule.h"
 #include "ngx_http_vod_module.h"
 #include "ngx_http_vod_status.h"
+#include "ngx_perf_counters.h"
 #include "ngx_buffer_cache.h"
 #include "vod/common.h"
 
@@ -120,6 +121,11 @@ ngx_http_vod_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child)
 	ngx_conf_merge_str_value(conf->clip_to_param_name, prev->clip_to_param_name, "clipTo");
 	ngx_conf_merge_str_value(conf->clip_from_param_name, prev->clip_from_param_name, "clipFrom");
 	ngx_conf_merge_str_value(conf->tracks_param_name, prev->tracks_param_name, "tracks");
+
+	if (conf->perf_counters_zone == NULL)
+	{
+		conf->perf_counters_zone = prev->perf_counters_zone;
+	}
 
 	// validate vod_upstream / vod_upstream_host_header used when needed
 	if (conf->request_handler == ngx_http_vod_remote_request_handler || conf->request_handler == ngx_http_vod_mapped_request_handler)
@@ -377,7 +383,37 @@ ngx_http_vod_cache_command(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
 	if (*zone == NULL)
 	{
 		ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
-			"failed to create moov cache zone");
+			"failed to create cache zone");
+		return NGX_CONF_ERROR;
+	}
+
+	return NGX_CONF_OK;
+}
+
+static char *
+ngx_http_vod_perf_counters_command(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
+{
+	ngx_shm_zone_t **zone = (ngx_shm_zone_t **)((u_char*)conf + cmd->offset);
+	ngx_str_t  *value;
+
+	value = cf->args->elts;
+
+	if (*zone != NULL)
+	{
+		return "is duplicate";
+	}
+
+	if (ngx_strcmp(value[1].data, "off") == 0)
+	{
+		*zone = NULL;
+		return NGX_CONF_OK;
+	}
+
+	*zone = ngx_perf_counters_create_zone(cf, &value[1], &ngx_http_vod_module);
+	if (*zone == NULL)
+	{
+		ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
+			"failed to create perf counters cache zone");
 		return NGX_CONF_ERROR;
 	}
 
@@ -780,6 +816,13 @@ ngx_command_t ngx_http_vod_commands[] = {
 	ngx_conf_set_str_slot,
 	NGX_HTTP_LOC_CONF_OFFSET,
 	offsetof(ngx_http_vod_loc_conf_t, tracks_param_name),
+	NULL },
+
+	{ ngx_string("vod_performance_counters"),
+	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1,
+	ngx_http_vod_perf_counters_command,
+	NGX_HTTP_LOC_CONF_OFFSET,
+	offsetof(ngx_http_vod_loc_conf_t, perf_counters_zone),
 	NULL },
 
 #include "ngx_http_vod_dash_commands.h"

@@ -3,6 +3,7 @@
 #include "ngx_http_vod_module.h"
 #include "ngx_http_vod_utils.h"
 #include "ngx_http_vod_conf.h"
+#include "ngx_perf_counters.h"
 #include "ngx_buffer_cache.h"
 
 // macros
@@ -53,7 +54,7 @@ ngx_http_vod_append_cache_stats(u_char* p, ngx_buffer_cache_stats_t* stats)
 		*p++ = '>';
 
 		// value
-		p = ngx_sprintf(p, "%A", *(ngx_atomic_t*)((u_char*)stats + cur_stat->offset));
+		p = ngx_sprintf(p, "%uA", *(ngx_atomic_t*)((u_char*)stats + cur_stat->offset));
 
 		// closing tag
 		*p++ = '<';
@@ -69,9 +70,20 @@ ngx_http_vod_append_cache_stats(u_char* p, ngx_buffer_cache_stats_t* stats)
 	return p;
 }
 
+#define MOOV_CACHE_OPEN "<moov_cache>\r\n"
+#define MOOV_CACHE_CLOSE "</moov_cache>\r\n"
+#define RESPONSE_CACHE_OPEN "<response_cache>\r\n"
+#define RESPONSE_CACHE_CLOSE "</response_cache>\r\n"
+#define PATH_MAPPING_CACHE_OPEN "<path_mapping_cache>\r\n"
+#define PATH_MAPPING_CACHE_CLOSE "</path_mapping_cache>\r\n"
+#define PATH_PERF_COUNTERS_OPEN "<performance_counters>\r\n"
+#define PATH_PERF_COUNTERS_CLOSE "</performance_counters>\r\n"
+#define PERF_COUNTER_FORMAT "<time>%uA</time>\r\n<count>%uA</count>\r\n"
+
 ngx_int_t
 ngx_http_vod_status_handler(ngx_http_request_t *r)
 {
+	ngx_perf_counters_t* perf_counters;
 	ngx_buffer_cache_stats_t stats;
 	ngx_http_vod_loc_conf_t *conf;
 	ngx_http_vod_stat_def_t* cur_stat;
@@ -79,6 +91,7 @@ ngx_http_vod_status_handler(ngx_http_request_t *r)
 	u_char* p;
 	size_t cache_stats_len = 0;
 	size_t result_size;
+	int i;
 
 	conf = ngx_http_get_module_loc_conf(r, ngx_http_vod_module);
 
@@ -91,18 +104,30 @@ ngx_http_vod_status_handler(ngx_http_request_t *r)
 	result_size = sizeof(status_prefix) - 1;
 	if (conf->moov_cache_zone != NULL)
 	{
-		result_size += sizeof("<moov_cache>\r\n") + cache_stats_len + sizeof("</moov_cache>\r\n");
+		result_size += sizeof(MOOV_CACHE_OPEN) + cache_stats_len + sizeof(MOOV_CACHE_CLOSE);
 	}
 
 	if (conf->response_cache_zone != NULL)
 	{
-		result_size += sizeof("<response_cache>\r\n") + cache_stats_len + sizeof("</response_cache>\r\n");
+		result_size += sizeof(RESPONSE_CACHE_OPEN) + cache_stats_len + sizeof(RESPONSE_CACHE_CLOSE);
 	}
 	
 	if (conf->path_mapping_cache_zone != NULL)
 	{
-		result_size += sizeof("<path_mapping_cache>\r\n") + cache_stats_len + sizeof("</path_mapping_cache>\r\n");
+		result_size += sizeof(PATH_MAPPING_CACHE_OPEN) + cache_stats_len + sizeof(PATH_MAPPING_CACHE_CLOSE);
 	}
+
+	perf_counters = ngx_perf_counter_get_state(conf->perf_counters_zone);
+	if (perf_counters != NULL)
+	{
+		result_size += sizeof(PATH_PERF_COUNTERS_OPEN);
+		for (i = 0; i < PC_COUNT; i++)
+		{
+			result_size += perf_counters_open_tags[i].len + sizeof(PERF_COUNTER_FORMAT) + 2 * NGX_ATOMIC_T_LEN + perf_counters_close_tags[i].len;
+		}
+		result_size += sizeof(PATH_PERF_COUNTERS_CLOSE);
+	}
+
 	result_size += sizeof(status_postfix);
 
 	// allocate the buffer
@@ -121,27 +146,39 @@ ngx_http_vod_status_handler(ngx_http_request_t *r)
 	{
 		ngx_buffer_cache_get_stats(conf->moov_cache_zone, &stats);
 
-		p = ngx_copy(p, "<moov_cache>\r\n", sizeof("<moov_cache>\r\n") - 1);
+		p = ngx_copy(p, MOOV_CACHE_OPEN, sizeof(MOOV_CACHE_OPEN) - 1);
 		p = ngx_http_vod_append_cache_stats(p, &stats);
-		p = ngx_copy(p, "</moov_cache>\r\n", sizeof("</moov_cache>\r\n") - 1);
+		p = ngx_copy(p, MOOV_CACHE_CLOSE, sizeof(MOOV_CACHE_CLOSE) - 1);
 	}
 
 	if (conf->response_cache_zone != NULL)
 	{
 		ngx_buffer_cache_get_stats(conf->response_cache_zone, &stats);
 
-		p = ngx_copy(p, "<response_cache>\r\n", sizeof("<response_cache>\r\n") - 1);
+		p = ngx_copy(p, RESPONSE_CACHE_OPEN, sizeof(RESPONSE_CACHE_OPEN) - 1);
 		p = ngx_http_vod_append_cache_stats(p, &stats);
-		p = ngx_copy(p, "</response_cache>\r\n", sizeof("</response_cache>\r\n") - 1);
+		p = ngx_copy(p, RESPONSE_CACHE_CLOSE, sizeof(RESPONSE_CACHE_CLOSE) - 1);
 	}
 	
 	if (conf->path_mapping_cache_zone != NULL)
 	{
 		ngx_buffer_cache_get_stats(conf->path_mapping_cache_zone, &stats);
 
-		p = ngx_copy(p, "<path_mapping_cache>\r\n", sizeof("<path_mapping_cache>\r\n") - 1);
+		p = ngx_copy(p, PATH_MAPPING_CACHE_OPEN, sizeof(PATH_MAPPING_CACHE_OPEN) - 1);
 		p = ngx_http_vod_append_cache_stats(p, &stats);
-		p = ngx_copy(p, "</path_mapping_cache>\r\n", sizeof("</path_mapping_cache>\r\n") - 1);
+		p = ngx_copy(p, PATH_MAPPING_CACHE_CLOSE, sizeof(PATH_MAPPING_CACHE_CLOSE) - 1);
+	}
+
+	if (perf_counters != NULL)
+	{
+		p = ngx_copy(p, PATH_PERF_COUNTERS_OPEN, sizeof(PATH_PERF_COUNTERS_OPEN) - 1);
+		for (i = 0; i < PC_COUNT; i++)
+		{
+			p = ngx_copy(p, perf_counters_open_tags[i].data, perf_counters_open_tags[i].len);
+			p = ngx_sprintf(p, PERF_COUNTER_FORMAT, perf_counters->counters[i].time, perf_counters->counters[i].count);
+			p = ngx_copy(p, perf_counters_close_tags[i].data, perf_counters_close_tags[i].len);
+		}
+		p = ngx_copy(p, PATH_PERF_COUNTERS_CLOSE, sizeof(PATH_PERF_COUNTERS_CLOSE) - 1);
 	}
 
 	p = ngx_copy(p, status_postfix, sizeof(status_postfix) - 1);
