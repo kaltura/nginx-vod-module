@@ -369,6 +369,13 @@ The name of the clip from request parameter.
 
 The name of the clip from request parameter.
 
+#### vod_performance_counters
+* **syntax**: `vod_performance_counters zone_name`
+* **default**: `off`
+* **context**: `http`, `server`, `location`
+
+Configures the shared memory object name of the performance counters
+
 ### Configuration directives - DASH
 
 #### vod_dash_absolute_manifest_urls

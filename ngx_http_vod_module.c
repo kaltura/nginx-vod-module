@@ -10,6 +10,7 @@
 #include "ngx_http_vod_request_parse.h"
 #include "ngx_child_http_request.h"
 #include "ngx_http_vod_utils.h"
+#include "ngx_perf_counters.h"
 #include "ngx_http_vod_conf.h"
 #include "ngx_file_reader.h"
 #include "ngx_buffer_cache.h"
@@ -46,6 +47,8 @@ typedef struct {
 	off_t alignment;
 	int state;
 	u_char request_key[BUFFER_CACHE_KEY_SIZE];
+	ngx_perf_counters_t* perf_counters;
+	ngx_perf_counter_context(perf_counter_context);
 
 	// moov read state
 	u_char* read_buffer;
@@ -95,6 +98,68 @@ ngx_module_t  ngx_http_vod_module = {
     NULL,                             /* exit master */
     NGX_MODULE_V1_PADDING
 };
+
+////// Perf counter wrappers
+
+static ngx_flag_t
+ngx_buffer_cache_fetch_perf(
+	ngx_perf_counters_t* perf_counters,
+	ngx_shm_zone_t *shm_zone,
+	u_char* key,
+	u_char** buffer,
+	size_t* buffer_size)
+{
+	ngx_perf_counter_context(pcctx);
+	ngx_flag_t result;
+	
+	ngx_perf_counter_start(pcctx);
+
+	result = ngx_buffer_cache_fetch(shm_zone, key, buffer, buffer_size);
+
+	ngx_perf_counter_end(perf_counters, pcctx, PC_FETCH_CACHE);
+
+	return result;
+}
+
+static ngx_flag_t
+ngx_buffer_cache_store_perf(
+	ngx_perf_counters_t* perf_counters,
+	ngx_shm_zone_t *shm_zone,
+	u_char* key,
+	u_char* source_buffer,
+	size_t buffer_size)
+{
+	ngx_perf_counter_context(pcctx);
+	ngx_flag_t result;
+
+	ngx_perf_counter_start(pcctx);
+
+	result = ngx_buffer_cache_store(shm_zone, key, source_buffer, buffer_size);
+
+	ngx_perf_counter_end(perf_counters, pcctx, PC_STORE_CACHE);
+
+	return result;
+}
+
+static ngx_flag_t 
+ngx_buffer_cache_store_gather_perf(
+	ngx_perf_counters_t* perf_counters,
+	ngx_shm_zone_t *shm_zone,
+	u_char* key,
+	ngx_str_t* buffers,
+	size_t buffer_count)
+{
+	ngx_perf_counter_context(pcctx);
+	ngx_flag_t result;
+
+	ngx_perf_counter_start(pcctx);
+
+	result = ngx_buffer_cache_store_gather(shm_zone, key, buffers, buffer_count);
+
+	ngx_perf_counter_end(perf_counters, pcctx, PC_STORE_CACHE);
+
+	return result;
+}
 
 ////// Encryption support
 
@@ -197,6 +262,9 @@ ngx_http_vod_read_moov_atom(ngx_http_vod_ctx_t *ctx)
 		absolute_moov_offset = ctx->read_offset + ctx->moov_offset;
 		ctx->read_offset = absolute_moov_offset & (~(ctx->alignment - 1));
 		ctx->atom_start_offset = absolute_moov_offset - ctx->read_offset;
+
+		ngx_perf_counter_start(ctx->perf_counter_context);
+
 		rc = ctx->async_reader(
 			ctx->async_reader_context, 
 			ctx->read_buffer, 
@@ -211,6 +279,8 @@ ngx_http_vod_read_moov_atom(ngx_http_vod_ctx_t *ctx)
 			}
 			return rc;
 		}
+
+		ngx_perf_counter_end(ctx->perf_counters, ctx->perf_counter_context, PC_READ_FILE);
 
 		ctx->buffer_size = rc;
 	}
@@ -250,6 +320,9 @@ ngx_http_vod_read_moov_atom(ngx_http_vod_ctx_t *ctx)
 	// read the rest of the atom
 	ctx->submodule_context.request_context.log->action = "reading moov atom";
 	ctx->state = STATE_MOOV_ATOM_READ;
+
+	ngx_perf_counter_start(ctx->perf_counter_context);
+
 	rc = ctx->async_reader(
 		ctx->async_reader_context, 
 		ctx->read_buffer + ctx->buffer_size, 
@@ -264,6 +337,8 @@ ngx_http_vod_read_moov_atom(ngx_http_vod_ctx_t *ctx)
 		}
 		return rc;
 	}
+
+	ngx_perf_counter_end(ctx->perf_counters, ctx->perf_counter_context, PC_READ_FILE);
 
 	ctx->buffer_size += rc;
 	return NGX_OK;
@@ -280,6 +355,8 @@ ngx_http_vod_parse_moov_atom(ngx_http_vod_ctx_t *ctx, u_char* moov_buffer, size_
 	vod_status_t rc;
 	file_info_t file_info;
 	uint32_t segment_count;
+
+	ngx_perf_counter_start(ctx->perf_counter_context);
 
 	// init the request context
 	request_context->parse_type = request->parse_type;
@@ -392,6 +469,8 @@ ngx_http_vod_parse_moov_atom(ngx_http_vod_ctx_t *ctx, u_char* moov_buffer, size_
 			"ngx_http_vod_parse_moov_atom: mp4_parser_parse_frames failed %i", rc);
 		return ngx_http_vod_status_to_ngx_error(rc);
 	}
+
+	ngx_perf_counter_end(ctx->perf_counters, ctx->perf_counter_context, PC_MP4_PARSE);
 
 	return NGX_OK;
 }
@@ -536,6 +615,8 @@ ngx_http_vod_init_frame_processing(ngx_http_vod_ctx_t *ctx)
 	}
 
 	// initialize the protocol specific frame processor
+	ngx_perf_counter_start(ctx->perf_counter_context);
+
 	rc = ctx->submodule_context.request_params.request->init_frame_processor(
 		&ctx->submodule_context,
 		&ctx->read_cache_state,
@@ -552,6 +633,8 @@ ngx_http_vod_init_frame_processing(ngx_http_vod_ctx_t *ctx)
 			"ngx_http_vod_init_frame_processing: init_frame_processor failed %i", rc);
 		return rc;
 	}
+
+	ngx_perf_counter_end(ctx->perf_counters, ctx->perf_counter_context, PC_INIT_FRAME_PROCESS);
 
 	r->headers_out.content_type_len = content_type.len;
 	r->headers_out.content_type.len = content_type.len;
@@ -702,7 +785,12 @@ ngx_http_vod_process_mp4_frames(ngx_http_vod_ctx_t *ctx)
 
 	for (;;)
 	{
+		ngx_perf_counter_start(ctx->perf_counter_context);
+
 		rc = ctx->frame_processor(ctx->frame_processor_state, &required_offset);
+
+		ngx_perf_counter_end(ctx->perf_counters, ctx->perf_counter_context, PC_PROCESS_FRAMES);
+
 		switch (rc)
 		{
 		case VOD_OK:
@@ -729,6 +817,8 @@ ngx_http_vod_process_mp4_frames(ngx_http_vod_ctx_t *ctx)
 		}
 
 		// perform the read
+		ngx_perf_counter_start(ctx->perf_counter_context);
+
 		rc = ctx->async_reader(ctx->async_reader_context, read_buffer, read_size, read_offset);
 		if (rc < 0)
 		{
@@ -739,6 +829,8 @@ ngx_http_vod_process_mp4_frames(ngx_http_vod_ctx_t *ctx)
 			}
 			return rc;
 		}
+
+		ngx_perf_counter_end(ctx->perf_counters, ctx->perf_counter_context, PC_READ_FILE);
 
 		// read completed synchronously, update the read cache
 		read_cache_read_completed(&ctx->read_cache_state, rc);
@@ -801,7 +893,7 @@ ngx_http_vod_run_state_machine(ngx_http_vod_ctx_t *ctx)
 			if (conf->moov_cache_zone != NULL)
 			{
 				// try to read the moov atom from cache
-				if (ngx_buffer_cache_fetch(conf->moov_cache_zone, ctx->submodule_context.request_params.file_key, &moov_buffer, &moov_size))
+				if (ngx_buffer_cache_fetch_perf(ctx->perf_counters, conf->moov_cache_zone, ctx->submodule_context.request_params.file_key, &moov_buffer, &moov_size))
 				{
 					ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
 						"ngx_http_vod_run_state_machine: moov atom cache hit, size is %uz", moov_size);
@@ -849,6 +941,9 @@ ngx_http_vod_run_state_machine(ngx_http_vod_ctx_t *ctx)
 			r->connection->log->action = "reading mp4 header";
 			ctx->moov_start_reads = MAX_MOOV_START_READS;
 			ctx->state = STATE_INITIAL_READ;
+
+			ngx_perf_counter_start(ctx->perf_counter_context);
+
 			rc = ctx->async_reader(ctx->async_reader_context, ctx->read_buffer, conf->initial_read_size, 0);
 			if (rc < 0)		// inc. NGX_AGAIN
 			{
@@ -861,6 +956,7 @@ ngx_http_vod_run_state_machine(ngx_http_vod_ctx_t *ctx)
 			}
 
 			// read completed synchronously
+			ngx_perf_counter_end(ctx->perf_counters, ctx->perf_counter_context, PC_READ_FILE);
 			ctx->buffer_size = rc;
 			// fallthrough
 
@@ -901,7 +997,8 @@ ngx_http_vod_run_state_machine(ngx_http_vod_ctx_t *ctx)
 			// save the moov atom to cache
 			if (conf->moov_cache_zone != NULL)
 			{
-				if (ngx_buffer_cache_store(
+				if (ngx_buffer_cache_store_perf(
+					ctx->perf_counters,
 					conf->moov_cache_zone,
 					ctx->submodule_context.request_params.file_key,
 					ctx->read_buffer + ctx->moov_offset,
@@ -962,6 +1059,8 @@ ngx_http_vod_run_state_machine(ngx_http_vod_ctx_t *ctx)
 	// handle metadata requests
 	if (ctx->submodule_context.request_params.request->handle_metadata_request != NULL)
 	{
+		ngx_perf_counter_start(ctx->perf_counter_context);
+
 		rc = ctx->submodule_context.request_params.request->handle_metadata_request(
 			&ctx->submodule_context,
 			&response,
@@ -973,6 +1072,8 @@ ngx_http_vod_run_state_machine(ngx_http_vod_ctx_t *ctx)
 			return rc;
 		}
 
+		ngx_perf_counter_end(ctx->perf_counters, ctx->perf_counter_context, PC_BUILD_MANIFEST);
+
 		if (conf->response_cache_zone != NULL)
 		{
 			cache_buffers[0].data = (u_char*)&content_type.len;
@@ -980,7 +1081,7 @@ ngx_http_vod_run_state_machine(ngx_http_vod_ctx_t *ctx)
 			cache_buffers[1] = content_type;
 			cache_buffers[2] = response;
 
-			if (ngx_buffer_cache_store_gather(conf->response_cache_zone, ctx->request_key, cache_buffers, 3))
+			if (ngx_buffer_cache_store_gather_perf(ctx->perf_counters, conf->response_cache_zone, ctx->request_key, cache_buffers, 3))
 			{
 				ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
 					"ngx_http_vod_run_state_machine: stored in response cache");
@@ -1055,6 +1156,8 @@ ngx_http_vod_handle_read_completed(void* context, ngx_int_t rc, ssize_t bytes_re
 		rc = ngx_http_vod_status_to_ngx_error(VOD_BAD_DATA);
 		goto finalize_request;
 	}
+
+	ngx_perf_counter_end(ctx->perf_counters, ctx->perf_counter_context, PC_ASYNC_READ_FILE);
 
 	// update the bytes read
 	switch (ctx->state)
@@ -1156,6 +1259,8 @@ ngx_http_vod_init_file_reader(ngx_http_request_t *r, ngx_str_t* path)
 
 	clcf = ngx_http_get_module_loc_conf(r, ngx_http_core_module);
 
+	ngx_perf_counter_start(ctx->perf_counter_context);
+
 	rc = ngx_file_reader_init(&ctx->file_reader, ngx_http_vod_file_read_completed, ctx, r, clcf, path);
 	if (rc != NGX_OK)
 	{
@@ -1163,6 +1268,8 @@ ngx_http_vod_init_file_reader(ngx_http_request_t *r, ngx_str_t* path)
 			"ngx_http_vod_init_file_reader: ngx_file_reader_init failed %i", rc);
 		return rc;
 	}
+
+	ngx_perf_counter_end(ctx->perf_counters, ctx->perf_counter_context, PC_OPEN_FILE);
 
 	return NGX_OK;
 }
@@ -1326,7 +1433,8 @@ ngx_http_vod_run_mapped_mode_state_machine(ngx_http_request_t *r)
 				&ctx->submodule_context.cur_suburi->stripped_uri);
 
 			// try getting the file path from cache
-			if (ngx_buffer_cache_fetch(
+			if (ngx_buffer_cache_fetch_perf(
+				ctx->perf_counters,
 				conf->path_mapping_cache_zone,
 				ctx->submodule_context.request_params.file_key,
 				&path_buffer,
@@ -1367,6 +1475,8 @@ ngx_http_vod_run_mapped_mode_state_machine(ngx_http_request_t *r)
 		child_params.base_uri = ctx->submodule_context.cur_suburi->stripped_uri;
 		child_params.extra_args = conf->upstream_extra_args;
 		child_params.host_name = conf->upstream_host_header;
+
+		ngx_perf_counter_start(ctx->perf_counter_context);
 
 		rc = ngx_child_request_start(
 			r,
@@ -1425,6 +1535,8 @@ ngx_http_vod_path_request_finished(void* context, ngx_int_t rc, ngx_buf_t* respo
 
 	ctx = ngx_http_get_module_ctx(r, ngx_http_vod_module);
 
+	ngx_perf_counter_end(ctx->perf_counters, ctx->perf_counter_context, PC_MAP_PATH);
+
 	ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0, "ngx_http_vod_path_request_finished: result %s", response->pos);
 
 	path.data = response->pos;
@@ -1473,7 +1585,8 @@ ngx_http_vod_path_request_finished(void* context, ngx_int_t rc, ngx_buf_t* respo
 	// save to cache
 	if (conf->path_mapping_cache_zone != NULL)
 	{
-		if (ngx_buffer_cache_store(
+		if (ngx_buffer_cache_store_perf(
+			ctx->perf_counters,
 			conf->path_mapping_cache_zone,
 			ctx->submodule_context.request_params.file_key,
 			path.data,
@@ -1704,6 +1817,7 @@ ngx_http_vod_parse_uri(ngx_http_request_t *r, ngx_http_vod_loc_conf_t *conf, ngx
 ngx_int_t
 ngx_http_vod_handler(ngx_http_request_t *r)
 {
+	ngx_perf_counters_t* perf_counters;
 	ngx_http_vod_ctx_t *ctx;
 	ngx_http_vod_request_params_t request_params;
 	ngx_http_vod_loc_conf_t *conf;
@@ -1763,6 +1877,8 @@ ngx_http_vod_handler(ngx_http_request_t *r)
 		}
 	}
 
+	perf_counters = ngx_perf_counter_get_state(conf->perf_counters_zone);
+
 	if (request_params.request->handle_metadata_request != NULL &&
 		conf->response_cache_zone != NULL)
 	{
@@ -1776,7 +1892,7 @@ ngx_http_vod_handler(ngx_http_request_t *r)
 		ngx_md5_final(request_key, &md5);
 
 		// try to fetch from cache
-		if (ngx_buffer_cache_fetch(conf->response_cache_zone, request_key, &cache_buffer, &cache_buffer_size) &&
+		if (ngx_buffer_cache_fetch_perf(perf_counters, conf->response_cache_zone, request_key, &cache_buffer, &cache_buffer_size) &&
 			cache_buffer_size > sizeof(size_t))
 		{
 			ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
@@ -1824,6 +1940,7 @@ ngx_http_vod_handler(ngx_http_request_t *r)
 	ctx->submodule_context.request_params = request_params;
 	ctx->submodule_context.cur_suburi = request_params.suburis;
 	ctx->submodule_context.cur_file_index = 0;
+	ctx->perf_counters = perf_counters;
 
 	ngx_http_set_ctx(r, ctx, ngx_http_vod_module);
 
