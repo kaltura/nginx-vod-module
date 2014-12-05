@@ -78,7 +78,7 @@ ngx_http_vod_append_cache_stats(u_char* p, ngx_buffer_cache_stats_t* stats)
 #define PATH_MAPPING_CACHE_CLOSE "</path_mapping_cache>\r\n"
 #define PATH_PERF_COUNTERS_OPEN "<performance_counters>\r\n"
 #define PATH_PERF_COUNTERS_CLOSE "</performance_counters>\r\n"
-#define PERF_COUNTER_FORMAT "<time>%uA</time>\r\n<count>%uA</count>\r\n"
+#define PERF_COUNTER_FORMAT "<sum>%uA</sum>\r\n<max>%uA</max>\r\n<count>%uA</count>\r\n"
 
 ngx_int_t
 ngx_http_vod_status_handler(ngx_http_request_t *r)
@@ -123,7 +123,7 @@ ngx_http_vod_status_handler(ngx_http_request_t *r)
 		result_size += sizeof(PATH_PERF_COUNTERS_OPEN);
 		for (i = 0; i < PC_COUNT; i++)
 		{
-			result_size += perf_counters_open_tags[i].len + sizeof(PERF_COUNTER_FORMAT) + 2 * NGX_ATOMIC_T_LEN + perf_counters_close_tags[i].len;
+			result_size += perf_counters_open_tags[i].len + sizeof(PERF_COUNTER_FORMAT) + 3 * NGX_ATOMIC_T_LEN + perf_counters_close_tags[i].len;
 		}
 		result_size += sizeof(PATH_PERF_COUNTERS_CLOSE);
 	}
@@ -175,7 +175,10 @@ ngx_http_vod_status_handler(ngx_http_request_t *r)
 		for (i = 0; i < PC_COUNT; i++)
 		{
 			p = ngx_copy(p, perf_counters_open_tags[i].data, perf_counters_open_tags[i].len);
-			p = ngx_sprintf(p, PERF_COUNTER_FORMAT, perf_counters->counters[i].time, perf_counters->counters[i].count);
+			p = ngx_sprintf(p, PERF_COUNTER_FORMAT, 
+				perf_counters->counters[i].sum, 
+				perf_counters->counters[i].max, 
+				perf_counters->counters[i].count);
 			p = ngx_copy(p, perf_counters_close_tags[i].data, perf_counters_close_tags[i].len);
 		}
 		p = ngx_copy(p, PATH_PERF_COUNTERS_CLOSE, sizeof(PATH_PERF_COUNTERS_CLOSE) - 1);

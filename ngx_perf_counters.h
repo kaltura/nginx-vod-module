@@ -40,6 +40,10 @@ typedef struct timeval ngx_tick_count_t;
 #define ngx_perf_counter_start(ctx)									\
 	ngx_get_tick_count(&ctx.start);
 
+// Note: the calculation of 'max' has a race condition, the value can decrease since the condition
+//		and the assignment are not performed atomically. however, the value of max is expected to
+//		converge quickly so that its updates will be performed less and less frequently, so it 
+//		should be accurate enough.
 #define ngx_perf_counter_end(state, ctx, type)						\
 	if (state != NULL)												\
 	{																\
@@ -49,7 +53,11 @@ typedef struct timeval ngx_tick_count_t;
 		ngx_get_tick_count(&__end);									\
 																	\
 		__delta = ngx_tick_count_diff(ctx.start, __end);			\
-		ngx_atomic_fetch_add(&state->counters[type].time, __delta);	\
+		ngx_atomic_fetch_add(&state->counters[type].sum, __delta);	\
+		if (__delta > state->counters[type].max)					\
+		{															\
+			state->counters[type].max = __delta;					\
+		}															\
 		ngx_atomic_fetch_add(&state->counters[type].count, 1);		\
 	}
 
@@ -83,7 +91,8 @@ typedef struct {
 
 // typedefs
 typedef struct {
-	ngx_atomic_t time;
+	ngx_atomic_t sum;
+	ngx_atomic_t max;
 	ngx_atomic_t count;
 } ngx_perf_counter_t;
 
