@@ -1884,7 +1884,8 @@ ngx_http_vod_handler(ngx_http_request_t *r)
 		}
 	}
 
-	if (request_params.request->handle_metadata_request != NULL &&
+	if (request_params.request != NULL && 
+		request_params.request->handle_metadata_request != NULL &&
 		conf->response_cache_zone != NULL)
 	{
 		// calc request key from host + uri

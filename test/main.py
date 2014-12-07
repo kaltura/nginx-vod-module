@@ -846,7 +846,7 @@ class FileServeTestSuite(TestSuite):
             
             logTracker = LogTracker()
             cachedResponse = urllib2.urlopen(url).read()
-            logTracker.assertContains('moov atom cache hit')
+            logTracker.assertContains(['moov atom cache hit', 'response cache hit'])
 
             assert(cachedResponse == uncachedResponse)
 
@@ -949,7 +949,7 @@ class MappedTestSuite(ModeTestSuite):
             response = urllib2.urlopen(url)
             assertEquals(response.info().getheader('Content-Type'), contentType)            
             cachedResponse = response.read()
-            logTracker.assertContains('path mapping cache hit')
+            logTracker.assertContains(['path mapping cache hit', 'response cache hit'])
 
             assert(cachedResponse == uncachedResponse)
                    
@@ -973,7 +973,7 @@ class RemoteTestSuite(ModeTestSuite):
             
             logTracker = LogTracker()
             cachedResponse = urllib2.urlopen(url).read()
-            logTracker.assertContains('moov atom cache hit')
+            logTracker.assertContains(['moov atom cache hit', 'response cache hit'])
 
             assert(cachedResponse == uncachedResponse)
 
