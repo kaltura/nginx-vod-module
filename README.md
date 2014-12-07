@@ -12,7 +12,7 @@
   2. Remote - serve files accessible via HTTP using range requests
   3. Mapped - perform an HTTP request to map the input URI to a locally accessible file
 
-* Fallback support for file not found in local/mapped modes
+* Fallback support for file not found in local/mapped modes (useful in multi-datacenter environments)
   
 * Video codecs: H264, H265 (dash only)
 
@@ -84,18 +84,19 @@ To disable compiler optimizations (for debugging with gdb) add `CFLAGS="-g -O0"`
 
 Enables the nginx-vod module on the enclosing location. 
 Currently the allowed values for `segmenter` are:
+
 1. `none` - serves the MP4 files as is
 2. `dash` - Dynamic Adaptive Streaming over HTTP packetizer
-2. `hds` - Adobe HTTP Dynamic Streaming packetizer
-2. `hls` - Apple HTTP Live Streaming packetizer
-2. `mss` - Microsoft Smooth Streaming packetizer
+3. `hds` - Adobe HTTP Dynamic Streaming packetizer
+4. `hls` - Apple HTTP Live Streaming packetizer
+5. `mss` - Microsoft Smooth Streaming packetizer
 
 #### vod_mode
 * **syntax**: `vod_mode mode`
 * **default**: `local`
 * **context**: `http`, `server`, `location`
 
-Sets the file access mode - local, remote or mapped
+Sets the file access mode - local, remote or mapped (see the features section above for more details)
 
 #### vod_status
 * **syntax**: `vod_status`
@@ -110,7 +111,7 @@ Enables the nginx-vod status page on the enclosing location.
 * **context**: `http`, `server`, `location`
 
 A URL suffix that is used to identify multi URLs. A multi URL is a way to encode several different URLs
-that should be played together as an adaptive streaming, under a single URL. When the default suffix is
+that should be played together as an adaptive streaming set, under a single URL. When the default suffix is
 used, an HLS set URL may look like: 
 http://host/hls/common-prefix,bitrate1,bitrate2,common-suffix.urlset/master.m3u8
 
@@ -136,14 +137,14 @@ the overhead of short segments throughout the video.
 * **context**: `http`, `server`, `location`
 
 When enabled, the module forces all segments to start with a key frame. Enabling this setting can lead to differences
-between the actual segment durations and the durations reported in the manifest.
+between the actual segment durations and the durations reported in the manifest (unless vod_manifest_segment_durations_mode is set to accurate).
 
 #### vod_segment_count_policy
 * **syntax**: `vod_segment_count_policy last_short/last_long/last_rounded`
 * **default**: `last_short`
 * **context**: `http`, `server`, `location`
 
-Configures the policy for calculating the segment count:
+Configures the policy for calculating the segment count, for segment_duration = 10 seconds:
 * last_short - a file of 33 sec is partitioned as - 10, 10, 10, 3
 * last_long - a file of 33 sec is partitioned as - 10, 10, 13
 * last_rounded - a file of 33 sec is partitioned as - 10, 10, 13, a file of 38 sec is partitioned as 10, 10, 10, 8
@@ -208,14 +209,14 @@ Sets the size of the initial read operation of the MP4 file.
 
 #### vod_max_moov_size
 * **syntax**: `vod_max_moov_size size`
-* **default**: `32MB`
+* **default**: `128MB`
 * **context**: `http`, `server`, `location`
 
 Sets the maximum supported MP4 moov atom size.
 
 #### vod_cache_buffer_size
 * **syntax**: `vod_cache_buffer_size size`
-* **default**: `64K`
+* **default**: `256K`
 * **context**: `http`, `server`, `location`
 
 Sets the size of the cache buffers used when reading MP4 frames.
@@ -367,7 +368,7 @@ The name of the clip from request parameter.
 * **default**: `tracks`
 * **context**: `http`, `server`, `location`
 
-The name of the clip from request parameter.
+The name of the tracks request parameter.
 
 #### vod_performance_counters
 * **syntax**: `vod_performance_counters zone_name`
