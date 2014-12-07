@@ -1,6 +1,7 @@
 from httplib import BadStatusLine
 import stress_base
 import urllib2
+import socket
 import re
 
 from uri_compare_params import *
@@ -20,6 +21,9 @@ class TestThread(stress_base.TestThreadBase):
 			return 0, ''
 		except BadStatusLine, e:
 			self.writeOutput('Error: request failed %s %s' % (url, e))
+			return 0, ''
+		except socket.error, e:
+			self.writeOutput('Error: got socket error %s %s' % (url, e))
 			return 0, ''
 		return f.getcode(), f.read()
 		

@@ -1529,14 +1529,14 @@ ngx_http_vod_path_request_finished(void* context, ngx_int_t rc, ngx_buf_t* respo
 	ngx_http_request_t *r = context;
 	ngx_str_t path;
 
+	ctx = ngx_http_get_module_ctx(r, ngx_http_vod_module);
+
 	if (rc != NGX_OK)
 	{
 		ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
 			"ngx_http_vod_path_request_finished: upstream request failed %i", rc);
 		goto finalize_request;
 	}
-
-	ctx = ngx_http_get_module_ctx(r, ngx_http_vod_module);
 
 	ngx_perf_counter_end(ctx->perf_counters, ctx->perf_counter_context, PC_MAP_PATH);
 
