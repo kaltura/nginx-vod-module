@@ -14,6 +14,7 @@ class TestThread(stress_base.TestThreadBase):
 		request = urllib2.Request(url)
 		try:
 			f = urllib2.urlopen(request)
+			return f.getcode(), f.read()
 		except urllib2.HTTPError, e:
 			return e.getcode(), e.read()			
 		except urllib2.URLError, e:
@@ -25,7 +26,6 @@ class TestThread(stress_base.TestThreadBase):
 		except socket.error, e:
 			self.writeOutput('Error: got socket error %s %s' % (url, e))
 			return 0, ''
-		return f.getcode(), f.read()
 		
 	def runTest(self, uri):		
 		url1 = URL1_BASE + uri

@@ -407,7 +407,9 @@ ngx_buffer_cache_store_gather(
 		entry = ngx_buffer_cache_rbtree_lookup(&cache->rbtree, key, hash);
 		if (entry != NULL)
 		{
-			goto error;
+			cache->stats.store_exists++;
+			ngx_shmtx_unlock(&shpool->mutex);
+			return 0;
 		}
 
 		// enable the reset flag before we start making any changes

@@ -179,6 +179,13 @@ ngx_http_vod_process_header(ngx_http_request_t *r)
 				return NGX_OK;
 			}
 
+			if (u->state && u->state->status != NGX_HTTP_OK && u->state->status != NGX_HTTP_PARTIAL_CONTENT)
+			{
+				ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
+					"ngx_http_vod_process_header: upstream returned a bad status %ui", u->state->status);
+				return NGX_HTTP_UPSTREAM_INVALID_HEADER;
+			}
+
 			// make sure we got some content length
 			if (u->headers_in.content_length_n < 0)
 			{
@@ -198,8 +205,6 @@ ngx_http_vod_process_header(ngx_http_request_t *r)
 						"ngx_http_vod_process_header: ngx_pnalloc failed (2)");
 					return NGX_ERROR;
 				}
-
-				ctx->response_buffer[ctx->response_buffer_size] = '\0';
 			}
 
 			// in case we already got some of the response body, copy it to the response buffer
@@ -214,7 +219,7 @@ ngx_http_vod_process_header(ngx_http_request_t *r)
 			u->buffer.start = ctx->response_buffer;
 			u->buffer.pos = u->buffer.start;
 			u->buffer.last = u->buffer.start + ctx->read_body_size;
-			u->buffer.end = u->buffer.start + ctx->response_buffer_size;
+			u->buffer.end = u->buffer.start + ctx->response_buffer_size + 1;
 			u->buffer.temporary = 1;
 
 			return NGX_OK;
@@ -305,7 +310,7 @@ ngx_http_vod_filter_init(void *data)
 
 	u = r->upstream;
 
-	if (u->headers_in.content_length_n > u->buffer.end - u->buffer.start) 
+	if (u->headers_in.content_length_n + 1 > u->buffer.end - u->buffer.start) 
 	{
 		ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
 			"ngx_http_vod_filter_init: content length %O exceeds buffer size %O", u->headers_in.content_length_n, (off_t)(u->buffer.end - u->buffer.start));
@@ -669,13 +674,7 @@ ngx_child_request_finished_handler(ngx_http_request_t *r, void *data, ngx_int_t 
 	u = r->upstream;
 	if (rc == NGX_OK)
 	{
-		if (u->state && u->state->status != NGX_HTTP_OK && u->state->status != NGX_HTTP_PARTIAL_CONTENT)
-		{
-			ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
-				"ngx_child_request_finished_handler: upstream returned a bad status %ui", u->state->status);
-			rc = NGX_HTTP_BAD_GATEWAY;
-		}
-		else if (u->length != 0)
+		if (u->length != 0)
 		{
 			ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
 				"ngx_child_request_finished_handler: upstream connection was closed with %O bytes left to read", u->length);

@@ -55,7 +55,7 @@ read_cache_get_read_buffer(read_cache_state_t* state, uint64_t offset, uint64_t*
 	// make sure the buffer is allocated
 	if (target_buffer->buffer == NULL)
 	{
-		target_buffer->buffer = vod_memalign(state->request_context->pool, state->buffer_size, state->alignment);
+		target_buffer->buffer = vod_memalign(state->request_context->pool, state->buffer_size + 1, state->alignment);
 		if (target_buffer->buffer == NULL)
 		{
 			vod_log_debug0(VOD_LOG_DEBUG_LEVEL, state->request_context->log, 0,
