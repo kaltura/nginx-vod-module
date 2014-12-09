@@ -45,16 +45,6 @@ without the overhead of short segments for the whole duration of the video
 
 * Tested on Linux only
 
-### Nginx patch
-
-The module depends on a small patch to the nginx code - in src/http/ngx_http_upstream.c, in ngx_http_upstream_process_body_in_memory replace:
-	for ( ;; ) {
-with:
-	while (u->length) {
-	
-The problem with the existing code is that when the upstream buffer size matches the response size exactly, the upstream module fails with 'upstream buffer is too small to read response' instead of completing the result successfully.
-Since the nginx-vod-module performs range requests and sets the upstream buffer to the exact response size, this error always happens.
-
 ### Build
 
 cd to NGINX source directory and execute:
@@ -602,19 +592,9 @@ The name of the manifest file (has no extension).
 		}
 	}
 
+	
 ### Copyright & License
 
-Copyright (C) 2006-2014  Kaltura Inc.
+All code in this project is released under the [AGPLv3 license](http://www.gnu.org/licenses/agpl-3.0.html) unless a different license for a particular library is specified in the applicable library path. 
 
-This program is free software: you can redistribute it and/or modify
-it under the terms of the GNU Affero General Public License as
-published by the Free Software Foundation, either version 3 of the
-License, or (at your option) any later version.
-
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU Affero General Public License for more details.
-
-You should have received a copy of the GNU Affero General Public License
-along with this program.  If not, see <http://www.gnu.org/licenses/>.
+Copyright © Kaltura Inc. All rights reserved.

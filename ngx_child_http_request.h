@@ -28,6 +28,12 @@ typedef struct {
 } ngx_child_request_buffers_t;
 
 // request initiation function
+
+// IMPORTANT NOTE: due to the implementation of ngx_http_upstream_process_body_in_memory, and in order to
+//		avoid memory copy operations, this function assumes that the buffer passed to it has a size of 
+//		at least max_response_length + 1 (unlike max_response_length like one would expect)
+//		this issue is discussed in http://trac.nginx.org/nginx/ticket/680
+
 ngx_int_t ngx_child_request_start(
 	ngx_http_request_t *r,
 	ngx_child_request_buffers_t* buffers,

@@ -305,7 +305,7 @@ ngx_http_vod_read_moov_atom(ngx_http_vod_ctx_t *ctx)
 	// calculate the new buffer size (round the moov end up to alignment)
 	new_buffer_size = ((ctx->moov_offset + ctx->moov_size) + ctx->alignment - 1) & (~(ctx->alignment - 1));
 
-	new_read_buffer = ngx_pmemalign(ctx->submodule_context.r->pool, new_buffer_size, ctx->alignment);
+	new_read_buffer = ngx_pmemalign(ctx->submodule_context.r->pool, new_buffer_size + 1, ctx->alignment);
 	if (new_read_buffer == NULL)
 	{
 		ngx_log_debug0(NGX_LOG_DEBUG_HTTP, ctx->submodule_context.request_context.log, 0,
@@ -930,7 +930,7 @@ ngx_http_vod_run_state_machine(ngx_http_vod_ctx_t *ctx)
 			ctx->file_opened = 1;
 
 			// allocate the initial read buffer
-			ctx->read_buffer = ngx_pmemalign(r->pool, conf->initial_read_size, ctx->alignment);
+			ctx->read_buffer = ngx_pmemalign(r->pool, conf->initial_read_size + 1, ctx->alignment);
 			if (ctx->read_buffer == NULL)
 			{
 				ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
@@ -1533,13 +1533,15 @@ ngx_http_vod_path_request_finished(void* context, ngx_int_t rc, ngx_buf_t* respo
 
 	if (rc != NGX_OK)
 	{
-		ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
+		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
 			"ngx_http_vod_path_request_finished: upstream request failed %i", rc);
 		goto finalize_request;
 	}
 
 	ngx_perf_counter_end(ctx->perf_counters, ctx->perf_counter_context, PC_MAP_PATH);
 
+	*response->last = '\0';		// this is ok since ngx_child_http_request always allocate the content-length + 1
+	
 	ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0, "ngx_http_vod_path_request_finished: result %s", response->pos);
 
 	path.data = response->pos;
@@ -1663,7 +1665,7 @@ ngx_http_vod_http_read_completed(void* context, ngx_int_t rc, ngx_buf_t* respons
 
 	if (rc != NGX_OK)
 	{
-		ngx_log_error(NGX_LOG_ERR, ctx->submodule_context.request_context.log, 0,
+		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, ctx->submodule_context.request_context.log, 0,
 			"ngx_http_vod_http_read_completed: upstream request failed %i", rc);
 		ngx_http_vod_finalize_request(ctx, rc);
 		return;

@@ -12,6 +12,7 @@ typedef struct {
 	ngx_atomic_t store_ok;
 	ngx_atomic_t store_bytes;
 	ngx_atomic_t store_err;
+	ngx_atomic_t store_exists;
 	ngx_atomic_t fetch_hit;
 	ngx_atomic_t fetch_bytes;
 	ngx_atomic_t fetch_miss;

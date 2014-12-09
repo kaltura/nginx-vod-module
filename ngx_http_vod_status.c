@@ -30,6 +30,7 @@ static ngx_http_vod_stat_def_t buffer_cache_stat_defs[] = {
 	DEFINE_STAT(store_ok),
 	DEFINE_STAT(store_bytes),
 	DEFINE_STAT(store_err),
+	DEFINE_STAT(store_exists),
 	DEFINE_STAT(fetch_hit),
 	DEFINE_STAT(fetch_bytes),
 	DEFINE_STAT(fetch_miss),
