@@ -100,6 +100,8 @@ ngx_module_t  ngx_http_vod_module = {
     NGX_MODULE_V1_PADDING
 };
 
+static ngx_str_t options_content_type = ngx_string("text/plain");
+
 ////// Perf counter wrappers
 
 static ngx_flag_t
@@ -1840,6 +1842,14 @@ ngx_http_vod_handler(ngx_http_request_t *r)
 	ngx_perf_counter_start(pcctx);
 	conf = ngx_http_get_module_loc_conf(r, ngx_http_vod_module);
 	perf_counters = ngx_perf_counter_get_state(conf->perf_counters_zone);
+
+	if (r->method == NGX_HTTP_OPTIONS)
+	{
+		response.data = NULL;
+		response.len = 0;
+		rc = ngx_http_vod_send_response(r, &response, options_content_type.data, options_content_type.len);
+		goto done;
+	}
 
 	// we respond to 'GET' and 'HEAD' requests only
 	if (!(r->method & (NGX_HTTP_GET | NGX_HTTP_HEAD))) 
