@@ -335,6 +335,7 @@ m3u8_builder_build_index_playlist(
 	{
 		result_size +=
 			sizeof(encryption_key_tag_prefix) - 1 +
+			base_url->len +
 			conf->encryption_key_file_name.len + 
 			sizeof("-f") - 1 + VOD_INT32_LEN + 
 			sizeof(encryption_key_tag_postfix) - 1;
@@ -358,6 +359,7 @@ m3u8_builder_build_index_playlist(
 	if (encryption_enabled)
 	{
 		p = vod_copy(p, encryption_key_tag_prefix, sizeof(encryption_key_tag_prefix) - 1);
+		p = vod_copy(p, base_url->data, base_url->len);
 		p = vod_copy(p, conf->encryption_key_file_name.data, conf->encryption_key_file_name.len);
 		if (include_file_index)
 		{
