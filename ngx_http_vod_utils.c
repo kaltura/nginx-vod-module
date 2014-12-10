@@ -56,7 +56,10 @@ ngx_http_vod_send_response(ngx_http_request_t *r, ngx_str_t *response, u_char* c
 
 	b->pos = response->data;
 	b->last = response->data + response->len;
-	b->memory = 1;    // this buffer is in memory
+	if (response->len > 0)
+	{
+		b->memory = 1;    // this buffer is in memory
+	}
 	b->last_buf = 1;  // this is the last buffer in the buffer chain
 
 	// attach the buffer to the chain
