@@ -54,11 +54,12 @@ typedef struct timeval ngx_tick_count_t;
 																	\
 		__delta = ngx_tick_count_diff(ctx.start, __end);			\
 		ngx_atomic_fetch_add(&state->counters[type].sum, __delta);	\
+		ngx_atomic_fetch_add(&state->counters[type].count, 1);		\
 		if (__delta > state->counters[type].max)					\
 		{															\
 			state->counters[type].max = __delta;					\
+			state->counters[type].max_time = ngx_time();			\
 		}															\
-		ngx_atomic_fetch_add(&state->counters[type].count, 1);		\
 	}
 
 #define ngx_perf_counter_copy(target, source)	target = source
@@ -92,8 +93,9 @@ typedef struct {
 // typedefs
 typedef struct {
 	ngx_atomic_t sum;
-	ngx_atomic_t max;
 	ngx_atomic_t count;
+	ngx_atomic_t max;
+	ngx_atomic_t max_time;
 } ngx_perf_counter_t;
 
 typedef struct {

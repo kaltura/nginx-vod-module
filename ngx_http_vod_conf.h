@@ -35,7 +35,7 @@ struct ngx_http_vod_loc_conf_s {
 	size_t cache_buffer_size;
 	ngx_http_upstream_conf_t upstream;
 	ngx_str_t upstream_host_header;
-	ngx_str_t upstream_extra_args;
+	ngx_http_complex_value_t *upstream_extra_args;
 	ngx_shm_zone_t* path_mapping_cache_zone;
 	ngx_str_t path_response_prefix;
 	ngx_str_t path_response_postfix;
