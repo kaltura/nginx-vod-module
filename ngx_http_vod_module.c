@@ -1244,7 +1244,8 @@ ngx_http_vod_start_processing_mp4_file(ngx_http_request_t *r)
 static ngx_int_t
 ngx_http_vod_init_upstream_vars(ngx_http_vod_ctx_t *ctx)
 {
-	if (ctx->upstream_extra_args.len != 0)
+	if (ctx->upstream_extra_args.len != 0 || 
+		ctx->submodule_context.conf->upstream_extra_args == NULL)
 	{
 		return NGX_OK;
 	}
