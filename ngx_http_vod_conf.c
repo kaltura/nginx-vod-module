@@ -99,10 +99,10 @@ ngx_http_vod_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child)
 	}
 	ngx_conf_merge_str_value(conf->upstream_host_header, prev->upstream_host_header, "");
 	
-    if (conf->upstream_extra_args == NULL) 
+	if (conf->upstream_extra_args == NULL) 
 	{
-        conf->upstream_extra_args = prev->upstream_extra_args;
-    }
+		conf->upstream_extra_args = prev->upstream_extra_args;
+	}
 
 	if (conf->path_mapping_cache_zone == NULL)
 	{
