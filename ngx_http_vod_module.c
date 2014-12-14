@@ -74,6 +74,7 @@ typedef struct {
 	ngx_child_request_buffers_t child_request_buffers;
 	ngx_str_t* file_key_prefix;
 	ngx_str_t cur_remote_suburi;
+	ngx_str_t upstream_extra_args;
 
 	// segment requests only
 	read_cache_state_t read_cache_state;
@@ -1238,6 +1239,27 @@ ngx_http_vod_start_processing_mp4_file(ngx_http_request_t *r)
 	return ngx_http_vod_run_state_machine(ctx);
 }
 
+////// Mapped & remote modes
+
+static ngx_int_t
+ngx_http_vod_init_upstream_vars(ngx_http_vod_ctx_t *ctx)
+{
+	if (ctx->upstream_extra_args.len != 0)
+	{
+		return NGX_OK;
+	}
+
+	if (ngx_http_complex_value(
+		ctx->submodule_context.r, 
+		ctx->submodule_context.conf->upstream_extra_args, 
+		&ctx->upstream_extra_args) != NGX_OK)
+	{
+		return NGX_ERROR;
+	}
+
+	return NGX_OK;
+}
+
 ////// Local & mapped modes
 
 static void
@@ -1472,13 +1494,20 @@ ngx_http_vod_run_mapped_mode_state_machine(ngx_http_request_t *r)
 			}
 		}
 
+		// initialize the upstream variables
+		rc = ngx_http_vod_init_upstream_vars(ctx);
+		if (rc != NGX_OK)
+		{
+			return rc;
+		}
+
 		// get the mp4 file path from upstream
 		r->connection->log->action = "getting file path";
 
 		ngx_memzero(&child_params, sizeof(child_params));
 		child_params.method = NGX_HTTP_GET;
 		child_params.base_uri = ctx->submodule_context.cur_suburi->stripped_uri;
-		child_params.extra_args = conf->upstream_extra_args;
+		child_params.extra_args = ctx->upstream_extra_args;
 		child_params.host_name = conf->upstream_host_header;
 
 		ngx_perf_counter_start(ctx->perf_counter_context);
@@ -1689,7 +1718,7 @@ ngx_http_vod_async_http_read(ngx_http_request_t *r, u_char *buf, size_t size, of
 	ngx_memzero(&child_params, sizeof(child_params));
 	child_params.method = NGX_HTTP_GET;
 	child_params.base_uri = ctx->cur_remote_suburi;
-	child_params.extra_args = conf->upstream_extra_args;
+	child_params.extra_args = ctx->upstream_extra_args;
 	child_params.host_name = conf->upstream_host_header;
 	child_params.range_start = offset;
 	child_params.range_end = offset + size;
@@ -1710,14 +1739,16 @@ ngx_int_t
 ngx_http_vod_dump_http_request(ngx_http_request_t *r)
 {
 	ngx_http_vod_loc_conf_t *conf;
+	ngx_http_vod_ctx_t *ctx;
 	ngx_child_request_params_t child_params;
 
-	conf = ngx_http_get_module_loc_conf(r, ngx_http_vod_module);
+	ctx = ngx_http_get_module_ctx(r, ngx_http_vod_module);
+	conf = ctx->submodule_context.conf;
 
 	ngx_memzero(&child_params, sizeof(child_params));
 	child_params.method = r->method;
 	child_params.base_uri = r->uri;
-	child_params.extra_args = conf->upstream_extra_args;
+	child_params.extra_args = ctx->upstream_extra_args;
 	child_params.host_name = conf->upstream_host_header;
 	child_params.proxy_range = 1;
 	child_params.proxy_accept_encoding = 1;
@@ -1732,8 +1763,16 @@ static ngx_int_t
 ngx_http_vod_http_reader_open_file(ngx_http_request_t* r, ngx_str_t* path)
 {
 	ngx_http_vod_ctx_t *ctx;
+	ngx_int_t rc;
 
 	ctx = ngx_http_get_module_ctx(r, ngx_http_vod_module);
+
+	// initialize the upstream variables
+	rc = ngx_http_vod_init_upstream_vars(ctx);
+	if (rc != NGX_OK)
+	{
+		return rc;
+	}
 
 	// Note: since this remote mode, no need to open any files, just save the remote uri
 	ctx->cur_remote_suburi = *path;

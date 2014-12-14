@@ -16,7 +16,7 @@ $array = json_decode($json, true);
 // print the result
 $pc = $array["performance_counters"];
 
-echo "name,sum,max,count\n";
+echo "name,sum,count,max,max_time\n";
 foreach ($pc as $key => $row)
 {
         echo $key;
