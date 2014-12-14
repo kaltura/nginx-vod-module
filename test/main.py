@@ -53,11 +53,13 @@ M3U8_PREFIX = '''#EXTM3U
 #EXT-X-MEDIA-SEQUENCE:1
 '''
 
-M3U8_PREFIX_ENCRYPTED = '''#EXTM3U
+M3U8_PREFIX_ENCRYPTED_PART1 = '''#EXTM3U
 #EXT-X-TARGETDURATION:10
 #EXT-X-ALLOW-CACHE:YES
 #EXT-X-PLAYLIST-TYPE:VOD
-#EXT-X-KEY:METHOD=AES-128,URI="encryption.key"
+#EXT-X-KEY:METHOD=AES-128,URI="'''
+
+M3U8_PREFIX_ENCRYPTED_PART2 = '''encryption.key"
 #EXT-X-VERSION:3
 #EXT-X-MEDIA-SEQUENCE:1
 '''
@@ -131,8 +133,9 @@ def assertRequestFails(url, statusCode, expectedBody = None, headers = {}, postD
 
 def validatePlaylistM3U8(buffer, expectedBaseUrl):
     expectedBaseUrl = expectedBaseUrl.rsplit('/', 1)[0]
-    if buffer.startswith(M3U8_PREFIX_ENCRYPTED):
-        buffer = buffer[len(M3U8_PREFIX_ENCRYPTED):]
+    encryptedHeader = M3U8_PREFIX_ENCRYPTED_PART1 + expectedBaseUrl + '/' + M3U8_PREFIX_ENCRYPTED_PART2
+    if buffer.startswith(encryptedHeader):
+        buffer = buffer[len(encryptedHeader):]
     else:
         assertStartsWith(buffer, M3U8_PREFIX)
         buffer = buffer[len(M3U8_PREFIX):]
@@ -602,7 +605,7 @@ class BasicTestSuite(TestSuite):
         if keyUri == None:
             return
         baseUrl = url[:url.rfind('/')] + '/'        # cannot use getUrl here since it will create a new URL with a new key
-        aesKey = urllib2.urlopen(baseUrl + keyUri).read()
+        aesKey = urllib2.urlopen(keyUri).read()
 
         encryptedSegment = urllib2.urlopen(baseUrl + HLS_SEGMENT_FILE).read()
         cipher = AES.new(aesKey, AES.MODE_CBC, '\0' * 12 + struct.pack('>L', 1))
