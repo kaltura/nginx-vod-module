@@ -505,6 +505,13 @@ post_bootstrap:
 
 	result->item_count = cur_item + 1 - result->items;
 
+	// remove any empty segments from the end
+	if (result->item_count > 0 && cur_item->duration == 0)
+	{
+		result->item_count--;
+		result->segment_count -= cur_item->repeat_count;
+	}
+
 	return VOD_OK;
 }
 

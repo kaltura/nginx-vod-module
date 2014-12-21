@@ -184,6 +184,7 @@ ngx_http_vod_dash_create_loc_conf(
 	ngx_http_vod_dash_loc_conf_t *conf)
 {
 	conf->absolute_manifest_urls = NGX_CONF_UNSET;
+	conf->mpd_config.segment_timeline = NGX_CONF_UNSET;
 }
 
 static char *
@@ -198,7 +199,8 @@ ngx_http_vod_dash_merge_loc_conf(
 	ngx_conf_merge_str_value(conf->manifest_file_name_prefix, prev->manifest_file_name_prefix, "manifest");
 	ngx_conf_merge_str_value(conf->mpd_config.init_file_name_prefix, prev->mpd_config.init_file_name_prefix, "init");
 	ngx_conf_merge_str_value(conf->mpd_config.fragment_file_name_prefix, prev->mpd_config.fragment_file_name_prefix, "fragment");
-	
+	ngx_conf_merge_value(conf->mpd_config.segment_timeline, prev->mpd_config.segment_timeline, 1);
+
 	return NGX_CONF_OK;
 }
 

@@ -62,6 +62,15 @@
 #define VOD_DASH_MANIFEST_AUDIO_FOOTER											\
     "    </AdaptationSet>\n"
 
+#define VOD_DASH_MANIFEST_SEGMENT_TEMPLATE_FIXED								\
+	"        <SegmentTemplate\n"												\
+	"            timescale=\"1000\"\n"											\
+	"            media=\"%V%V-$Number$-$RepresentationID$.m4s\"\n"				\
+	"            initialization=\"%V%V-$RepresentationID$.mp4\"\n"				\
+	"            duration=\"%ui\"\n"											\
+	"            startNumber=\"1\">\n"											\
+	"        </SegmentTemplate>\n"
+
 #define VOD_DASH_MANIFEST_SEGMENT_TEMPLATE_HEADER								\
 	"        <SegmentTemplate\n"												\
 	"            timescale=\"1000\"\n"											\
@@ -243,12 +252,24 @@ static u_char*
 dash_packager_write_segment_template(
 	u_char* p, 
 	dash_manifest_config_t* conf,
+	segmenter_conf_t* segmenter_conf,
 	vod_str_t* base_url,
 	segment_durations_t* segment_durations)
 {
 	segment_duration_item_t* cur_item;
 	segment_duration_item_t* last_item = segment_durations->items + segment_durations->item_count;
 	uint32_t duration;
+
+	if (!conf->segment_timeline)
+	{
+		return vod_sprintf(p,
+			VOD_DASH_MANIFEST_SEGMENT_TEMPLATE_FIXED,
+			base_url,
+			&conf->fragment_file_name_prefix,
+			base_url,
+			&conf->init_file_name_prefix,
+			segmenter_conf->segment_duration);
+	}
 
 	p = vod_sprintf(p,
 		VOD_DASH_MANIFEST_SEGMENT_TEMPLATE_HEADER,
@@ -328,10 +349,17 @@ dash_packager_build_mpd(
 			return rc;
 		}
 
-		result_size += 
-			sizeof(VOD_DASH_MANIFEST_SEGMENT_TEMPLATE_HEADER) - 1 + urls_length +
-				(sizeof(VOD_DASH_MANIFEST_SEGMENT_REPEAT) - 1 + 2 * VOD_INT32_LEN) * segment_durations[media_type].item_count +
-			sizeof(VOD_DASH_MANIFEST_SEGMENT_TEMPLATE_FOOTER) - 1;
+		if (conf->segment_timeline)
+		{
+			result_size += 
+				sizeof(VOD_DASH_MANIFEST_SEGMENT_TEMPLATE_HEADER) - 1 + urls_length +
+					(sizeof(VOD_DASH_MANIFEST_SEGMENT_REPEAT) - 1 + 2 * VOD_INT32_LEN) * segment_durations[media_type].item_count +
+				sizeof(VOD_DASH_MANIFEST_SEGMENT_TEMPLATE_FOOTER) - 1;
+		}
+		else
+		{
+			result_size += sizeof(VOD_DASH_MANIFEST_SEGMENT_TEMPLATE_FIXED) - 1 + urls_length + VOD_INT64_LEN;
+		}
 	}
 
 	// allocate the buffer
@@ -390,6 +418,7 @@ dash_packager_build_mpd(
 		p = dash_packager_write_segment_template(
 			p,
 			conf,
+			segmenter_conf,
 			base_url,
 			&segment_durations[MEDIA_TYPE_VIDEO]);
 			
@@ -427,6 +456,7 @@ dash_packager_build_mpd(
 		p = dash_packager_write_segment_template(
 			p,
 			conf,
+			segmenter_conf,
 			base_url,
 			&segment_durations[MEDIA_TYPE_AUDIO]);
 

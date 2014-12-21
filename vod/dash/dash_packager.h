@@ -11,6 +11,7 @@
 typedef struct {
 	vod_str_t init_file_name_prefix;
 	vod_str_t fragment_file_name_prefix;
+	bool_t segment_timeline;
 } dash_manifest_config_t;
 
 // functions
