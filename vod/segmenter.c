@@ -485,7 +485,7 @@ post_bootstrap:
 	}
 
 	// add the last segment / empty segments after the last keyframe (in case align to key frames is on)
-	while (segment_index < result->segment_count)
+	while (segment_index < result->segment_count && accum_duration > segment_start)
 	{
 		// get the current duration and update to array
 		cur_duration = accum_duration - segment_start;
@@ -502,6 +502,8 @@ post_bootstrap:
 		segment_index++;
 		segment_start = accum_duration;
 	}
+
+	result->segment_count = segment_index;
 
 	result->item_count = cur_item + 1 - result->items;
 
