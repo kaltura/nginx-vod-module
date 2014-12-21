@@ -485,7 +485,7 @@ post_bootstrap:
 	}
 
 	// add the last segment / empty segments after the last keyframe (in case align to key frames is on)
-	while (segment_index < result->segment_count && accum_duration > segment_start)
+	while (segment_index < result->segment_count)
 	{
 		// get the current duration and update to array
 		cur_duration = accum_duration - segment_start;
@@ -503,9 +503,14 @@ post_bootstrap:
 		segment_start = accum_duration;
 	}
 
-	result->segment_count = segment_index;
-
 	result->item_count = cur_item + 1 - result->items;
+
+	// remove any empty segments from the end
+	if (result->item_count > 0 && cur_item->duration == 0)
+	{
+		result->item_count--;
+		result->segment_count -= cur_item->repeat_count;
+	}
 
 	return VOD_OK;
 }
