@@ -188,6 +188,12 @@ typedef bool_t(*stream_comparator_t)(void* context, const media_info_t* mi1, con
 typedef vod_status_t(*write_callback_t)(void* context, u_char* buffer, uint32_t size, bool_t* reuse_buffer);
 
 typedef struct {
+	write_callback_t write_tail;
+	write_callback_t write_head;
+	void* context;
+} segment_writer_t;
+
+typedef struct {
 	vod_pool_t* pool;
 	vod_log_t *log;
 	int parse_type;

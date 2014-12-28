@@ -25,8 +25,11 @@ ngx_http_vod_create_loc_conf(ngx_conf_t *cf)
 	// base params
 	ngx_init_upstream_conf(&conf->upstream);
 	ngx_init_upstream_conf(&conf->fallback_upstream);
-	conf->parse_uri_file_name = NGX_CONF_UNSET_PTR;
-	conf->get_file_path_components = NGX_CONF_UNSET_PTR;
+	ngx_init_upstream_conf(&conf->drm_upstream);
+	conf->drm_enabled = NGX_CONF_UNSET;
+	conf->drm_clear_lead_segment_count = NGX_CONF_UNSET_UINT;
+	conf->drm_max_info_length = NGX_CONF_UNSET_SIZE;
+	conf->submodule.parse_uri_file_name = NGX_CONF_UNSET_PTR;
 	conf->request_handler = NGX_CONF_UNSET_PTR;
 	conf->segmenter.segment_duration = NGX_CONF_UNSET_UINT;
 	conf->segmenter.bootstrap_segments = NGX_CONF_UNSET_PTR;
@@ -61,8 +64,18 @@ ngx_http_vod_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child)
 
 	// base params
 	ngx_conf_merge_str_value(conf->child_request_location, prev->child_request_location, "");
-	ngx_conf_merge_ptr_value(conf->parse_uri_file_name, prev->parse_uri_file_name, NULL);
-	ngx_conf_merge_ptr_value(conf->get_file_path_components, prev->get_file_path_components, NULL);
+	if (conf->submodule.parse_uri_file_name == NGX_CONF_UNSET_PTR) 
+	{
+		if (prev->submodule.parse_uri_file_name != NGX_CONF_UNSET_PTR)
+		{
+			conf->submodule = prev->submodule;
+		}
+		else
+		{
+			// zero module = serve files
+			ngx_memzero(&conf->submodule, sizeof(conf->submodule));
+		}
+	}
 	ngx_conf_merge_ptr_value(conf->request_handler, prev->request_handler, ngx_http_vod_local_request_handler);
 	ngx_conf_merge_str_value(conf->multi_uri_suffix, prev->multi_uri_suffix, ".urlset");
 
@@ -121,6 +134,21 @@ ngx_http_vod_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child)
 	}
 	ngx_conf_merge_str_value(conf->proxy_header_name, prev->proxy_header_name, "X-Kaltura-Proxy");
 	ngx_conf_merge_str_value(conf->proxy_header_value, prev->proxy_header_value, "dumpApiRequest");
+
+	err = ngx_merge_upstream_conf(cf, &conf->drm_upstream, &prev->drm_upstream);
+	if (err != NGX_CONF_OK)
+	{
+		ngx_log_debug0(NGX_LOG_DEBUG_HTTP, cf->log, 0,
+			"ngx_http_vod_merge_loc_conf: ngx_merge_upstream_conf failed (3)");
+		return err;
+	}
+	if (conf->drm_info_cache_zone == NULL)
+	{
+		conf->drm_info_cache_zone = prev->drm_info_cache_zone;
+	}
+	ngx_conf_merge_value(conf->drm_enabled, prev->drm_enabled, 0);
+	ngx_conf_merge_uint_value(conf->drm_clear_lead_segment_count, prev->drm_clear_lead_segment_count, 1);
+	ngx_conf_merge_size_value(conf->drm_max_info_length, prev->drm_max_info_length, 4096);
 
 	ngx_conf_merge_str_value(conf->clip_to_param_name, prev->clip_to_param_name, "clipTo");
 	ngx_conf_merge_str_value(conf->clip_from_param_name, prev->clip_from_param_name, "clipFrom");
@@ -187,6 +215,13 @@ ngx_http_vod_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child)
 	{
 		ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
 			"failed to initialize the segmenter %i", rc);
+		return NGX_CONF_ERROR;
+	}
+
+	if (conf->drm_enabled && conf->drm_upstream.upstream == NULL)
+	{
+		ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
+			"\"drm_upstream\" must be configured when drm is enabled");
 		return NGX_CONF_ERROR;
 	}
 
@@ -425,37 +460,6 @@ ngx_http_vod_perf_counters_command(ngx_conf_t *cf, ngx_command_t *cmd, void *con
 }
 
 static char *
-ngx_http_upstream_command(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
-{
-	ngx_http_upstream_conf_t *upstream_conf = (ngx_http_upstream_conf_t*)((u_char*)conf + cmd->offset);
-    ngx_str_t                       *value;
-    ngx_url_t                        u;
-
-	if (upstream_conf->upstream)
-	{
-        return "is duplicate";
-    }
-
-    value = cf->args->elts;
-
-    ngx_memzero(&u, sizeof(ngx_url_t));
-
-    u.url = value[1];
-    u.no_resolve = 1;
-    u.default_port = 80;
-
-	upstream_conf->upstream = ngx_http_upstream_add(cf, &u, 0);
-	if (upstream_conf->upstream == NULL)
-	{
-		ngx_log_debug0(NGX_LOG_DEBUG_HTTP, cf->log, 0,
-			"ngx_http_upstream_command: ngx_http_upstream_add failed");
-		return NGX_CONF_ERROR;
-    }
-
-    return NGX_CONF_OK;
-}
-
-static char *
 ngx_http_vod(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
 {
 	const ngx_http_vod_submodule_t** cur_module;
@@ -475,8 +479,7 @@ ngx_http_vod(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
 	// file serve
 	if (ngx_strcasecmp(value[1].data, (u_char *) "none") == 0)
 	{
-		vod_conf->parse_uri_file_name = NULL;
-		vod_conf->get_file_path_components = NULL;
+		ngx_memzero(&vod_conf->submodule, sizeof(vod_conf->submodule));
 		return NGX_CONF_OK;
 	}
 
@@ -487,8 +490,7 @@ ngx_http_vod(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
 	{
 		if (ngx_strcasecmp(value[1].data, (*cur_module)->name) == 0)
 		{
-			vod_conf->parse_uri_file_name = (*cur_module)->parse_uri_file_name;
-			vod_conf->get_file_path_components = (*cur_module)->get_file_path_components;
+			vod_conf->submodule = **cur_module;
 			found_module = 1;
 			break;
 		}
@@ -686,12 +688,7 @@ ngx_command_t ngx_http_vod_commands[] = {
 	offsetof(ngx_http_vod_loc_conf_t, child_request_location),
 	NULL },
 
-	{ ngx_string("vod_upstream"),
-	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1,
-	ngx_http_upstream_command,
-	NGX_HTTP_LOC_CONF_OFFSET,
-	offsetof(ngx_http_vod_loc_conf_t, upstream),
-	NULL },
+	DEFINE_UPSTREAM_COMMANDS(upstream, "")
 
 	{ ngx_string("vod_upstream_host_header"),
 	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1,
@@ -705,27 +702,6 @@ ngx_command_t ngx_http_vod_commands[] = {
 	ngx_http_set_complex_value_slot,
 	NGX_HTTP_LOC_CONF_OFFSET,
 	offsetof(ngx_http_vod_loc_conf_t, upstream_extra_args),
-	NULL },
-
-	{ ngx_string("vod_connect_timeout"),
-	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1,
-	ngx_conf_set_msec_slot,
-	NGX_HTTP_LOC_CONF_OFFSET,
-	offsetof(ngx_http_vod_loc_conf_t, upstream.connect_timeout),
-	NULL },
-
-	{ ngx_string("vod_send_timeout"),
-	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1,
-	ngx_conf_set_msec_slot,
-	NGX_HTTP_LOC_CONF_OFFSET,
-	offsetof(ngx_http_vod_loc_conf_t, upstream.send_timeout),
-	NULL },
-
-	{ ngx_string("vod_read_timeout"),
-	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1,
-	ngx_conf_set_msec_slot,
-	NGX_HTTP_LOC_CONF_OFFSET,
-	offsetof(ngx_http_vod_loc_conf_t, upstream.read_timeout),
 	NULL },
 
 	// path request parameters - mapped mode only
@@ -758,33 +734,7 @@ ngx_command_t ngx_http_vod_commands[] = {
 	NULL },
 
 	// fallback upstream - only for local/mapped modes
-	{ ngx_string("vod_fallback_upstream"),
-	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1,
-	ngx_http_upstream_command,
-	NGX_HTTP_LOC_CONF_OFFSET,
-	offsetof(ngx_http_vod_loc_conf_t, fallback_upstream),
-	NULL },
-
-	{ ngx_string("vod_fallback_connect_timeout"),
-	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1,
-	ngx_conf_set_msec_slot,
-	NGX_HTTP_LOC_CONF_OFFSET,
-	offsetof(ngx_http_vod_loc_conf_t, fallback_upstream.connect_timeout),
-	NULL },
-
-	{ ngx_string("vod_fallback_send_timeout"),
-	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1,
-	ngx_conf_set_msec_slot,
-	NGX_HTTP_LOC_CONF_OFFSET,
-	offsetof(ngx_http_vod_loc_conf_t, fallback_upstream.send_timeout),
-	NULL },
-
-	{ ngx_string("vod_fallback_read_timeout"),
-	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1,
-	ngx_conf_set_msec_slot,
-	NGX_HTTP_LOC_CONF_OFFSET,
-	offsetof(ngx_http_vod_loc_conf_t, fallback_upstream.read_timeout),
-	NULL },
+	DEFINE_UPSTREAM_COMMANDS(fallback_upstream, "fallback_")
 
 	{ ngx_string("vod_proxy_header_name"),
 	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1,
@@ -798,6 +748,37 @@ ngx_command_t ngx_http_vod_commands[] = {
 	ngx_conf_set_str_slot,
 	NGX_HTTP_LOC_CONF_OFFSET,
 	offsetof(ngx_http_vod_loc_conf_t, proxy_header_value),
+	NULL },
+
+	// drm
+	{ ngx_string("vod_drm_enabled"),
+	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1,
+	ngx_conf_set_flag_slot,
+	NGX_HTTP_LOC_CONF_OFFSET,
+	offsetof(ngx_http_vod_loc_conf_t, drm_enabled),
+	NULL },
+
+	{ ngx_string("vod_drm_clear_lead_segment_count"),
+	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1,
+	ngx_conf_set_num_slot,
+	NGX_HTTP_LOC_CONF_OFFSET,
+	offsetof(ngx_http_vod_loc_conf_t, drm_clear_lead_segment_count),
+	NULL },
+
+	{ ngx_string("vod_drm_max_info_length"),
+	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1,
+	ngx_conf_set_size_slot,
+	NGX_HTTP_LOC_CONF_OFFSET,
+	offsetof(ngx_http_vod_loc_conf_t, drm_max_info_length),
+	NULL },
+
+	DEFINE_UPSTREAM_COMMANDS(drm_upstream, "drm_")
+
+	{ ngx_string("vod_drm_info_cache"),
+	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1 | NGX_CONF_TAKE2,
+	ngx_http_vod_cache_command,
+	NGX_HTTP_LOC_CONF_OFFSET,
+	offsetof(ngx_http_vod_loc_conf_t, drm_info_cache_zone),
 	NULL },
 
 	// request format settings

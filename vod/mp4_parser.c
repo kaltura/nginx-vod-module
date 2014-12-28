@@ -138,17 +138,6 @@ typedef struct {
 } stss_atom_t;
 
 typedef struct {
-	u_char	version[1];
-	u_char	flags[3];
-	u_char	entries[4];
-} stsd_atom_t;
-
-typedef struct {
-	u_char	size[4];
-	u_char	format[4];
-} stsd_entry_header_t;
-
-typedef struct {
 	u_char	reserved1[4];
 	u_char	reserved2[2];
 	u_char	dref_id[2];
@@ -2267,6 +2256,7 @@ mp4_parser_process_moov_atom_callback(void* ctx, atom_info_t* atom_info)
 		if ((context->request_context->parse_type & PARSE_FLAG_SAVE_RAW_ATOMS) != 0)
 		{
 			result->mvhd_atom.size = atom_info->header_size + atom_info->size;
+			result->mvhd_atom.header_size = atom_info->header_size;
 			atom_data = vod_alloc(context->request_context->pool, result->mvhd_atom.size);
 			if (atom_data == NULL)
 			{
@@ -2430,6 +2420,8 @@ mp4_parser_process_moov_atom_callback(void* ctx, atom_info_t* atom_info)
 	// parse / copy the extra data
 	if ((context->request_context->parse_type & (PARSE_FLAG_EXTRA_DATA | PARSE_FLAG_EXTRA_DATA_SIZE)) != 0)
 	{
+		// TODO: add HEVC support
+
 		if (is_avc && (context->request_context->parse_type & PARSE_FLAG_EXTRA_DATA_PARSE) != 0)
 		{
 			// extract the nal units
@@ -2615,6 +2607,7 @@ mp4_parser_copy_raw_atoms(request_context_t* request_context, raw_atom_t* dest, 
 		raw_atom = dest + cur->raw_atom_index;
 
 		raw_atom->size = atom_info->header_size + atom_info->size;
+		raw_atom->header_size = atom_info->header_size;
 		total_size += raw_atom->size;
 	}
 
@@ -2760,6 +2753,7 @@ mp4_parser_parse_frames(
 		result_stream->key_frame_count = context.key_frame_count;
 		result_stream->total_frames_size = context.total_frames_size;
 		result_stream->total_frames_duration = context.total_frames_duration;
+		result_stream->first_frame_index = context.first_frame;
 		result_stream->first_frame_time_offset = context.first_frame_time_offset;
 
 		// copy raw atoms

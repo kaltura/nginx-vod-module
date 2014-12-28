@@ -57,8 +57,7 @@ static ngx_int_t
 ngx_http_vod_mss_init_frame_processor(
 	ngx_http_vod_submodule_context_t* submodule_context,
 	read_cache_state_t* read_cache_state,
-	write_callback_t write_callback,
-	void* write_context,
+	segment_writer_t* segment_writer,
 	ngx_http_vod_frame_processor_t* frame_processor,
 	void** frame_processor_state,
 	ngx_str_t* output_buffer,
@@ -89,8 +88,8 @@ ngx_http_vod_mss_init_frame_processor(
 			&submodule_context->request_context,
 			submodule_context->mpeg_metadata.first_stream,
 			read_cache_state,
-			write_callback,
-			write_context,
+			segment_writer->write_tail,
+			segment_writer->context,
 			&state);
 		if (rc != VOD_OK)
 		{
@@ -244,6 +243,17 @@ ngx_http_vod_mss_parse_uri_file_name(
 	}
 
 	return NGX_OK;
+}
+
+ngx_int_t
+ngx_http_vod_mss_parse_drm_info(
+	ngx_http_vod_submodule_context_t* submodule_context,
+	ngx_str_t* drm_info,
+	void** output)
+{
+	ngx_log_error(NGX_LOG_ERR, submodule_context->request_context.log, 0,
+		"ngx_http_vod_mss_parse_drm_info: drm support for mss not implemented");
+	return VOD_UNEXPECTED;
 }
 
 DEFINE_SUBMODULE(mss);

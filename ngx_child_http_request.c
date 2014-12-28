@@ -884,3 +884,34 @@ ngx_merge_upstream_conf(
 
 	return NGX_CONF_OK;
 }
+
+char *
+ngx_http_upstream_command(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
+{
+	ngx_http_upstream_conf_t *upstream_conf = (ngx_http_upstream_conf_t*)((u_char*)conf + cmd->offset);
+	ngx_str_t                       *value;
+	ngx_url_t                        u;
+
+	if (upstream_conf->upstream)
+	{
+		return "is duplicate";
+	}
+
+	value = cf->args->elts;
+
+	ngx_memzero(&u, sizeof(ngx_url_t));
+
+	u.url = value[1];
+	u.no_resolve = 1;
+	u.default_port = 80;
+
+	upstream_conf->upstream = ngx_http_upstream_add(cf, &u, 0);
+	if (upstream_conf->upstream == NULL)
+	{
+		ngx_log_debug0(NGX_LOG_DEBUG_HTTP, cf->log, 0,
+			"ngx_http_upstream_command: ngx_http_upstream_add failed");
+		return NGX_CONF_ERROR;
+	}
+
+	return NGX_CONF_OK;
+}

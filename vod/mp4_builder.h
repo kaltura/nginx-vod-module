@@ -9,6 +9,12 @@
 #define ATOM_HEADER_SIZE (8)
 
 // macros
+#define write_word(p, w)			\
+	{								\
+	*(p)++ = ((w) >> 8) & 0xFF;	\
+	*(p)++ = (w)& 0xFF;			\
+	}
+
 #define write_dword(p, dw)			\
 	{								\
 	*(p)++ = ((dw) >> 24) & 0xFF;	\
@@ -69,7 +75,7 @@ u_char* mp4_builder_write_trun_atom(
 	uint32_t media_type, 
 	input_frame_t* frames, 
 	uint32_t frame_count, 
-	uint32_t moof_atom_size);
+	uint32_t first_frame_offset);
 
 vod_status_t mp4_builder_frame_writer_init(
 	request_context_t* request_context,

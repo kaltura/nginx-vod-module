@@ -26,7 +26,7 @@ mp4_builder_get_trun_atom_size(uint32_t media_type, uint32_t frame_count)
 }
 
 static u_char* 
-mp4_builder_write_video_trun_atom(u_char* p, input_frame_t* frames, uint32_t frame_count, uint32_t moof_atom_size)
+mp4_builder_write_video_trun_atom(u_char* p, input_frame_t* frames, uint32_t frame_count, uint32_t first_frame_offset)
 {
 	input_frame_t* cur_frame;
 	input_frame_t* last_frame = frames + frame_count;
@@ -37,7 +37,7 @@ mp4_builder_write_video_trun_atom(u_char* p, input_frame_t* frames, uint32_t fra
 	write_atom_header(p, atom_size, 't', 'r', 'u', 'n');
 	write_dword(p, 0xF01);								// flags = data offset, duration, size, key, delay
 	write_dword(p, frame_count);
-	write_dword(p, moof_atom_size + ATOM_HEADER_SIZE);	// mdat data offset relative to moof start offset
+	write_dword(p, first_frame_offset);	// first frame offset relative to moof start offset
 
 	for (cur_frame = frames; cur_frame < last_frame; cur_frame++)
 	{
@@ -57,7 +57,7 @@ mp4_builder_write_video_trun_atom(u_char* p, input_frame_t* frames, uint32_t fra
 }
 
 static u_char* 
-mp4_builder_write_audio_trun_atom(u_char* p, input_frame_t* frames, uint32_t frame_count, uint32_t moof_atom_size)
+mp4_builder_write_audio_trun_atom(u_char* p, input_frame_t* frames, uint32_t frame_count, uint32_t first_frame_offset)
 {
 	input_frame_t* cur_frame;
 	input_frame_t* last_frame = frames + frame_count;
@@ -68,7 +68,7 @@ mp4_builder_write_audio_trun_atom(u_char* p, input_frame_t* frames, uint32_t fra
 	write_atom_header(p, atom_size, 't', 'r', 'u', 'n');
 	write_dword(p, 0x301);								// flags = data offset, duration, size
 	write_dword(p, frame_count);
-	write_dword(p, moof_atom_size + ATOM_HEADER_SIZE);	// mdat data offset relative to moof start offset
+	write_dword(p, first_frame_offset);	// first frame offset relative to moof start offset
 
 	for (cur_frame = frames; cur_frame < last_frame; cur_frame++)
 	{
@@ -84,16 +84,16 @@ mp4_builder_write_trun_atom(
 	uint32_t media_type, 
 	input_frame_t* frames, 
 	uint32_t frame_count, 
-	uint32_t moof_atom_size)
+	uint32_t first_frame_offset)
 {
 	switch (media_type)
 	{
 	case MEDIA_TYPE_VIDEO:
-		p = mp4_builder_write_video_trun_atom(p, frames, frame_count, moof_atom_size);
+		p = mp4_builder_write_video_trun_atom(p, frames, frame_count, first_frame_offset);
 		break;
 
 	case MEDIA_TYPE_AUDIO:
-		p = mp4_builder_write_audio_trun_atom(p, frames, frame_count, moof_atom_size);
+		p = mp4_builder_write_audio_trun_atom(p, frames, frame_count, first_frame_offset);
 		break;
 	}
 	return p;

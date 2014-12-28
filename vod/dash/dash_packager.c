@@ -24,7 +24,7 @@
     "        maxHeight=\"%uD\"\n"												\
     "        maxFrameRate=\"%uD.%03uD\">\n"
 
-#define VOD_DASH_MANIFEST_VIDEO													\
+#define VOD_DASH_MANIFEST_VIDEO_PREFIX											\
 	"      <Representation\n"													\
     "          id=\"f%uD-v%uD\"\n"												\
     "          mimeType=\"video/mp4\"\n"										\
@@ -34,7 +34,9 @@
     "          frameRate=\"%uD.%03uD\"\n"										\
     "          sar=\"1:1\"\n"													\
     "          startWithSAP=\"1\"\n"											\
-	"          bandwidth=\"%uD\">\n"											\
+	"          bandwidth=\"%uD\">\n"
+
+#define VOD_DASH_MANIFEST_VIDEO_SUFFIX											\
 	"      </Representation>\n"
 
 #define VOD_DASH_MANIFEST_VIDEO_FOOTER											\
@@ -49,14 +51,16 @@
                                 "23003:3:audio_channel_configuration:2011\"\n"	\
     "          value=\"1\"/>\n"
 
-#define VOD_DASH_MANIFEST_AUDIO													\
+#define VOD_DASH_MANIFEST_AUDIO_PREFIX											\
 	"      <Representation\n"													\
 	"          id=\"f%uD-a%uD\"\n"												\
     "          mimeType=\"audio/mp4\"\n"										\
     "          codecs=\"%V\"\n"													\
     "          audioSamplingRate=\"%uD\"\n"										\
     "          startWithSAP=\"1\"\n"											\
-    "          bandwidth=\"%uD\">\n"											\
+    "          bandwidth=\"%uD\">\n"
+
+#define VOD_DASH_MANIFEST_AUDIO_SUFFIX											\
 	"      </Representation>\n"
 
 #define VOD_DASH_MANIFEST_AUDIO_FOOTER											\
@@ -304,6 +308,9 @@ dash_packager_build_mpd(
 	vod_str_t* base_url,
 	segmenter_conf_t* segmenter_conf,
 	mpeg_metadata_t* mpeg_metadata, 
+	size_t representation_tags_size,
+	write_tags_callback_t write_representation_tags,
+	void* representation_tags_writer_context,
 	vod_str_t* result)
 {
 	mpeg_stream_metadata_t* cur_stream;
@@ -323,12 +330,17 @@ dash_packager_build_mpd(
 	result_size =
 		sizeof(VOD_DASH_MANIFEST_HEADER) - 1 + 3 * VOD_INT32_LEN +
 			sizeof(VOD_DASH_MANIFEST_VIDEO_HEADER) - 1 + 4 * VOD_INT32_LEN + 
-				mpeg_metadata->stream_count[MEDIA_TYPE_VIDEO] * (sizeof(VOD_DASH_MANIFEST_VIDEO) - 1 + 7 * VOD_INT32_LEN + MAX_CODEC_NAME_SIZE) + 
+				mpeg_metadata->stream_count[MEDIA_TYPE_VIDEO] * (
+					sizeof(VOD_DASH_MANIFEST_VIDEO_PREFIX) - 1 + 7 * VOD_INT32_LEN + MAX_CODEC_NAME_SIZE +
+					sizeof(VOD_DASH_MANIFEST_VIDEO_SUFFIX) - 1) +
 			sizeof(VOD_DASH_MANIFEST_VIDEO_FOOTER) - 1 +
 			sizeof(VOD_DASH_MANIFEST_AUDIO_HEADER) - 1 + 
-				mpeg_metadata->stream_count[MEDIA_TYPE_AUDIO] * (sizeof(VOD_DASH_MANIFEST_AUDIO) - 1 + 4 * VOD_INT32_LEN + MAX_CODEC_NAME_SIZE) +
+				mpeg_metadata->stream_count[MEDIA_TYPE_AUDIO] * (
+					sizeof(VOD_DASH_MANIFEST_AUDIO_PREFIX) - 1 + 4 * VOD_INT32_LEN + MAX_CODEC_NAME_SIZE +
+					sizeof(VOD_DASH_MANIFEST_AUDIO_SUFFIX) - 1) +
 			sizeof(VOD_DASH_MANIFEST_AUDIO_FOOTER) - 1 +
-		sizeof(VOD_DASH_MANIFEST_FOOTER);
+		sizeof(VOD_DASH_MANIFEST_FOOTER) +
+		representation_tags_size;
 
 	// get the segment count
 	for (media_type = 0; media_type < MEDIA_TYPE_COUNT; media_type++)
@@ -372,7 +384,8 @@ dash_packager_build_mpd(
 	}
 	
 	// print the manifest header
-	p = vod_sprintf(result->data, VOD_DASH_MANIFEST_HEADER,
+	p = vod_sprintf(result->data, 
+		VOD_DASH_MANIFEST_HEADER,
 		(uint32_t)(mpeg_metadata->duration_millis / 1000),
 		(uint32_t)(mpeg_metadata->duration_millis % 1000),
 		(uint32_t)(segmenter_conf->max_segment_duration / 1000));
@@ -408,7 +421,8 @@ dash_packager_build_mpd(
 		}
 
 		// print the header
-		p = vod_sprintf(p, VOD_DASH_MANIFEST_VIDEO_HEADER,
+		p = vod_sprintf(p, 
+			VOD_DASH_MANIFEST_VIDEO_HEADER,
 			max_width,
 			max_height,
 			(uint32_t)max_framerate_timescale / max_framerate_duration,
@@ -430,7 +444,8 @@ dash_packager_build_mpd(
 				continue;
 			}
 
-			p = vod_sprintf(p, VOD_DASH_MANIFEST_VIDEO,
+			p = vod_sprintf(p, 
+				VOD_DASH_MANIFEST_VIDEO_PREFIX,
 				cur_stream->file_info.file_index + 1,
 				cur_stream->track_index + 1,
 				&cur_stream->media_info.codec_name,
@@ -440,6 +455,14 @@ dash_packager_build_mpd(
 				(uint32_t)(((uint64_t)cur_stream->media_info.timescale * 1000) / cur_stream->media_info.min_frame_duration % 1000),
 				cur_stream->media_info.bitrate
 				);
+
+			// write any additional tags
+			if (write_representation_tags != NULL)
+			{
+				p = write_representation_tags(representation_tags_writer_context, p, cur_stream);
+			}
+
+			p = vod_copy(p, VOD_DASH_MANIFEST_VIDEO_SUFFIX, sizeof(VOD_DASH_MANIFEST_VIDEO_SUFFIX) - 1);
 		}
 
 		// print the footer
@@ -469,19 +492,27 @@ dash_packager_build_mpd(
 			}
 
 			p = vod_sprintf(p,
-				VOD_DASH_MANIFEST_AUDIO,
+				VOD_DASH_MANIFEST_AUDIO_PREFIX,
 				cur_stream->file_info.file_index + 1,
 				cur_stream->track_index + 1,
 				&cur_stream->media_info.codec_name,
 				cur_stream->media_info.u.audio.sample_rate,
 				cur_stream->media_info.bitrate);
+
+			// write any additional tags
+			if (write_representation_tags != NULL)
+			{
+				p = write_representation_tags(representation_tags_writer_context, p, cur_stream);
+			}
+
+			p = vod_copy(p, VOD_DASH_MANIFEST_AUDIO_SUFFIX, sizeof(VOD_DASH_MANIFEST_AUDIO_SUFFIX) - 1);
 		}
 
 		// print the footer
 		p = vod_copy(p, VOD_DASH_MANIFEST_AUDIO_FOOTER, sizeof(VOD_DASH_MANIFEST_AUDIO_FOOTER) - 1);
 	}
 
-	p = vod_sprintf(p, VOD_DASH_MANIFEST_FOOTER);
+	p = vod_copy(p, VOD_DASH_MANIFEST_FOOTER, sizeof(VOD_DASH_MANIFEST_FOOTER) - 1);
 
 	result->len = p - result->data;
 
@@ -500,9 +531,9 @@ dash_packager_build_mpd(
 // init mp4 writing code
 
 static void
-dash_packager_get_track_sizes(mpeg_stream_metadata_t* cur_stream, track_sizes_t* result)
+dash_packager_get_track_sizes(mpeg_stream_metadata_t* cur_stream, size_t stsd_size, track_sizes_t* result)
 {
-	result->track_stbl_size = ATOM_HEADER_SIZE + cur_stream->raw_atoms[RTA_STSD].size + sizeof(fixed_stbl_atoms);
+	result->track_stbl_size = ATOM_HEADER_SIZE + stsd_size + sizeof(fixed_stbl_atoms);
 	result->track_minf_size = ATOM_HEADER_SIZE + cur_stream->raw_atoms[RTA_DINF].size + result->track_stbl_size;
 	switch (cur_stream->media_info.media_type)
 	{
@@ -537,28 +568,40 @@ dash_packager_build_init_mp4(
 	request_context_t* request_context, 
 	mpeg_metadata_t* mpeg_metadata, 
 	bool_t size_only,
+	atom_writer_t* extra_moov_atoms_writer,
+	atom_writer_t* stsd_atom_writer,
 	vod_str_t* result)
 {
-	mpeg_stream_metadata_t* cur_stream;
 	track_sizes_t track_sizes;
 	size_t moov_atom_size;
 	size_t mvex_atom_size;
 	size_t result_size;
+	size_t stsd_size;
 	u_char* p;
 
 	// calc moov atom size
-	moov_atom_size = ATOM_HEADER_SIZE + mpeg_metadata->mvhd_atom.size;
-	mvex_atom_size = ATOM_HEADER_SIZE;
-	for (cur_stream = mpeg_metadata->first_stream; cur_stream < mpeg_metadata->last_stream; cur_stream++)
+	if (stsd_atom_writer != NULL)
 	{
-		// trak
-		dash_packager_get_track_sizes(cur_stream, &track_sizes);
-		moov_atom_size += track_sizes.track_trak_size;
-
-		// trex
-		mvex_atom_size += ATOM_HEADER_SIZE + sizeof(trex_atom_t);
+		stsd_size = stsd_atom_writer->atom_size;
 	}
-	moov_atom_size += mvex_atom_size;
+	else
+	{
+		stsd_size = mpeg_metadata->first_stream->raw_atoms[RTA_STSD].size;
+	}
+
+	dash_packager_get_track_sizes(mpeg_metadata->first_stream, stsd_size, &track_sizes);
+
+	mvex_atom_size = ATOM_HEADER_SIZE + ATOM_HEADER_SIZE + sizeof(trex_atom_t);
+
+	moov_atom_size = ATOM_HEADER_SIZE +
+		mpeg_metadata->mvhd_atom.size +
+		track_sizes.track_trak_size +
+		mvex_atom_size;
+
+	if (extra_moov_atoms_writer != NULL)
+	{
+		moov_atom_size += extra_moov_atoms_writer->atom_size;
+	}
 
 	result_size = sizeof(ftyp_atom) + moov_atom_size;
 
@@ -589,43 +632,48 @@ dash_packager_build_init_mp4(
 
 	// moov.mvex
 	write_atom_header(p, mvex_atom_size, 'm', 'v', 'e', 'x');
-	for (cur_stream = mpeg_metadata->first_stream; cur_stream < mpeg_metadata->last_stream; cur_stream++)
+
+	// moov.mvex.trex
+	p = dash_packager_write_trex_atom(p, mpeg_metadata->first_stream->media_info.track_id);
+
+	// moov.trak
+	write_atom_header(p, track_sizes.track_trak_size, 't', 'r', 'a', 'k');
+	p = vod_copy_atom(p, mpeg_metadata->first_stream->raw_atoms[RTA_TKHD]);
+
+	// moov.trak.mdia
+	write_atom_header(p, track_sizes.track_mdia_size, 'm', 'd', 'i', 'a');
+	p = vod_copy_atom(p, mpeg_metadata->first_stream->raw_atoms[RTA_MDHD]);
+	p = vod_copy_atom(p, mpeg_metadata->first_stream->raw_atoms[RTA_HDLR]);
+
+	// moov.trak.minf
+	write_atom_header(p, track_sizes.track_minf_size, 'm', 'i', 'n', 'f');
+	switch (mpeg_metadata->first_stream->media_info.media_type)
 	{
-		// moov.mvex.trex
-		p = dash_packager_write_trex_atom(p, cur_stream->media_info.track_id);
+	case MEDIA_TYPE_VIDEO:
+		p = vod_copy(p, vmhd_atom, sizeof(vmhd_atom));
+		break;
+	case MEDIA_TYPE_AUDIO:
+		p = vod_copy(p, smhd_atom, sizeof(smhd_atom));
+		break;
 	}
+	p = vod_copy_atom(p, mpeg_metadata->first_stream->raw_atoms[RTA_DINF]);
 
-	// tracks
-	for (cur_stream = mpeg_metadata->first_stream; cur_stream < mpeg_metadata->last_stream; cur_stream++)
+	// moov.trak.minf.stbl
+	write_atom_header(p, track_sizes.track_stbl_size, 's', 't', 'b', 'l');
+	if (stsd_atom_writer != NULL)
 	{
-		dash_packager_get_track_sizes(cur_stream, &track_sizes);
+		p = stsd_atom_writer->write(stsd_atom_writer->context, p);
+	}
+	else
+	{
+		p = vod_copy_atom(p, mpeg_metadata->first_stream->raw_atoms[RTA_STSD]);
+	}
+	p = vod_copy(p, fixed_stbl_atoms, sizeof(fixed_stbl_atoms));
 
-		// moov.trak
-		write_atom_header(p, track_sizes.track_trak_size, 't', 'r', 'a', 'k');
-		p = vod_copy_atom(p, cur_stream->raw_atoms[RTA_TKHD]);
-
-		// moov.trak.mdia
-		write_atom_header(p, track_sizes.track_mdia_size, 'm', 'd', 'i', 'a');
-		p = vod_copy_atom(p, cur_stream->raw_atoms[RTA_MDHD]);
-		p = vod_copy_atom(p, cur_stream->raw_atoms[RTA_HDLR]);
-
-		// moov.trak.minf
-		write_atom_header(p, track_sizes.track_minf_size, 'm', 'i', 'n', 'f');
-		switch (cur_stream->media_info.media_type)
-		{
-		case MEDIA_TYPE_VIDEO:
-			p = vod_copy(p, vmhd_atom, sizeof(vmhd_atom));
-			break;
-		case MEDIA_TYPE_AUDIO:
-			p = vod_copy(p, smhd_atom, sizeof(smhd_atom));
-			break;
-		}
-		p = vod_copy_atom(p, cur_stream->raw_atoms[RTA_DINF]);
-
-		// moov.trak.minf.stbl
-		write_atom_header(p, track_sizes.track_stbl_size, 's', 't', 'b', 'l');
-		p = vod_copy_atom(p, cur_stream->raw_atoms[RTA_STSD]);
-		p = vod_copy(p, fixed_stbl_atoms, sizeof(fixed_stbl_atoms));
+	// moov.xxx
+	if (extra_moov_atoms_writer != NULL)
+	{
+		p = extra_moov_atoms_writer->write(extra_moov_atoms_writer->context, p);
 	}
 
 	result->len = p - result->data;
@@ -700,13 +748,26 @@ dash_packager_write_sidx64_atom(
 }
 
 static u_char*
-dash_packager_write_tfhd_atom(u_char* p, uint32_t track_id)
+dash_packager_write_tfhd_atom(u_char* p, uint32_t track_id, uint32_t sample_description_index)
 {
-	size_t atom_size = ATOM_HEADER_SIZE + sizeof(tfhd_atom_t);
+	size_t atom_size;
+	uint32_t flags;
+
+	flags = 0x020000;				// default-base-is-moof
+	atom_size = ATOM_HEADER_SIZE + sizeof(tfhd_atom_t);
+	if (sample_description_index > 0)
+	{
+		flags |= 0x02;				// sample-description-index-present
+		atom_size += sizeof(uint32_t);
+	}
 
 	write_atom_header(p, atom_size, 't', 'f', 'h', 'd');
-	write_dword(p, 0x020000);		// flags
+	write_dword(p, flags);			// flags
 	write_dword(p, track_id);		// track id
+	if (sample_description_index > 0)
+	{
+		write_dword(p, sample_description_index);
+	}
 	return p;
 }
 
@@ -737,13 +798,20 @@ dash_packager_build_fragment_header(
 	request_context_t* request_context,
 	mpeg_stream_metadata_t* stream_metadata,
 	uint32_t segment_index,
+	uint32_t sample_description_index,
+	size_t extra_traf_atoms_size,
+	write_extra_traf_atoms_callback_t write_extra_traf_atoms_callback,
+	void* write_extra_traf_atoms_context,
+	atom_writer_t* mdat_prefix_writer,
 	bool_t size_only,
 	vod_str_t* result,
 	size_t* total_fragment_size)
 {
 	uint64_t earliest_pres_time = dash_packager_get_earliest_pres_time(stream_metadata);
+	size_t first_frame_offset;
 	size_t mdat_atom_size;
 	size_t trun_atom_size;
+	size_t tfhd_atom_size;
 	size_t moof_atom_size;
 	size_t traf_atom_size;
 	size_t result_size;
@@ -751,13 +819,24 @@ dash_packager_build_fragment_header(
 
 	// calculate sizes
 	mdat_atom_size = ATOM_HEADER_SIZE + stream_metadata->total_frames_size;
+	if (mdat_prefix_writer != NULL)
+	{
+		mdat_atom_size += mdat_prefix_writer->atom_size;
+	}
 	trun_atom_size = mp4_builder_get_trun_atom_size(stream_metadata->media_info.media_type, stream_metadata->frame_count);
+
+	tfhd_atom_size = ATOM_HEADER_SIZE + sizeof(tfhd_atom_t);
+	if (sample_description_index > 0)
+	{
+		tfhd_atom_size += sizeof(uint32_t);
+	}
 
 	traf_atom_size =
 		ATOM_HEADER_SIZE +
-		ATOM_HEADER_SIZE + sizeof(tfhd_atom_t)+
+		tfhd_atom_size +
 		ATOM_HEADER_SIZE + (earliest_pres_time > UINT_MAX ? sizeof(tfdt64_atom_t) : sizeof(tfdt_atom_t)) +
-		trun_atom_size;
+		trun_atom_size + 
+		extra_traf_atoms_size;
 
 	moof_atom_size =
 		ATOM_HEADER_SIZE +
@@ -768,7 +847,7 @@ dash_packager_build_fragment_header(
 		sizeof(styp_atom)+
 		ATOM_HEADER_SIZE + (earliest_pres_time > UINT_MAX ? sizeof(sidx64_atom_t) : sizeof(sidx_atom_t)) + 
 		moof_atom_size +
-		ATOM_HEADER_SIZE;		// mdat
+		mdat_atom_size - stream_metadata->total_frames_size;		// mdat
 
 	*total_fragment_size = result_size + stream_metadata->total_frames_size;
 
@@ -810,7 +889,7 @@ dash_packager_build_fragment_header(
 	write_atom_header(p, traf_atom_size, 't', 'r', 'a', 'f');
 
 	// moof.traf.tfhd
-	p = dash_packager_write_tfhd_atom(p, stream_metadata->media_info.track_id);
+	p = dash_packager_write_tfhd_atom(p, stream_metadata->media_info.track_id, sample_description_index);
 
 	// moof.traf.tfdt
 	if (earliest_pres_time > UINT_MAX)
@@ -823,15 +902,33 @@ dash_packager_build_fragment_header(
 	}
 
 	// moof.traf.trun
+	first_frame_offset = moof_atom_size + ATOM_HEADER_SIZE;
+	if (mdat_prefix_writer != NULL)
+	{
+		first_frame_offset += mdat_prefix_writer->atom_size;
+	}
+
 	p = mp4_builder_write_trun_atom(
 		p, 
 		stream_metadata->media_info.media_type, 
 		stream_metadata->frames, 
 		stream_metadata->frame_count, 
-		moof_atom_size);
+		first_frame_offset);
+
+	// moof.traf.xxx
+	if (write_extra_traf_atoms_callback != NULL)
+	{
+		p = write_extra_traf_atoms_callback(write_extra_traf_atoms_context, p, moof_atom_size);
+	}
 
 	// mdat
 	write_atom_header(p, mdat_atom_size, 'm', 'd', 'a', 't');
+
+	// mdat prefix
+	if (mdat_prefix_writer != NULL)
+	{
+		p = mdat_prefix_writer->write(mdat_prefix_writer->context, p);
+	}
 
 	result->len = p - result->data;
 
