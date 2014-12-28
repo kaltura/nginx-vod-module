@@ -4,26 +4,27 @@
 // includes
 #include "dash_packager.h"
 
-#define AES_KEY_SIZE (16)
-#define KID_SIZE (16)
-#define SYSTEM_ID_SIZE (16)
+// constants
+#define EDASH_AES_KEY_SIZE (16)
+#define EDASH_KID_SIZE (16)
+#define EDASH_SYSTEM_ID_SIZE (16)
 
 // typedef
 typedef struct {
 	u_char system_id[16];
 	vod_str_t data;
-} pssh_info_t;
+} edash_pssh_info_t;
 
 typedef struct {
 	uint32_t count;
-	pssh_info_t* first;
-	pssh_info_t* last;
-} pssh_info_array_t;
+	edash_pssh_info_t* first;
+	edash_pssh_info_t* last;
+} edash_pssh_info_array_t;
 
 typedef struct {
-	u_char key_id[KID_SIZE];
-	u_char key[AES_KEY_SIZE];
-	pssh_info_array_t pssh_array;
+	u_char key_id[EDASH_KID_SIZE];
+	u_char key[EDASH_AES_KEY_SIZE];
+	edash_pssh_info_array_t pssh_array;
 } edash_drm_info_t;
 
 // functions
@@ -42,8 +43,7 @@ vod_status_t edash_packager_build_init_mp4(
 	bool_t size_only,
 	vod_str_t* result);
 
-vod_status_t
-edash_packager_get_fragment_writer(
+vod_status_t edash_packager_get_fragment_writer(
 	segment_writer_t* result,
 	request_context_t* request_context,
 	mpeg_stream_metadata_t* stream_metadata,

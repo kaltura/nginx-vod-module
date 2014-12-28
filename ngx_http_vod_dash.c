@@ -353,7 +353,7 @@ ngx_http_vod_dash_parse_drm_info(
 {
 	edash_drm_info_t* result;
 	ngx_json_value_t* cur_input_pssh;
-	pssh_info_t* cur_output_pssh;
+	edash_pssh_info_t* cur_output_pssh;
 	ngx_json_value_t parsed_info;
 	ngx_array_t *pssh_array;
 	ngx_int_t rc;

@@ -11,8 +11,8 @@
 // macros
 #define write_word(p, w)			\
 	{								\
-	*(p)++ = ((w) >> 8) & 0xFF;	\
-	*(p)++ = (w)& 0xFF;			\
+	*(p)++ = ((w) >> 8) & 0xFF;		\
+	*(p)++ = (w) & 0xFF;			\
 	}
 
 #define write_dword(p, dw)			\
@@ -20,7 +20,7 @@
 	*(p)++ = ((dw) >> 24) & 0xFF;	\
 	*(p)++ = ((dw) >> 16) & 0xFF;	\
 	*(p)++ = ((dw) >> 8) & 0xFF;	\
-	*(p)++ = (dw)& 0xFF;			\
+	*(p)++ = (dw) & 0xFF;			\
 	}
 
 #define write_qword(p, qw)			\

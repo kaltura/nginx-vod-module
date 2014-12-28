@@ -25,10 +25,6 @@ ngx_http_vod_create_loc_conf(ngx_conf_t *cf)
 	// base params
 	ngx_init_upstream_conf(&conf->upstream);
 	ngx_init_upstream_conf(&conf->fallback_upstream);
-	ngx_init_upstream_conf(&conf->drm_upstream);
-	conf->drm_enabled = NGX_CONF_UNSET;
-	conf->drm_clear_lead_segment_count = NGX_CONF_UNSET_UINT;
-	conf->drm_max_info_length = NGX_CONF_UNSET_SIZE;
 	conf->submodule.parse_uri_file_name = NGX_CONF_UNSET_PTR;
 	conf->request_handler = NGX_CONF_UNSET_PTR;
 	conf->segmenter.segment_duration = NGX_CONF_UNSET_UINT;
@@ -41,6 +37,11 @@ ngx_http_vod_create_loc_conf(ngx_conf_t *cf)
 	conf->max_moov_size = NGX_CONF_UNSET_SIZE;
 	conf->cache_buffer_size = NGX_CONF_UNSET_SIZE;
 	conf->max_path_length = NGX_CONF_UNSET_SIZE;
+
+	conf->drm_enabled = NGX_CONF_UNSET;
+	conf->drm_clear_lead_segment_count = NGX_CONF_UNSET_UINT;
+	ngx_init_upstream_conf(&conf->drm_upstream);
+	conf->drm_max_info_length = NGX_CONF_UNSET_SIZE;
 
 	// submodules
 	for (cur_module = submodules; *cur_module != NULL; cur_module++)
@@ -135,6 +136,8 @@ ngx_http_vod_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child)
 	ngx_conf_merge_str_value(conf->proxy_header_name, prev->proxy_header_name, "X-Kaltura-Proxy");
 	ngx_conf_merge_str_value(conf->proxy_header_value, prev->proxy_header_value, "dumpApiRequest");
 
+	ngx_conf_merge_value(conf->drm_enabled, prev->drm_enabled, 0);
+	ngx_conf_merge_uint_value(conf->drm_clear_lead_segment_count, prev->drm_clear_lead_segment_count, 1);
 	err = ngx_merge_upstream_conf(cf, &conf->drm_upstream, &prev->drm_upstream);
 	if (err != NGX_CONF_OK)
 	{
@@ -142,13 +145,11 @@ ngx_http_vod_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child)
 			"ngx_http_vod_merge_loc_conf: ngx_merge_upstream_conf failed (3)");
 		return err;
 	}
+	ngx_conf_merge_size_value(conf->drm_max_info_length, prev->drm_max_info_length, 4096);
 	if (conf->drm_info_cache_zone == NULL)
 	{
 		conf->drm_info_cache_zone = prev->drm_info_cache_zone;
 	}
-	ngx_conf_merge_value(conf->drm_enabled, prev->drm_enabled, 0);
-	ngx_conf_merge_uint_value(conf->drm_clear_lead_segment_count, prev->drm_clear_lead_segment_count, 1);
-	ngx_conf_merge_size_value(conf->drm_max_info_length, prev->drm_max_info_length, 4096);
 
 	ngx_conf_merge_str_value(conf->clip_to_param_name, prev->clip_to_param_name, "clipTo");
 	ngx_conf_merge_str_value(conf->clip_from_param_name, prev->clip_from_param_name, "clipFrom");

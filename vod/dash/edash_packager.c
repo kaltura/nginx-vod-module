@@ -39,13 +39,13 @@ typedef struct {
 	u_char flags[3];
 	u_char default_is_encrypted[3];
 	u_char default_iv_size;
-	u_char default_kid[KID_SIZE];
+	u_char default_kid[EDASH_KID_SIZE];
 } tenc_atom_t;
 
 typedef struct {
 	u_char version[1];
 	u_char flags[3];
-	u_char system_id[SYSTEM_ID_SIZE];
+	u_char system_id[EDASH_SYSTEM_ID_SIZE];
 	u_char data_size[4];
 } pssh_atom_t;
 
@@ -160,14 +160,14 @@ static u_char*
 edash_packager_write_content_protection(void* context, u_char* p, mpeg_stream_metadata_t* stream)
 {
 	edash_drm_info_t* drm_info = (edash_drm_info_t*)stream->file_info.drm_info;
-	pssh_info_t* cur_info;
+	edash_pssh_info_t* cur_info;
 
 	p = vod_copy(p, VOD_EDASH_MANIFEST_CONTENT_PROTECTION_CENC, sizeof(VOD_EDASH_MANIFEST_CONTENT_PROTECTION_CENC) - 1);
 	for (cur_info = drm_info->pssh_array.first; cur_info < drm_info->pssh_array.last; cur_info++)
 	{
-		p = vod_copy(p, VOD_EDASH_MANIFEST_CONTENT_PROTECTION_PREFIX, sizeof(VOD_EDASH_MANIFEST_CONTENT_PROTECTION_PREFIX)-1);
+		p = vod_copy(p, VOD_EDASH_MANIFEST_CONTENT_PROTECTION_PREFIX, sizeof(VOD_EDASH_MANIFEST_CONTENT_PROTECTION_PREFIX) - 1);
 		p = edash_packager_write_guid(p, cur_info->system_id);
-		p = vod_copy(p, VOD_EDASH_MANIFEST_CONTENT_PROTECTION_SUFFIX, sizeof(VOD_EDASH_MANIFEST_CONTENT_PROTECTION_SUFFIX)-1);
+		p = vod_copy(p, VOD_EDASH_MANIFEST_CONTENT_PROTECTION_SUFFIX, sizeof(VOD_EDASH_MANIFEST_CONTENT_PROTECTION_SUFFIX) - 1);
 	}
 	return p;
 }
@@ -305,7 +305,7 @@ edash_packager_write_stsd(void* ctx, u_char* p)
 	write_atom_header(p, context->tenc_atom_size, 't', 'e', 'n', 'c');
 	write_dword(p, 0);							// version + flags
 	write_dword(p, 0x108);						// default is encrypted (1) + iv size (8)
-	p = vod_copy(p, context->default_kid, KID_SIZE);			// default key id
+	p = vod_copy(p, context->default_kid, EDASH_KID_SIZE);			// default key id
 
 	// clear entry
 	if (context->has_clear_lead)
@@ -319,8 +319,8 @@ edash_packager_write_stsd(void* ctx, u_char* p)
 static u_char*
 edash_packager_write_pssh(void* context, u_char* p)
 {
-	pssh_info_array_t* pssh_array = (pssh_info_array_t*)context;
-	pssh_info_t* cur_info;
+	edash_pssh_info_array_t* pssh_array = (edash_pssh_info_array_t*)context;
+	edash_pssh_info_t* cur_info;
 	size_t pssh_atom_size;
 
 	for (cur_info = pssh_array->first; cur_info < pssh_array->last; cur_info++)
@@ -329,7 +329,7 @@ edash_packager_write_pssh(void* context, u_char* p)
 
 		write_atom_header(p, pssh_atom_size, 'p', 's', 's', 'h');
 		write_dword(p, 0);						// version + flags
-		p = vod_copy(p, cur_info->system_id, SYSTEM_ID_SIZE);	// system id
+		p = vod_copy(p, cur_info->system_id, EDASH_SYSTEM_ID_SIZE);	// system id
 		write_dword(p, cur_info->data.len);		// data size
 		p = vod_copy(p, cur_info->data.data, cur_info->data.len);
 	}
@@ -349,7 +349,7 @@ edash_packager_build_init_mp4(
 	atom_writer_t pssh_atom_writer;
 	atom_writer_t stsd_atom_writer;
 	stsd_writer_context_t stsd_writer_context;
-	pssh_info_t* cur_info;
+	edash_pssh_info_t* cur_info;
 	vod_status_t rc;
 
 	rc = edash_packager_init_stsd_writer_context(
@@ -361,9 +361,12 @@ edash_packager_build_init_mp4(
 		&stsd_writer_context);
 	if (rc != VOD_OK)
 	{
+		vod_log_debug1(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
+			"edash_packager_build_init_mp4: edash_packager_init_stsd_writer_context failed %i", rc);
 		return rc;
 	}
 
+	// build the pssh writer
 	pssh_atom_writer.atom_size = 0;
 	for (cur_info = drm_info->pssh_array.first; cur_info < drm_info->pssh_array.last; cur_info++)
 	{
@@ -372,6 +375,7 @@ edash_packager_build_init_mp4(
 	pssh_atom_writer.write = edash_packager_write_pssh;
 	pssh_atom_writer.context = &drm_info->pssh_array;
 
+	// build the stsd writer
 	stsd_atom_writer.atom_size = stsd_writer_context.stsd_atom_size;
 	stsd_atom_writer.write = edash_packager_write_stsd;
 	stsd_atom_writer.context = &stsd_writer_context;
@@ -385,6 +389,8 @@ edash_packager_build_init_mp4(
 		result);
 	if (rc != VOD_OK)
 	{
+		vod_log_debug1(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
+			"edash_packager_build_init_mp4: dash_packager_build_init_mp4 failed %i", rc);
 		return rc;
 	}
 
@@ -454,7 +460,7 @@ edash_packager_init_state(
 	// fixed fields
 	state->request_context = request_context;
 	state->segment_writer = *segment_writer;
-	if (AES_set_encrypt_key(drm_info->key, AES_KEY_SIZE * 8, &state->encryption_key) != 0)
+	if (AES_set_encrypt_key(drm_info->key, EDASH_AES_KEY_SIZE * 8, &state->encryption_key) != 0)
 	{
 		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
 			"edash_packager_init_state: AES_set_encrypt_key failed");
@@ -475,7 +481,6 @@ edash_packager_init_state(
 
 	return VOD_OK;
 }
-
 
 static vod_status_t
 edash_packager_start_frame(edash_packager_state_t* state)
@@ -513,6 +518,8 @@ edash_packager_video_start_frame(edash_packager_video_state_t* state)
 	rc = vod_buf_reserve(&state->auxiliary_data, sizeof(cenc_sample_auxiliary_data_t));
 	if (rc != VOD_OK)
 	{
+		vod_log_debug1(VOD_LOG_DEBUG_LEVEL, state->base.request_context->log, 0,
+			"edash_packager_video_start_frame: vod_buf_reserve failed %i", rc);
 		return rc;
 	}
 
@@ -524,6 +531,8 @@ edash_packager_video_start_frame(edash_packager_video_state_t* state)
 	rc = edash_packager_start_frame(&state->base);
 	if (rc != VOD_OK)
 	{
+		vod_log_debug1(VOD_LOG_DEBUG_LEVEL, state->base.request_context->log, 0,
+			"edash_packager_video_start_frame: edash_packager_start_frame failed %i", rc);
 		return rc;
 	}
 
@@ -538,6 +547,8 @@ edash_packager_video_add_subsample(edash_packager_video_state_t* state, uint16_t
 	rc = vod_buf_reserve(&state->auxiliary_data, sizeof(cenc_sample_auxiliary_data_subsample_t));
 	if (rc != VOD_OK)
 	{
+		vod_log_debug1(VOD_LOG_DEBUG_LEVEL, state->base.request_context->log, 0,
+			"edash_packager_video_add_subsample: vod_buf_reserve failed %i", rc);
 		return rc;
 	}
 	write_word(state->auxiliary_data.pos, bytes_of_clear_data);
@@ -660,6 +671,8 @@ edash_packager_video_write_fragment_header(edash_packager_video_state_t* state)
 		&total_fragment_size);
 	if (rc != VOD_OK)
 	{
+		vod_log_debug1(VOD_LOG_DEBUG_LEVEL, state->base.request_context->log, 0,
+			"edash_packager_video_write_fragment_header: dash_packager_build_fragment_header failed %i", rc);
 		return rc;
 	}
 
@@ -670,6 +683,8 @@ edash_packager_video_write_fragment_header(edash_packager_video_state_t* state)
 		&reuse_buffer);
 	if (rc != VOD_OK)
 	{
+		vod_log_debug1(VOD_LOG_DEBUG_LEVEL, state->base.request_context->log, 0,
+			"edash_packager_video_write_fragment_header: write_head failed %i", rc);
 		return rc;
 	}
 
@@ -826,6 +841,8 @@ edash_packager_video_get_fragment_writer(
 	rc = edash_packager_init_state(&state->base, request_context, stream_metadata, segment_writer, iv);
 	if (rc != VOD_OK)
 	{
+		vod_log_debug1(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
+			"edash_packager_video_get_fragment_writer: edash_packager_init_state failed %i", rc);
 		return rc;
 	}
 
@@ -872,6 +889,8 @@ edash_packager_video_get_fragment_writer(
 		rc = edash_packager_video_write_fragment_header(state);
 		if (rc != VOD_OK)
 		{
+			vod_log_debug1(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
+				"edash_packager_video_get_fragment_writer: edash_packager_video_write_fragment_header failed %i", rc);
 			return rc;
 		}
 	}
@@ -896,7 +915,7 @@ edash_packager_audio_write_buffer(void* context, u_char* buffer, uint32_t size, 
 
 	while (cur_pos < buffer_end)
 	{
-		if (state->frame_size_left <= 0)
+		while (state->frame_size_left <= 0)
 		{
 			rc = edash_packager_start_frame(state);
 			if (rc != VOD_OK)
@@ -926,7 +945,7 @@ edash_packager_audio_write_extra_traf_atoms(void* context, u_char* p, size_t moo
 	// moof.traf.saiz
 	write_atom_header(p, saiz_atom_size, 's', 'a', 'i', 'z');
 	write_dword(p, 0);			// version, flags
-	*p++ = IV_SIZE;
+	*p++ = IV_SIZE;				// default auxiliary sample size
 	write_dword(p, state->frame_count);
 
 	// moof.traf.saio
@@ -942,12 +961,12 @@ static u_char*
 edash_packager_audio_write_auxiliary_data(void* context, u_char* p)
 {
 	edash_packager_state_t* state = (edash_packager_state_t*)context;
-	uint32_t i;
+	u_char* end_pos = p + sizeof(state->iv) * state->frame_count;
 	u_char iv[IV_SIZE];
 
 	vod_memcpy(iv, state->iv, sizeof(iv));
 
-	for (i = 0; i < state->frame_count; i++)
+	while (p < end_pos)
 	{
 		p = vod_copy(p, iv, sizeof(iv));
 		increment_be64(iv);
@@ -984,6 +1003,8 @@ edash_packager_audio_get_fragment_writer(
 	rc = edash_packager_init_state(state, request_context, stream_metadata, segment_writer, iv);
 	if (rc != VOD_OK)
 	{
+		vod_log_debug1(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
+			"edash_packager_audio_get_fragment_writer: edash_packager_init_state failed %i", rc);
 		return rc;
 	}
 
@@ -1003,6 +1024,12 @@ edash_packager_audio_get_fragment_writer(
 		size_only,
 		fragment_header,
 		total_fragment_size);
+	if (rc != VOD_OK)
+	{
+		vod_log_debug1(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
+			"edash_packager_audio_get_fragment_writer: dash_packager_build_fragment_header failed %i", rc);
+		return rc;
+	}
 
 	result->write_tail = edash_packager_audio_write_buffer;
 	result->write_head = NULL;
@@ -1028,10 +1055,25 @@ edash_packager_get_fragment_writer(
 	switch (stream_metadata->media_info.media_type)
 	{
 	case MEDIA_TYPE_VIDEO:
-		return edash_packager_video_get_fragment_writer(result, request_context, stream_metadata, segment_index, segment_writer, iv);
+		return edash_packager_video_get_fragment_writer(
+			result, 
+			request_context, 
+			stream_metadata, 
+			segment_index, 
+			segment_writer, 
+			iv);
 
 	case MEDIA_TYPE_AUDIO:
-		return edash_packager_audio_get_fragment_writer(result, request_context, stream_metadata, segment_index, segment_writer, iv, size_only, fragment_header, total_fragment_size);
+		return edash_packager_audio_get_fragment_writer(
+			result, 
+			request_context, 
+			stream_metadata, 
+			segment_index, 
+			segment_writer, 
+			iv, 
+			size_only, 
+			fragment_header, 
+			total_fragment_size);
 	}
 
 	vod_log_error(VOD_LOG_ERR, request_context->log, 0,

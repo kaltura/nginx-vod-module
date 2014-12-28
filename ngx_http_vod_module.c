@@ -540,6 +540,8 @@ ngx_http_vod_write_segment_header_buffer(void* ctx, u_char* buffer, uint32_t siz
 
 	if (context->r->header_sent)
 	{
+		ngx_log_error(NGX_LOG_ERR, context->r->connection->log, 0,
+			"ngx_http_vod_write_segment_header_buffer: called after the headers were already sent");
 		return VOD_UNEXPECTED;
 	}
 
@@ -1027,13 +1029,13 @@ ngx_http_vod_get_drm_info(ngx_http_vod_ctx_t *ctx)
 		if (ngx_buffer_cache_fetch_copy_perf(r, ctx->perf_counters, conf->drm_info_cache_zone, ctx->submodule_context.cur_suburi->file_key, &drm_info.data, &drm_info.len))
 		{
 			ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
-				"ngx_http_vod_get_drm_info: drm cache hit, size is %uz", drm_info.len);
+				"ngx_http_vod_get_drm_info: drm info cache hit, size is %uz", drm_info.len);
 
 			rc = conf->submodule.parse_drm_info(&ctx->submodule_context, &drm_info, &ctx->submodule_context.cur_suburi->drm_info);
 			if (rc != NGX_OK)
 			{
 				ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
-					"ngx_http_vod_get_drm_info: invalid drm info response %V", &drm_info);
+					"ngx_http_vod_get_drm_info: invalid drm info in cache %V", &drm_info);
 				return rc;
 			}
 

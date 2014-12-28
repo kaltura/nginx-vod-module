@@ -34,7 +34,6 @@ ngx_json_skip_spaces(ngx_json_parser_state_t* state)
 static ngx_int_t 
 ngx_json_parse_string(ngx_json_parser_state_t* state, ngx_str_t* result)
 {
-	ngx_json_skip_spaces(state);
 	EXPECT_CHAR(state, '\"');
 
 	result->data = state->cur_pos;
@@ -72,7 +71,6 @@ ngx_json_parse_array(ngx_json_parser_state_t* state, ngx_array_t* result)
 		return NGX_JSON_ALLOC_FAILED;
 	}
 
-	ngx_json_skip_spaces(state);
 	EXPECT_CHAR(state, '[');
 	ngx_json_skip_spaces(state);
 	if (*state->cur_pos == ']')
@@ -124,7 +122,6 @@ ngx_json_parse_object(ngx_json_parser_state_t* state, ngx_array_t* result)
 		return NGX_JSON_ALLOC_FAILED;
 	}
 
-	ngx_json_skip_spaces(state);
 	EXPECT_CHAR(state, '{');
 	ngx_json_skip_spaces(state);
 	if (*state->cur_pos == '}')
@@ -220,11 +217,12 @@ ngx_json_parse(ngx_pool_t* pool, u_char* string, ngx_json_value_t* result)
 	state.pool = pool;
 	state.cur_pos = string;
 
+	ngx_json_skip_spaces(&state);
 	return ngx_json_parse_value(&state, result);
 }
 
 static ngx_int_t
-ngx_json_get_element(ngx_json_value_t* object, ngx_str_t* key, ngx_json_value_t** result)
+ngx_json_get_element(ngx_json_value_t* object, ngx_str_t* key, int expected_type, ngx_json_value_t** result)
 {
 	ngx_json_key_value_t* cur;
 	ngx_json_key_value_t* last;
@@ -241,6 +239,11 @@ ngx_json_get_element(ngx_json_value_t* object, ngx_str_t* key, ngx_json_value_t*
 		if (cur->key.len == key->len &&
 			ngx_memcmp(cur->key.data, key->data, key->len) == 0)
 		{
+			if (cur->value.type != expected_type)
+			{
+				return NGX_JSON_BAD_TYPE;
+			}
+
 			*result = &cur->value;
 			return NGX_JSON_OK;
 		}
@@ -276,15 +279,10 @@ ngx_json_get_element_guid_string(ngx_json_value_t* object, ngx_str_t* key, u_cha
 	int c1;
 	int c2;
 
-	rc = ngx_json_get_element(object, key, &element);
+	rc = ngx_json_get_element(object, key, NGX_JSON_STRING, &element);
 	if (rc != NGX_JSON_OK)
 	{
 		return rc;
-	}
-
-	if (element->type != NGX_JSON_STRING)
-	{
-		return NGX_JSON_BAD_TYPE;
 	}
 	
 	cur_pos = element->v.str.data;
@@ -359,15 +357,10 @@ ngx_json_get_element_fixed_binary_string(ngx_json_value_t* object, ngx_str_t* ke
 	ngx_int_t rc;
 	size_t decoded_len;
 
-	rc = ngx_json_get_element(object, key, &element);
+	rc = ngx_json_get_element(object, key, NGX_JSON_STRING, &element);
 	if (rc != NGX_JSON_OK)
 	{
 		return rc;
-	}
-
-	if (element->type != NGX_JSON_STRING)
-	{
-		return NGX_JSON_BAD_TYPE;
 	}
 
 	rc = ngx_base64_exact_decoded_length(&element->v.str, &decoded_len);
@@ -401,15 +394,10 @@ ngx_json_get_element_binary_string(ngx_pool_t* pool, ngx_json_value_t* object, n
 	ngx_json_value_t* element;
 	ngx_int_t rc;
 
-	rc = ngx_json_get_element(object, key, &element);
+	rc = ngx_json_get_element(object, key, NGX_JSON_STRING, &element);
 	if (rc != NGX_JSON_OK)
 	{
 		return rc;
-	}
-
-	if (element->type != NGX_JSON_STRING)
-	{
-		return NGX_JSON_BAD_TYPE;
 	}
 
 	result->data = ngx_palloc(pool, ngx_base64_decoded_length(element->v.str.len));
@@ -432,15 +420,10 @@ ngx_json_get_element_array(ngx_json_value_t* object, ngx_str_t* key, ngx_array_t
 	ngx_json_value_t* element;
 	ngx_int_t rc;
 
-	rc = ngx_json_get_element(object, key, &element);
+	rc = ngx_json_get_element(object, key, NGX_JSON_ARRAY, &element);
 	if (rc != NGX_JSON_OK)
 	{
 		return rc;
-	}
-
-	if (element->type != NGX_JSON_ARRAY)
-	{
-		return NGX_JSON_BAD_TYPE;
 	}
 
 	*result = &element->v.arr;
