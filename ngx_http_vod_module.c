@@ -1044,7 +1044,7 @@ ngx_http_vod_get_drm_info(ngx_http_vod_ctx_t *ctx)
 		else
 		{
 			ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
-				"ngx_http_vod_get_drm_info: drm cache miss");
+				"ngx_http_vod_get_drm_info: drm info cache miss");
 		}
 	}
 
