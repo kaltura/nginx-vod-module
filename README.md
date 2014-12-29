@@ -81,7 +81,7 @@ Where:
   * local mode - the full file path is determined according to the root / alias nginx.conf directives
   * mapped mode - the full file path is determined according to the response from the upstream
   * remote mode - the mp4 file is read from upstream in chunks
-  In mapped & remote modes, the URL of the upstream request is http://<upstream>/<location>/<fileuri>?<extraargs>
+  * Note: in mapped & remote modes, the URL of the upstream request is `http://<upstream>/<location>/<fileuri>?<extraargs>`
   (extraargs is determined by the vod_upstream_extra_args parameter)
 * filename - detailed below
 
@@ -94,9 +94,9 @@ The structure of a multi URL is:
 `http://<domain>/<location>/<prefix>,<middle1>,<middle2>,<middle3>,<postfix>.urlset/<filename>`
 
 The sample URL above represents 3 URLs:
-* http://<domain>/<location>/<prefix><middle1><postfix>.urlset/<filename>
-* http://<domain>/<location>/<prefix><middle2><postfix>.urlset/<filename>
-* http://<domain>/<location>/<prefix><middle3><postfix>.urlset/<filename>
+* `http://<domain>/<location>/<prefix><middle1><postfix>.urlset/<filename>`
+* `http://<domain>/<location>/<prefix><middle2><postfix>.urlset/<filename>`
+* `http://<domain>/<location>/<prefix><middle3><postfix>.urlset/<filename>`
 
 The suffix `.urlset` (can be changed with vod_multi_uri_suffix) indicates that the URL should be treated as a multi URL.
 
@@ -107,7 +107,7 @@ The following parameters are supported on the URL path:
 	For example, .../clipFrom/10000/... will generate a stream that starts 10 seconds into the video.
 * clipTo - an offset in milliseconds since the beginning of the video, where the generated stream should end.
 	For example, .../clipTo/60000/... will generate a stream truncated to 60 seconds.
-* tracks - can be used to select specific audio/video tracks. The structure of parameter is: v<id1>-v<id2>-a<id1>-a<id2>...
+* tracks - can be used to select specific audio/video tracks. The structure of parameter is: `v<id1>-v<id2>-a<id1>-a<id2>...`
 	For example, .../tracks/v1-a1/... will select the first video track and first audio track.
 	The default is to include all tracks.
 
