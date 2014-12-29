@@ -4,6 +4,38 @@
 // includes
 #include <ngx_http.h>
 
+#define DEFINE_UPSTREAM_COMMANDS(member, command_prefix)							\
+	{ ngx_string("vod_" command_prefix "upstream"),									\
+	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1,	\
+	ngx_http_upstream_command,														\
+	NGX_HTTP_LOC_CONF_OFFSET,														\
+	offsetof(ngx_http_vod_loc_conf_t, member),										\
+	NULL },																			\
+																					\
+	{ ngx_string("vod_" command_prefix "connect_timeout"),							\
+	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1,	\
+	ngx_conf_set_msec_slot,															\
+	NGX_HTTP_LOC_CONF_OFFSET,														\
+	offsetof(ngx_http_vod_loc_conf_t, member.connect_timeout),						\
+	NULL },																			\
+																					\
+	{ ngx_string("vod_" command_prefix "send_timeout"),								\
+	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1,	\
+	ngx_conf_set_msec_slot,															\
+	NGX_HTTP_LOC_CONF_OFFSET,														\
+	offsetof(ngx_http_vod_loc_conf_t, member.send_timeout),							\
+	NULL },																			\
+																					\
+	{ ngx_string("vod_" command_prefix "read_timeout"),								\
+	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1,	\
+	ngx_conf_set_msec_slot,															\
+	NGX_HTTP_LOC_CONF_OFFSET,														\
+	offsetof(ngx_http_vod_loc_conf_t, member.read_timeout),							\
+	NULL },
+
+
+
+
 // typedefs
 typedef void (*ngx_child_request_callback_t)(void* context, ngx_int_t rc, ngx_buf_t* response);
 
@@ -60,6 +92,8 @@ char *ngx_merge_upstream_conf(
 	ngx_conf_t *cf,
 	ngx_http_upstream_conf_t* conf_upstream,
 	ngx_http_upstream_conf_t* prev_upstream);
+
+char *ngx_http_upstream_command(ngx_conf_t *cf, ngx_command_t *cmd, void *conf);
 
 ngx_int_t ngx_child_request_internal_handler(ngx_http_request_t *r);
 

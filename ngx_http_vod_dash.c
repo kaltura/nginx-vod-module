@@ -1,7 +1,9 @@
 #include <ngx_http.h>
 #include "ngx_http_vod_submodule.h"
 #include "ngx_http_vod_utils.h"
+#include "ngx_simple_json_parser.h"
 #include "vod/dash/dash_packager.h"
+#include "vod/dash/edash_packager.h"
 
 // content types
 static u_char mpd_content_type[] = "application/dash+xml";
@@ -12,6 +14,13 @@ static u_char mp4_video_content_type[] = "video/mp4";
 static const u_char manifest_file_ext[] = ".mpd";
 static const u_char init_segment_file_ext[] = ".mp4";
 static const u_char fragment_file_ext[] = ".m4s";
+
+// drm info json keys
+ngx_str_t drm_info_key =       ngx_string("key");
+ngx_str_t drm_info_key_id =    ngx_string("key_id");
+ngx_str_t drm_info_pssh =      ngx_string("pssh");
+ngx_str_t drm_info_system_id = ngx_string("uuid");
+ngx_str_t drm_info_data =      ngx_string("data");
 
 static ngx_int_t 
 ngx_http_vod_dash_handle_manifest(
@@ -27,17 +36,34 @@ ngx_http_vod_dash_handle_manifest(
 		ngx_http_vod_get_base_url(submodule_context->r, submodule_context->conf, &submodule_context->r->uri, &base_url);
 	}
 
-	rc = dash_packager_build_mpd(
-		&submodule_context->request_context,
-		&submodule_context->conf->dash.mpd_config,
-		&base_url,
-		&submodule_context->conf->segmenter,
-		&submodule_context->mpeg_metadata,
-		response);
+	if (submodule_context->conf->drm_enabled)
+	{
+		rc = edash_packager_build_mpd(
+			&submodule_context->request_context,
+			&submodule_context->conf->dash.mpd_config,
+			&base_url,
+			&submodule_context->conf->segmenter,
+			&submodule_context->mpeg_metadata,
+			response);
+	}
+	else
+	{
+		rc = dash_packager_build_mpd(
+			&submodule_context->request_context,
+			&submodule_context->conf->dash.mpd_config,
+			&base_url,
+			&submodule_context->conf->segmenter,
+			&submodule_context->mpeg_metadata,
+			0,
+			NULL,
+			NULL,
+			response);
+	}
+
 	if (rc != VOD_OK)
 	{
 		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, submodule_context->request_context.log, 0,
-			"ngx_http_vod_dash_handle_manifest: dash_packager_build_mpd failed %i", rc);
+			"ngx_http_vod_dash_handle_manifest: (e)dash_packager_build_mpd failed %i", rc);
 		return ngx_http_vod_status_to_ngx_error(rc);
 	}
 
@@ -55,15 +81,30 @@ ngx_http_vod_dash_handle_init_segment(
 {
 	vod_status_t rc;
 
-	rc = dash_packager_build_init_mp4(
-		&submodule_context->request_context, 
-		&submodule_context->mpeg_metadata, 
-		ngx_http_vod_submodule_size_only(submodule_context),
-		response);
+	if (submodule_context->conf->drm_enabled)
+	{
+		rc = edash_packager_build_init_mp4(
+			&submodule_context->request_context,
+			&submodule_context->mpeg_metadata,
+			submodule_context->conf->drm_clear_lead_segment_count > 0,
+			ngx_http_vod_submodule_size_only(submodule_context),
+			response);
+	}
+	else
+	{
+		rc = dash_packager_build_init_mp4(
+			&submodule_context->request_context,
+			&submodule_context->mpeg_metadata,
+			ngx_http_vod_submodule_size_only(submodule_context),
+			NULL,
+			NULL,
+			response);
+	}
+
 	if (rc != VOD_OK)
 	{
 		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, submodule_context->request_context.log, 0,
-			"ngx_http_vod_dash_handle_init_segment: dash_packager_build_init_mp4 failed %i", rc);
+			"ngx_http_vod_dash_handle_init_segment: (e)dash_packager_build_init_mp4 failed %i", rc);
 		return ngx_http_vod_status_to_ngx_error(rc);
 	}
 
@@ -85,8 +126,7 @@ static ngx_int_t
 ngx_http_vod_dash_init_frame_processor(
 	ngx_http_vod_submodule_context_t* submodule_context,
 	read_cache_state_t* read_cache_state,
-	write_callback_t write_callback,
-	void* write_context,
+	segment_writer_t* segment_writer,
 	ngx_http_vod_frame_processor_t* frame_processor,
 	void** frame_processor_state,
 	ngx_str_t* output_buffer,
@@ -94,33 +134,64 @@ ngx_http_vod_dash_init_frame_processor(
 	ngx_str_t* content_type)
 {
 	fragment_writer_state_t* state;
+	segment_writer_t edash_writer;
 	vod_status_t rc;
 	bool_t size_only = ngx_http_vod_submodule_size_only(submodule_context);
 
-	// build the fragment header
-	rc = dash_packager_build_fragment_header(
-		&submodule_context->request_context,
-		submodule_context->mpeg_metadata.first_stream,
-		submodule_context->request_params.segment_index,
-		size_only,
-		output_buffer,
-		response_size);
-	if (rc != VOD_OK)
+	if (submodule_context->conf->drm_enabled && 
+		submodule_context->request_params.segment_index >= submodule_context->conf->drm_clear_lead_segment_count)
 	{
-		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, submodule_context->request_context.log, 0,
-			"ngx_http_vod_dash_init_frame_processor: dash_packager_build_fragment_header failed %i", rc);
-		return ngx_http_vod_status_to_ngx_error(rc);
+		rc = edash_packager_get_fragment_writer(
+			&edash_writer,
+			&submodule_context->request_context,
+			submodule_context->mpeg_metadata.first_stream,
+			submodule_context->request_params.segment_index,
+			segment_writer,
+			submodule_context->cur_suburi->file_key,		// iv
+			size_only,
+			output_buffer,
+			response_size);
+		if (rc != VOD_OK)
+		{
+			ngx_log_debug1(NGX_LOG_DEBUG_HTTP, submodule_context->request_context.log, 0,
+				"ngx_http_vod_dash_init_frame_processor: edash_packager_get_fragment_writer failed %i", rc);
+			return ngx_http_vod_status_to_ngx_error(rc);
+		}
+
+		segment_writer = &edash_writer;
+	}
+	else
+	{
+		// build the fragment header
+		rc = dash_packager_build_fragment_header(
+			&submodule_context->request_context,
+			submodule_context->mpeg_metadata.first_stream,
+			submodule_context->request_params.segment_index,
+			submodule_context->conf->drm_enabled ? 2 : 0,
+			0,
+			NULL,
+			NULL,
+			NULL,
+			size_only,
+			output_buffer,
+			response_size);
+		if (rc != VOD_OK)
+		{
+			ngx_log_debug1(NGX_LOG_DEBUG_HTTP, submodule_context->request_context.log, 0,
+				"ngx_http_vod_dash_init_frame_processor: dash_packager_build_fragment_header failed %i", rc);
+			return ngx_http_vod_status_to_ngx_error(rc);
+		}
 	}
 
 	// initialize the frame processor
-	if (!size_only)
+	if (!size_only || *response_size == 0)
 	{
 		rc = mp4_builder_frame_writer_init(
 			&submodule_context->request_context,
 			submodule_context->mpeg_metadata.first_stream,
 			read_cache_state,
-			write_callback,
-			write_context,
+			segment_writer->write_tail,
+			segment_writer->context,
 			&state);
 		if (rc != VOD_OK)
 		{
@@ -178,6 +249,16 @@ static const ngx_http_vod_request_t dash_fragment_request = {
 	ngx_http_vod_dash_init_frame_processor,
 };
 
+static const ngx_http_vod_request_t edash_fragment_request = {
+	REQUEST_FLAG_SINGLE_STREAM,
+	PARSE_FLAG_FRAMES_ALL | PARSE_FLAG_PARSED_EXTRA_DATA,
+	NULL,
+	0,
+	REQUEST_CLASS_SEGMENT,
+	NULL,
+	ngx_http_vod_dash_init_frame_processor,
+};
+
 static void
 ngx_http_vod_dash_create_loc_conf(
 	ngx_conf_t *cf,
@@ -226,7 +307,7 @@ ngx_http_vod_dash_parse_uri_file_name(
 	{
 		start_pos += conf->dash.mpd_config.fragment_file_name_prefix.len;
 		end_pos -= (sizeof(fragment_file_ext) - 1);
-		request_params->request = &dash_fragment_request;
+		request_params->request = conf->drm_enabled ? &edash_fragment_request : &dash_fragment_request;
 		expect_segment_index = TRUE;
 	}
 	// init segment
@@ -260,6 +341,100 @@ ngx_http_vod_dash_parse_uri_file_name(
 			"ngx_http_vod_dash_parse_uri_file_name: ngx_http_vod_parse_uri_file_name failed %i", rc);
 		return rc;
 	}
+
+	return NGX_OK;
+}
+
+static ngx_int_t
+ngx_http_vod_dash_parse_drm_info(
+	ngx_http_vod_submodule_context_t* submodule_context, 
+	ngx_str_t* drm_info, 
+	void** output)
+{
+	edash_drm_info_t* result;
+	ngx_json_value_t* cur_input_pssh;
+	edash_pssh_info_t* cur_output_pssh;
+	ngx_json_value_t parsed_info;
+	ngx_array_t *pssh_array;
+	ngx_int_t rc;
+	ngx_uint_t i;
+	
+	result = ngx_palloc(submodule_context->r->pool, sizeof(*result));
+	if (result == NULL)
+	{
+		ngx_log_debug0(NGX_LOG_DEBUG_HTTP, submodule_context->request_context.log, 0,
+			"ngx_http_vod_dash_parse_drm_info: ngx_palloc failed (1)");
+		return NGX_ERROR;
+	}
+
+	// note: drm_info is guaranteed to be null terminated
+	rc = ngx_json_parse(submodule_context->r->pool, drm_info->data, &parsed_info);
+	if (rc != NGX_JSON_OK)
+	{
+		ngx_log_error(NGX_LOG_ERR, submodule_context->request_context.log, 0,
+			"ngx_http_vod_dash_parse_drm_info: ngx_json_parse failed %i", rc);
+		return NGX_ERROR;
+	}
+
+	rc = ngx_json_get_element_fixed_binary_string(&parsed_info, &drm_info_key, result->key, sizeof(result->key));
+	if (rc != NGX_JSON_OK)
+	{
+		ngx_log_error(NGX_LOG_ERR, submodule_context->request_context.log, 0,
+			"ngx_http_vod_dash_parse_drm_info: ngx_json_get_element_fixed_binary_string(key) failed %i", rc);
+		return NGX_ERROR;
+	}
+
+	rc = ngx_json_get_element_fixed_binary_string(&parsed_info, &drm_info_key_id, result->key_id, sizeof(result->key_id));
+	if (rc != NGX_JSON_OK)
+	{
+		ngx_log_error(NGX_LOG_ERR, submodule_context->request_context.log, 0,
+			"ngx_http_vod_dash_parse_drm_info: ngx_json_get_element_fixed_binary_string(key_id) failed %i", rc);
+		return NGX_ERROR;
+	}
+
+	rc = ngx_json_get_element_array(&parsed_info, &drm_info_pssh, &pssh_array);
+	if (rc != NGX_JSON_OK)
+	{
+		ngx_log_error(NGX_LOG_ERR, submodule_context->request_context.log, 0,
+			"ngx_http_vod_dash_parse_drm_info: ngx_json_get_element_array(pssh) failed %i", rc);
+		return NGX_ERROR;
+	}
+
+	result->pssh_array.count = pssh_array->nelts;
+	result->pssh_array.first = ngx_palloc(
+		submodule_context->r->pool, 
+		sizeof(*result->pssh_array.first) * result->pssh_array.count);
+	if (result->pssh_array.first == NULL)
+	{
+		ngx_log_debug0(NGX_LOG_DEBUG_HTTP, submodule_context->request_context.log, 0,
+			"ngx_http_vod_dash_parse_drm_info: ngx_palloc failed (2)");
+		return NGX_ERROR;
+	}
+	result->pssh_array.last = result->pssh_array.first + result->pssh_array.count;
+
+	for (i = 0; i < pssh_array->nelts; i++)
+	{
+		cur_input_pssh = (ngx_json_value_t*)pssh_array->elts + i;
+		cur_output_pssh = result->pssh_array.first + i;
+
+		rc = ngx_json_get_element_guid_string(cur_input_pssh, &drm_info_system_id, cur_output_pssh->system_id);
+		if (rc != NGX_JSON_OK)
+		{
+			ngx_log_error(NGX_LOG_ERR, submodule_context->request_context.log, 0,
+				"ngx_http_vod_dash_parse_drm_info: ngx_json_get_element_guid_string(uuid) failed %i", rc);
+			return NGX_ERROR;
+		}
+
+		rc = ngx_json_get_element_binary_string(submodule_context->r->pool, cur_input_pssh, &drm_info_data, &cur_output_pssh->data);
+		if (rc != NGX_JSON_OK)
+		{
+			ngx_log_error(NGX_LOG_ERR, submodule_context->request_context.log, 0,
+				"ngx_http_vod_dash_parse_drm_info: ngx_json_get_element_binary_string(data) failed %i", rc);
+			return NGX_ERROR;
+		}
+	}
+
+	*output = result;
 
 	return NGX_OK;
 }

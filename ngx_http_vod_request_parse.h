@@ -3,7 +3,6 @@
 
 // includes
 #include <ngx_http.h>
-#include "ngx_http_vod_conf.h"
 #include "ngx_buffer_cache.h"
 #include "vod/mp4_parser.h"
 
@@ -28,6 +27,9 @@
 // typedefs
 struct ngx_http_vod_request_s;
 
+struct ngx_http_vod_loc_conf_s;
+typedef struct ngx_http_vod_loc_conf_s ngx_http_vod_loc_conf_t;
+
 enum {
 	MATCH_END,
 	MATCH_FIXED_STRING,
@@ -50,6 +52,9 @@ typedef struct {
 	uint32_t clip_from;
 	uint32_t file_index;
 	uint32_t required_tracks[MEDIA_TYPE_COUNT];
+
+	u_char file_key[BUFFER_CACHE_KEY_SIZE];
+	void* drm_info;
 } ngx_http_vod_suburi_params_t;
 
 typedef struct ngx_http_vod_request_params_s {
@@ -60,7 +65,6 @@ typedef struct ngx_http_vod_request_params_s {
 	uint32_t segment_index;
 	uint32_t required_files;
 	uint32_t required_tracks[MEDIA_TYPE_COUNT];
-	u_char file_key[BUFFER_CACHE_KEY_SIZE];
 } ngx_http_vod_request_params_t;
 
 // functions

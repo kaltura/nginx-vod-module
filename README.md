@@ -29,6 +29,8 @@ without the overhead of short segments for the whole duration of the video
 
 * Serving of files for progressive download playback
 
+* DASH: common encryption (cenc) support
+
 * HLS: Generation of I-frames playlist (EXT-X-I-FRAMES-ONLY)
 
 * HLS: AES-128 encryption support
@@ -64,6 +66,69 @@ To compile nginx with debug messages add `--with-debug`
 To disable compiler optimizations (for debugging with gdb) add `CFLAGS="-g -O0"`
 
 	CFLAGS="-g -O0" ./configure ....
+
+### URL structure
+
+#### Basic URL structure
+
+The basic structure of an nginx-vod-module URL is:
+`http://<domain>/<location>/<fileuri>/<filename>`
+
+Where:
+* domain - the domain of the nginx-vod-module server
+* location - the location specified in the nginx conf
+* fileuri - a URI to the mp4 file:
+  * local mode - the full file path is determined according to the root / alias nginx.conf directives
+  * mapped mode - the full file path is determined according to the response from the upstream
+  * remote mode - the mp4 file is read from upstream in chunks
+  * Note: in mapped & remote modes, the URL of the upstream request is `http://<upstream>/<location>/<fileuri>?<extraargs>`
+  (extraargs is determined by the vod_upstream_extra_args parameter)
+* filename - detailed below
+
+#### Multi URL structure
+
+Multi URLs are used to encode several URLs on a single URL. A multi URL can be used to specify
+the URLs of several different MP4 files that should be included together in a DASH MPD for example.
+
+The structure of a multi URL is:
+`http://<domain>/<location>/<prefix>,<middle1>,<middle2>,<middle3>,<postfix>.urlset/<filename>`
+
+The sample URL above represents 3 URLs:
+* `http://<domain>/<location>/<prefix><middle1><postfix>.urlset/<filename>`
+* `http://<domain>/<location>/<prefix><middle2><postfix>.urlset/<filename>`
+* `http://<domain>/<location>/<prefix><middle3><postfix>.urlset/<filename>`
+
+The suffix `.urlset` (can be changed with vod_multi_uri_suffix) indicates that the URL should be treated as a multi URL.
+
+#### URL path parameters
+
+The following parameters are supported on the URL path:
+* clipFrom - an offset in milliseconds since the beginning of the video, where the generated stream should start. 
+	For example, `.../clipFrom/10000/...` will generate a stream that starts 10 seconds into the video.
+* clipTo - an offset in milliseconds since the beginning of the video, where the generated stream should end.
+	For example, `.../clipTo/60000/...` will generate a stream truncated to 60 seconds.
+* tracks - can be used to select specific audio/video tracks. The structure of parameter is: `v<id1>-v<id2>-a<id1>-a<id2>...`
+	For example, `.../tracks/v1-a1/...` will select the first video track and first audio track.
+	The default is to include all tracks.
+
+#### Filename structure
+
+The structure of filename is:
+`<basename>[<fileparams>][<trackparams>].<extension>`
+
+Where:
+* basename + extension - the set of options is packager specific (the list below applies to the default settings):
+  * dash - manifest.mpd
+  * hds - manifest.f4m
+  * hls master playlist - master.m3u8
+  * hls media playlist - index.m3u8
+  * mss - manifest
+* fileparams - can be used to select specific files (URLs) when using multi URLs.
+	For example, manifest-f1.mpd will return an MPD only from the first URL.
+* trackparams - can be used to select specific audio/video tracks.
+	For example, manifest-a1.f4m will return an F4M containing only the first audio stream.
+	The default is to include the first audio and first video tracks of each file.
+	The tracks selected on the file name are AND-ed with the tracks selected with the /tracks/ path parameter.
 
 ### Common configuration directives
 
@@ -366,6 +431,65 @@ The name of the tracks request parameter.
 * **context**: `http`, `server`, `location`
 
 Configures the shared memory object name of the performance counters
+
+### Configuration directives - DRM
+
+#### vod_drm_enabled
+* **syntax**: `vod_drm_enabled on/off`
+* **default**: `off`
+* **context**: `http`, `server`, `location`
+
+When enabled, the module encrypts the media segments according to the response it gets from the drm upstream.
+Currently supported only for dash.
+
+#### vod_drm_clear_lead_segment_count
+* **syntax**: `vod_drm_clear_lead_segment_count count`
+* **default**: `1`
+* **context**: `http`, `server`, `location`
+
+Sets the number of clear (unencrypted) segments in the beginning of the stream. A clear lead enables the player to start playing without having to wait for the license response.
+
+#### vod_drm_max_info_length
+* **syntax**: `vod_drm_max_info_length length`
+* **default**: `4K`
+* **context**: `http`, `server`, `location`
+
+Sets the maximum length of a drm info returned from upstream.
+
+#### vod_drm_upstream
+* **syntax**: `vod_drm_upstream upstream_name`
+* **default**: `none`
+* **context**: `http`, `server`, `location`
+
+Sets the upstream that should be used for getting the DRM info for the file.
+
+#### vod_drm_connect_timeout
+* **syntax**: `vod_drm_connect_timeout timeout`
+* **default**: `60s`
+* **context**: `http`, `server`, `location`
+
+Sets the timeout in milliseconds for connecting to the upstream.
+
+#### vod_drm_send_timeout
+* **syntax**: `vod_drm_send_timeout timeout`
+* **default**: `60s`
+* **context**: `http`, `server`, `location`
+
+Sets the timeout in milliseconds for sending data to the upstream.
+
+#### vod_drm_read_timeout
+* **syntax**: `vod_drm_read_timeout timeout`
+* **default**: `60s`
+* **context**: `http`, `server`, `location`
+
+Sets the timeout in milliseconds for reading data from the upstream.
+
+#### vod_drm_info_cache
+* **syntax**: `vod_drm_info_cache zone_name zone_size`
+* **default**: `off`
+* **context**: `http`, `server`, `location`
+
+Configures the size and shared memory object name of the drm info cache.
 
 ### Configuration directives - DASH
 

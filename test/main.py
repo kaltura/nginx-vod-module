@@ -3,6 +3,7 @@ from threading import Thread
 from Crypto.Cipher import AES
 import urlparse
 import urllib2
+import base64
 import struct
 import socket
 import random
@@ -21,6 +22,7 @@ NGINX_LOG_PATH = '/var/log/nginx/error.log'
 NGINX_HOST = 'http://localhost:8001'
 API_SERVER_PORT = 8002
 FALLBACK_PORT = 8003
+DRM_SERVER_PORT = 8004
 ENCRYPTED_PREFIX = '/enc'
 NGINX_LOCAL = NGINX_HOST + '/tlocal'
 NGINX_MAPPED = NGINX_HOST + '/tmapped'
@@ -44,6 +46,17 @@ HLS_SEGMENT_FILE = '/seg-1.ts'
 MSS_PREFIX = '/mss'
 MSS_MANIFEST_FILE = '/manifest'
 MSS_FRAGMENT_FILE = '/QualityLevels(%s)/Fragments(video=0)' % MSS_BITRATE
+
+EDASH_PREFIX = '/edash'
+DRM_SERVICE_RESPONSE = '''{
+                "key_id": "%s",
+                "pssh": [{
+                                "data": "%s",
+                                "uuid": "edef8ba9-79d6-4ace-a3c8-27dcd51d21ed"
+                }],
+                "next_key_id": null,
+                "key": "%s"
+}''' % (base64.b64encode('0' * 16), base64.b64encode('abcd'), base64.b64encode('1' * 16))
 
 M3U8_PREFIX = '''#EXTM3U
 #EXT-X-TARGETDURATION:10
@@ -743,9 +756,10 @@ class UpstreamTestSuite(TestSuite):
         self.logTracker.assertContains('upstream prematurely closed connection')
 
 class MemoryUpstreamTestSuite(UpstreamTestSuite):
-    def __init__(self, baseUrl, urlFile, serverPort, upstreamHandler):
+    def __init__(self, baseUrl, urlFile, serverPort, upstreamHandler, validateResponse=validatePlaylistM3U8):
         super(MemoryUpstreamTestSuite, self).__init__(baseUrl, urlFile, serverPort)
         self.upstreamHandler = upstreamHandler
+        self.validateResponse = validateResponse
 
     def testContentLengthTooBig(self):
         TcpServer(self.serverPort, lambda s: socketSendAndShutdown(s, 'HTTP/1.1 200 OK\r\nContent-Length: 999999999\r\n'))
@@ -768,24 +782,24 @@ class MemoryUpstreamTestSuite(UpstreamTestSuite):
         self.logTracker.assertContains('upstream returned a bad status 400')
 
     def testHeadersForwardedToUpstream(self):
-        TcpServer(API_SERVER_PORT, lambda s: socketExpectHttpHeaderAndHandle(s, 'mukka: ukk', self.upstreamHandler))
-        url = getUniqueUrl(self.baseUrl, HLS_PLAYLIST_FILE)
+        TcpServer(self.serverPort, lambda s: socketExpectHttpHeaderAndHandle(s, 'mukka: ukk', self.upstreamHandler))
+        url = getUniqueUrl(self.baseUrl, self.urlFile)
         request = urllib2.Request(url, headers={'mukka':'ukk'})
         response = urllib2.urlopen(request)
-        validatePlaylistM3U8(response.read(), url)
+        self.validateResponse(response.read(), url)
 
     def testUpstreamHostHeader(self):
-        TcpServer(API_SERVER_PORT, lambda s: socketExpectHttpHeaderAndHandle(s, 'Host: blabla.com', self.upstreamHandler))
-        url = getUniqueUrl(self.baseUrl, HLS_PLAYLIST_FILE)
+        TcpServer(self.serverPort, lambda s: socketExpectHttpHeaderAndHandle(s, 'Host: blabla.com', self.upstreamHandler))
+        url = getUniqueUrl(self.baseUrl, self.urlFile)
         request = urllib2.Request(url, headers={'Host': 'blabla.com'})
         response = urllib2.urlopen(request)
-        validatePlaylistM3U8(response.read(), url.replace(NGINX_HOST, 'http://blabla.com'))
+        self.validateResponse(response.read(), url.replace(NGINX_HOST, 'http://blabla.com'))
 
     def testUpstreamHostHeaderHttp10(self):
-        TcpServer(API_SERVER_PORT, lambda s: socketExpectHttpHeaderAndHandle(s, 'Host: %s' % SERVER_NAME, self.upstreamHandler))
-        url = getUniqueUrl(self.baseUrl, HLS_PLAYLIST_FILE)
+        TcpServer(self.serverPort, lambda s: socketExpectHttpHeaderAndHandle(s, 'Host: %s' % SERVER_NAME, self.upstreamHandler))
+        url = getUniqueUrl(self.baseUrl, self.urlFile)
         body = sendHttp10Request(url)
-        validatePlaylistM3U8(body, '')
+        self.validateResponse(body, '')
 
 class DumpUpstreamTestSuite(UpstreamTestSuite):
     def testRangeForwarded(self):
@@ -998,8 +1012,37 @@ class RemoteTestSuite(ModeTestSuite):
         assertRequestFails(self.getUrl(HLS_PREFIX, HLS_PLAYLIST_FILE), 404)
         self.logTracker.assertContains('bytes read is zero')
 
+class DrmTestSuite(ModeTestSuite):
+    def runChildSuites(self):
+        requestHandler = lambda s,h: socketSendAndShutdown(s, getHttpResponse(DRM_SERVICE_RESPONSE))
+        suite = MemoryUpstreamTestSuite(self.baseUrl + EDASH_PREFIX + TEST_FLAVOR_URI, DASH_MANIFEST_FILE, DRM_SERVER_PORT, requestHandler, lambda buffer, url: None)
+        suite.prepareTest = lambda: TcpServer(API_SERVER_PORT, lambda s: serveFile(s, TEST_FILES_ROOT + TEST_FLAVOR_FILE, TEST_FILE_TYPE))
+        suite.run()
+
+    def testInfoParseError(self):
+        TcpServer(DRM_SERVER_PORT, lambda s: socketSendAndShutdown(s, getHttpResponse('null')))
+        assertRequestFails(self.getUrl(EDASH_PREFIX, DASH_MANIFEST_FILE), 503)
+        self.logTracker.assertContains('invalid drm info response null')
+        
+    def testDrmInfoCache(self):
+        TcpServer(API_SERVER_PORT, lambda s: serveFile(s, TEST_FILES_ROOT + TEST_FLAVOR_FILE, TEST_FILE_TYPE))
+        TcpServer(DRM_SERVER_PORT, lambda s: socketSendAndShutdown(s, getHttpResponse(DRM_SERVICE_RESPONSE)))
+        url = self.getUrl(EDASH_PREFIX, DASH_MANIFEST_FILE)
+        
+        logTracker = LogTracker()
+        missResponse = urllib2.urlopen(url).read()
+        logTracker.assertContains('drm info cache miss')
+        
+        logTracker = LogTracker()
+        hitResponse = urllib2.urlopen(url.replace(DASH_MANIFEST_FILE, '/manifest-v1-a1.mpd')).read()
+        logTracker.assertContains('drm info cache hit')
+        
+        assert(missResponse == hitResponse)
+        
 class MainTestSuite(TestSuite):
     def runChildSuites(self):
+        DrmTestSuite(NGINX_REMOTE).run()
+
         # non encrypted
         #LocalTestSuite(NGINX_LOCAL).run()
         MappedTestSuite(NGINX_MAPPED).run()
@@ -1008,7 +1051,7 @@ class MainTestSuite(TestSuite):
         # encrypted
         #LocalTestSuite(NGINX_LOCAL, ENCRYPTED_PREFIX).run()
         MappedTestSuite(NGINX_MAPPED, ENCRYPTED_PREFIX).run()
-        RemoteTestSuite(NGINX_REMOTE, ENCRYPTED_PREFIX).run()
+        RemoteTestSuite(NGINX_REMOTE, ENCRYPTED_PREFIX).run()       
 
 socketSend = socketSendRegular
 MainTestSuite().run()

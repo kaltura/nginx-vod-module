@@ -3,6 +3,7 @@
 
 // includes
 #include <ngx_http.h>
+#include "ngx_http_vod_submodule.h"
 #include "ngx_http_vod_dash_conf.h"
 #include "ngx_http_vod_hds_conf.h"
 #include "ngx_http_vod_hls_conf.h"
@@ -14,14 +15,8 @@ struct ngx_http_vod_request_params_s;
 
 struct ngx_http_vod_loc_conf_s {
 	// config fields
+	ngx_http_vod_submodule_t submodule;
 	ngx_str_t child_request_location;
-	int (*get_file_path_components)(ngx_str_t* uri);
-	ngx_int_t (*parse_uri_file_name)(
-		ngx_http_request_t *r,
-		struct ngx_http_vod_loc_conf_s *conf,
-		u_char* start_pos,
-		u_char* end_pos,
-		struct ngx_http_vod_request_params_s* request_params);
 	ngx_int_t(*request_handler)(ngx_http_request_t *r);
 	ngx_str_t multi_uri_suffix;
 	segmenter_conf_t segmenter;
@@ -40,9 +35,15 @@ struct ngx_http_vod_loc_conf_s {
 	ngx_str_t path_response_prefix;
 	ngx_str_t path_response_postfix;
 	size_t max_path_length;
-	ngx_http_upstream_conf_t   fallback_upstream;
+	ngx_http_upstream_conf_t fallback_upstream;
 	ngx_str_t proxy_header_name;
 	ngx_str_t proxy_header_value;
+
+	ngx_flag_t drm_enabled;
+	ngx_uint_t drm_clear_lead_segment_count;
+	ngx_http_upstream_conf_t drm_upstream;
+	size_t drm_max_info_length;
+	ngx_shm_zone_t* drm_info_cache_zone;
 
 	ngx_str_t clip_to_param_name;
 	ngx_str_t clip_from_param_name;

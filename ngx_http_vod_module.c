@@ -24,6 +24,7 @@
 // enums
 enum {
 	STATE_INITIAL,
+	STATE_DRM_INFO_READ,
 	STATE_INITIAL_READ,
 	STATE_MOOV_ATOM_READ,
 	STATE_MOOV_ATOM_PARSED,
@@ -37,6 +38,7 @@ typedef ngx_int_t(*ngx_http_vod_dump_request_t)(void* context);
 
 typedef struct {
 	ngx_http_request_t* r;
+	ngx_chain_t* chain_head;
 	ngx_chain_t* chain_end;
 	size_t total_size;
 } ngx_http_vod_write_segment_context_t;
@@ -103,6 +105,10 @@ ngx_module_t  ngx_http_vod_module = {
 
 static ngx_str_t options_content_type = ngx_string("text/plain");
 
+// forward declarations
+static void ngx_http_vod_finalize_request(ngx_http_vod_ctx_t *ctx, ngx_int_t rc);
+static ngx_int_t ngx_http_vod_run_state_machine(ngx_http_vod_ctx_t *ctx);
+
 ////// Perf counter wrappers
 
 static ngx_flag_t
@@ -123,6 +129,49 @@ ngx_buffer_cache_fetch_perf(
 	ngx_perf_counter_end(perf_counters, pcctx, PC_FETCH_CACHE);
 
 	return result;
+}
+
+static ngx_flag_t
+ngx_buffer_cache_fetch_copy_perf(
+	ngx_http_request_t* r,
+	ngx_perf_counters_t* perf_counters,
+	ngx_shm_zone_t *shm_zone,
+	u_char* key,
+	u_char** buffer,
+	size_t* buffer_size)
+{
+	ngx_perf_counter_context(pcctx);
+	ngx_flag_t result;
+	u_char* original_buffer;
+	u_char* buffer_copy;
+	size_t original_size;
+
+	ngx_perf_counter_start(pcctx);
+
+	result = ngx_buffer_cache_fetch(shm_zone, key, &original_buffer, &original_size);
+
+	ngx_perf_counter_end(perf_counters, pcctx, PC_FETCH_CACHE);
+
+	if (!result)
+	{
+		return 0;
+	}
+
+	buffer_copy = ngx_palloc(r->pool, original_size + 1);
+	if (buffer_copy == NULL)
+	{
+		ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+			"ngx_buffer_cache_fetch_copy_perf: ngx_palloc failed");
+		return 0;
+	}
+
+	ngx_memcpy(buffer_copy, original_buffer, original_size);
+	buffer_copy[original_size] = '\0';
+
+	*buffer = buffer_copy;
+	*buffer_size = original_size;
+
+	return 1;
 }
 
 static ngx_flag_t
@@ -197,7 +246,7 @@ ngx_http_vod_init_aes_encryption(ngx_http_vod_ctx_t *ctx, write_callback_t write
 		&ctx->submodule_context.request_context, 
 		write_callback, 
 		callback_context, 
-		ctx->submodule_context.request_params.file_key, 
+		ctx->submodule_context.cur_suburi->file_key,
 		ctx->submodule_context.request_params.segment_index);
 	if (rc != VOD_OK)
 	{
@@ -374,6 +423,7 @@ ngx_http_vod_parse_moov_atom(ngx_http_vod_ctx_t *ctx, u_char* moov_buffer, size_
 
 	file_info.file_index = suburi_params->file_index;
 	file_info.uri = suburi_params->uri;
+	file_info.drm_info = suburi_params->drm_info;
 
 	// parse the basic metadata
 	rc = mp4_parser_parse_basic_metadata(
@@ -481,6 +531,51 @@ ngx_http_vod_parse_moov_atom(ngx_http_vod_ctx_t *ctx, u_char* moov_buffer, size_
 
 ////// Segment request handling
 
+static vod_status_t
+ngx_http_vod_write_segment_header_buffer(void* ctx, u_char* buffer, uint32_t size, bool_t* reuse_buffer)
+{
+	ngx_http_vod_write_segment_context_t* context = (ngx_http_vod_write_segment_context_t*)ctx;
+	ngx_chain_t *chain;
+	ngx_buf_t *b;
+
+	if (context->r->header_sent)
+	{
+		ngx_log_error(NGX_LOG_ERR, context->r->connection->log, 0,
+			"ngx_http_vod_write_segment_header_buffer: called after the headers were already sent");
+		return VOD_UNEXPECTED;
+	}
+
+	b = ngx_calloc_buf(context->r->pool);
+	if (b == NULL)
+	{
+		ngx_log_debug0(NGX_LOG_DEBUG_HTTP, context->r->connection->log, 0,
+			"ngx_http_vod_write_segment_header_buffer: ngx_pcalloc failed (1)");
+		return VOD_ALLOC_FAILED;
+	}
+
+	b->pos = buffer;
+	b->last = buffer + size;
+	b->memory = 1;
+
+	chain = ngx_alloc_chain_link(context->r->pool);
+	if (chain == NULL)
+	{
+		ngx_log_debug0(NGX_LOG_DEBUG_HTTP, context->r->connection->log, 0,
+			"ngx_http_vod_write_segment_header_buffer: ngx_pcalloc failed (2)");
+		return VOD_ALLOC_FAILED;
+	}
+
+	chain->buf = context->chain_head->buf;
+	chain->next = context->chain_head->next;
+
+	context->chain_head->buf = b;
+	context->chain_head->next = chain;
+
+	context->total_size += size;
+
+	return VOD_OK;
+}
+
 static vod_status_t 
 ngx_http_vod_write_segment_buffer(void* ctx, u_char* buffer, uint32_t size, bool_t* reuse_buffer)
 {
@@ -494,7 +589,7 @@ ngx_http_vod_write_segment_buffer(void* ctx, u_char* buffer, uint32_t size, bool
 	*reuse_buffer = FALSE;
 
 	// create a wrapping ngx_buf_t
-	b = ngx_pcalloc(context->r->pool, sizeof(ngx_buf_t));
+	b = ngx_calloc_buf(context->r->pool);
 	if (b == NULL) 
 	{
 		ngx_log_debug0(NGX_LOG_DEBUG_HTTP, context->r->connection->log, 0,
@@ -505,7 +600,6 @@ ngx_http_vod_write_segment_buffer(void* ctx, u_char* buffer, uint32_t size, bool
 	b->pos = buffer;
 	b->last = buffer + size;
 	b->memory = 1;
-	b->last_buf = 0;	// not the last buffer in the buffer chain
 
 	if (context->r->header_sent)
 	{
@@ -552,12 +646,11 @@ ngx_http_vod_init_frame_processing(ngx_http_vod_ctx_t *ctx)
 {
 	ngx_http_vod_loc_conf_t* conf;
 	ngx_http_request_t* r = ctx->submodule_context.r;
-	write_callback_t write_callback;
+	segment_writer_t segment_writer;
 	ngx_str_t output_buffer = ngx_null_string;
 	ngx_str_t content_type;
 	size_t response_size = 0;
 	bool_t reuse_buffer;
-	void* write_context;
 	ngx_int_t rc;
 
 	conf = ctx->submodule_context.conf;
@@ -596,6 +689,7 @@ ngx_http_vod_init_frame_processing(ngx_http_vod_ctx_t *ctx)
 	ctx->out.buf = NULL;
 	ctx->out.next = NULL;
 	ctx->write_segment_buffer_context.r = r;
+	ctx->write_segment_buffer_context.chain_head = &ctx->out;
 	ctx->write_segment_buffer_context.chain_end = &ctx->out;
 	ctx->write_segment_buffer_context.total_size = 0;
 
@@ -609,13 +703,15 @@ ngx_http_vod_init_frame_processing(ngx_http_vod_ctx_t *ctx)
 			return ngx_http_vod_status_to_ngx_error(rc);
 		}
 
-		write_callback = (write_callback_t)aes_encrypt_write;
-		write_context = ctx->encrypted_write_context;
+		segment_writer.write_tail = (write_callback_t)aes_encrypt_write;
+		segment_writer.write_head = NULL;			// cannot be supported with CBC encryption
+		segment_writer.context = ctx->encrypted_write_context;
 	}
 	else
 	{
-		write_callback = ngx_http_vod_write_segment_buffer;
-		write_context = &ctx->write_segment_buffer_context;
+		segment_writer.write_tail = ngx_http_vod_write_segment_buffer;
+		segment_writer.write_head = ngx_http_vod_write_segment_header_buffer;
+		segment_writer.context = &ctx->write_segment_buffer_context;
 	}
 
 	// initialize the protocol specific frame processor
@@ -624,8 +720,7 @@ ngx_http_vod_init_frame_processing(ngx_http_vod_ctx_t *ctx)
 	rc = ctx->submodule_context.request_params.request->init_frame_processor(
 		&ctx->submodule_context,
 		&ctx->read_cache_state,
-		write_callback,
-		write_context,
+		&segment_writer,
 		&ctx->frame_processor,
 		&ctx->frame_processor_state,
 		&output_buffer,
@@ -686,7 +781,7 @@ ngx_http_vod_init_frame_processing(ngx_http_vod_ctx_t *ctx)
 	// write the initial buffer if provided
 	if (output_buffer.len != 0)
 	{
-		rc = write_callback(write_context, output_buffer.data, output_buffer.len, &reuse_buffer);
+		rc = segment_writer.write_tail(segment_writer.context, output_buffer.data, output_buffer.len, &reuse_buffer);
 		if (rc != VOD_OK)
 		{
 			ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
@@ -841,6 +936,144 @@ ngx_http_vod_process_mp4_frames(ngx_http_vod_ctx_t *ctx)
 	}
 }
 
+////// DRM
+
+static void
+ngx_http_vod_drm_info_request_finished(void* context, ngx_int_t rc, ngx_buf_t* response)
+{
+	ngx_http_vod_loc_conf_t *conf;
+	ngx_http_vod_ctx_t *ctx;
+	ngx_http_request_t *r = context;
+	ngx_str_t drm_info;
+
+	ctx = ngx_http_get_module_ctx(r, ngx_http_vod_module);
+	conf = ctx->submodule_context.conf;
+
+	if (rc != NGX_OK)
+	{
+		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+			"ngx_http_vod_drm_info_request_finished: upstream request failed %i", rc);
+		goto finalize_request;
+	}
+
+	ngx_perf_counter_end(ctx->perf_counters, ctx->perf_counter_context, PC_GET_DRM_INFO);
+
+	drm_info.data = response->pos;
+	drm_info.len = response->last - response->pos;
+	*response->last = '\0';		// this is ok since ngx_child_http_request always allocate the content-length + 1
+
+	ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0, "ngx_http_vod_drm_info_request_finished: result %V", &drm_info);
+
+	// parse the drm info
+	rc = conf->submodule.parse_drm_info(&ctx->submodule_context, &drm_info, &ctx->submodule_context.cur_suburi->drm_info);
+	if (rc != NGX_OK)
+	{
+		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+			"ngx_http_vod_drm_info_request_finished: invalid drm info response %V", &drm_info);
+		rc = NGX_HTTP_SERVICE_UNAVAILABLE;
+		goto finalize_request;
+	}
+
+	// save to cache
+	if (conf->drm_info_cache_zone != NULL)
+	{
+		if (ngx_buffer_cache_store_perf(
+			ctx->perf_counters,
+			conf->drm_info_cache_zone,
+			ctx->submodule_context.cur_suburi->file_key,
+			drm_info.data,
+			drm_info.len))
+		{
+			ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+				"ngx_http_vod_drm_info_request_finished: stored in drm info cache");
+		}
+		else
+		{
+			ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+				"ngx_http_vod_drm_info_request_finished: failed to store drm info in cache");
+		}
+	}
+
+	ctx->state = STATE_DRM_INFO_READ;
+
+	rc = ngx_http_vod_run_state_machine(ctx);
+	if (rc != NGX_AGAIN)
+	{
+		if (rc != NGX_OK)
+		{
+			ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+				"ngx_http_vod_drm_info_request_finished: ngx_http_vod_run_state_machine failed %i", rc);
+		}
+		goto finalize_request;
+	}
+
+	return;
+
+finalize_request:
+
+	ngx_http_vod_finalize_request(ctx, rc);
+}
+
+static ngx_int_t
+ngx_http_vod_get_drm_info(ngx_http_vod_ctx_t *ctx)
+{
+	ngx_child_request_params_t child_params;
+	ngx_http_vod_loc_conf_t* conf = ctx->submodule_context.conf;
+	ngx_http_request_t* r = ctx->submodule_context.r;
+	ngx_int_t rc;
+	ngx_str_t drm_info;
+
+	if (conf->drm_info_cache_zone != NULL)
+	{
+		// try to read the drm info from cache
+		if (ngx_buffer_cache_fetch_copy_perf(r, ctx->perf_counters, conf->drm_info_cache_zone, ctx->submodule_context.cur_suburi->file_key, &drm_info.data, &drm_info.len))
+		{
+			ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+				"ngx_http_vod_get_drm_info: drm info cache hit, size is %uz", drm_info.len);
+
+			rc = conf->submodule.parse_drm_info(&ctx->submodule_context, &drm_info, &ctx->submodule_context.cur_suburi->drm_info);
+			if (rc != NGX_OK)
+			{
+				ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+					"ngx_http_vod_get_drm_info: invalid drm info in cache %V", &drm_info);
+				return rc;
+			}
+
+			return VOD_OK;
+		}
+		else
+		{
+			ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+				"ngx_http_vod_get_drm_info: drm info cache miss");
+		}
+	}
+
+	r->connection->log->action = "getting drm info";
+
+	ngx_memzero(&child_params, sizeof(child_params));
+	child_params.method = NGX_HTTP_GET;
+	child_params.base_uri = ctx->submodule_context.cur_suburi->uri;			// XXXX make configurable, use complex values
+
+	ngx_perf_counter_start(ctx->perf_counter_context);
+
+	rc = ngx_child_request_start(
+		r,
+		&ctx->child_request_buffers,
+		ngx_http_vod_drm_info_request_finished,
+		r,
+		&conf->drm_upstream,
+		&conf->child_request_location,
+		&child_params,
+		conf->drm_max_info_length,
+		NULL);
+	if (rc != NGX_AGAIN)
+	{
+		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+			"ngx_http_vod_get_drm_info: async_reader failed %i", rc);
+	}
+	return rc;
+}
+
 ////// Common
 
 static void
@@ -863,7 +1096,7 @@ ngx_http_vod_init_file_key(ngx_http_request_t* r, ngx_str_t* path1, ngx_str_t* p
 	{
 		ngx_md5_update(&md5, path2->data, path2->len);
 	}
-	ngx_md5_final(ctx->submodule_context.request_params.file_key, &md5);
+	ngx_md5_final(ctx->submodule_context.cur_suburi->file_key, &md5);
 }
 
 static ngx_int_t
@@ -894,10 +1127,28 @@ ngx_http_vod_run_state_machine(ngx_http_vod_ctx_t *ctx)
 		case STATE_INITIAL:
 			ngx_http_vod_init_file_key(r, ctx->file_key_prefix, &ctx->submodule_context.cur_suburi->stripped_uri);
 
+			if (conf->drm_enabled)
+			{
+				rc = ngx_http_vod_get_drm_info(ctx);
+				if (rc != NGX_OK)
+				{
+					if (rc != NGX_AGAIN)
+					{
+						ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+							"ngx_http_vod_run_state_machine: ngx_http_vod_get_drm_info failed %i", rc);
+					}
+					return rc;
+				}
+			}
+
+			ctx->state = STATE_DRM_INFO_READ;
+			// fallthrough
+
+		case STATE_DRM_INFO_READ:
 			if (conf->moov_cache_zone != NULL)
 			{
 				// try to read the moov atom from cache
-				if (ngx_buffer_cache_fetch_perf(ctx->perf_counters, conf->moov_cache_zone, ctx->submodule_context.request_params.file_key, &moov_buffer, &moov_size))
+				if (ngx_buffer_cache_fetch_perf(ctx->perf_counters, conf->moov_cache_zone, ctx->submodule_context.cur_suburi->file_key, &moov_buffer, &moov_size))
 				{
 					ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
 						"ngx_http_vod_run_state_machine: moov atom cache hit, size is %uz", moov_size);
@@ -1004,7 +1255,7 @@ ngx_http_vod_run_state_machine(ngx_http_vod_ctx_t *ctx)
 				if (ngx_buffer_cache_store_perf(
 					ctx->perf_counters,
 					conf->moov_cache_zone,
-					ctx->submodule_context.request_params.file_key,
+					ctx->submodule_context.cur_suburi->file_key,
 					ctx->read_buffer + ctx->moov_offset,
 					ctx->moov_size))
 				{
@@ -1442,8 +1693,6 @@ ngx_http_vod_run_mapped_mode_state_machine(ngx_http_request_t *r)
 	ngx_http_vod_ctx_t *ctx;
 	ngx_str_t path;
 	ngx_int_t rc;
-	u_char* path_buffer;
-	size_t path_size;
 
 	ctx = ngx_http_get_module_ctx(r, ngx_http_vod_module);
 	conf = ctx->submodule_context.conf;
@@ -1461,26 +1710,14 @@ ngx_http_vod_run_mapped_mode_state_machine(ngx_http_request_t *r)
 				&ctx->submodule_context.cur_suburi->stripped_uri);
 
 			// try getting the file path from cache
-			if (ngx_buffer_cache_fetch_perf(
+			if (ngx_buffer_cache_fetch_copy_perf(
+				ctx->submodule_context.r,
 				ctx->perf_counters,
 				conf->path_mapping_cache_zone,
-				ctx->submodule_context.request_params.file_key,
-				&path_buffer,
-				&path_size))
+				ctx->submodule_context.cur_suburi->file_key,
+				&path.data,
+				&path.len))
 			{
-				// copy the path since the cache buffer should not be held for long
-				path.len = path_size;
-				path.data = ngx_palloc(r->pool, path.len + 1);
-				if (path.data == NULL)
-				{
-					ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
-						"ngx_http_vod_run_mapped_mode_state_machine: ngx_palloc failed");
-					return NGX_HTTP_INTERNAL_SERVER_ERROR;
-				}
-
-				ngx_memcpy(path.data, path_buffer, path.len);
-				path.data[path.len] = '\0';
-
 				ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
 					"ngx_http_vod_run_mapped_mode_state_machine: path mapping cache hit %V", &path);
 
@@ -1625,7 +1862,7 @@ ngx_http_vod_path_request_finished(void* context, ngx_int_t rc, ngx_buf_t* respo
 		if (ngx_buffer_cache_store_perf(
 			ctx->perf_counters,
 			conf->path_mapping_cache_zone,
-			ctx->submodule_context.request_params.file_key,
+			ctx->submodule_context.cur_suburi->file_key,
 			path.data,
 			path.len))
 		{
@@ -1825,7 +2062,7 @@ ngx_http_vod_parse_uri(ngx_http_request_t *r, ngx_http_vod_loc_conf_t *conf, ngx
 	ngx_int_t rc;
 	int file_components;
 	
-	file_components = conf->get_file_path_components(&r->uri);
+	file_components = conf->submodule.get_file_path_components(&r->uri);
 
 	if (!ngx_http_vod_split_uri_file_name(&r->uri, file_components, &uri_path, &uri_file_name))
 	{
@@ -1834,7 +2071,7 @@ ngx_http_vod_parse_uri(ngx_http_request_t *r, ngx_http_vod_loc_conf_t *conf, ngx
 		return NGX_HTTP_BAD_REQUEST;
 	}
 
-	rc = conf->parse_uri_file_name(r, conf, uri_file_name.data, uri_file_name.data + uri_file_name.len, request_params);
+	rc = conf->submodule.parse_uri_file_name(r, conf, uri_file_name.data, uri_file_name.data + uri_file_name.len, request_params);
 	if (rc != NGX_OK)
 	{
 		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
@@ -1911,7 +2148,7 @@ ngx_http_vod_handler(ngx_http_request_t *r)
 
 	// parse the uri
 	ngx_memzero(&request_params, sizeof(request_params));
-	if (conf->parse_uri_file_name != NULL)
+	if (conf->submodule.parse_uri_file_name != NULL)
 	{
 		rc = ngx_http_vod_parse_uri(r, conf, &request_params);
 		if (rc != NGX_OK)
@@ -1950,7 +2187,7 @@ ngx_http_vod_handler(ngx_http_request_t *r)
 		ngx_md5_final(request_key, &md5);
 
 		// try to fetch from cache
-		if (ngx_buffer_cache_fetch_perf(perf_counters, conf->response_cache_zone, request_key, &cache_buffer, &cache_buffer_size) &&
+		if (ngx_buffer_cache_fetch_copy_perf(r, perf_counters, conf->response_cache_zone, request_key, &cache_buffer, &cache_buffer_size) &&
 			cache_buffer_size > sizeof(size_t))
 		{
 			ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,

@@ -104,8 +104,20 @@ enum {			// raw track atoms
 
 // typedefs
 typedef struct {
+	u_char	version[1];
+	u_char	flags[3];
+	u_char	entries[4];
+} stsd_atom_t;
+
+typedef struct {
+	u_char	size[4];
+	u_char	format[4];
+} stsd_entry_header_t;
+
+typedef struct {
 	const u_char* ptr;
 	uint64_t size;
+	uint8_t header_size;
 } raw_atom_t;
 
 typedef struct {
@@ -153,6 +165,7 @@ typedef struct {
 typedef struct {
 	uint32_t file_index;
 	vod_str_t uri;
+	void* drm_info;
 } file_info_t;
 
 typedef struct {
@@ -172,6 +185,7 @@ typedef struct {
 	uint32_t key_frame_count;
 	uint64_t total_frames_size;
 	uint64_t total_frames_duration;
+	uint32_t first_frame_index;
 	uint64_t first_frame_time_offset;
 	raw_atom_t raw_atoms[RTA_COUNT];
 } mpeg_stream_metadata_t;

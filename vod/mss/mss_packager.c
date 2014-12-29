@@ -386,7 +386,7 @@ mss_packager_build_fragment_header(
 		stream_metadata->media_info.media_type,
 		stream_metadata->frames,
 		stream_metadata->frame_count,
-		moof_atom_size);
+		moof_atom_size + ATOM_HEADER_SIZE);
 
 	p = mss_write_uuid_tfxd_atom(p, stream_metadata);
 

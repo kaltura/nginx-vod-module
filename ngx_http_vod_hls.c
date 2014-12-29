@@ -136,7 +136,7 @@ ngx_http_vod_hls_handle_encryption_key(
 		return NGX_HTTP_INTERNAL_SERVER_ERROR;
 	}
 
-	ngx_memcpy(encryption_key, submodule_context->request_params.file_key, BUFFER_CACHE_KEY_SIZE);
+	ngx_memcpy(encryption_key, submodule_context->cur_suburi->file_key, BUFFER_CACHE_KEY_SIZE);
 
 	response->data = encryption_key;
 	response->len = BUFFER_CACHE_KEY_SIZE;
@@ -151,8 +151,7 @@ static ngx_int_t
 ngx_http_vod_hls_init_frame_processor(
 	ngx_http_vod_submodule_context_t* submodule_context,
 	read_cache_state_t* read_cache_state,
-	write_callback_t write_callback,
-	void* write_context,
+	segment_writer_t* segment_writer,
 	ngx_http_vod_frame_processor_t* frame_processor,
 	void** frame_processor_state,
 	ngx_str_t* output_buffer,
@@ -177,8 +176,8 @@ ngx_http_vod_hls_init_frame_processor(
 		submodule_context->request_params.segment_index,
 		&submodule_context->mpeg_metadata,
 		read_cache_state,
-		write_callback,
-		write_context,
+		segment_writer->write_tail,
+		segment_writer->context,
 		&simulation_supported);
 	if (rc != VOD_OK)
 	{
@@ -366,6 +365,17 @@ ngx_http_vod_hls_parse_uri_file_name(
 	}
 
 	return NGX_OK;
+}
+
+ngx_int_t
+ngx_http_vod_hls_parse_drm_info(
+	ngx_http_vod_submodule_context_t* submodule_context,
+	ngx_str_t* drm_info,
+	void** output)
+{
+	ngx_log_error(NGX_LOG_ERR, submodule_context->request_context.log, 0,
+		"ngx_http_vod_hls_parse_drm_info: drm support for hls not implemented");
+	return VOD_UNEXPECTED;
 }
 
 DEFINE_SUBMODULE(hls);

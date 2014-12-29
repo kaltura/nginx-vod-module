@@ -15,6 +15,7 @@
 		(ngx_http_vod_merge_loc_conf_t)ngx_http_vod_##x##_merge_loc_conf,	\
 		ngx_http_vod_##x##_get_file_path_components,			\
 		ngx_http_vod_##x##_parse_uri_file_name,					\
+		ngx_http_vod_##x##_parse_drm_info,						\
 	}
 
 #define ngx_http_vod_submodule_size_only(submodule_context)		\
@@ -77,8 +78,7 @@ struct ngx_http_vod_request_s {
 		// in
 		ngx_http_vod_submodule_context_t* submodule_context,
 		read_cache_state_t* read_cache_state,
-		write_callback_t write_callback,
-		void* write_context,
+		segment_writer_t* segment_writer,
 		// out
 		ngx_http_vod_frame_processor_t* frame_processor,
 		void** frame_processor_state,
@@ -109,6 +109,11 @@ typedef struct {
 		u_char* start_pos,
 		u_char* end_pos,
 		ngx_http_vod_request_params_t* request_params);
+
+	ngx_int_t (*parse_drm_info)(
+		ngx_http_vod_submodule_context_t* submodule_context,
+		ngx_str_t* drm_info,
+		void** output);
 } ngx_http_vod_submodule_t;
 
 // globals
