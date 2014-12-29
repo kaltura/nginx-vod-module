@@ -213,12 +213,24 @@ ngx_int_t
 ngx_json_parse(ngx_pool_t* pool, u_char* string, ngx_json_value_t* result)
 {
 	ngx_json_parser_state_t state;
+	ngx_int_t rc;
 
 	state.pool = pool;
 	state.cur_pos = string;
 
 	ngx_json_skip_spaces(&state);
-	return ngx_json_parse_value(&state, result);
+	rc = ngx_json_parse_value(&state, result);
+	if (rc != NGX_JSON_OK)
+	{
+		return rc;
+	}
+	ngx_json_skip_spaces(&state);
+	if (*state.cur_pos)
+	{
+		return NGX_JSON_BAD_DATA;
+	}
+
+	return NGX_JSON_OK;
 }
 
 static ngx_int_t

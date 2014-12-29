@@ -104,11 +104,11 @@ The suffix `.urlset` (can be changed with vod_multi_uri_suffix) indicates that t
 
 The following parameters are supported on the URL path:
 * clipFrom - an offset in milliseconds since the beginning of the video, where the generated stream should start. 
-	For example, .../clipFrom/10000/... will generate a stream that starts 10 seconds into the video.
+	For example, `.../clipFrom/10000/...` will generate a stream that starts 10 seconds into the video.
 * clipTo - an offset in milliseconds since the beginning of the video, where the generated stream should end.
-	For example, .../clipTo/60000/... will generate a stream truncated to 60 seconds.
+	For example, `.../clipTo/60000/...` will generate a stream truncated to 60 seconds.
 * tracks - can be used to select specific audio/video tracks. The structure of parameter is: `v<id1>-v<id2>-a<id1>-a<id2>...`
-	For example, .../tracks/v1-a1/... will select the first video track and first audio track.
+	For example, `.../tracks/v1-a1/...` will select the first video track and first audio track.
 	The default is to include all tracks.
 
 #### Filename structure
@@ -117,7 +117,7 @@ The structure of filename is:
 `<basename>[<fileparams>][<trackparams>].<extension>`
 
 Where:
-* basename + extension - packager specific (the list below applies to the default settings):
+* basename + extension - the set of options is packager specific (the list below applies to the default settings):
   * dash - manifest.mpd
   * hds - manifest.f4m
   * hls master playlist - master.m3u8
