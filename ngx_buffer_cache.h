@@ -48,6 +48,8 @@ void ngx_buffer_cache_get_stats(
 	ngx_shm_zone_t *shm_zone,
 	ngx_buffer_cache_stats_t* stats);
 
+void ngx_buffer_cache_reset_stats(ngx_shm_zone_t *shm_zone);
+
 ngx_shm_zone_t* ngx_buffer_cache_create_zone(ngx_conf_t *cf, ngx_str_t *name, size_t size, void *tag);
 
 #endif // _NGX_BUFFER_CACHE_H_INCLUDED_
