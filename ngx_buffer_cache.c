@@ -519,6 +519,22 @@ ngx_buffer_cache_get_stats(
 	ngx_shmtx_unlock(&shpool->mutex);
 }
 
+void
+ngx_buffer_cache_reset_stats(ngx_shm_zone_t *shm_zone)
+{
+	ngx_buffer_cache_t *cache;
+	ngx_slab_pool_t *shpool;
+
+	shpool = (ngx_slab_pool_t *)shm_zone->shm.addr;
+	cache = shpool->data;
+
+	ngx_shmtx_lock(&shpool->mutex);
+
+	ngx_memzero(&cache->stats, sizeof(cache->stats));
+
+	ngx_shmtx_unlock(&shpool->mutex);
+}
+
 ngx_shm_zone_t* 
 ngx_buffer_cache_create_zone(ngx_conf_t *cf, ngx_str_t *name, size_t size, void *tag)
 {

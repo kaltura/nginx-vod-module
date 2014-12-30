@@ -57,8 +57,11 @@ typedef struct timeval ngx_tick_count_t;
 		ngx_atomic_fetch_add(&state->counters[type].count, 1);		\
 		if (__delta > state->counters[type].max)					\
 		{															\
+			struct timeval __tv;									\
+			ngx_gettimeofday(&__tv);								\
 			state->counters[type].max = __delta;					\
-			state->counters[type].max_time = ngx_time();			\
+			state->counters[type].max_time = __tv.tv_sec;			\
+			state->counters[type].max_pid = ngx_pid;				\
 		}															\
 	}
 
@@ -96,6 +99,7 @@ typedef struct {
 	ngx_atomic_t count;
 	ngx_atomic_t max;
 	ngx_atomic_t max_time;
+	ngx_atomic_t max_pid;
 } ngx_perf_counter_t;
 
 typedef struct {
