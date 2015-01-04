@@ -8,8 +8,8 @@
 #define container_of(ptr, type, member) (type *)((char *)(ptr) - offsetof(type, member))
 
 // constants
-#define CACHE_LOCK_EXPIRATION (10)
-#define ENTRY_LOCK_EXPIRATION (60)
+#define CACHE_LOCK_EXPIRATION (5)
+#define ENTRY_LOCK_EXPIRATION (5)
 #define ENTRIES_ALLOC_MARGIN (1024)		// 1K entries ~= 100KB, we reserve this space to make sure allocating entries does not become the bottleneck
 #define BUFFER_ALIGNMENT (16)
 
