@@ -68,7 +68,7 @@ class TestThread(stress_base.TestThreadBase):
 		if str(code1) != '200':
 			self.writeOutput('Notice: got status code %s' % (code1))
 		
-		if url1.split('?')[0].rsplit('.', 1)[-1] in set(['m3u8']):
+		if url1.split('?')[0].rsplit('.', 1)[-1] in set(['m3u8', 'mpd']):
 			body1 = body1.replace(URL1_BASE, URL2_BASE)
 			body1 = body1.replace('-a1-v1', '-v1-a1')
 			body2 = body2.replace('-a1-v1', '-v1-a1')
