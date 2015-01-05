@@ -105,7 +105,7 @@ typedef struct {
 
 	ngx_int_t (*parse_uri_file_name)(
 		ngx_http_request_t *r,
-		ngx_http_vod_loc_conf_t *conf,
+		struct ngx_http_vod_loc_conf_s *conf,
 		u_char* start_pos,
 		u_char* end_pos,
 		ngx_http_vod_request_params_t* request_params);
