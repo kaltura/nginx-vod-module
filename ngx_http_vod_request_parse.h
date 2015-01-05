@@ -26,9 +26,7 @@
 
 // typedefs
 struct ngx_http_vod_request_s;
-
 struct ngx_http_vod_loc_conf_s;
-typedef struct ngx_http_vod_loc_conf_s ngx_http_vod_loc_conf_t;
 
 enum {
 	MATCH_END,
@@ -76,13 +74,13 @@ bool_t ngx_http_vod_split_uri_file_name(
 
 ngx_int_t ngx_http_vod_parse_uri_path(
 	ngx_http_request_t* r,
-	ngx_http_vod_loc_conf_t* conf,
+	struct ngx_http_vod_loc_conf_s* conf,
 	ngx_str_t* uri,
 	ngx_http_vod_request_params_t* request_params);
 
 ngx_int_t ngx_http_vod_init_uri_params_hash(
 	ngx_conf_t *cf, 
-	ngx_http_vod_loc_conf_t* conf);
+	struct ngx_http_vod_loc_conf_s* conf);
 
 // utility functions for submodules
 u_char* ngx_http_vod_extract_uint32_token_reverse(
