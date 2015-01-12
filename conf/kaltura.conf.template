@@ -76,16 +76,12 @@ http {
 		location /nginx_status {
 			stub_status on;
 			access_log off;
-			allow @STATUS_ALLOWED_RANGE@;
-			deny all;
 		}
 
 		# vod status page
 		location /vod_status {
 			vod_status;
 			access_log off;
-			allow @STATUS_ALLOWED_RANGE@;
-			deny all;
 		}
 		
 		# internal location for vod subrequests
@@ -122,6 +118,9 @@ http {
 		location ~ ^/dash/p/\d+/(sp/\d+/)?serveFlavor/ {
 			vod dash;
 			vod_segment_duration 4000;
+			vod_bootstrap_segment_durations 3500;
+			vod_align_segments_to_key_frames on;
+			vod_dash_include_segment_timeline off;
 			
 			add_header Last-Modified "Sun, 19 Nov 2000 08:52:00 GMT";
 			add_header Access-Control-Allow-Headers "origin,range,accept-encoding,referer";
