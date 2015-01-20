@@ -108,7 +108,7 @@ http {
 
 			add_header Last-Modified "Sun, 19 Nov 2000 08:52:00 GMT";
 			add_header Access-Control-Allow-Headers "*";
-			add_header Access-Control-Expose-Headers "*";
+			add_header Access-Control-Expose-Headers "Server,range,Content-Length,Content-Range";
 			add_header Access-Control-Allow-Methods "GET, HEAD, OPTIONS";
 			add_header Access-Control-Allow-Origin "*";
 			expires 100d;
