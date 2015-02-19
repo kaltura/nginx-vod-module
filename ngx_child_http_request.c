@@ -414,6 +414,7 @@ ngx_init_request_buffer(
 	ngx_uint_t                    i;
 	ngx_flag_t range_request = params->range_start < params->range_end;
 	ngx_buf_t *b;
+	uintptr_t escape_chars;
 	size_t len;
 	u_char* p;
 
@@ -432,8 +433,17 @@ ngx_init_request_buffer(
 	}
 
 	// calculate the request size
+	if (params->escape_uri)
+	{
+		escape_chars = ngx_escape_uri(NULL, params->base_uri.data, params->base_uri.len, NGX_ESCAPE_URI);
+	}
+	else
+	{
+		escape_chars = 0;
+	}
+
 	len =
-		sizeof("HEAD ") - 1 + params->base_uri.len + sizeof("?") - 1 + params->extra_args.len + sizeof(" HTTP/1.1" CRLF) - 1 +
+		sizeof("HEAD ") - 1 + params->base_uri.len + 2 * escape_chars + sizeof("?") - 1 + params->extra_args.len + sizeof(" HTTP/1.1" CRLF) - 1 +
 		sizeof("Host: ") - 1 + params->host_name.len + sizeof(CRLF) - 1 +
 		params->extra_headers.len +
 		sizeof(CRLF);
@@ -496,7 +506,16 @@ ngx_init_request_buffer(
 		*p++ = 'G';		*p++ = 'E';		*p++ = 'T';
 	}
 	*p++ = ' ';
-	p = ngx_copy(p, params->base_uri.data, params->base_uri.len);
+
+	if (escape_chars > 0)
+	{
+		p = (u_char *)ngx_escape_uri(p, params->base_uri.data, params->base_uri.len, NGX_ESCAPE_URI);
+	}
+	else
+	{
+		p = ngx_copy(p, params->base_uri.data, params->base_uri.len);
+	}
+
 	if (params->extra_args.len > 0)
 	{
 		if (ngx_strchr(params->base_uri.data, '?'))

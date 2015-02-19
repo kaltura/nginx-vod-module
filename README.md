@@ -312,6 +312,7 @@ Sets the value of the HTTP host header that should be sent to the upstream (remo
 * **context**: `http`, `server`, `location`
 
 Extra query string arguments that should be added to the upstream request (remote/mapped modes only).
+The parameter value can contain variables.
 
 #### vod_connect_timeout
 * **syntax**: `vod_connect_timeout timeout`
@@ -490,6 +491,14 @@ Sets the timeout in milliseconds for reading data from the upstream.
 * **context**: `http`, `server`, `location`
 
 Configures the size and shared memory object name of the drm info cache.
+
+#### vod_drm_request_uri
+* **syntax**: `vod_drm_request_uri uri`
+* **default**: `$uri`
+* **context**: `http`, `server`, `location`
+
+Sets the uri of drm info requests, the parameter value can contain variables.
+In case of multi url, $uri will one of the sub URLs (a separate drm info request is issued per sub URL)
 
 ### Configuration directives - DASH
 
