@@ -150,6 +150,10 @@ ngx_http_vod_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child)
 	{
 		conf->drm_info_cache_zone = prev->drm_info_cache_zone;
 	}
+	if (conf->drm_request_uri == NULL) 
+	{
+		conf->drm_request_uri = prev->drm_request_uri;
+	}
 
 	ngx_conf_merge_str_value(conf->clip_to_param_name, prev->clip_to_param_name, "clipTo");
 	ngx_conf_merge_str_value(conf->clip_from_param_name, prev->clip_from_param_name, "clipFrom");
@@ -782,6 +786,13 @@ ngx_command_t ngx_http_vod_commands[] = {
 	offsetof(ngx_http_vod_loc_conf_t, drm_info_cache_zone),
 	NULL },
 
+	{ ngx_string("vod_drm_request_uri"),
+	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1,
+	ngx_http_set_complex_value_slot,
+	NGX_HTTP_LOC_CONF_OFFSET,
+	offsetof(ngx_http_vod_loc_conf_t, drm_request_uri),
+	NULL },
+	
 	// request format settings
 	{ ngx_string("vod_clip_to_param_name"),
 	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1,

@@ -49,6 +49,7 @@ typedef struct {
 	ngx_str_t extra_headers;
 	ngx_flag_t proxy_range;
 	ngx_flag_t proxy_accept_encoding;
+	ngx_flag_t escape_uri;
 } ngx_child_request_params_t;
 
 // Note: the purpose of this struct is to reuse the request & headers buffers between several 

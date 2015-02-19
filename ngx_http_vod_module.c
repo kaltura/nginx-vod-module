@@ -1022,6 +1022,7 @@ ngx_http_vod_get_drm_info(ngx_http_vod_ctx_t *ctx)
 	ngx_http_request_t* r = ctx->submodule_context.r;
 	ngx_int_t rc;
 	ngx_str_t drm_info;
+	ngx_str_t original_uri;
 
 	if (conf->drm_info_cache_zone != NULL)
 	{
@@ -1052,7 +1053,27 @@ ngx_http_vod_get_drm_info(ngx_http_vod_ctx_t *ctx)
 
 	ngx_memzero(&child_params, sizeof(child_params));
 	child_params.method = NGX_HTTP_GET;
-	child_params.base_uri = ctx->submodule_context.cur_suburi->uri;			// XXXX make configurable, use complex values
+	child_params.escape_uri = 1;
+
+	if (conf->drm_request_uri != NULL)
+	{
+		original_uri = r->uri;
+		r->uri = ctx->submodule_context.cur_suburi->uri;		// switch the uri so that $uri would be replaced with the sub uri
+
+		if (ngx_http_complex_value(
+			r,
+			conf->drm_request_uri,
+			&child_params.base_uri) != NGX_OK)
+		{
+			return NGX_ERROR;
+		}
+
+		r->uri = original_uri;
+	}
+	else
+	{
+		child_params.base_uri = ctx->submodule_context.cur_suburi->uri;
+	}
 
 	ngx_perf_counter_start(ctx->perf_counter_context);
 
@@ -1582,7 +1603,7 @@ ngx_http_vod_dump_request_to_fallback(
 	// dump the request to the fallback upstream
 	ngx_memzero(&child_params, sizeof(child_params));
 	child_params.method = r->method;
-	child_params.base_uri = r->uri;
+	child_params.base_uri = r->unparsed_uri;
 	child_params.extra_headers = conf->proxy_header;
 	child_params.proxy_range = 1;
 	child_params.proxy_accept_encoding = 1;
@@ -1747,6 +1768,7 @@ ngx_http_vod_run_mapped_mode_state_machine(ngx_http_request_t *r)
 		child_params.base_uri = ctx->submodule_context.cur_suburi->stripped_uri;
 		child_params.extra_args = ctx->upstream_extra_args;
 		child_params.host_name = conf->upstream_host_header;
+		child_params.escape_uri = 1;
 
 		ngx_perf_counter_start(ctx->perf_counter_context);
 
@@ -1960,6 +1982,7 @@ ngx_http_vod_async_http_read(ngx_http_request_t *r, u_char *buf, size_t size, of
 	child_params.host_name = conf->upstream_host_header;
 	child_params.range_start = offset;
 	child_params.range_end = offset + size;
+	child_params.escape_uri = 1;
 
 	return ngx_child_request_start(
 		r, 
@@ -1985,7 +2008,7 @@ ngx_http_vod_dump_http_request(ngx_http_request_t *r)
 
 	ngx_memzero(&child_params, sizeof(child_params));
 	child_params.method = r->method;
-	child_params.base_uri = r->uri;
+	child_params.base_uri = r->unparsed_uri;
 	child_params.extra_args = ctx->upstream_extra_args;
 	child_params.host_name = conf->upstream_host_header;
 	child_params.proxy_range = 1;
