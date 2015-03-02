@@ -49,9 +49,9 @@ without the overhead of short segments for the whole duration of the video
 
 ### Build
 
-cd to NGINX source directory and execute:
+cd to NGINX source directory and execute (make sure to have openssl-devel package installed):
 
-    ./configure --add-module=/path/to/nginx-vod-module
+    ./configure --add-module=/path/to/nginx-vod-module --with-http_ssl_module
     make
     make install
 	
