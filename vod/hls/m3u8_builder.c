@@ -279,6 +279,7 @@ m3u8_builder_build_index_playlist(
 	request_context_t* request_context,
 	m3u8_config_t* conf,
 	vod_str_t* base_url,
+	vod_str_t* segments_base_url,
 	bool_t include_file_index,
 	bool_t encryption_enabled,
 	segmenter_conf_t* segmenter_conf,
@@ -323,7 +324,7 @@ m3u8_builder_build_index_playlist(
 
 	// get the required buffer length
 	segment_length = sizeof("#EXTINF:.000,\n") - 1 + m3u8_builder_get_int_print_len(DIV_CEIL(mpeg_metadata->duration_millis, 1000)) +
-		base_url->len + conf->segment_file_name_prefix.len + 1 + m3u8_builder_get_int_print_len(segment_durations.segment_count) + required_tracks.len + sizeof(".ts\n") - 1;
+		segments_base_url->len + conf->segment_file_name_prefix.len + 1 + m3u8_builder_get_int_print_len(segment_durations.segment_count) + required_tracks.len + sizeof(".ts\n") - 1;
 
 	result_size =
 		sizeof(M3U8_HEADER_PART1) + VOD_INT64_LEN + 
@@ -386,14 +387,14 @@ m3u8_builder_build_index_playlist(
 		extinf.data = p;
 		p = m3u8_builder_append_extinf_tag(p, rescale_time(cur_item->duration, segment_durations.timescale, scale), scale);
 		extinf.len = p - extinf.data;
-		p = m3u8_builder_append_segment_name(p, base_url, &conf->segment_file_name_prefix, segment_index, &required_tracks);
+		p = m3u8_builder_append_segment_name(p, segments_base_url, &conf->segment_file_name_prefix, segment_index, &required_tracks);
 		segment_index++;
 
 		// write any additional segments
 		for (; segment_index < last_segment_index; segment_index++)
 		{
 			p = vod_copy(p, extinf.data, extinf.len);
-			p = m3u8_builder_append_segment_name(p, base_url, &conf->segment_file_name_prefix, segment_index, &required_tracks);
+			p = m3u8_builder_append_segment_name(p, segments_base_url, &conf->segment_file_name_prefix, segment_index, &required_tracks);
 		}
 	}
 

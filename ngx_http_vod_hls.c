@@ -26,7 +26,7 @@ ngx_http_vod_hls_handle_master_playlist(
 
 	if (submodule_context->conf->hls.absolute_master_urls)
 	{
-		ngx_http_vod_get_base_url(submodule_context->r, submodule_context->conf, &empty_string, &base_url);
+		ngx_http_vod_get_base_url(submodule_context->r, submodule_context->conf, &empty_string, 0, &base_url);
 	}
 
 	rc = m3u8_builder_build_master_playlist(
@@ -55,18 +55,29 @@ ngx_http_vod_hls_handle_index_playlist(
 	ngx_str_t* response,
 	ngx_str_t* content_type)
 {
+	ngx_str_t segments_base_url = ngx_null_string;
 	ngx_str_t base_url = ngx_null_string;
 	vod_status_t rc;
 
 	if (submodule_context->conf->hls.absolute_index_urls)
 	{
-		ngx_http_vod_get_base_url(submodule_context->r, submodule_context->conf, &submodule_context->r->uri, &base_url);
+		ngx_http_vod_get_base_url(submodule_context->r, submodule_context->conf, &submodule_context->r->uri, 0, &base_url);
+
+		if (submodule_context->conf->force_http_segments)
+		{
+			ngx_http_vod_get_base_url(submodule_context->r, submodule_context->conf, &submodule_context->r->uri, 1, &segments_base_url);
+		}
+		else
+		{
+			segments_base_url = base_url;
+		}
 	}
 
 	rc = m3u8_builder_build_index_playlist(
 		&submodule_context->request_context,
 		&submodule_context->conf->hls.m3u8_config,
 		&base_url,
+		&segments_base_url,
 		submodule_context->request_params.uses_multi_uri,
 		submodule_context->conf->secret_key.len != 0,
 		&submodule_context->conf->segmenter,
@@ -96,7 +107,7 @@ ngx_http_vod_hls_handle_iframe_playlist(
 
 	if (submodule_context->conf->hls.absolute_iframe_urls)
 	{
-		ngx_http_vod_get_base_url(submodule_context->r, submodule_context->conf, &submodule_context->r->uri, &base_url);
+		ngx_http_vod_get_base_url(submodule_context->r, submodule_context->conf, &submodule_context->r->uri, 0, &base_url);
 	}
 
 	rc = m3u8_builder_build_iframe_playlist(
