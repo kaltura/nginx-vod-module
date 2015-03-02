@@ -120,6 +120,7 @@ ngx_http_vod_get_base_url(
 	ngx_http_request_t* r,
 	ngx_http_vod_loc_conf_t* conf,
 	ngx_str_t* file_uri,
+	ngx_flag_t force_http,
 	ngx_str_t* base_url)
 {
 	ngx_flag_t use_https;
@@ -161,7 +162,11 @@ ngx_http_vod_get_base_url(
 	}
 
 	// decide whether to use http or https
-	if (conf->https_header_name.len)
+	if (force_http)
+	{
+		use_https = 0;
+	}
+	else if (conf->https_header_name.len)
 	{
 		use_https = ngx_http_vod_header_exists(r, &conf->https_header_name);
 	}

@@ -18,6 +18,7 @@ void ngx_http_vod_get_base_url(
 	ngx_http_request_t* r,
 	ngx_http_vod_loc_conf_t* conf,
 	ngx_str_t* file_uri,
+	ngx_flag_t force_http,
 	ngx_str_t* base_url);
 
 ngx_int_t ngx_http_vod_merge_string_parts(

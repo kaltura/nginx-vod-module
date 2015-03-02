@@ -33,7 +33,7 @@ ngx_http_vod_dash_handle_manifest(
 
 	if (submodule_context->conf->dash.absolute_manifest_urls)
 	{
-		ngx_http_vod_get_base_url(submodule_context->r, submodule_context->conf, &submodule_context->r->uri, &base_url);
+		ngx_http_vod_get_base_url(submodule_context->r, submodule_context->conf, &submodule_context->r->uri, 0, &base_url);
 	}
 
 	if (submodule_context->conf->drm_enabled)
