@@ -16,7 +16,9 @@ ngx_flag_t ngx_http_vod_header_exists(ngx_http_request_t* r, ngx_str_t* searched
 
 void ngx_http_vod_get_base_url(
 	ngx_http_request_t* r,
-	ngx_http_vod_loc_conf_t* conf,
+	ngx_str_t* https_header_name,
+	ngx_str_t* conf_base_url,
+	ngx_flag_t conf_base_url_has_schema,
 	ngx_str_t* file_uri,
 	ngx_str_t* base_url);
 

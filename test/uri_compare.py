@@ -14,6 +14,8 @@ from uri_compare_params import *
 
 INGORED_HEADERS = set([
 	'x-vod-me','x-vod-session',
+	'x-me', 'x-kaltura-session', 
+	'x-varnish', 
 ])
 
 IGNORE_HEADER_VALUES = set([
@@ -78,7 +80,7 @@ class TestThread(stress_base.TestThreadBase):
 			value2 = headers2[curHeader]
 			if value1 == value2:
 				continue
-			if curHeader == 'expires':
+			if curHeader in set(['expires', 'last-modified']):
 				if abs(self.parseHttpTime(value1[0]) - self.parseHttpTime(value2[0])) < 10:
 					continue
 			self.writeOutput('Error: different value for header %s - %s vs %s' % (curHeader, value1, value2))
@@ -129,6 +131,10 @@ class TestThread(stress_base.TestThreadBase):
 			body1 = body1.replace(URL1_BASE, URL2_BASE)
 			body1 = body1.replace('-a1-v1', '-v1-a1')
 			body2 = body2.replace('-a1-v1', '-v1-a1')
+		
+		if body1.startswith('<?xml'):
+			body1 = re.sub('<executionTime>[0-9\.]+<\/executionTime>', '', body1)
+			body2 = re.sub('<executionTime>[0-9\.]+<\/executionTime>', '', body2)
 			
 		if body1 != body2:
 			self.writeOutput('Error: comparison failed - url1=%s, url2=%s' % (url1, url2))

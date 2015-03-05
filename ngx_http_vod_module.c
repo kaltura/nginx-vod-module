@@ -2202,10 +2202,24 @@ ngx_http_vod_handler(ngx_http_request_t *r)
 	{
 		// calc request key from host + uri
 		ngx_md5_init(&md5);
+
 		if (r->headers_in.host != NULL)
 		{
 			ngx_md5_update(&md5, r->headers_in.host->value.data, r->headers_in.host->value.len);
 		}
+
+		if (conf->https_header_name.len)
+		{
+			if (ngx_http_vod_header_exists(r, &conf->https_header_name))
+			{
+				ngx_md5_update(&md5, "1", sizeof("1") - 1);
+			}
+			else
+			{
+				ngx_md5_update(&md5, "0", sizeof("0") - 1);
+			}
+		}
+
 		ngx_md5_update(&md5, r->uri.data, r->uri.len);
 		ngx_md5_final(request_key, &md5);
 

@@ -23,6 +23,8 @@ struct ngx_http_vod_loc_conf_s {
 	ngx_str_t secret_key;
 	ngx_uint_t duplicate_bitrate_threshold;
 	ngx_str_t https_header_name;
+	ngx_str_t segments_base_url;
+	ngx_flag_t segments_base_url_has_scheme;
 	ngx_shm_zone_t* moov_cache_zone;
 	ngx_shm_zone_t* response_cache_zone;
 	size_t initial_read_size;

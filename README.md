@@ -240,6 +240,19 @@ Sets the name of an HTTP header whose existence determines whether the request w
 If not set, the decision is made according to the protocol used to connect to the nginx server.
 A common scenario for using this setting is a load-balancer placed before the nginx that performs SSL-offloading.
 
+#### vod_segments_base_url
+* **syntax**: `vod_segments_base_url url`
+* **default**: `empty`
+* **context**: `http`, `server`, `location`
+
+Sets the base URL (usually domain only) that should be used for delivering video segments.
+When empty, the host header sent on the request will be used as the domain.
+The scheme (http/https) used in the returned URLs is determined by:
+* the value of vod_segments_base_url, if it starts with http:// or https://
+* the existence of a request header whose name matches the value of vod_https_header_name, if vod_https_header_name is not empty
+* the type of connection used to connect to the nginx server
+The setting currently affects only HLS.
+
 #### vod_moov_cache
 * **syntax**: `vod_moov_cache zone_name zone_size`
 * **default**: `off`
