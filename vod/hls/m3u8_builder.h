@@ -37,6 +37,7 @@ vod_status_t m3u8_builder_build_index_playlist(
 	request_context_t* request_context,
 	m3u8_config_t* conf,
 	vod_str_t* base_url,
+	vod_str_t* segments_base_url,
 	bool_t include_file_index,
 	bool_t encryption_enabled,
 	segmenter_conf_t* segmenter_conf,
