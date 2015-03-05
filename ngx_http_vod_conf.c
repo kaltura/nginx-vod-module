@@ -89,6 +89,11 @@ ngx_http_vod_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child)
 	ngx_conf_merge_str_value(conf->secret_key, prev->secret_key, "");
 	ngx_conf_merge_uint_value(conf->duplicate_bitrate_threshold, prev->duplicate_bitrate_threshold, 4096);
 	ngx_conf_merge_str_value(conf->https_header_name, prev->https_header_name, "");
+	ngx_conf_merge_str_value(conf->segments_base_url, prev->segments_base_url, "");
+	conf->segments_base_url_has_scheme =
+		(ngx_strncasecmp(conf->segments_base_url.data, (u_char *) "http://", 7) == 0 ||
+		ngx_strncasecmp(conf->segments_base_url.data, (u_char *) "https://", 8) == 0);
+
 
 	if (conf->moov_cache_zone == NULL) 
 	{
@@ -642,6 +647,13 @@ ngx_command_t ngx_http_vod_commands[] = {
 	offsetof(ngx_http_vod_loc_conf_t, https_header_name),
 	NULL },
 
+	{ ngx_string("vod_segments_base_url"),
+	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1,
+	ngx_conf_set_str_slot,
+	NGX_HTTP_LOC_CONF_OFFSET,
+	offsetof(ngx_http_vod_loc_conf_t, segments_base_url),
+	NULL },
+	
 	// mp4 reading parameters
 	{ ngx_string("vod_moov_cache"),
 	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1 | NGX_CONF_TAKE2,

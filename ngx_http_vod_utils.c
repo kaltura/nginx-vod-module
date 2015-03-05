@@ -118,7 +118,9 @@ ngx_http_vod_header_exists(ngx_http_request_t* r, ngx_str_t* searched_header)
 void
 ngx_http_vod_get_base_url(
 	ngx_http_request_t* r,
-	ngx_http_vod_loc_conf_t* conf,
+	ngx_str_t* https_header_name,
+	ngx_str_t* conf_base_url,
+	ngx_flag_t conf_base_url_has_schema,
 	ngx_str_t* file_uri,
 	ngx_str_t* base_url)
 {
@@ -129,13 +131,20 @@ ngx_http_vod_get_base_url(
 	u_char* last_slash;
 	u_char* p;
 
-	// when the request has no host header (HTTP 1.0), use relative URLs
-	if (r->headers_in.host == NULL)
+	if (conf_base_url == NULL || conf_base_url->len == 0)
 	{
-		return;
-	}
+		// when the request has no host header (HTTP 1.0), use relative URLs
+		if (r->headers_in.host == NULL)
+		{
+			return;
+		}
 
-	host_name = &r->headers_in.host->value;
+		host_name = &r->headers_in.host->value;
+	}
+	else
+	{
+		host_name = conf_base_url;
+	}
 
 	if (file_uri->len)
 	{
@@ -154,34 +163,39 @@ ngx_http_vod_get_base_url(
 
 	// allocate the base url
 	result_size = sizeof("https://") - 1 + host_name->len + uri_path_len + sizeof("/");
-	base_url->data = ngx_palloc(r->pool, result_size);
-	if (base_url->data == NULL)
+	p = ngx_palloc(r->pool, result_size);
+	if (p == NULL)
 	{
 		return;
 	}
 
-	// decide whether to use http or https
-	if (conf->https_header_name.len)
-	{
-		use_https = ngx_http_vod_header_exists(r, &conf->https_header_name);
-	}
-	else
-	{
-#if (NGX_HTTP_SSL)
-		use_https = (r->connection->ssl != NULL);
-#else
-		use_https = 0;
-#endif
-	}
-
 	// build the url
-	if (use_https)
+	base_url->data = p;
+
+	if (!conf_base_url_has_schema)
 	{
-		p = ngx_copy(base_url->data, "https://", sizeof("https://") - 1);
-	}
-	else
-	{
-		p = ngx_copy(base_url->data, "http://", sizeof("http://") - 1);
+		// decide whether to use http or https
+		if (https_header_name->len)
+		{
+			use_https = ngx_http_vod_header_exists(r, https_header_name);
+		}
+		else
+		{
+#if (NGX_HTTP_SSL)
+			use_https = (r->connection->ssl != NULL);
+#else
+			use_https = 0;
+#endif
+		}
+
+		if (use_https)
+		{
+			p = ngx_copy(p, "https://", sizeof("https://") - 1);
+		}
+		else
+		{
+			p = ngx_copy(p, "http://", sizeof("http://") - 1);
+		}
 	}
 
 	p = ngx_copy(p, host_name->data, host_name->len);
