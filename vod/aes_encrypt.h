@@ -8,7 +8,9 @@
 #include "common.h"
 
 // macros
+#ifndef AES_BLOCK_SIZE
 #define AES_BLOCK_SIZE (16)
+#endif // AES_BLOCK_SIZE
 #define AES_ROUND_TO_BLOCK(n) (((n) + 0x10) & ~0xf)
 
 // typedefs

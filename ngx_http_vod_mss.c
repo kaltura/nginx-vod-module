@@ -1,7 +1,9 @@
 #include <ngx_http.h>
 #include "ngx_http_vod_submodule.h"
 #include "ngx_http_vod_utils.h"
+#include "ngx_http_vod_udrm.h"
 #include "vod/mss/mss_packager.h"
+#include "vod/mss/mss_playready.h"
 
 // typedefs
 typedef struct {
@@ -34,11 +36,25 @@ ngx_http_vod_mss_handle_manifest(
 {
 	vod_status_t rc;
 
-	rc = mss_packager_build_manifest(
-		&submodule_context->request_context,
-		&submodule_context->conf->segmenter,
-		&submodule_context->mpeg_metadata,
-		response);
+	if (submodule_context->conf->drm_enabled)
+	{
+		rc = mss_playready_build_manifest(
+			&submodule_context->request_context,
+			&submodule_context->conf->segmenter,
+			&submodule_context->mpeg_metadata,
+			response);
+	}
+	else
+	{
+		rc = mss_packager_build_manifest(
+			&submodule_context->request_context,
+			&submodule_context->conf->segmenter,
+			&submodule_context->mpeg_metadata,
+			0,
+			NULL,
+			NULL,
+			response);
+	}
 	if (rc != VOD_OK)
 	{
 		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, submodule_context->request_context.log, 0,
@@ -65,24 +81,52 @@ ngx_http_vod_mss_init_frame_processor(
 	ngx_str_t* content_type)
 {
 	fragment_writer_state_t* state;
+	segment_writer_t drm_writer;
 	vod_status_t rc;
 	bool_t size_only = ngx_http_vod_submodule_size_only(submodule_context);
 
-	rc = mss_packager_build_fragment_header(
-		&submodule_context->request_context,
-		submodule_context->mpeg_metadata.first_stream,
-		submodule_context->request_params.segment_index,
-		size_only,
-		output_buffer,
-		response_size);
-	if (rc != VOD_OK)
+	if (submodule_context->conf->drm_enabled)
 	{
-		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, submodule_context->request_context.log, 0,
-			"ngx_http_vod_mss_init_frame_processor: mss_packager_build_fragment_header failed %i", rc);
-		return ngx_http_vod_status_to_ngx_error(rc);
+		rc = mss_playready_get_fragment_writer(
+			&drm_writer,
+			&submodule_context->request_context,
+			submodule_context->mpeg_metadata.first_stream,
+			submodule_context->request_params.segment_index,
+			segment_writer,
+			submodule_context->cur_suburi->file_key,		// iv
+			size_only,
+			output_buffer,
+			response_size);
+		if (rc != VOD_OK)
+		{
+			ngx_log_debug1(NGX_LOG_DEBUG_HTTP, submodule_context->request_context.log, 0,
+				"ngx_http_vod_mss_init_frame_processor: mss_playready_get_fragment_writer failed %i", rc);
+			return ngx_http_vod_status_to_ngx_error(rc);
+		}
+
+		segment_writer = &drm_writer;
+	}
+	else
+	{
+		rc = mss_packager_build_fragment_header(
+			&submodule_context->request_context,
+			submodule_context->mpeg_metadata.first_stream,
+			submodule_context->request_params.segment_index,
+			0,
+			NULL,
+			NULL,
+			size_only,
+			output_buffer,
+			response_size);
+		if (rc != VOD_OK)
+		{
+			ngx_log_debug1(NGX_LOG_DEBUG_HTTP, submodule_context->request_context.log, 0,
+				"ngx_http_vod_mss_init_frame_processor: mss_packager_build_fragment_header failed %i", rc);
+			return ngx_http_vod_status_to_ngx_error(rc);
+		}
 	}
 
-	if (!size_only)
+	if (!size_only || *response_size == 0)
 	{
 		rc = mp4_builder_frame_writer_init(
 			&submodule_context->request_context,
@@ -130,6 +174,16 @@ static const ngx_http_vod_request_t mss_manifest_request = {
 static const ngx_http_vod_request_t mss_fragment_request = {
 	REQUEST_FLAG_SINGLE_STREAM,
 	PARSE_FLAG_FRAMES_ALL,
+	NULL,
+	0,
+	REQUEST_CLASS_SEGMENT,
+	NULL,
+	ngx_http_vod_mss_init_frame_processor,
+};
+
+static const ngx_http_vod_request_t mss_playready_fragment_request = {
+	REQUEST_FLAG_SINGLE_STREAM,
+	PARSE_FLAG_FRAMES_ALL | PARSE_FLAG_PARSED_EXTRA_DATA,
 	NULL,
 	0,
 	REQUEST_CLASS_SEGMENT,
@@ -218,7 +272,7 @@ ngx_http_vod_mss_parse_uri_file_name(
 
 		request_params->segment_index = segmenter_get_segment_index(&conf->segmenter, fragment_params.time / 10000);
 
-		request_params->request = &mss_fragment_request;
+		request_params->request = conf->drm_enabled ? &mss_playready_fragment_request : &mss_fragment_request;
 
 		return NGX_OK;
 	}
@@ -251,9 +305,10 @@ ngx_http_vod_mss_parse_drm_info(
 	ngx_str_t* drm_info,
 	void** output)
 {
-	ngx_log_error(NGX_LOG_ERR, submodule_context->request_context.log, 0,
-		"ngx_http_vod_mss_parse_drm_info: drm support for mss not implemented");
-	return VOD_UNEXPECTED;
+	return 	ngx_http_vod_udrm_parse_response(
+		&submodule_context->request_context,
+		drm_info,
+		output);
 }
 
 DEFINE_SUBMODULE(mss);
