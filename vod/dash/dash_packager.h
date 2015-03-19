@@ -3,6 +3,7 @@
 
 // includes
 #include "../mp4_builder.h"
+#include "../mp4_encrypt.h"
 #include "../mp4_parser.h"
 #include "../segmenter.h"
 #include "../common.h"
@@ -10,11 +11,11 @@
 // typedefs
 typedef u_char* (*write_tags_callback_t)(void* context, u_char* p, mpeg_stream_metadata_t* stream);
 
-typedef u_char* (*write_extra_traf_atoms_callback_t)(void* context, u_char* p, size_t moof_atom_size);
+typedef u_char* (*atom_writer_func_t)(void* context, u_char* p);
 
 typedef struct {
 	size_t atom_size;
-	u_char* (*write)(void* context, u_char* p);
+	atom_writer_func_t write;
 	void* context;
 } atom_writer_t;
 

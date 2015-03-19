@@ -114,6 +114,9 @@ mss_packager_build_manifest(
 	request_context_t* request_context, 
 	segmenter_conf_t* segmenter_conf, 
 	mpeg_metadata_t* mpeg_metadata, 
+	size_t extra_tags_size,
+	mss_write_tags_callback_t write_extra_tags,
+	void* extra_tags_writer_context,
 	vod_str_t* result)
 {
 	mpeg_stream_metadata_t* cur_stream;
@@ -129,6 +132,7 @@ mss_packager_build_manifest(
 	// calculate the result size
 	result_size = 
 		sizeof(MSS_MANIFEST_HEADER) - 1 + VOD_INT64_LEN + 
+		extra_tags_size +
 		sizeof(MSS_MANIFEST_FOOTER);
 	for (media_type = 0; media_type < MEDIA_TYPE_COUNT; media_type++)
 	{
@@ -256,6 +260,11 @@ mss_packager_build_manifest(
 		p = vod_copy(p, MSS_STREAM_INDEX_FOOTER, sizeof(MSS_STREAM_INDEX_FOOTER) - 1);
 	}
 
+	if (write_extra_tags != NULL)
+	{
+		p = write_extra_tags(extra_tags_writer_context, p, mpeg_metadata);
+	}
+
 	p = vod_copy(p, MSS_MANIFEST_FOOTER, sizeof(MSS_MANIFEST_FOOTER) - 1);
 
 	result->len = p - result->data;
@@ -303,6 +312,9 @@ mss_packager_build_fragment_header(
 	request_context_t* request_context,
 	mpeg_stream_metadata_t* stream_metadata,
 	uint32_t segment_index,
+	size_t extra_traf_atoms_size,
+	write_extra_traf_atoms_callback_t write_extra_traf_atoms_callback,
+	void* write_extra_traf_atoms_context,
 	bool_t size_only,
 	vod_str_t* result,
 	size_t* total_fragment_size)
@@ -324,7 +336,8 @@ mss_packager_build_fragment_header(
 		ATOM_HEADER_SIZE +
 		ATOM_HEADER_SIZE + sizeof(tfhd_atom_t) +
 		trun_atom_size +
-		ATOM_HEADER_SIZE + sizeof(uuid_tfxd_atom_t);
+		ATOM_HEADER_SIZE + sizeof(uuid_tfxd_atom_t) + 
+		extra_traf_atoms_size;
 
 	moof_atom_size =
 		ATOM_HEADER_SIZE +
@@ -389,6 +402,12 @@ mss_packager_build_fragment_header(
 		moof_atom_size + ATOM_HEADER_SIZE);
 
 	p = mss_write_uuid_tfxd_atom(p, stream_metadata);
+
+	// moof.traf.xxx
+	if (write_extra_traf_atoms_callback != NULL)
+	{
+		p = write_extra_traf_atoms_callback(write_extra_traf_atoms_context, p, moof_atom_size + ATOM_HEADER_SIZE);
+	}
 
 	// mdat
 	write_atom_header(p, mdat_atom_size, 'm', 'd', 'a', 't');

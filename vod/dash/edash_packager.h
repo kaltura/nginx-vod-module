@@ -4,29 +4,6 @@
 // includes
 #include "dash_packager.h"
 
-// constants
-#define EDASH_AES_KEY_SIZE (16)
-#define EDASH_KID_SIZE (16)
-#define EDASH_SYSTEM_ID_SIZE (16)
-
-// typedef
-typedef struct {
-	u_char system_id[16];
-	vod_str_t data;
-} edash_pssh_info_t;
-
-typedef struct {
-	uint32_t count;
-	edash_pssh_info_t* first;
-	edash_pssh_info_t* last;
-} edash_pssh_info_array_t;
-
-typedef struct {
-	u_char key_id[EDASH_KID_SIZE];
-	u_char key[EDASH_AES_KEY_SIZE];
-	edash_pssh_info_array_t pssh_array;
-} edash_drm_info_t;
-
 // functions
 vod_status_t edash_packager_build_mpd(
 	request_context_t* request_context,

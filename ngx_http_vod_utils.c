@@ -126,6 +126,7 @@ ngx_http_vod_get_base_url(
 {
 	ngx_flag_t use_https;
 	ngx_str_t* host_name;
+	uintptr_t uri_escape_chars = 0;
 	size_t uri_path_len;
 	size_t result_size;
 	u_char* last_slash;
@@ -155,6 +156,8 @@ ngx_http_vod_get_base_url(
 		}
 
 		uri_path_len = last_slash + 1 - file_uri->data;
+
+		uri_escape_chars = ngx_escape_uri(NULL, file_uri->data, uri_path_len, NGX_ESCAPE_URI);
 	}
 	else
 	{
@@ -162,7 +165,7 @@ ngx_http_vod_get_base_url(
 	}
 
 	// allocate the base url
-	result_size = sizeof("https://") - 1 + host_name->len + uri_path_len + sizeof("/");
+	result_size = sizeof("https://") - 1 + host_name->len + uri_path_len + uri_escape_chars + sizeof("/");
 	p = ngx_palloc(r->pool, result_size);
 	if (p == NULL)
 	{
@@ -199,7 +202,15 @@ ngx_http_vod_get_base_url(
 	}
 
 	p = ngx_copy(p, host_name->data, host_name->len);
-	p = ngx_copy(p, file_uri->data, uri_path_len);
+
+	if (uri_escape_chars > 0)
+	{
+		p = (u_char *)ngx_escape_uri(p, file_uri->data, uri_path_len, NGX_ESCAPE_URI);
+	}
+	else
+	{
+		p = ngx_copy(p, file_uri->data, uri_path_len);
+	}
 	*p = '\0';
 
 	base_url->len = p - base_url->data;

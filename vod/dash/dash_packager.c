@@ -918,7 +918,7 @@ dash_packager_build_fragment_header(
 	// moof.traf.xxx
 	if (write_extra_traf_atoms_callback != NULL)
 	{
-		p = write_extra_traf_atoms_callback(write_extra_traf_atoms_context, p, moof_atom_size);
+		p = write_extra_traf_atoms_callback(write_extra_traf_atoms_context, p, moof_atom_size + ATOM_HEADER_SIZE);
 	}
 
 	// mdat

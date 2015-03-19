@@ -3,6 +3,7 @@
 
 // includes
 #include "../mp4_builder.h"
+#include "../mp4_encrypt.h"
 #include "../mp4_parser.h"
 #include "../segmenter.h"
 #include "../common.h"
@@ -19,6 +20,9 @@
 #define MSS_FILE_INDEX(bitrate)	(((bitrate) >> 5) & 0x1F)
 #define MSS_TRACK_INDEX(bitrate)	((bitrate) & 0x1F)
 
+//typedefs
+typedef u_char* (*mss_write_tags_callback_t)(void* context, u_char* p, mpeg_metadata_t* stream);
+
 // functions
 bool_t mss_packager_compare_streams(void* context, const media_info_t* mi1, const media_info_t* mi2);
 
@@ -26,12 +30,18 @@ vod_status_t mss_packager_build_manifest(
 	request_context_t* request_context,
 	segmenter_conf_t* segmenter_conf,
 	mpeg_metadata_t* mpeg_metadata,
+	size_t extra_tags_size,
+	mss_write_tags_callback_t write_extra_tags,
+	void* extra_tags_writer_context,
 	vod_str_t* result);
 
 vod_status_t mss_packager_build_fragment_header(
 	request_context_t* request_context,
 	mpeg_stream_metadata_t* stream_metadata,
 	uint32_t segment_index,
+	size_t extra_traf_atoms_size,
+	write_extra_traf_atoms_callback_t write_extra_traf_atoms_callback,
+	void* write_extra_traf_atoms_context,
 	bool_t size_only,
 	vod_str_t* result,
 	size_t* total_fragment_size);
