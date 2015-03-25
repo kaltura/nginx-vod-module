@@ -50,7 +50,6 @@ mss_playready_write_protection_tag(void* context, u_char* p, mpeg_metadata_t* mp
 	// XXXX taking only the first stream
 	mp4_encrypt_info_t* drm_info = (mp4_encrypt_info_t*)mpeg_metadata->first_stream->file_info.drm_info;
 	mp4_encrypt_system_info_t* cur_info;
-	vod_str_t wrm_header;
 	vod_str_t base64;
 
 	p = vod_copy(p, VOD_MSS_PLAYREADY_PROTECTION_PREFIX, sizeof(VOD_MSS_PLAYREADY_PROTECTION_PREFIX) - 1);
