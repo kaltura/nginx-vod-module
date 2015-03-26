@@ -3,7 +3,6 @@
 
 // includes
 #include <ngx_core.h>
-#include <ctype.h>
 
 // macros
 #define NGX_GUID_LEN (16)

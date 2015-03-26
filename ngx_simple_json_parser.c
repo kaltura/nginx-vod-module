@@ -1,4 +1,5 @@
 #include "ngx_simple_json_parser.h"
+#include <ctype.h>
 
 // macros
 #define EXPECT_CHAR(state, ch)										\
