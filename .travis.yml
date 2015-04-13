@@ -5,5 +5,5 @@ language: c
 compiler:
     - clang
     - gcc
-script: ./build.sh
+script: ./travis_build.sh
 
