@@ -20,19 +20,19 @@ if [ ! -x "`which wget 2>/dev/null`" ];then
         echo "Need to install wget."
         exit 2
 fi
-mkdir /tmp/builddir
-cp -r . /tmp/builddir/nginx-vod-module
+mkdir -p /tmp/builddir/nginx-$NGINX_VERSION
+cp -r . /tmp/builddir/nginx-$NGINX_VERSION/nginx-vod-module-$KALTURA_NGINX_VOD_VERSION
 cd /tmp/builddir
-wget $KALTURA_NGINX_SECURE_TOKEN_URI -O nginx-secure-token-module-$KALTURA_NGINX_SECURE_TOKEN_VERSION.zip
-unzip nginx-secure-token-module-$KALTURA_NGINX_SECURE_TOKEN_VERSION.zip
-wget $KALTURA_NGINX_AKAMAI_TOKEN_VALIDATE_URI -O nginx-akamai-token-validate-module-$KALTURA_NGINX_AKAMAI_TOKEN_VALIDATE_VERSION.zip
-unzip nginx-akamai-token-validate-module-$KALTURA_NGINX_AKAMAI_TOKEN_VALIDATE_VERSION.zip
-#wget $KALTURA_NGINX_VOD_URI -O nginx-vod-module-$KALTURA_NGINX_VOD_VERSION.zip
-#unzip nginx-vod-module-$KALTURA_NGINX_VOD_VERSION.zip
-
 wget $NGINX_URI -O kaltura-nginx-$NGINX_VERSION.tar.gz
 tar zxvf kaltura-nginx-$NGINX_VERSION.tar.gz
 cd nginx-$NGINX_VERSION
+wget $KALTURA_NGINX_SECURE_TOKEN_URI -O nginx-secure-token-module-$KALTURA_NGINX_SECURE_TOKEN_VERSION.zip
+unzip -oqq nginx-secure-token-module-$KALTURA_NGINX_SECURE_TOKEN_VERSION.zip
+wget $KALTURA_NGINX_AKAMAI_TOKEN_VALIDATE_URI -O nginx-akamai-token-validate-module-$KALTURA_NGINX_AKAMAI_TOKEN_VALIDATE_VERSION.zip
+unzip -oqq nginx-akamai-token-validate-module-$KALTURA_NGINX_AKAMAI_TOKEN_VALIDATE_VERSION.zip
+#wget $KALTURA_NGINX_VOD_URI -O nginx-vod-module-$KALTURA_NGINX_VOD_VERSION.zip
+#unzip nginx-vod-module-$KALTURA_NGINX_VOD_VERSION.zip
+
 
 ./configure \
         --prefix=/etc/nginx \
@@ -47,8 +47,6 @@ cd nginx-$NGINX_VERSION
         --http-fastcgi-temp-path=/var/log/cache/nginx/fastcgi_temp \
         --http-uwsgi-temp-path=/var/log/cache/nginx/uwsgi_temp \
         --http-scgi-temp-path=/var/log/cache/nginx/scgi_temp \
-        #--user=%{nginx_user} \
-        #--group=%{nginx_group} \
         --with-http_ssl_module \
         --with-http_realip_module \
         --with-http_addition_module \
@@ -67,9 +65,8 @@ cd nginx-$NGINX_VERSION
         --with-file-aio \
         --with-ipv6 \
         --with-debug \
-        #--with-cc-opt="%{optflags} $(pcre-config --cflags)" \
-        --add-module=./nginx-vod-module-master \
-        --add-module=./nginx-secure-token-module-master \
-        --add-module=./nginx-akamai-token-validate-module-master \
+        --add-module=./nginx-vod-module-$KALTURA_NGINX_VOD_VERSION \
+        --add-module=./nginx-secure-token-module-$KALTURA_NGINX_SECURE_TOKEN_VERSION \
+        --add-module=./nginx-akamai-token-validate-module-$KALTURA_NGINX_AKAMAI_TOKEN_VALIDATE_VERSION \
         $*
 make
