@@ -14,6 +14,8 @@
 #define FALSE (0)
 #endif // FALSE
 
+#define INVALID_FILE_INDEX ((uint32_t)-1)
+
 // macros
 #define DIV_CEIL(x, y) (((x) + (y) - 1) / (y))
 #define ARRAY_ENTRIES(x) (sizeof(x) / sizeof(x[0]))
@@ -55,6 +57,9 @@
 
 #define VOD_INT64_LEN NGX_INT64_LEN
 #define VOD_INT32_LEN NGX_INT32_LEN
+
+#define VOD_HAVE_LIB_AV_CODEC NGX_HAVE_LIB_AV_CODEC 
+#define VOD_HAVE_LIB_AV_FILTER NGX_HAVE_LIB_AV_FILTER
 
 // macros
 #define MIN(x, y) ngx_min(x, y)

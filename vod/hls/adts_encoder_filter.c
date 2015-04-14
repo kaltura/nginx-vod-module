@@ -1,7 +1,5 @@
 #include "adts_encoder_filter.h"
-#include "../bit_read_stream.h"
-
-#define AOT_ESCAPE (31)
+#include "../codec_config.h"
 
 vod_status_t 
 adts_encoder_init(
@@ -12,10 +10,8 @@ adts_encoder_init(
 	const u_char* extra_data, 
 	uint32_t extra_data_size)
 {
-	bit_reader_state_t reader;
-	int object_type;
-	int sample_rate_index;
-	int channel_config;
+	mp4a_config_t codec_config;
+	vod_status_t rc;
 	
 	state->next_filter = next_filter;
 	state->next_filter_context = next_filter_context;
@@ -25,41 +21,26 @@ adts_encoder_init(
 		return VOD_OK;
 	}
 
-	vod_log_buffer(VOD_LOG_DEBUG_LEVEL, request_context->log, 0, "adts_encoder_init: extra data ", extra_data, extra_data_size);
-	
-	bit_read_stream_init(&reader, extra_data, extra_data_size);
-
-    object_type = bit_read_stream_get(&reader, 5);
-    if (object_type == AOT_ESCAPE)
-        object_type = 32 + bit_read_stream_get(&reader, 6);
-	
-	sample_rate_index = bit_read_stream_get(&reader, 4);
-	if (sample_rate_index == 0x0f)
-		bit_read_stream_get(&reader, 24);
-
-    channel_config = bit_read_stream_get(&reader, 4);
-	
-	if (reader.stream.eof_reached)
+	rc = codec_config_mp4a_config_parse(request_context, extra_data, extra_data_size, &codec_config);
+	if (rc != VOD_OK)
 	{
-		vod_log_error(VOD_LOG_ERR, request_context->log, 0, 
-			"adts_encoder_init: failed to read all required audio extra data fields");
-		return VOD_BAD_DATA;
+		return rc;
 	}
-	
+
 	// Note: not parsing all the special cases in handled in ffmpeg's avpriv_mpeg4audio_get_config
 	// Note: not handling pce_data
 	
 	vod_log_debug3(VOD_LOG_DEBUG_LEVEL, request_context->log, 0, 
 		"adts_encoder_init: object_type=%d sample_rate_index=%d channel_config=%d", 
-		object_type, sample_rate_index, channel_config);
+		codec_config.object_type, codec_config.sample_rate_index, codec_config.channel_config);
 	
 	vod_memzero(&state->header, sizeof(state->header));
 	
 	adts_frame_header_set_syncword(state->header, 0xfff);
 	adts_frame_header_set_protection_absent(state->header, 1);
-	adts_frame_header_set_profile_object_type(state->header, object_type - 1);
-	adts_frame_header_set_sample_rate_index(state->header, sample_rate_index);
-	adts_frame_header_set_channel_configuration(state->header, channel_config);
+	adts_frame_header_set_profile_object_type(state->header, codec_config.object_type - 1);
+	adts_frame_header_set_sample_rate_index(state->header, codec_config.sample_rate_index);
+	adts_frame_header_set_channel_configuration(state->header, codec_config.channel_config);
 	adts_frame_header_set_adts_buffer_fullness(state->header, 0x7ff);
 	
 	return VOD_OK;

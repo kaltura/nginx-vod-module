@@ -1,5 +1,5 @@
 # NGINX-based VOD Packager
-## nginx-vod-module
+## nginx-vod-module [![Build Status](https://travis-ci.org/kaltura/nginx-vod-module.svg?branch=master)](https://travis-ci.org/kaltura/nginx-vod-module)
 
 ### Features
 
@@ -21,6 +21,10 @@
 * Audio only/video only files
 
 * Track selection for multi audio/video MP4 files
+
+* Mux audio and video streams from separate MP4 files (HLS/HDS)
+
+* Playback rate change - 0.5x up to 2x (requires libavcodec and libavfilter)
 
 * Source file clipping (only from I-Frame to P-frame)
 
@@ -438,6 +442,13 @@ The name of the clip from request parameter.
 * **context**: `http`, `server`, `location`
 
 The name of the tracks request parameter.
+
+#### vod_speed_param_name
+* **syntax**: `vod_speed_param_name name`
+* **default**: `tracks`
+* **context**: `http`, `server`, `location`
+
+The name of the speed request parameter.
 
 #### vod_performance_counters
 * **syntax**: `vod_performance_counters zone_name`

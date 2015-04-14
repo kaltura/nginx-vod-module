@@ -22,6 +22,7 @@ typedef struct {
 	int media_type;
 	uint32_t stream_index;
 	uint32_t timescale;
+	uint32_t frames_file_index;
 	
 	// input frames
 	input_frame_t* first_frame;
@@ -69,6 +70,7 @@ typedef struct {
 	void* cur_writer_context;
 	uint32_t cur_frame_pos;
 	int cache_slot_id;
+	uint32_t cur_file_index;
 } hls_muxer_state_t;
 
 // functions
@@ -82,7 +84,7 @@ vod_status_t hls_muxer_init(
 	void* write_context,
 	bool_t* simulation_supported);
 
-vod_status_t hls_muxer_process(hls_muxer_state_t* state, uint64_t* required_offset);
+vod_status_t hls_muxer_process(hls_muxer_state_t* state);
 
 vod_status_t hls_muxer_simulate_get_iframes(
 	hls_muxer_state_t* state,

@@ -84,6 +84,8 @@
 #define PARSE_FLAG_DURATION_LIMITS_AND_TOTAL_SIZE (PARSE_FLAG_DURATION_LIMITS | PARSE_FLAG_TOTAL_SIZE_ESTIMATE)
 #define PARSE_BASIC_METADATA_ONLY (0)
 
+#define INVALID_FILE_INDEX ((uint32_t)-1)
+
 // enums
 enum {
 	MEDIA_TYPE_VIDEO,
@@ -147,6 +149,8 @@ struct media_info_s {
 	vod_str_t codec_name;
 	const u_char* extra_data;
 	uint32_t extra_data_size;
+	uint32_t speed_nom;
+	uint32_t speed_denom;
 	union {
 		video_media_info_t video;
 		audio_media_info_t audio;
@@ -180,6 +184,7 @@ typedef struct {
 	file_info_t file_info;
 	uint32_t track_index;
 	input_frame_t* frames;
+	uint32_t frames_file_index;		// the index of the file to which frame_offsets refer
 	uint64_t* frame_offsets;		// Saved outside input_frame_t since it's not needed for iframes file
 	uint32_t frame_count;
 	uint32_t key_frame_count;
@@ -204,6 +209,14 @@ typedef struct {
 	mpeg_stream_metadata_t* longest_stream[MEDIA_TYPE_COUNT];
 } mpeg_metadata_t;
 
+typedef struct {
+	uint32_t* required_tracks_mask;
+	uint32_t clip_from;
+	uint32_t clip_to;
+	uint32_t speed_nom;
+	uint32_t speed_denom;
+} mpeg_parse_params_t;
+
 // functions
 vod_status_t mp4_parser_get_moov_atom_info(
 	request_context_t* request_context, 
@@ -218,9 +231,7 @@ vod_status_t mp4_parser_init_mpeg_metadata(
 
 vod_status_t mp4_parser_parse_basic_metadata(
 	request_context_t* request_context,
-	uint32_t* required_tracks_mask,
-	uint32_t clip_from,
-	uint32_t clip_to,
+	mpeg_parse_params_t* parse_params,
 	const u_char* buffer,
 	size_t size,
 	file_info_t* file_info,
@@ -229,8 +240,7 @@ vod_status_t mp4_parser_parse_basic_metadata(
 vod_status_t mp4_parser_parse_frames(
 	request_context_t* request_context,
 	mpeg_base_metadata_t* base,
-	uint32_t clip_from,
-	uint32_t clip_to,
+	mpeg_parse_params_t* parse_params,
 	bool_t align_segments_to_key_frames,
 	mpeg_metadata_t* result);
 
