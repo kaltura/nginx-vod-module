@@ -334,7 +334,7 @@ codec_config_mp4a_config_parse(
 	if (reader.stream.eof_reached)
 	{
 		vod_log_error(VOD_LOG_ERR, request_context->log, 0, 
-			"adts_encoder_init: failed to read all required audio extra data fields");
+			"codec_config_mp4a_config_parse: failed to read all required audio extra data fields");
 		return VOD_BAD_DATA;
 	}
 

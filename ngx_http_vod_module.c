@@ -654,32 +654,38 @@ ngx_http_vod_write_segment_buffer(void* ctx, u_char* buffer, uint32_t size, bool
 static ngx_int_t
 ngx_http_vod_prepare_frame_reading(ngx_http_vod_ctx_t *ctx)
 {
-	ngx_http_vod_loc_conf_t* conf = ctx->submodule_context.conf;
-	ngx_http_request_t* r = ctx->submodule_context.r;
+	ngx_http_vod_suburi_params_t* suburi_cur;
+	ngx_http_vod_suburi_params_t* suburi_end;
+	ngx_http_vod_loc_conf_t* conf;
+	ngx_http_request_t* r;
 	ngx_int_t rc;
 	uint32_t file_index;
-	uint32_t i;
 
 	if (ctx->prepared_frame_reading)
 	{
 		return NGX_OK;
 	}
 	ctx->prepared_frame_reading = 1;
-	
-	for (i = 0; i < ctx->submodule_context.request_params.suburi_count; i++)
+
+	conf = ctx->submodule_context.conf;
+	r = ctx->submodule_context.r;
+
+	suburi_end = ctx->submodule_context.request_params.suburis + ctx->submodule_context.request_params.suburi_count;
+
+	for (suburi_cur = ctx->submodule_context.request_params.suburis; suburi_cur < suburi_end; suburi_cur++)
 	{
-		file_index = ctx->submodule_context.request_params.suburis[i].file_index;
+		file_index = suburi_cur->file_index;
 
 		// open the file if not already opened
 		if (ctx->async_reader_context[file_index] == NULL)
 		{
-			rc = ctx->open_file(r, &ctx->submodule_context.request_params.suburis[i].stripped_uri, file_index);
+			rc = ctx->open_file(r, &suburi_cur->stripped_uri, file_index);
 			if (rc != NGX_OK)
 			{
 				if (rc != NGX_AGAIN)		// NGX_AGAIN will be returned in case of fallback
 				{
 					ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
-						"ngx_http_vod_init_frame_processing: open_file failed %i", rc);
+						"ngx_http_vod_prepare_frame_reading: open_file failed %i", rc);
 				}
 				return rc;
 			}
@@ -1193,6 +1199,8 @@ ngx_http_vod_init_audio_filter(ngx_http_vod_ctx_t *ctx)
 			&audio_filter_state);
 		if (rc != VOD_OK)
 		{
+			ngx_log_debug1(NGX_LOG_DEBUG_HTTP, ctx->submodule_context.request_context.log, 0,
+				"ngx_http_vod_init_audio_filter: audio_filter_alloc_state failed %i", rc);
 			return ngx_http_vod_status_to_ngx_error(rc);
 		}
 
@@ -1200,7 +1208,8 @@ ngx_http_vod_init_audio_filter(ngx_http_vod_ctx_t *ctx)
 		if (cln == NULL)
 		{
 			ngx_log_debug0(NGX_LOG_DEBUG_HTTP, ctx->submodule_context.request_context.log, 0,
-				"ngx_http_vod_init_aes_encryption: ngx_pool_cleanup_add failed");
+				"ngx_http_vod_init_audio_filter: ngx_pool_cleanup_add failed");
+			audio_filter_free_state(audio_filter_state);
 			return NGX_HTTP_INTERNAL_SERVER_ERROR;
 		}
 
@@ -1216,6 +1225,8 @@ ngx_http_vod_init_audio_filter(ngx_http_vod_ctx_t *ctx)
 			&frame_processor_state);
 		if (rc != VOD_OK)
 		{
+			ngx_log_debug1(NGX_LOG_DEBUG_HTTP, ctx->submodule_context.request_context.log, 0,
+				"ngx_http_vod_init_audio_filter: full_frame_processor_init failed %i", rc);
 			return ngx_http_vod_status_to_ngx_error(rc);
 		}
 
@@ -1230,7 +1241,7 @@ ngx_http_vod_init_audio_filter(ngx_http_vod_ctx_t *ctx)
 		else if (rc != NGX_AGAIN)
 		{
 			ngx_log_debug1(NGX_LOG_DEBUG_HTTP, ctx->submodule_context.request_context.log, 0,
-				"ngx_http_vod_run_state_machine: ngx_http_vod_process_mp4_frames failed %i", rc);
+				"ngx_http_vod_init_audio_filter: ngx_http_vod_process_mp4_frames failed %i", rc);
 		}
 		return rc;
 	}
@@ -1268,8 +1279,8 @@ ngx_http_vod_run_state_machine(ngx_http_vod_ctx_t *ctx)
 	conf = ctx->submodule_context.conf;
 
 	for (;
-		ctx->submodule_context.cur_file_index < ctx->submodule_context.request_params.suburi_count;
-		ctx->submodule_context.cur_suburi++, ctx->submodule_context.cur_file_index++)
+		ctx->submodule_context.cur_suburi < ctx->submodule_context.request_params.suburis_end;
+		ctx->submodule_context.cur_suburi++)
 	{
 		switch (ctx->state)
 		{
@@ -1463,11 +1474,8 @@ ngx_http_vod_run_state_machine(ngx_http_vod_ctx_t *ctx)
 		return NGX_HTTP_BAD_REQUEST;
 	}
 	
-	// restore cur_suburi / cur_file_index
-	// Note: cur_suburi should only be used in the request handler if it has REQUEST_FLAG_SINGLE_STREAM / REQUEST_FLAG_SINGLE_FILE.
-	//		requests that require frame processing (e.g. hls segment) must have one of these flags enabled
+	// restore cur_suburi
 	ctx->submodule_context.cur_suburi = ctx->submodule_context.request_params.suburis;
-	ctx->submodule_context.cur_file_index = 0;
 
 	// handle metadata requests
 	if (ctx->submodule_context.request_params.request->handle_metadata_request != NULL)
@@ -1719,6 +1727,8 @@ ngx_http_vod_init_file_reader(ngx_http_request_t *r, ngx_str_t* path, uint32_t f
 	state = ngx_pcalloc(r->pool, sizeof(*state));
 	if (state == NULL)
 	{
+		ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+			"ngx_http_vod_init_file_reader: ngx_pcalloc failed");
 		return NGX_HTTP_INTERNAL_SERVER_ERROR;
 	}
 
@@ -1814,8 +1824,8 @@ ngx_http_vod_local_request_handler(ngx_http_request_t *r)
 	// map all uris to paths
 	original_uri = r->uri;
 	for (;
-		ctx->submodule_context.cur_file_index < ctx->submodule_context.request_params.suburi_count;
-		ctx->submodule_context.cur_suburi++, ctx->submodule_context.cur_file_index++)
+		ctx->submodule_context.cur_suburi < ctx->submodule_context.request_params.suburis_end;
+		ctx->submodule_context.cur_suburi++)
 	{
 		r->uri = ctx->submodule_context.cur_suburi->stripped_uri;
 		last = ngx_http_map_uri_to_path(r, &path, &root, 0);
@@ -1834,7 +1844,6 @@ ngx_http_vod_local_request_handler(ngx_http_request_t *r)
 
 	// restart the file index/uri params
 	ctx->submodule_context.cur_suburi = ctx->submodule_context.request_params.suburis;
-	ctx->submodule_context.cur_file_index = 0;
 
 	// initialize for reading files
 	clcf = ngx_http_get_module_loc_conf(r, ngx_http_core_module);
@@ -1882,8 +1891,8 @@ ngx_http_vod_run_mapped_mode_state_machine(ngx_http_request_t *r)
 
 	// map all uris to paths
 	for (;
-		ctx->submodule_context.cur_file_index < ctx->submodule_context.request_params.suburi_count;
-		ctx->submodule_context.cur_suburi++, ctx->submodule_context.cur_file_index++)
+		ctx->submodule_context.cur_suburi < ctx->submodule_context.request_params.suburis_end;
+		ctx->submodule_context.cur_suburi++)
 	{
 		if (conf->path_mapping_cache_zone != NULL)
 		{
@@ -1959,7 +1968,6 @@ ngx_http_vod_run_mapped_mode_state_machine(ngx_http_request_t *r)
 
 	// restart the file index/uri params
 	ctx->submodule_context.cur_suburi = ctx->submodule_context.request_params.suburis;
-	ctx->submodule_context.cur_file_index = 0;
 
 	// initialize for reading files
 	clcf = ngx_http_get_module_loc_conf(r, ngx_http_core_module);
@@ -2064,7 +2072,6 @@ ngx_http_vod_path_request_finished(void* context, ngx_int_t rc, ngx_buf_t* respo
 
 	// move to the next suburi
 	ctx->submodule_context.cur_suburi++;
-	ctx->submodule_context.cur_file_index++;
 
 	// run the state machine
 	rc = ngx_http_vod_run_mapped_mode_state_machine(r);
@@ -2200,6 +2207,8 @@ ngx_http_vod_http_reader_open_file(ngx_http_request_t* r, ngx_str_t* path, uint3
 	state = ngx_palloc(r->pool, sizeof(*state));
 	if (state == NULL)
 	{
+		ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+			"ngx_http_vod_http_reader_open_file: ngx_palloc failed");
 		return NGX_HTTP_INTERNAL_SERVER_ERROR;
 	}
 
@@ -2442,7 +2451,6 @@ ngx_http_vod_handler(ngx_http_request_t *r)
 	ctx->submodule_context.conf = conf;
 	ctx->submodule_context.request_params = request_params;
 	ctx->submodule_context.cur_suburi = request_params.suburis;
-	ctx->submodule_context.cur_file_index = 0;
 	ctx->perf_counters = perf_counters;
 	ngx_perf_counter_copy(ctx->total_perf_counter_context, pcctx);
 

@@ -666,6 +666,7 @@ ngx_http_vod_parse_uri_path(
 
 	request_params->suburis = suburis;
 	request_params->suburi_count = uri_count;
+	request_params->suburis_end = suburis + uri_count;
 	request_params->uses_multi_uri = (multi_uri.parts_count > 1);
 
 	return NGX_OK;

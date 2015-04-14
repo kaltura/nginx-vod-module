@@ -79,7 +79,14 @@ full_frame_processor_process(full_frame_processor_t* state)
 
 		// read some data from the frame
 		offset = *state->cur_frame_offset + state->cur_frame_pos;
-		if (!read_cache_get_from_cache(state->read_cache_state, state->cur_frame->size - state->cur_frame_pos, 0, state->frames_file_index, offset, &read_buffer, &read_size))
+		if (!read_cache_get_from_cache(
+			state->read_cache_state, 
+			state->cur_frame->size - state->cur_frame_pos, 
+			0, 
+			state->frames_file_index, 
+			offset, 
+			&read_buffer, 
+			&read_size))
 		{
 			if (!processed_data && !state->first_time)
 			{
@@ -106,7 +113,6 @@ full_frame_processor_process(full_frame_processor_t* state)
 			// move to the next frame
 			state->cur_frame++;
 			state->cur_frame_offset++;
-			state->cur_frame_pos = 0;
 			continue;
 		}
 		

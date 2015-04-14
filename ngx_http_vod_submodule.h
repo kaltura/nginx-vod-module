@@ -55,7 +55,6 @@ typedef struct {
 	ngx_http_request_t* r;
 	struct ngx_http_vod_loc_conf_s* conf;
 	ngx_http_vod_suburi_params_t* cur_suburi;
-	uint32_t cur_file_index;
 } ngx_http_vod_submodule_context_t;
 
 // submodule request

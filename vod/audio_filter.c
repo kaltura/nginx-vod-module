@@ -37,9 +37,6 @@ typedef struct {
 	uint32_t speed_nom;
 	uint32_t speed_denom;
 	mpeg_stream_metadata_t* output;
-
-	vod_array_t frames_array;
-	vod_array_t frame_offsets_array;
 	
 	AVCodecContext *decoder;
 	AVCodecContext *encoder;
@@ -48,6 +45,9 @@ typedef struct {
 	AVFilterContext *buffer_sink;
 	AVFrame *decoded_frame;
 	AVFrame *filtered_frame;
+
+	vod_array_t frames_array;
+	vod_array_t frame_offsets_array;
 	uint64_t dts;
 } audio_filter_state_t;
 
@@ -376,6 +376,7 @@ audio_filter_alloc_state(
 	state->decoder->codec_tag = stream_metadata->media_info.format;
 	state->decoder->bit_rate = stream_metadata->media_info.bitrate;
 	state->decoder->time_base.num = 1;
+	// Note: changing the timescale in order to revert the speed change that was applied to the frames while parsing the mp4
 	state->decoder->time_base.den = stream_metadata->media_info.timescale / stream_metadata->media_info.speed_nom * stream_metadata->media_info.speed_denom;
 	state->decoder->pkt_timebase = state->decoder->time_base;
 	state->decoder->extradata = (u_char*)stream_metadata->media_info.extra_data;
@@ -584,10 +585,10 @@ audio_filter_update_stream_metadata(audio_filter_state_t* state)
 	output->media_info.speed_nom = 1;
 	output->media_info.speed_denom = 1;
 	
-	output->media_info.u.audio.object_type_id = 0x40;		// ffmpeg always outputs 0x40
+	output->media_info.u.audio.object_type_id = 0x40;		// ffmpeg always writes 0x40 (ff_mp4_obj_type)
 	output->media_info.u.audio.channels = state->encoder->channels;
 	output->media_info.u.audio.bits_per_sample = ENCODER_BITS_PER_SAMPLE;
-	output->media_info.u.audio.packet_size = 0;				// ffmpeg always writes 0 in movenc
+	output->media_info.u.audio.packet_size = 0;				// ffmpeg always writes 0 (mov_write_audio_tag)
 	output->media_info.u.audio.sample_rate = state->encoder->sample_rate;
 	
 	output->key_frame_count = 0;
@@ -829,7 +830,7 @@ audio_filter_alloc_state(
 	void** result)
 {
 	vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-		"audio_filter_alloc_state: audio filtering not supported, recompile with avcodec/avfilter");
+		"audio_filter_alloc_state: audio filtering not supported, recompile with avcodec/avfilter to enable it");
 	return VOD_UNEXPECTED;
 }
 
