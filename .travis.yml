@@ -1,11 +1,13 @@
 before_install:
     - sudo apt-get update -qq
-    - sudo apt-get install -y libssl-dev libpcre3-dev wget unzip libavcodec-dev libavfilter-dev libavfilter-ffmpeg-dev
+    - sudo apt-get install -y libssl-dev libpcre3-dev wget unzip libavcodec-dev libavfilter-dev apt-file
+    - sudo apt-file update
+    - sudo apt-file search buffersink.h
 language: c
 compiler:
     - clang
     - gcc
-script: dpkg -L libavfilter-dev; dpkg -L libavfilter-ffmpeg-dev; ./travis_build.sh
+script: dpkg -L libavfilter-dev; ./travis_build.sh
 notifications:
   email:
     recipients:
