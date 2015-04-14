@@ -6,4 +6,10 @@ compiler:
     - clang
     - gcc
 script: ./travis_build.sh
-
+notifications:
+  email:
+    recipients:
+      - eran.kornblau@kaltura.com
+      - jess.portnoy@kaltura.com
+    on_success: change
+    on_failure: always
