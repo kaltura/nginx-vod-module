@@ -121,6 +121,7 @@ mp4_builder_frame_writer_init(
 	state->request_context = request_context;
 	state->write_callback = write_callback;
 	state->write_context = write_context;
+	state->frames_file_index = stream_metadata->frames_file_index;
 
 	state->read_cache_state = read_cache_state;
 	state->cur_frame = stream_metadata->frames;
@@ -134,7 +135,7 @@ mp4_builder_frame_writer_init(
 }
 
 vod_status_t
-mp4_builder_frame_writer_process(fragment_writer_state_t* state, uint64_t* required_offset)
+mp4_builder_frame_writer_process(fragment_writer_state_t* state)
 {
 	u_char* read_buffer;
 	uint32_t read_size;
@@ -164,7 +165,7 @@ mp4_builder_frame_writer_process(fragment_writer_state_t* state, uint64_t* requi
 
 		// read some data from the frame
 		offset = *state->cur_frame_offset + state->cur_frame_pos;
-		if (!read_cache_get_from_cache(state->read_cache_state, 0, offset, &read_buffer, &read_size))
+		if (!read_cache_get_from_cache(state->read_cache_state, state->cur_frame->size - state->cur_frame_pos, 0, state->frames_file_index, offset, &read_buffer, &read_size))
 		{
 			if (write_buffer != NULL)
 			{
@@ -190,7 +191,6 @@ mp4_builder_frame_writer_process(fragment_writer_state_t* state, uint64_t* requi
 			}
 
 			state->first_time = FALSE;
-			*required_offset = offset;
 			return VOD_AGAIN;
 		}
 

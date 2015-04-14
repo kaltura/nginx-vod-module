@@ -1,6 +1,8 @@
 #include "bit_read_stream.h"
 #include "codec_config.h"
 
+#define AOT_ESCAPE (31)
+
 // TODO: implement get_nal_units for hevc
 
 vod_status_t 
@@ -302,6 +304,39 @@ codec_config_get_audio_codec_name(request_context_t* request_context, media_info
 	}
 
 	media_info->codec_name.len = p - media_info->codec_name.data;
+
+	return VOD_OK;
+}
+
+vod_status_t
+codec_config_mp4a_config_parse(
+	request_context_t* request_context, 
+	const u_char* buffer, 
+	int size, 
+	mp4a_config_t* result)
+{
+	bit_reader_state_t reader;
+
+	vod_log_buffer(VOD_LOG_DEBUG_LEVEL, request_context->log, 0, "codec_config_mp4a_config_parse: extra data ", buffer, size);
+
+	bit_read_stream_init(&reader, buffer, size);
+
+	result->object_type = bit_read_stream_get(&reader, 5);
+	if (result->object_type == AOT_ESCAPE)
+		result->object_type = 32 + bit_read_stream_get(&reader, 6);
+
+	result->sample_rate_index = bit_read_stream_get(&reader, 4);
+	if (result->sample_rate_index == 0x0f)
+		bit_read_stream_get(&reader, 24);
+
+	result->channel_config = bit_read_stream_get(&reader, 4);
+
+	if (reader.stream.eof_reached)
+	{
+		vod_log_error(VOD_LOG_ERR, request_context->log, 0, 
+			"codec_config_mp4a_config_parse: failed to read all required audio extra data fields");
+		return VOD_BAD_DATA;
+	}
 
 	return VOD_OK;
 }

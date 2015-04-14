@@ -69,7 +69,7 @@ typedef struct {
 	size_t saio_atom_size;
 } mp4_encrypt_state_t;
 
-typedef struct mp4_encrypt_video_state_s {
+struct mp4_encrypt_video_state_s {
 	mp4_encrypt_state_t base;
 
 	// fixed
@@ -90,7 +90,7 @@ typedef struct mp4_encrypt_video_state_s {
 	// saiz / saio
 	u_char default_auxiliary_sample_size;
 	uint32_t saiz_sample_count;
-} mp4_encrypt_video_state_t;
+};
 
 // functions
 u_char* mp4_encrypt_write_guid(u_char* p, u_char* guid);

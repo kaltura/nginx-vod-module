@@ -3,9 +3,6 @@
 #include "ngx_http_vod_conf.h"
 #include "ngx_http_vod_utils.h"
 
-// constants
-#define MAX_SUB_URIS (32)
-
 // typedefs
 typedef ngx_int_t(*ngx_http_vod_param_parser_t)(ngx_str_t* value, ngx_http_vod_suburi_params_t* output, int offset);
 
@@ -385,6 +382,8 @@ ngx_http_vod_parse_tracks_param(ngx_str_t* value, ngx_http_vod_suburi_params_t* 
 {
 	u_char* end_pos;
 
+	output->required_tracks[MEDIA_TYPE_AUDIO] = 0;
+	output->required_tracks[MEDIA_TYPE_VIDEO] = 0;
 	end_pos = ngx_http_vod_extract_track_tokens(value->data, value->data + value->len, output->required_tracks);
 	if (end_pos != value->data + value->len)
 	{
@@ -394,10 +393,33 @@ ngx_http_vod_parse_tracks_param(ngx_str_t* value, ngx_http_vod_suburi_params_t* 
 	return NGX_OK;
 }
 
+static ngx_int_t
+ngx_http_vod_parse_speed_param(ngx_str_t* value, ngx_http_vod_suburi_params_t* output, int offset)
+{
+	ngx_int_t result;
+
+	result = ngx_atofp(value->data, value->len, 1);
+	if (result < 0)
+	{
+		return NGX_HTTP_BAD_REQUEST;
+	}
+
+	if (result < 5 || result > 20)
+	{
+		return NGX_HTTP_BAD_REQUEST;
+	}
+
+	output->speed_nom = result;
+	output->speed_denom = 10;
+
+	return NGX_OK;
+}
+
 static ngx_http_vod_uri_param_def_t uri_param_defs[] = {
 	{ offsetof(ngx_http_vod_loc_conf_t, clip_to_param_name), ngx_http_vod_parse_uint32_param, offsetof(ngx_http_vod_suburi_params_t, clip_to) },
 	{ offsetof(ngx_http_vod_loc_conf_t, clip_from_param_name), ngx_http_vod_parse_uint32_param, offsetof(ngx_http_vod_suburi_params_t, clip_from) },
 	{ offsetof(ngx_http_vod_loc_conf_t, tracks_param_name), ngx_http_vod_parse_tracks_param, 0 },
+	{ offsetof(ngx_http_vod_loc_conf_t, speed_param_name), ngx_http_vod_parse_speed_param, 0 },
 };
 
 ngx_int_t
@@ -461,6 +483,8 @@ ngx_http_vod_extract_uri_params(
 	suburi->clip_to = UINT_MAX;
 	suburi->required_tracks[MEDIA_TYPE_AUDIO] = 0xffffffff;
 	suburi->required_tracks[MEDIA_TYPE_VIDEO] = 0xffffffff;
+	suburi->speed_nom = 1;
+	suburi->speed_denom = 1;
 
 	p = ngx_palloc(r->pool, suburi->uri.len + 1);
 	if (p == NULL)
@@ -642,6 +666,7 @@ ngx_http_vod_parse_uri_path(
 
 	request_params->suburis = suburis;
 	request_params->suburi_count = uri_count;
+	request_params->suburis_end = suburis + uri_count;
 	request_params->uses_multi_uri = (multi_uri.parts_count > 1);
 
 	return NGX_OK;

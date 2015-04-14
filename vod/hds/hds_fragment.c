@@ -86,6 +86,7 @@ typedef struct {
 	int media_type;
 	uint8_t sound_info;
 	uint32_t timescale;
+	uint32_t frames_file_index;
 
 	uint64_t first_frame_time_offset;
 	uint64_t next_frame_time_offset;
@@ -119,6 +120,7 @@ struct hds_muxer_state_s {
 	uint64_t cur_frame_offset;
 	uint32_t cur_frame_pos;
 	int cache_slot_id;
+	uint32_t cur_file_index;
 
 	uint32_t frame_header_size;
 };
@@ -452,6 +454,7 @@ hds_muxer_init_state(
 		stream_state->metadata = cur_stream;
 		stream_state->media_type = cur_stream->media_info.media_type;
 		stream_state->timescale = cur_stream->media_info.timescale;
+		stream_state->frames_file_index = cur_stream->frames_file_index;
 		stream_state->first_frame = cur_stream->frames;
 		stream_state->last_frame = cur_stream->frames + cur_stream->frame_count;
 
@@ -731,6 +734,7 @@ hds_muxer_start_frame(hds_muxer_state_t* state)
 
 	// init the frame
 	state->cur_frame = selected_stream->cur_frame;
+	state->cur_file_index = selected_stream->frames_file_index;
 	selected_stream->cur_frame++;
 	state->cur_frame_offset = *selected_stream->cur_frame_input_offset;
 	selected_stream->cur_frame_input_offset++;
@@ -812,7 +816,7 @@ hds_muxer_end_frame(hds_muxer_state_t* state)
 }
 
 vod_status_t
-hds_muxer_process_frames(hds_muxer_state_t* state, uint64_t* required_offset)
+hds_muxer_process_frames(hds_muxer_state_t* state)
 {
 	u_char* read_buffer;
 	uint32_t read_size;
@@ -843,7 +847,7 @@ hds_muxer_process_frames(hds_muxer_state_t* state, uint64_t* required_offset)
 
 		// read some data from the frame
 		offset = state->cur_frame_offset + state->cur_frame_pos;
-		if (!read_cache_get_from_cache(state->read_cache_state, state->cache_slot_id, offset, &read_buffer, &read_size))
+		if (!read_cache_get_from_cache(state->read_cache_state, state->cur_frame->size - state->cur_frame_pos, state->cache_slot_id, state->cur_file_index, offset, &read_buffer, &read_size))
 		{
 			if (!wrote_data && !first_time)
 			{
@@ -851,7 +855,6 @@ hds_muxer_process_frames(hds_muxer_state_t* state, uint64_t* required_offset)
 					"hds_muxer_process_frames: no data was handled, probably a truncated file");
 				return VOD_BAD_DATA;
 			}
-			*required_offset = offset;
 			return VOD_AGAIN;
 		}
 

@@ -52,6 +52,12 @@ typedef struct
 	uint16_t scalability_mask;
 } hevc_config_t;
 
+typedef struct {
+	uint8_t object_type;
+	uint8_t sample_rate_index;
+	uint8_t channel_config;
+} mp4a_config_t;
+
 // functions
 vod_status_t
 codec_config_avcc_get_nal_units(
@@ -65,5 +71,11 @@ codec_config_avcc_get_nal_units(
 // get codec name according to http://tools.ietf.org/html/rfc6381
 vod_status_t codec_config_get_video_codec_name(request_context_t* request_context, media_info_t* media_info);
 vod_status_t codec_config_get_audio_codec_name(request_context_t* request_context, media_info_t* media_info);
+
+vod_status_t codec_config_mp4a_config_parse(
+	request_context_t* request_context,
+	const u_char* buffer,
+	int size,
+	mp4a_config_t* result);
 
 #endif // __CODEC_CONFIG_H__

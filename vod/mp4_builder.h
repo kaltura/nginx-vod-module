@@ -56,6 +56,7 @@ typedef struct {
 	request_context_t* request_context;
 	write_callback_t write_callback;
 	void* write_context;
+	uint32_t frames_file_index;
 
 	read_cache_state_t* read_cache_state;
 	input_frame_t* cur_frame;
@@ -85,7 +86,6 @@ vod_status_t mp4_builder_frame_writer_init(
 	void* write_context,
 	fragment_writer_state_t** result);
 
-vod_status_t mp4_builder_frame_writer_process(
-	fragment_writer_state_t* state, uint64_t* required_offset);
+vod_status_t mp4_builder_frame_writer_process(fragment_writer_state_t* state);
 
 #endif // __MP4_BUILDER_H__

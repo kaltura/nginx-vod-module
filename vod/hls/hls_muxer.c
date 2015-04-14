@@ -52,6 +52,7 @@ hls_muxer_init(
 		cur_stream->media_type = cur_stream_metadata->media_info.media_type;
 		cur_stream->stream_index = cur_stream_metadata->track_index;
 		cur_stream->timescale = cur_stream_metadata->media_info.timescale;
+		cur_stream->frames_file_index = cur_stream_metadata->frames_file_index;
 		cur_stream->first_frame = cur_stream_metadata->frames;
 		cur_stream->cur_frame = cur_stream_metadata->frames;
 		cur_stream->last_frame = cur_stream->cur_frame + cur_stream_metadata->frame_count;
@@ -209,6 +210,7 @@ hls_muxer_start_frame(hls_muxer_state_t* state)
 	// init the frame
 	state->cur_frame = selected_stream->cur_frame;
 	selected_stream->cur_frame++;
+	state->cur_file_index = selected_stream->frames_file_index;
 	state->cur_frame_offset = *selected_stream->cur_frame_offset;
 	selected_stream->cur_frame_offset++;
 	cur_frame_time_offset = selected_stream->next_frame_time_offset;
@@ -267,7 +269,7 @@ hls_muxer_start_frame(hls_muxer_state_t* state)
 }
 		
 vod_status_t 
-hls_muxer_process(hls_muxer_state_t* state, uint64_t* required_offset)
+hls_muxer_process(hls_muxer_state_t* state)
 {
 	hls_muxer_stream_state_t* cur_stream;
 	u_char* read_buffer;
@@ -297,7 +299,7 @@ hls_muxer_process(hls_muxer_state_t* state, uint64_t* required_offset)
 		
 		// read some data from the frame
 		offset = state->cur_frame_offset + state->cur_frame_pos;
-		if (!read_cache_get_from_cache(state->read_cache_state, state->cache_slot_id, offset, &read_buffer, &read_size))
+		if (!read_cache_get_from_cache(state->read_cache_state, state->cur_frame->size - state->cur_frame_pos, state->cache_slot_id, state->cur_file_index, offset, &read_buffer, &read_size))
 		{
 			if (!wrote_data && !first_time)
 			{
@@ -305,7 +307,6 @@ hls_muxer_process(hls_muxer_state_t* state, uint64_t* required_offset)
 					"hls_muxer_process: no data was handled, probably a truncated file");
 				return VOD_BAD_DATA;
 			}
-			*required_offset = offset;
 			return VOD_AGAIN;
 		}
 

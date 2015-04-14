@@ -11,6 +11,7 @@
 typedef struct {
 	u_char* buffer;
 	uint32_t buffer_size;
+	uint32_t file_index;
 	uint64_t start_offset;
 	uint64_t end_offset;
 } cache_buffer_t;
@@ -32,7 +33,9 @@ void read_cache_init(
 	
 bool_t read_cache_get_from_cache(
 	read_cache_state_t* state, 
+	uint32_t frame_size_left, 
 	int cache_slot_id, 
+	uint32_t file_index, 
 	uint64_t offset, 
 	u_char** buffer, 
 	uint32_t* size);
@@ -42,7 +45,7 @@ void read_cache_disable_buffer_reuse(
 
 vod_status_t read_cache_get_read_buffer(
 	read_cache_state_t* state, 
-	uint64_t offset, 
+	uint32_t* file_index,
 	uint64_t* out_offset, 
 	u_char** buffer, 
 	uint32_t* size);

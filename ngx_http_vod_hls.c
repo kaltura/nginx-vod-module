@@ -33,7 +33,7 @@ ngx_http_vod_hls_handle_master_playlist(
 		&submodule_context->request_context,
 		&submodule_context->conf->hls.m3u8_config,
 		&base_url,
-		submodule_context->request_params.uses_multi_uri,
+		submodule_context->request_params.uses_multi_uri && submodule_context->request_params.required_files != 0xffffffff,
 		&submodule_context->mpeg_metadata,
 		response);
 	if (rc != VOD_OK)
@@ -77,7 +77,7 @@ ngx_http_vod_hls_handle_index_playlist(
 		&submodule_context->conf->hls.m3u8_config,
 		&base_url,
 		&segments_base_url,
-		submodule_context->request_params.uses_multi_uri,
+		submodule_context->request_params.uses_multi_uri && submodule_context->request_params.required_files != 0xffffffff,
 		submodule_context->conf->secret_key.len != 0,
 		&submodule_context->conf->segmenter,
 		&submodule_context->mpeg_metadata,
@@ -101,8 +101,22 @@ ngx_http_vod_hls_handle_iframe_playlist(
 	ngx_str_t* response,
 	ngx_str_t* content_type)
 {
+	mpeg_stream_metadata_t* cur_stream;
 	ngx_str_t base_url = ngx_null_string;
 	vod_status_t rc;
+
+	for (cur_stream = submodule_context->mpeg_metadata.first_stream;
+		cur_stream < submodule_context->mpeg_metadata.last_stream;
+		cur_stream++)
+	{
+		if (cur_stream->media_info.media_type == MEDIA_TYPE_AUDIO &&
+			cur_stream->media_info.speed_nom != cur_stream->media_info.speed_denom)
+		{
+			ngx_log_error(NGX_LOG_ERR, submodule_context->request_context.log, 0,
+				"ngx_http_vod_hls_handle_iframe_playlist: iframes playlist not supported with audio speed change");
+			return NGX_HTTP_BAD_REQUEST;
+		}
+	}
 
 	if (submodule_context->conf->hls.absolute_iframe_urls)
 	{
@@ -113,7 +127,7 @@ ngx_http_vod_hls_handle_iframe_playlist(
 		&submodule_context->request_context,
 		&submodule_context->conf->hls.m3u8_config,
 		&base_url,
-		submodule_context->request_params.uses_multi_uri,
+		submodule_context->request_params.uses_multi_uri && submodule_context->request_params.required_files != 0xffffffff,
 		&submodule_context->conf->segmenter,
 		&submodule_context->mpeg_metadata,
 		response);
@@ -222,7 +236,7 @@ static const ngx_http_vod_request_t hls_master_request = {
 };
 
 static const ngx_http_vod_request_t hls_index_request = {
-	REQUEST_FLAG_SINGLE_FILE,
+	REQUEST_FLAG_SINGLE_STREAM_PER_MEDIA_TYPE,
 	PARSE_BASIC_METADATA_ONLY,
 	NULL,
 	0,
@@ -232,7 +246,7 @@ static const ngx_http_vod_request_t hls_index_request = {
 };
 
 static const ngx_http_vod_request_t hls_iframes_request = {
-	REQUEST_FLAG_SINGLE_FILE,
+	REQUEST_FLAG_SINGLE_STREAM_PER_MEDIA_TYPE,
 	PARSE_FLAG_FRAMES_ALL_EXCEPT_OFFSETS | PARSE_FLAG_PARSED_EXTRA_DATA_SIZE,
 	NULL,
 	0,
@@ -242,7 +256,7 @@ static const ngx_http_vod_request_t hls_iframes_request = {
 };
 
 static const ngx_http_vod_request_t hls_enc_key_request = {
-	REQUEST_FLAG_SINGLE_FILE,
+	REQUEST_FLAG_SINGLE_STREAM_PER_MEDIA_TYPE,
 	PARSE_BASIC_METADATA_ONLY,
 	NULL,
 	0,
@@ -252,7 +266,7 @@ static const ngx_http_vod_request_t hls_enc_key_request = {
 };
 
 static const ngx_http_vod_request_t hls_segment_request = {
-	REQUEST_FLAG_SINGLE_FILE,
+	REQUEST_FLAG_SINGLE_STREAM_PER_MEDIA_TYPE,
 	PARSE_FLAG_FRAMES_ALL | PARSE_FLAG_PARSED_EXTRA_DATA,
 	NULL,
 	0,
