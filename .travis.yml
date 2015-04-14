@@ -1,15 +1,11 @@
 before_install:
-    - sudo echo "deb http://archive.ubuntu.com/ubuntu trusty main" >> /etc/apt/sources.list
-    - sudo echo "deb http://security.ubuntu.com/ubuntu trusty-security main" >> /etc/apt/sources.list
-    - sudo echo "deb http://security.ubuntu.com/ubuntu trusty-security universe" >> /etc/apt/sources.list
-    - sudo echo "deb http://security.ubuntu.com/ubuntu trusty-security multiverse" >> /etc/apt/sources.list
     - sudo apt-get update -qq
     - sudo apt-get install -y libssl-dev libpcre3-dev wget unzip libavcodec-dev libavfilter-dev
 language: c
 compiler:
     - clang
     - gcc
-script: dpkg -L libavfilter-dev; ./travis_build.sh
+script: ./travis_build.sh
 notifications:
   email:
     recipients:
