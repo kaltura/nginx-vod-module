@@ -101,8 +101,22 @@ ngx_http_vod_hls_handle_iframe_playlist(
 	ngx_str_t* response,
 	ngx_str_t* content_type)
 {
+	mpeg_stream_metadata_t* cur_stream;
 	ngx_str_t base_url = ngx_null_string;
 	vod_status_t rc;
+
+	for (cur_stream = submodule_context->mpeg_metadata.first_stream;
+		cur_stream < submodule_context->mpeg_metadata.last_stream;
+		cur_stream++)
+	{
+		if (cur_stream->media_info.media_type == MEDIA_TYPE_AUDIO &&
+			cur_stream->media_info.speed_nom != cur_stream->media_info.speed_denom)
+		{
+			ngx_log_error(NGX_LOG_ERR, submodule_context->request_context.log, 0,
+				"ngx_http_vod_hls_handle_iframe_playlist: iframes playlist not supported with audio speed change");
+			return NGX_HTTP_BAD_REQUEST;
+		}
+	}
 
 	if (submodule_context->conf->hls.absolute_iframe_urls)
 	{
