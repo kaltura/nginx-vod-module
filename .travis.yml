@@ -1,8 +1,8 @@
 before_install:
-    - echo "deb http://archive.ubuntu.com/ubuntu trusty main
-deb http://security.ubuntu.com/ubuntu trusty-security main
-deb http://security.ubuntu.com/ubuntu trusty-security universe
-deb http://security.ubuntu.com/ubuntu trusty-security multiverse" > /etc/apt/sources.list.d/trusty.list
+    - echo "deb http://archive.ubuntu.com/ubuntu trusty main" > /etc/apt/sources.list.d/trusty.list
+    - echo "deb http://security.ubuntu.com/ubuntu trusty-security main" >> /etc/apt/sources.list.d/trusty.list
+    - echo "deb http://security.ubuntu.com/ubuntu trusty-security universe" >> /etc/apt/sources.list.d/trusty.list
+    - echo "deb http://security.ubuntu.com/ubuntu trusty-security multiverse" >> /etc/apt/sources.list.d/trusty.list
     - sudo apt-get update -qq
     - sudo apt-get install -y libssl-dev libpcre3-dev wget unzip libavcodec-dev libavfilter-dev
 language: c
