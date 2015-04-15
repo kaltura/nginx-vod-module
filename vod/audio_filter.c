@@ -463,7 +463,7 @@ audio_filter_alloc_state(
 	}
 	
 	// initialize the filter graph
-	vod_sprintf(filter_desc, 
+	vod_sprintf((u_char*)filter_desc, 
 		ATEMPO_FILTER_DESCRIPTION, 
 		(int)(stream_metadata->media_info.speed_nom / 10), 
 		(int)(stream_metadata->media_info.speed_nom % 10));
