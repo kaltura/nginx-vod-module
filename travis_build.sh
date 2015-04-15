@@ -1,9 +1,6 @@
 #!/bin/sh
 set -o nounset                              # Treat unset variables as an error
 
-
-#build nginx-vod-module and deps
-
 KALTURA_NGINX_VOD_VERSION=master
 KALTURA_NGINX_VOD_URI="https://github.com/kaltura/nginx-vod-module/archive/$KALTURA_NGINX_VOD_VERSION.zip"
 
@@ -33,6 +30,10 @@ unzip -oqq nginx-akamai-token-validate-module-$KALTURA_NGINX_AKAMAI_TOKEN_VALIDA
 #wget $KALTURA_NGINX_VOD_URI -O nginx-vod-module-$KALTURA_NGINX_VOD_VERSION.zip
 #unzip nginx-vod-module-$KALTURA_NGINX_VOD_VERSION.zip
 
+LD_LIBRARY_PATH=/opt/kaltura/ffmpeg-2.1.3/lib
+LIBRARY_PATH=/opt/kaltura/ffmpeg-2.1.3/lib
+C_INCLUDE_PATH=/opt/kaltura/ffmpeg-2.1.3/include
+export LD_LIBRARY_PATH LIBRARY_PATH C_INCLUDE_PATH
 
 ./configure \
         --prefix=/etc/nginx \
