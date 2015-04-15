@@ -39,7 +39,9 @@ fi
 ngx_feature="libavfilter"
 ngx_feature_name="NGX_HAVE_LIB_AV_FILTER"
 ngx_feature_run=no
-ngx_feature_incs="#include <libavfilter/avfilter.h>"
+ngx_feature_incs="#include <libavfilter/avfilter.h>
+                  #include <libavfilter/buffersrc.h>
+                  #include <libavfilter/buffersink.h>"
 ngx_feature_path=
 ngx_feature_libs="-lavfilter"
 ngx_feature_test="avfilter_register_all()"

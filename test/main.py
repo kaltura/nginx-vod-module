@@ -663,9 +663,14 @@ class BasicTestSuite(TestSuite):
 
     def testRequiredTracksOptional(self):
         for curPrefix, curRequest, contentType in VOD_REQUESTS:
-            # request must have track specification
+            # request must not have track specification
             if '-v1' in curRequest:
                 continue
+               
+            # request must have extension
+            if curRequest.rfind('.') < curRequest.rfind('/'):
+                continue
+                
             # no tracks specification
             url = self.getUrl(curPrefix, curRequest)
             noTracksResponse = urllib2.urlopen(url).read()
@@ -684,7 +689,7 @@ class BasicTestSuite(TestSuite):
 
     def testSegmentIdTooBig(self):
         assertRequestFails(self.getUrl(HLS_PREFIX, '/seg-3600-a1-v1.ts'), 404)
-        self.logTracker.assertContains('requested segment index 3599 exceeds the segment count')
+        self.logTracker.assertContains('no matching streams were found, probably invalid segment index')
 
     def testNonExistingTracksM3U8(self):
         assertRequestFails(self.getUrl(HLS_PREFIX, '/index-a10-v10.m3u8'), 400)
@@ -692,7 +697,7 @@ class BasicTestSuite(TestSuite):
         
     def testNonExistingTracksTS(self):
         assertRequestFails(self.getUrl(HLS_PREFIX,  '/seg-1-a10-v10.ts'), 404)
-        self.logTracker.assertContains('requested segment index 0 exceeds the segment count 0')
+        self.logTracker.assertContains('no matching streams were found, probably invalid segment index')
 
     def testClipToLargerThanClipFrom(self):
         assertRequestFails(self.getUrl(HLS_PREFIX, '/clipFrom/10000/clipTo/1000' + HLS_PLAYLIST_FILE), 400)
@@ -700,7 +705,7 @@ class BasicTestSuite(TestSuite):
 
     def testClipFromLargerThanVideoDurationTS(self):
         assertRequestFails(self.getUrl(HLS_PREFIX, '/clipFrom/9999999' + HLS_SEGMENT_FILE), 404)
-        self.logTracker.assertContains('requested segment index 0 exceeds the segment count 0')
+        self.logTracker.assertContains('no matching streams were found, probably invalid segment index')
 
     def testClipFromLargerThanVideoDurationM3U8(self):
         assertRequestFails(self.getUrl(HLS_PREFIX, '/clipFrom/9999999' + HLS_PLAYLIST_FILE), 400)
@@ -892,14 +897,21 @@ class ModeTestSuite(TestSuite):
 class LocalTestSuite(ModeTestSuite):            
     def runChildSuites(self):
         BasicTestSuite(
-            lambda filePath: self.getBaseUrl(filePath) + TEST_FLAVOR_FILE + filePath,
+            self.getUrl,
             lambda: None).run()
-        FallbackUpstreamTestSuite(self.baseUrl + HLS_PREFIX + TEST_NONEXISTING_FILE, HLS_PLAYLIST, FALLBACK_PORT).run()
+        FallbackUpstreamTestSuite(self.baseUrl + HLS_PREFIX + TEST_NONEXISTING_FILE, HLS_PLAYLIST_FILE, FALLBACK_PORT).run()
         FileServeTestSuite(lambda protocolPrefix, uri: self.baseUrl + protocolPrefix + uri).run()
 
     def testFileNotFound(self):
-        assertRequestFails(self.baseUrl + TEST_NONEXISTING_FILE + HLS_PLAYLIST_FILE, 502)    # 502 is due to failing to connect to fallback
+        assertRequestFails(self.baseUrl + HLS_PREFIX + TEST_NONEXISTING_FILE + HLS_PLAYLIST_FILE, 502)    # 502 is due to failing to connect to fallback
         self.logTracker.assertContains(['open() "%s" failed' % (TEST_FILES_ROOT + TEST_NONEXISTING_FILE), 'stat() "%s" failed' % (TEST_FILES_ROOT + TEST_NONEXISTING_FILE)])
+        
+    def getUrl(self, protocolPrefix, filePath):
+        # encryption is supported only for hls
+        encryptionPrefix = ''
+        if protocolPrefix == HLS_PREFIX:
+            encryptionPrefix = self.encryptionPrefix
+        return self.getBaseUrl(filePath) + protocolPrefix + encryptionPrefix + TEST_FLAVOR_FILE + filePath
         
 class MappedTestSuite(ModeTestSuite):
     def runChildSuites(self):
@@ -1044,12 +1056,12 @@ class MainTestSuite(TestSuite):
         DrmTestSuite(NGINX_REMOTE).run()
 
         # non encrypted
-        #LocalTestSuite(NGINX_LOCAL).run()
+        LocalTestSuite(NGINX_LOCAL).run()
         MappedTestSuite(NGINX_MAPPED).run()
         RemoteTestSuite(NGINX_REMOTE).run()
 
         # encrypted
-        #LocalTestSuite(NGINX_LOCAL, ENCRYPTED_PREFIX).run()
+        LocalTestSuite(NGINX_LOCAL, ENCRYPTED_PREFIX).run()
         MappedTestSuite(NGINX_MAPPED, ENCRYPTED_PREFIX).run()
         RemoteTestSuite(NGINX_REMOTE, ENCRYPTED_PREFIX).run()       
 

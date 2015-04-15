@@ -242,7 +242,7 @@ vod_status_t mp4_parser_parse_frames(
 	bool_t align_segments_to_key_frames,
 	mpeg_metadata_t* result);
 
-vod_status_t mp4_parser_finalize_mpeg_metadata(
+void mp4_parser_finalize_mpeg_metadata(
 	request_context_t* request_context,
 	mpeg_metadata_t* mpeg_metadata);
 
