@@ -32,7 +32,7 @@ ngx_feature_test="avcodec_register_all()"
 . auto/feature
 
 if [ $ngx_found = yes ]; then
-    CORE_LIBS="$CORE_LIBS -lavcodec"
+    CORE_LIBS="$CORE_LIBS -lavcodec -lavutil"
 fi
 
 # libavfilter
@@ -48,7 +48,7 @@ ngx_feature_test="avfilter_register_all()"
 . auto/feature
 
 if [ $ngx_found = yes ]; then
-    CORE_LIBS="$CORE_LIBS -lavfilter"
+    CORE_LIBS="$CORE_LIBS -lavfilter -lavutil"
 fi
 
 HTTP_MODULES="$HTTP_MODULES ngx_http_vod_module"
