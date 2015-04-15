@@ -26,8 +26,6 @@ vod_status_t hds_muxer_init_fragment(
 	size_t* total_fragment_size,
 	hds_muxer_state_t** processor_state);
 
-vod_status_t hds_muxer_process_frames(
-	hds_muxer_state_t* state, 
-	uint64_t* required_offset);
+vod_status_t hds_muxer_process_frames(hds_muxer_state_t* state);
 
 #endif // __HDS_FRAGMENT_H__

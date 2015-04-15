@@ -24,6 +24,7 @@
 // request flags
 #define REQUEST_FLAG_SINGLE_FILE (0x1)
 #define REQUEST_FLAG_SINGLE_STREAM (0x2)
+#define REQUEST_FLAG_SINGLE_STREAM_PER_MEDIA_TYPE (0x4)
 
 // request classes
 enum {
@@ -35,9 +36,7 @@ enum {
 struct ngx_http_vod_loc_conf_s;
 
 // typedefs
-typedef vod_status_t (*ngx_http_vod_frame_processor_t)(
-	void* context, 
-	uint64_t* required_offset);
+typedef vod_status_t (*ngx_http_vod_frame_processor_t)(void* context);
 
 typedef void (*ngx_http_vod_create_loc_conf_t)(
 	ngx_conf_t *cf, 
@@ -56,7 +55,6 @@ typedef struct {
 	ngx_http_request_t* r;
 	struct ngx_http_vod_loc_conf_s* conf;
 	ngx_http_vod_suburi_params_t* cur_suburi;
-	uint32_t cur_file_index;
 } ngx_http_vod_submodule_context_t;
 
 // submodule request

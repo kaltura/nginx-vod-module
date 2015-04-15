@@ -7,6 +7,7 @@
 #include "vod/mp4_parser.h"
 
 // constants
+#define MAX_SUB_URIS (32)
 #define MAX_URI_PARAM_NAME_LEN (32)			// clipTo, clipFrom etc.
 
 // macros
@@ -48,6 +49,8 @@ typedef struct {
 	ngx_str_t stripped_uri;
 	uint32_t clip_to;
 	uint32_t clip_from;
+	uint32_t speed_nom;
+	uint32_t speed_denom;
 	uint32_t file_index;
 	uint32_t required_tracks[MEDIA_TYPE_COUNT];
 
@@ -58,6 +61,7 @@ typedef struct {
 typedef struct ngx_http_vod_request_params_s {
 	const struct ngx_http_vod_request_s* request;
 	ngx_http_vod_suburi_params_t* suburis;
+	ngx_http_vod_suburi_params_t* suburis_end;
 	uint32_t suburi_count;
 	ngx_flag_t uses_multi_uri;
 	uint32_t segment_index;

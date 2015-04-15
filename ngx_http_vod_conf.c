@@ -163,6 +163,7 @@ ngx_http_vod_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child)
 	ngx_conf_merge_str_value(conf->clip_to_param_name, prev->clip_to_param_name, "clipTo");
 	ngx_conf_merge_str_value(conf->clip_from_param_name, prev->clip_from_param_name, "clipFrom");
 	ngx_conf_merge_str_value(conf->tracks_param_name, prev->tracks_param_name, "tracks");
+	ngx_conf_merge_str_value(conf->speed_param_name, prev->speed_param_name, "speed");
 
 	if (conf->perf_counters_zone == NULL)
 	{
@@ -257,6 +258,13 @@ ngx_http_vod_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child)
 		return NGX_CONF_ERROR;
 	}
 
+	if (conf->speed_param_name.len > MAX_URI_PARAM_NAME_LEN)
+	{
+		ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
+			"\"speed_param_name\" should not be more than %d characters", MAX_URI_PARAM_NAME_LEN);
+		return NGX_CONF_ERROR;
+	}
+	
 	// combine the proxy header name and value to a single line
 	proxy_header_len = conf->proxy_header_name.len + sizeof(": ") - 1 + conf->proxy_header_value.len + sizeof(CRLF);
 	conf->proxy_header.data = ngx_palloc(cf->pool, proxy_header_len);
@@ -827,6 +835,13 @@ ngx_command_t ngx_http_vod_commands[] = {
 	offsetof(ngx_http_vod_loc_conf_t, tracks_param_name),
 	NULL },
 
+	{ ngx_string("vod_speed_param_name"),
+	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1,
+	ngx_conf_set_str_slot,
+	NGX_HTTP_LOC_CONF_OFFSET,
+	offsetof(ngx_http_vod_loc_conf_t, speed_param_name),
+	NULL },
+	
 	{ ngx_string("vod_performance_counters"),
 	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1,
 	ngx_http_vod_perf_counters_command,

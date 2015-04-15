@@ -10,15 +10,30 @@ read_cache_init(read_cache_state_t* state, request_context_t* request_context, s
 }
 
 bool_t 
-read_cache_get_from_cache(read_cache_state_t* state, int cache_slot_id, uint64_t offset, u_char** buffer, uint32_t* size)
+read_cache_get_from_cache(
+	read_cache_state_t* state, 
+	uint32_t frame_size_left, 
+	int cache_slot_id, 
+	uint32_t file_index, 
+	uint64_t offset, 
+	u_char** buffer, 
+	uint32_t* size)
 {
 	cache_buffer_t* cur_buffer;
 	cache_buffer_t* buffers_end = state->buffers + CACHED_BUFFERS;
 
+	if (file_index == INVALID_FILE_INDEX)
+	{
+		*buffer = (u_char*)offset;
+		*size = frame_size_left;
+		return TRUE;
+	}
+	
 	// check whether we already have the requested offset
 	for (cur_buffer = state->buffers; cur_buffer < buffers_end; cur_buffer++)
 	{
-		if (offset >= cur_buffer->start_offset && offset < cur_buffer->end_offset)
+		if (cur_buffer->file_index == file_index && 
+			offset >= cur_buffer->start_offset && offset < cur_buffer->end_offset)
 		{
 			*buffer = cur_buffer->buffer + (offset - cur_buffer->start_offset);
 			*size = cur_buffer->end_offset - offset;
@@ -29,6 +44,8 @@ read_cache_get_from_cache(read_cache_state_t* state, int cache_slot_id, uint64_t
 	// don't have the offset in cache
 	cache_slot_id %= CACHED_BUFFERS;
 	state->target_buffer = &state->buffers[cache_slot_id];
+	state->target_buffer->file_index = file_index;
+	state->target_buffer->start_offset = (offset & ~(state->alignment - 1));
 
 	return FALSE;
 }
@@ -36,18 +53,18 @@ read_cache_get_from_cache(read_cache_state_t* state, int cache_slot_id, uint64_t
 void
 read_cache_disable_buffer_reuse(read_cache_state_t* state)
 {
-	vod_memzero(state->target_buffer, sizeof(*state->target_buffer));
+	state->target_buffer->buffer = NULL;
+	state->target_buffer->buffer_size = 0;
+	state->target_buffer->end_offset = state->target_buffer->start_offset;
 }
 
 vod_status_t 
-read_cache_get_read_buffer(read_cache_state_t* state, uint64_t offset, uint64_t* out_offset, u_char** buffer, uint32_t* size)
+read_cache_get_read_buffer(read_cache_state_t* state, uint32_t* file_index, uint64_t* out_offset, u_char** buffer, uint32_t* size)
 {
 	cache_buffer_t* target_buffer;
 	cache_buffer_t* cur_buffer;
 	cache_buffer_t* buffers_end = state->buffers + CACHED_BUFFERS;
 	uint32_t read_size;
-
-	offset &= ~(state->alignment - 1);
 
 	// select a buffer
 	target_buffer = state->target_buffer;
@@ -68,17 +85,15 @@ read_cache_get_read_buffer(read_cache_state_t* state, uint64_t offset, uint64_t*
 	read_size = state->buffer_size;
 	for (cur_buffer = state->buffers; cur_buffer < buffers_end; cur_buffer++)
 	{
-		if (cur_buffer != target_buffer && cur_buffer->start_offset > offset)
+		if (cur_buffer != target_buffer && cur_buffer->start_offset > target_buffer->start_offset)
 		{
-			read_size = MIN(read_size, cur_buffer->start_offset - offset);
+			read_size = MIN(read_size, cur_buffer->start_offset - target_buffer->start_offset);
 		}
 	}
-
-	// save the state of the active read action
-	target_buffer->start_offset = offset;
 	
 	// return the target buffer pointer and size
-	*out_offset = offset;
+	*file_index = target_buffer->file_index;
+	*out_offset = target_buffer->start_offset;
 	*buffer = target_buffer->buffer;
 	*size = read_size;
 
