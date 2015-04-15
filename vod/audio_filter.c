@@ -13,7 +13,7 @@
 #define ENCODER_BITS_PER_SAMPLE (16)
 #define AAC_ENCODER_NAME ("libfdk_aac")
 
-#define BUFFERSRC_ARGS_FORMAT ("time_base=%d/%d:sample_rate=%d:sample_fmt=%s:channel_layout=0x%uL%Z")
+#define BUFFERSRC_ARGS_FORMAT ("time_base=%d/%d:sample_rate=%d:sample_fmt=%s:channel_layout=0x%uxL%Z")
 #define MAX_SAMPLE_FORMAT_NAME_LEN (10)
 #define BUFFERSRC_FILTER_NAME ("abuffer")
 #define BUFFERSINK_FILTER_NAME ("abuffersink")
@@ -144,8 +144,8 @@ audio_filter_init_filters(
 	int out_sample_rates[2];
 	AVFilterInOut *outputs = NULL;
 	AVFilterInOut *inputs = NULL;
-	int ret;
-	int rc;
+	int avrc;
+	vod_status_t rc;
 
 	// allocate the filter graph
 	state->filter_graph = avfilter_graph_alloc();
@@ -158,40 +158,40 @@ audio_filter_init_filters(
 	}
 
 	// create the buffer source
-	vod_sprintf(filter_args, BUFFERSRC_ARGS_FORMAT,
+	vod_sprintf((u_char*)filter_args, BUFFERSRC_ARGS_FORMAT,
 		state->decoder->time_base.num, 
 		state->decoder->time_base.den, 
 		state->decoder->sample_rate,
 		av_get_sample_fmt_name(state->decoder->sample_fmt), 
 		state->decoder->channel_layout);
 
-	ret = avfilter_graph_create_filter(
+	avrc = avfilter_graph_create_filter(
 		&state->buffer_src, 
 		buffersrc_filter, 
 		INPUT_FILTER_NAME,
 		filter_args, 
 		NULL, 
 		state->filter_graph);
-	if (ret < 0)
+	if (avrc < 0)
 	{
 		vod_log_error(VOD_LOG_ERR, state->request_context->log, 0,
-			"audio_filter_init_filters: avfilter_graph_create_filter(input) failed %d", ret);
+			"audio_filter_init_filters: avfilter_graph_create_filter(input) failed %d", avrc);
 		rc = VOD_ALLOC_FAILED;
 		goto end;
 	}
 
 	// create the buffer sink
-	ret = avfilter_graph_create_filter(
+	avrc = avfilter_graph_create_filter(
 		&state->buffer_sink, 
 		buffersink_filter, 
 		OUTPUT_FILTER_NAME,
 		NULL, 
 		NULL, 
 		state->filter_graph);
-	if (ret < 0) 
+	if (avrc < 0) 
 	{
 		vod_log_error(VOD_LOG_ERR, state->request_context->log, 0,
-			"audio_filter_init_filters: avfilter_graph_create_filter(output) failed %d", ret);
+			"audio_filter_init_filters: avfilter_graph_create_filter(output) failed %d", avrc);
 		rc = VOD_ALLOC_FAILED;
 		goto end;
 	}
@@ -199,48 +199,48 @@ audio_filter_init_filters(
 	// configure the buffer sink
 	out_sample_fmts[0] = ENCODER_INPUT_SAMPLE_FORMAT;
 	out_sample_fmts[1] = -1;
-	ret = av_opt_set_int_list(
+	avrc = av_opt_set_int_list(
 		state->buffer_sink, 
 		BUFFERSINK_PARAM_SAMPLE_FORMATS, 
 		out_sample_fmts, 
 		-1, 
 		AV_OPT_SEARCH_CHILDREN);
-	if (ret < 0) 
+	if (avrc < 0) 
 	{
 		vod_log_error(VOD_LOG_ERR, state->request_context->log, 0,
-			"audio_filter_init_filters: av_opt_set_int_list(sample format) failed %d", ret);
+			"audio_filter_init_filters: av_opt_set_int_list(sample format) failed %d", avrc);
 		rc = VOD_UNEXPECTED;
 		goto end;
 	}
 
 	out_channel_layouts[0] = state->decoder->channel_layout;
 	out_channel_layouts[1] = -1;
-	ret = av_opt_set_int_list(
+	avrc = av_opt_set_int_list(
 		state->buffer_sink, 
 		BUFFERSINK_PARAM_CHANNEL_LAYOUTS, 
 		out_channel_layouts, 
 		-1, 
 		AV_OPT_SEARCH_CHILDREN);
-	if (ret < 0) 
+	if (avrc < 0) 
 	{
 		vod_log_error(VOD_LOG_ERR, state->request_context->log, 0,
-			"audio_filter_init_filters: av_opt_set_int_list(channel layouts) failed %d", ret);
+			"audio_filter_init_filters: av_opt_set_int_list(channel layouts) failed %d", avrc);
 		rc = VOD_UNEXPECTED;
 		goto end;
 	}
 
 	out_sample_rates[0] = state->decoder->sample_rate;
 	out_sample_rates[1] = -1;
-	ret = av_opt_set_int_list(
+	avrc = av_opt_set_int_list(
 		state->buffer_sink, 
 		BUFFERSINK_PARAM_SAMPLE_RATES, 
 		out_sample_rates, 
 		-1, 
 		AV_OPT_SEARCH_CHILDREN);
-	if (ret < 0) 
+	if (avrc < 0) 
 	{
 		vod_log_error(VOD_LOG_ERR, state->request_context->log, 0,
-			"audio_filter_init_filters: av_opt_set_int_list(sample rates) failed %d", ret);
+			"audio_filter_init_filters: av_opt_set_int_list(sample rates) failed %d", avrc);
 		rc = VOD_UNEXPECTED;
 		goto end;
 	}
@@ -276,21 +276,21 @@ audio_filter_init_filters(
 	inputs->next = NULL;
 
 	// parse the filter description
-	ret = avfilter_graph_parse_ptr(state->filter_graph, filters_descr, &inputs, &outputs, NULL);
-	if (ret < 0)
+	avrc = avfilter_graph_parse_ptr(state->filter_graph, filters_descr, &inputs, &outputs, NULL);
+	if (avrc < 0)
 	{
 		vod_log_error(VOD_LOG_ERR, state->request_context->log, 0,
-			"audio_filter_init_filters: avfilter_graph_parse_ptr failed %d", ret);
+			"audio_filter_init_filters: avfilter_graph_parse_ptr failed %d", avrc);
 		rc = VOD_UNEXPECTED;
 		goto end;
 	}
 
 	// validate and configure the graph
-	ret = avfilter_graph_config(state->filter_graph, NULL);
-	if (ret < 0)
+	avrc = avfilter_graph_config(state->filter_graph, NULL);
+	if (avrc < 0)
 	{
 		vod_log_error(VOD_LOG_ERR, state->request_context->log, 0,
-			"audio_filter_init_filters: avfilter_graph_config failed %d", ret);
+			"audio_filter_init_filters: avfilter_graph_config failed %d", avrc);
 		rc = VOD_UNEXPECTED;
 		goto end;
 	}
@@ -321,7 +321,7 @@ audio_filter_alloc_state(
 	uint32_t initial_alloc_size;
 	mp4a_config_t codec_config;
 	vod_status_t rc;
-	int ret;
+	int avrc;
 	
 	if (!initialized)
 	{
@@ -390,11 +390,11 @@ audio_filter_alloc_state(
 		state->decoder->channel_layout = aac_channel_layout[codec_config.channel_config];
 	}
 	
-	ret = avcodec_open2(state->decoder, decoder_codec, NULL);
-	if (ret < 0) 
+	avrc = avcodec_open2(state->decoder, decoder_codec, NULL);
+	if (avrc < 0) 
 	{
 		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-			"audio_filter_alloc_state: avcodec_open2(decoder) failed %d", ret);
+			"audio_filter_alloc_state: avcodec_open2(decoder) failed %d", avrc);
 		rc = VOD_UNEXPECTED;
 		goto error;
 	}
@@ -416,11 +416,11 @@ audio_filter_alloc_state(
 	state->encoder->bit_rate = state->decoder->bit_rate;
 	state->encoder->flags |= CODEC_FLAG_GLOBAL_HEADER;		// make the codec generate the extra data
 
-	ret = avcodec_open2(state->encoder, encoder_codec, NULL);
-	if (ret < 0) 
+	avrc = avcodec_open2(state->encoder, encoder_codec, NULL);
+	if (avrc < 0) 
 	{
 		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-			"audio_filter_alloc_state: avcodec_open2(encoder) failed %d", ret);
+			"audio_filter_alloc_state: avcodec_open2(encoder) failed %d", avrc);
 		rc = VOD_UNEXPECTED;
 		goto error;
 	}
@@ -463,7 +463,7 @@ audio_filter_alloc_state(
 	}
 	
 	// initialize the filter graph
-	vod_sprintf(filter_desc, 
+	vod_sprintf((u_char*)filter_desc, 
 		ATEMPO_FILTER_DESCRIPTION, 
 		(int)(stream_metadata->media_info.speed_nom / 10), 
 		(int)(stream_metadata->media_info.speed_nom % 10));
@@ -628,7 +628,7 @@ audio_filter_flush_encoder(audio_filter_state_t* state)
 	AVPacket output_packet;
 	vod_status_t rc;
 	int got_packet;
-	int ret;
+	int avrc;
 	
 	for (;;)
 	{
@@ -637,11 +637,11 @@ audio_filter_flush_encoder(audio_filter_state_t* state)
 		output_packet.size = 0;
 		
 		got_packet = 0;
-		ret = avcodec_encode_audio2(state->encoder, &output_packet, NULL, &got_packet);
-		if (ret < 0)
+		avrc = avcodec_encode_audio2(state->encoder, &output_packet, NULL, &got_packet);
+		if (avrc < 0)
 		{
 			vod_log_error(VOD_LOG_ERR, state->request_context->log, 0,
-				"audio_filter_flush_encoder: avcodec_encode_audio2 failed %d", ret);
+				"audio_filter_flush_encoder: avcodec_encode_audio2 failed %d", avrc);
 			return VOD_UNEXPECTED;
 		}
 		
@@ -688,7 +688,7 @@ audio_filter_process_frame(void* context, input_frame_t* frame, u_char* buffer)
 	AVPacket input_packet;
 	int got_packet;
 	int got_frame;
-	int ret;
+	int avrc;
 #ifdef AUDIO_FILTER_DEBUG
 	size_t data_size;
 #endif // AUDIO_FILTER_DEBUG
@@ -714,11 +714,11 @@ audio_filter_process_frame(void* context, input_frame_t* frame, u_char* buffer)
 	avcodec_get_frame_defaults(state->decoded_frame);
 
 	got_frame = 0;
-	ret = avcodec_decode_audio4(state->decoder, state->decoded_frame, &got_frame, &input_packet);
-	if (ret < 0) 
+	avrc = avcodec_decode_audio4(state->decoder, state->decoded_frame, &got_frame, &input_packet);
+	if (avrc < 0) 
 	{
 		vod_log_error(VOD_LOG_ERR, state->request_context->log, 0,
-			"audio_filter_process_frame: avcodec_decode_audio4 failed %d", ret);
+			"audio_filter_process_frame: avcodec_decode_audio4 failed %d", avrc);
 		return VOD_BAD_DATA;
 	}
 
@@ -737,26 +737,26 @@ audio_filter_process_frame(void* context, input_frame_t* frame, u_char* buffer)
 	audio_filter_append_debug_data(AUDIO_FILTER_DEBUG_FILENAME_DECODED, state->decoded_frame->data[0], data_size);
 #endif // AUDIO_FILTER_DEBUG
 	
-	ret = av_buffersrc_add_frame_flags(state->buffer_src, state->decoded_frame, AV_BUFFERSRC_FLAG_PUSH);
-	if (ret < 0) 
+	avrc = av_buffersrc_add_frame_flags(state->buffer_src, state->decoded_frame, AV_BUFFERSRC_FLAG_PUSH);
+	if (avrc < 0) 
 	{
 		vod_log_error(VOD_LOG_ERR, state->request_context->log, 0,
-			"audio_filter_process_frame: av_buffersrc_add_frame_flags failed %d", ret);
+			"audio_filter_process_frame: av_buffersrc_add_frame_flags failed %d", avrc);
 		return VOD_ALLOC_FAILED;
 	}
 
 	for (;;)
 	{
-		ret = av_buffersink_get_frame_flags(state->buffer_sink, state->filtered_frame, AV_BUFFERSINK_FLAG_NO_REQUEST);
-		if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF)
+		avrc = av_buffersink_get_frame_flags(state->buffer_sink, state->filtered_frame, AV_BUFFERSINK_FLAG_NO_REQUEST);
+		if (avrc == AVERROR(EAGAIN) || avrc == AVERROR_EOF)
 		{
 			break;
 		}
 		
-		if (ret < 0)
+		if (avrc < 0)
 		{
 			vod_log_error(VOD_LOG_ERR, state->request_context->log, 0,
-				"audio_filter_process_frame: av_buffersink_get_frame_flags failed %d", ret);
+				"audio_filter_process_frame: av_buffersink_get_frame_flags failed %d", avrc);
 			return VOD_UNEXPECTED;
 		}
 
@@ -775,11 +775,14 @@ audio_filter_process_frame(void* context, input_frame_t* frame, u_char* buffer)
 		output_packet.size = 0;
 
 		got_packet = 0;
-		ret = avcodec_encode_audio2(state->encoder, &output_packet, state->filtered_frame, &got_packet);
-		if (ret < 0)
+		avrc = avcodec_encode_audio2(state->encoder, &output_packet, state->filtered_frame, &got_packet);
+
+		av_frame_unref(state->filtered_frame);
+
+		if (avrc < 0)
 		{
 			vod_log_error(VOD_LOG_ERR, state->request_context->log, 0,
-				"audio_filter_process_frame: avcodec_encode_audio2 failed %d", ret);
+				"audio_filter_process_frame: avcodec_encode_audio2 failed %d", avrc);
 			return VOD_ALLOC_FAILED;
 		}
 		
@@ -794,8 +797,6 @@ audio_filter_process_frame(void* context, input_frame_t* frame, u_char* buffer)
 				return rc;
 			}
 		}
-		
-		av_frame_unref(state->filtered_frame);
 	}
 	
 	return VOD_OK;

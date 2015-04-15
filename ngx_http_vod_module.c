@@ -483,9 +483,8 @@ ngx_http_vod_parse_moov_atom(ngx_http_vod_ctx_t *ctx, u_char* moov_buffer, size_
 
 		if (ctx->submodule_context.request_params.segment_index >= segment_count)
 		{
-			ngx_log_error(NGX_LOG_ERR, request_context->log, 0,
-				"ngx_http_vod_parse_moov_atom: requested segment index %uD exceeds the segment count %uD", ctx->submodule_context.request_params.segment_index, segment_count);
-			return NGX_HTTP_NOT_FOUND;
+			// no frames from this file
+			return NGX_OK;
 		}
 
 		// get the start / end offsets
@@ -1447,13 +1446,23 @@ ngx_http_vod_run_state_machine(ngx_http_vod_ctx_t *ctx)
 
 	// Note: at this point we finished reading all moov atoms
 
-	rc = mp4_parser_finalize_mpeg_metadata(&ctx->submodule_context.request_context, &ctx->submodule_context.mpeg_metadata);
-	if (rc != VOD_OK)
+	if (ctx->submodule_context.mpeg_metadata.streams.nelts == 0)
 	{
-		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, ctx->submodule_context.request_context.log, 0,
-			"ngx_http_vod_run_state_machine: mp4_parser_finalize_mpeg_metadata failed %i", rc);
-		return ngx_http_vod_status_to_ngx_error(rc);
+		if (ctx->submodule_context.request_params.request->request_class == REQUEST_CLASS_SEGMENT)
+		{
+			ngx_log_error(NGX_LOG_ERR, ctx->submodule_context.request_context.log, 0,
+				"ngx_http_vod_run_state_machine: no matching streams were found, probably invalid segment index");
+			return NGX_HTTP_NOT_FOUND;
+		}
+		else
+		{
+			ngx_log_error(NGX_LOG_ERR, ctx->submodule_context.request_context.log, 0,
+				"ngx_http_vod_run_state_machine: no matching streams were found");
+			return NGX_HTTP_BAD_REQUEST;
+		}
 	}
+
+	mp4_parser_finalize_mpeg_metadata(&ctx->submodule_context.request_context, &ctx->submodule_context.mpeg_metadata);
 
 	if ((ctx->submodule_context.request_params.request->flags & REQUEST_FLAG_SINGLE_STREAM) != 0 &&
 		ctx->submodule_context.mpeg_metadata.streams.nelts != 1)
@@ -2165,8 +2174,9 @@ ngx_http_vod_async_http_read(ngx_http_vod_http_reader_state_t *state, u_char *bu
 }
 
 ngx_int_t 
-ngx_http_vod_dump_http_request(ngx_http_request_t *r)
+ngx_http_vod_dump_http_request(ngx_http_vod_http_reader_state_t *state)
 {
+	ngx_http_request_t* r = state->r;
 	ngx_http_vod_loc_conf_t *conf;
 	ngx_http_vod_ctx_t *ctx;
 	ngx_child_request_params_t child_params;
