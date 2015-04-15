@@ -1,11 +1,17 @@
 before_install:
     - sudo apt-get update -qq
-    - sudo apt-get install -y libssl-dev libpcre3-dev wget unzip libavcodec-dev libavfilter-dev
+    - sudo apt-get install -y libssl-dev libpcre3-dev wget unzip libopencore-amrwb0 libopencore-amrnb0 libfaac0
+    - sudo wget http://installrepo.kaltura.org/repo/apt/debian/pool/main/k/kaltura-ffmpeg/kaltura-ffmpeg_2.1.3-1+b15_amd64.deb
+    - sudo wget http://ftp.br.debian.org/debian/pool/main/x/x264/libx264-123_0.123.2189+git35cf912-1_amd64.deb
+    - sudo dpkg -i libx264-123_0.123.2189+git35cf912-1_amd64.deb
+    - sudo wget http://archive.ubuntu.com/ubuntu/pool/multiverse/f/fdk-aac/libfdk-aac0_0.1.3-1_amd64.deb
+    - sudo dpkg -i libfdk-aac0_0.1.3-1_amd64.deb
+    - sudo dpkg -i kaltura-ffmpeg_2.1.3-1+b15_amd64.deb
 language: c
 compiler:
     - clang
     - gcc
-script: ./travis_build.sh
+script: export LD_LIBRARY_PATH=/opt/kaltura/ffmpeg-2.1.3/lib; export LIBRARY_PATH=/opt/kaltura/ffmpeg-2.1.3/lib ; ./travis_build.sh
 notifications:
   email:
     recipients:
