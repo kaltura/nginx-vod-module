@@ -1,6 +1,7 @@
 ngx_addon_name=ngx_http_vod_module
 
 # clock_gettime
+#
 ngx_feature="clock_gettime()"
 ngx_feature_name="NGX_HAVE_CLOCK_GETTIME"
 ngx_feature_run=no
@@ -32,7 +33,7 @@ ngx_feature_test="avcodec_register_all()"
 . auto/feature
 
 if [ $ngx_found = yes ]; then
-    CORE_LIBS="$CORE_LIBS -lavcodec"
+    CORE_LIBS="$CORE_LIBS -lavcodec -lavutil"
 fi
 
 # libavfilter
@@ -48,7 +49,7 @@ ngx_feature_test="avfilter_register_all()"
 . auto/feature
 
 if [ $ngx_found = yes ]; then
-    CORE_LIBS="$CORE_LIBS -lavfilter"
+    CORE_LIBS="$CORE_LIBS -lavfilter -lavutil"
 fi
 
 HTTP_MODULES="$HTTP_MODULES ngx_http_vod_module"
