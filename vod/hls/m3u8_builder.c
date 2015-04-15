@@ -78,13 +78,15 @@ m3u8_builder_build_required_tracks_string(
 	vod_str_t* required_tracks)
 {
 	mpeg_stream_metadata_t* cur_stream;
+	uint32_t printed_file_indexes;
+	uint32_t file_index;
 	u_char* p;
 	size_t result_size;
 
 	result_size = mpeg_metadata->streams.nelts * (sizeof("-v") - 1 + m3u8_builder_get_int_print_len(mpeg_metadata->max_track_index + 1));
 	if (include_file_index)
 	{
-		result_size += sizeof("-f") - 1 + m3u8_builder_get_int_print_len(mpeg_metadata->first_stream->file_info.file_index + 1);
+		result_size += mpeg_metadata->streams.nelts * (sizeof("-f") - 1 + m3u8_builder_get_int_print_len(mpeg_metadata->first_stream->file_info.file_index + 1));
 	}
 	p = vod_alloc(request_context->pool, result_size + 1);
 	if (p == NULL)
@@ -97,7 +99,18 @@ m3u8_builder_build_required_tracks_string(
 
 	if (include_file_index)
 	{
-		p = vod_sprintf(p, "-f%uD", mpeg_metadata->first_stream->file_info.file_index + 1);
+		printed_file_indexes = 0;
+		for (cur_stream = mpeg_metadata->first_stream; cur_stream < mpeg_metadata->last_stream; cur_stream++)
+		{
+			file_index = cur_stream->file_info.file_index;
+			if ((printed_file_indexes & (1 << file_index)) != 0)
+			{
+				continue;
+			}
+
+			p = vod_sprintf(p, "-f%uD", file_index + 1);
+			printed_file_indexes |= (1 << file_index);
+		}
 	}
 
 	for (cur_stream = mpeg_metadata->first_stream; cur_stream < mpeg_metadata->last_stream; cur_stream++)
