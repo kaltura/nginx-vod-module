@@ -1,6 +1,6 @@
 before_install:
     - sudo apt-get update -qq
-    - sudo apt-get install -y libssl-dev libpcre3-dev wget unzip libopencore-amrwb0 libopencore-amrnb0 libfaac0 libass4
+    - sudo apt-get -y libssl-dev libpcre3-dev wget unzip libopencore-amrwb0 libopencore-amrnb0 libfaac0 libass4 libgsm1 libmp3lame0 libopenjpeg2 libschroedinger-1.0-0 libspeex1 libtheora0 libva1 libvpx1 libxvidcore4
     - sudo wget http://installrepo.kaltura.org/repo/apt/debian/pool/main/k/kaltura-ffmpeg/kaltura-ffmpeg_2.1.3-1+b17_amd64.deb
     - sudo wget http://ftp.br.debian.org/debian/pool/main/x/x264/libx264-123_0.123.2189+git35cf912-1_amd64.deb
     - sudo dpkg -i libx264-123_0.123.2189+git35cf912-1_amd64.deb
