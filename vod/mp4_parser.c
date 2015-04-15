@@ -2811,20 +2811,11 @@ mp4_parser_parse_frames(
 	return VOD_OK;
 }
 
-vod_status_t 
+void 
 mp4_parser_finalize_mpeg_metadata(
 	request_context_t* request_context,
 	mpeg_metadata_t* mpeg_metadata)
 {
-	if (mpeg_metadata->streams.nelts == 0)
-	{
-		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-			"mp4_parser_finalize_mpeg_metadata: no matching streams were found");
-		return VOD_BAD_REQUEST;
-	}
-
 	mpeg_metadata->first_stream = (mpeg_stream_metadata_t*)mpeg_metadata->streams.elts;
 	mpeg_metadata->last_stream = mpeg_metadata->first_stream + mpeg_metadata->streams.nelts;
-
-	return VOD_OK;
 }
