@@ -37,6 +37,8 @@ unzip -oqq nginx-akamai-token-validate-module-$KALTURA_NGINX_AKAMAI_TOKEN_VALIDA
 #. ~/.bashrc
 sudo find /opt/kaltura/ffmpeg-2.1.3/lib/ -name "*so" -exec ln -s {} /usr/lib \;
 sudo find /opt/kaltura/ffmpeg-2.1.3/include/ -type d -exec ln -s {} /usr/include \;
+ls -al /usr/lib/libav*
+ls -al /usr/include/libav*
 
 ./configure \
         --prefix=/etc/nginx \
