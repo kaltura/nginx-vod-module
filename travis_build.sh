@@ -33,7 +33,7 @@ unzip -oqq nginx-akamai-token-validate-module-$KALTURA_NGINX_AKAMAI_TOKEN_VALIDA
 echo "LD_LIBRARY_PATH=/opt/kaltura/ffmpeg-2.1.3/lib
 LIBRARY_PATH=/opt/kaltura/ffmpeg-2.1.3/lib
 C_INCLUDE_PATH=/opt/kaltura/ffmpeg-2.1.3/include
-export LD_LIBRARY_PATH LIBRARY_PATH C_INCLUDE_PATH" >> ~/.bashrc
+export LD_LIBRARY_PATH LIBRARY_PATH C_INCLUDE_PATH" > ~/.bashrc
 . ~/.bashrc
 
 bash -x ./configure \
