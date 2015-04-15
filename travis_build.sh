@@ -30,17 +30,16 @@ unzip -oqq nginx-akamai-token-validate-module-$KALTURA_NGINX_AKAMAI_TOKEN_VALIDA
 #wget $KALTURA_NGINX_VOD_URI -O nginx-vod-module-$KALTURA_NGINX_VOD_VERSION.zip
 #unzip nginx-vod-module-$KALTURA_NGINX_VOD_VERSION.zip
 
-#echo "LD_LIBRARY_PATH=/opt/kaltura/ffmpeg-2.1.3/lib
-#LIBRARY_PATH=/opt/kaltura/ffmpeg-2.1.3/lib
-#C_INCLUDE_PATH=/opt/kaltura/ffmpeg-2.1.3/include
-#export LD_LIBRARY_PATH LIBRARY_PATH C_INCLUDE_PATH" > ~/.bashrc
-#. ~/.bashrc
-sudo find /opt/kaltura/ffmpeg-2.1.3/lib/ -name "*so" -exec ln -s {} /usr/lib \;
-sudo find /opt/kaltura/ffmpeg-2.1.3/include/ -type d -exec ln -s {} /usr/include \;
-ls -al /usr/lib/libav*
-ls -al /usr/include/libav*
-ldd /usr/lib/libavfilter.so
-ldd /usr/lib/libavcodec.so
+LD_LIBRARY_PATH=/opt/kaltura/ffmpeg-2.1.3/lib
+LIBRARY_PATH=/opt/kaltura/ffmpeg-2.1.3/lib
+C_INCLUDE_PATH=/opt/kaltura/ffmpeg-2.1.3/include
+export LD_LIBRARY_PATH LIBRARY_PATH C_INCLUDE_PATH
+#sudo find /opt/kaltura/ffmpeg-2.1.3/lib/ -name "*so" -exec ln -s {} /usr/lib \;
+#sudo find /opt/kaltura/ffmpeg-2.1.3/include/ -type d -exec ln -s {} /usr/include \;
+#ls -al /usr/lib/libav*
+#ls -al /usr/include/libav*
+#ldd /usr/lib/libavfilter.so
+#ldd /usr/lib/libavcodec.so
 
 ./configure \
         --prefix=/etc/nginx \
