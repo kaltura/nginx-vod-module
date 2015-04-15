@@ -24,7 +24,7 @@ ngx_http_vod_hds_handle_manifest(
 		&submodule_context->conf->hds.manifest_config,
 		&submodule_context->r->uri,
 		&submodule_context->conf->segmenter,
-		submodule_context->request_params.uses_multi_uri && submodule_context->request_params.required_files != 0xffffffff,
+		submodule_context->request_params.uses_multi_uri,
 		&submodule_context->mpeg_metadata,
 		response);
 	if (rc != VOD_OK)

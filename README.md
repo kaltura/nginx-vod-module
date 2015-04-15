@@ -22,8 +22,6 @@
 
 * Track selection for multi audio/video MP4 files
 
-* Mux audio and video streams from separate MP4 files (HLS/HDS)
-
 * Playback rate change - 0.5x up to 2x (requires libavcodec and libavfilter)
 
 * Source file clipping (only from I-Frame to P-frame)
@@ -34,6 +32,8 @@ without the overhead of short segments for the whole duration of the video
 * Serving of files for progressive download playback
 
 * DASH: common encryption (cenc) support
+
+* HLS: Mux audio and video streams from separate MP4 files (HLS/HDS)
 
 * HLS: Generation of I-frames playlist (EXT-X-I-FRAMES-ONLY)
 

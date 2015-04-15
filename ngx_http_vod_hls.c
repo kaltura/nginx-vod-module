@@ -33,7 +33,7 @@ ngx_http_vod_hls_handle_master_playlist(
 		&submodule_context->request_context,
 		&submodule_context->conf->hls.m3u8_config,
 		&base_url,
-		submodule_context->request_params.uses_multi_uri && submodule_context->request_params.required_files != 0xffffffff,
+		submodule_context->request_params.uses_multi_uri,
 		&submodule_context->mpeg_metadata,
 		response);
 	if (rc != VOD_OK)
@@ -77,7 +77,7 @@ ngx_http_vod_hls_handle_index_playlist(
 		&submodule_context->conf->hls.m3u8_config,
 		&base_url,
 		&segments_base_url,
-		submodule_context->request_params.uses_multi_uri && submodule_context->request_params.required_files != 0xffffffff,
+		submodule_context->request_params.uses_multi_uri,
 		submodule_context->conf->secret_key.len != 0,
 		&submodule_context->conf->segmenter,
 		&submodule_context->mpeg_metadata,
@@ -127,7 +127,7 @@ ngx_http_vod_hls_handle_iframe_playlist(
 		&submodule_context->request_context,
 		&submodule_context->conf->hls.m3u8_config,
 		&base_url,
-		submodule_context->request_params.uses_multi_uri && submodule_context->request_params.required_files != 0xffffffff,
+		submodule_context->request_params.uses_multi_uri,
 		&submodule_context->conf->segmenter,
 		&submodule_context->mpeg_metadata,
 		response);
