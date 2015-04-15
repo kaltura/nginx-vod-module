@@ -33,8 +33,10 @@ unzip -oqq nginx-akamai-token-validate-module-$KALTURA_NGINX_AKAMAI_TOKEN_VALIDA
 #wget $KALTURA_NGINX_VOD_URI -O nginx-vod-module-$KALTURA_NGINX_VOD_VERSION.zip
 #unzip nginx-vod-module-$KALTURA_NGINX_VOD_VERSION.zip
 
-export LD_LIBRARY_PATH=/opt/kaltura/ffmpeg-2.1.3/lib; export LIBRARY_PATH=/opt/kaltura/ffmpeg-2.1.3/lib ;
-
+export LD_LIBRARY_PATH=/opt/kaltura/ffmpeg-2.1.3/lib;
+export LIBRARY_PATH=/opt/kaltura/ffmpeg-2.1.3/lib
+export C_INCLUDE_PATH=/opt/kaltura/ffmpeg-2.1.3/include;
+set -x
 ./configure \
         --prefix=/etc/nginx \
         --sbin-path=/sbin/nginx \
