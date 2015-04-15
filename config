@@ -1,6 +1,7 @@
 ngx_addon_name=ngx_http_vod_module
 
 # clock_gettime
+#
 ngx_feature="clock_gettime()"
 ngx_feature_name="NGX_HAVE_CLOCK_GETTIME"
 ngx_feature_run=no
