@@ -237,6 +237,9 @@ buffer_filter_simulated_force_flush(buffer_filter_t* state)
 {
 	if (state->cur_state == STATE_FRAME_FLUSHED)
 	{
+		vod_log_debug2(VOD_LOG_DEBUG_LEVEL, state->request_context->log, 0,
+			"buffer_filter_simulated_force_flush: writing %uD dts %uL", state->cur_frame.original_size, state->cur_frame.dts);
+
 		state->next_filter->simulated_write(state->next_filter_context, &state->cur_frame);
 		state->cur_state = STATE_INITIAL;
 	}

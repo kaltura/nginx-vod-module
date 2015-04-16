@@ -310,6 +310,7 @@ typedef struct {
 	uint32_t first_frame;
 	uint32_t last_frame;
 	uint64_t first_frame_time_offset;
+	int32_t clip_from_frame_offset;
 	input_frame_t* frames;
 	uint64_t* frame_offsets;
 	uint32_t frame_count;
@@ -867,6 +868,8 @@ mp4_parser_parse_stts_atom(atom_info_t* atom_info, frames_parse_context_t* conte
 		// calculate the clip from duration
 		skip_count = DIV_CEIL(clip_from - accum_duration, sample_duration);
 		clip_from_accum_duration = accum_duration + skip_count * sample_duration;
+
+		context->clip_from_frame_offset = clip_from_accum_duration - clip_from;
 	}
 
 	// skip to the sample containing the start time
@@ -2762,6 +2765,7 @@ mp4_parser_parse_frames(
 		result_stream->total_frames_duration = context.total_frames_duration;
 		result_stream->first_frame_index = context.first_frame;
 		result_stream->first_frame_time_offset = context.first_frame_time_offset;
+		result_stream->clip_from_frame_offset = context.clip_from_frame_offset;
 
 		// copy raw atoms
 		if ((request_context->parse_type & PARSE_FLAG_SAVE_RAW_ATOMS) != 0)
