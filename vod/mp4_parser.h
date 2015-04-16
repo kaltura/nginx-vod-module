@@ -190,6 +190,7 @@ typedef struct {
 	uint64_t total_frames_duration;
 	uint32_t first_frame_index;
 	uint64_t first_frame_time_offset;
+	int32_t clip_from_frame_offset;
 	raw_atom_t raw_atoms[RTA_COUNT];
 } mpeg_stream_metadata_t;
 

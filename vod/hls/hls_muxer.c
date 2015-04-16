@@ -57,6 +57,7 @@ hls_muxer_init(
 		cur_stream->cur_frame = cur_stream_metadata->frames;
 		cur_stream->last_frame = cur_stream->cur_frame + cur_stream_metadata->frame_count;
 		cur_stream->first_frame_time_offset = cur_stream_metadata->first_frame_time_offset;
+		cur_stream->clip_from_frame_offset = cur_stream_metadata->clip_from_frame_offset;
 		cur_stream->next_frame_time_offset = cur_stream->first_frame_time_offset;
 		cur_stream->next_frame_dts = rescale_time(cur_stream->next_frame_time_offset, cur_stream->timescale, HLS_TIMESCALE);
 		cur_stream->first_frame_offset = cur_stream_metadata->frame_offsets;
@@ -452,7 +453,7 @@ hls_muxer_simulation_set_segment_limit(
 
 	for (cur_stream = state->first_stream; cur_stream < state->last_stream; cur_stream++)
 	{
-		cur_stream->segment_limit = (segment_end * cur_stream->timescale) / timescale;
+		cur_stream->segment_limit = (segment_end * cur_stream->timescale) / timescale - cur_stream->clip_from_frame_offset;
 	}
 }
 

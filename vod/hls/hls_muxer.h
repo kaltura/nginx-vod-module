@@ -34,6 +34,7 @@ typedef struct {
 	uint64_t next_frame_time_offset;
 	uint64_t next_frame_dts;
 	uint64_t segment_limit;		// used only for iframes
+	int32_t clip_from_frame_offset;
 	
 	// frame offsets
 	uint64_t* first_frame_offset;
