@@ -83,6 +83,7 @@ typedef struct {
 	ngx_str_t upstream_extra_args;
 
 	// segment requests only
+	size_t content_length;
 	read_cache_state_t read_cache_state;
 	ngx_http_vod_frame_processor_t frame_processor;
 	void* frame_processor_state;
@@ -716,7 +717,6 @@ ngx_http_vod_init_frame_processing(ngx_http_vod_ctx_t *ctx)
 	segment_writer_t segment_writer;
 	ngx_str_t output_buffer = ngx_null_string;
 	ngx_str_t content_type;
-	size_t response_size = 0;
 	bool_t reuse_buffer;
 	ngx_int_t rc;
 
@@ -765,7 +765,7 @@ ngx_http_vod_init_frame_processing(ngx_http_vod_ctx_t *ctx)
 		&ctx->frame_processor,
 		&ctx->frame_processor_state,
 		&output_buffer,
-		&response_size,
+		&ctx->content_length,
 		&content_type);
 	if (rc != NGX_OK)
 	{
@@ -781,7 +781,7 @@ ngx_http_vod_init_frame_processing(ngx_http_vod_ctx_t *ctx)
 	r->headers_out.content_type.data = content_type.data;
 
 	// if the frame processor can't determine the size in advance we have to build the whole response before we can start sending it
-	if (response_size == 0)
+	if (ctx->content_length == 0)
 	{
 		return NGX_OK;
 	}
@@ -789,12 +789,12 @@ ngx_http_vod_init_frame_processing(ngx_http_vod_ctx_t *ctx)
 	// calculate the response size
 	if (conf->secret_key.len != 0)
 	{
-		response_size = AES_ROUND_TO_BLOCK(response_size);
+		ctx->content_length = AES_ROUND_TO_BLOCK(ctx->content_length);
 	}
 
 	// set the status line
 	r->headers_out.status = NGX_HTTP_OK;
-	r->headers_out.content_length_n = response_size;
+	r->headers_out.content_length_n = ctx->content_length;
 
 	// set the etag
 	rc = ngx_http_set_etag(r);
@@ -855,11 +855,11 @@ ngx_http_vod_finalize_segment_response(ngx_http_vod_ctx_t *ctx)
 	// if we already sent the headers and all the buffers, just signal completion and return
 	if (r->header_sent)
 	{
-		if ((off_t)ctx->write_segment_buffer_context.total_size != r->headers_out.content_length_n)
+		if (ctx->write_segment_buffer_context.total_size != ctx->content_length)
 		{
 			ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
-				"ngx_http_vod_finalize_segment_response: actual content length %uD is different than reported length %O", 
-				ctx->write_segment_buffer_context.total_size, r->headers_out.content_length_n);
+				"ngx_http_vod_finalize_segment_response: actual content length %uz is different than reported length %uz", 
+				ctx->write_segment_buffer_context.total_size, ctx->content_length);
 		}
 
 		rc = ngx_http_send_special(r, NGX_HTTP_LAST);
