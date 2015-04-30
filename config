@@ -55,6 +55,7 @@ fi
 HTTP_MODULES="$HTTP_MODULES ngx_http_vod_module"
 
 NGX_ADDON_DEPS="$NGX_ADDON_DEPS                                     \
+                $ngx_addon_dir/ngx_async_open_file.h                \
                 $ngx_addon_dir/ngx_buffer_cache.h                   \
                 $ngx_addon_dir/ngx_buffer_cache_internal.h          \
                 $ngx_addon_dir/ngx_child_http_request.h             \
@@ -116,6 +117,7 @@ NGX_ADDON_DEPS="$NGX_ADDON_DEPS                                     \
                 "
 
 NGX_ADDON_SRCS="$NGX_ADDON_SRCS                                     \
+                $ngx_addon_dir/ngx_async_open_file.c                \
                 $ngx_addon_dir/ngx_buffer_cache.c                   \
                 $ngx_addon_dir/ngx_child_http_request.c             \
                 $ngx_addon_dir/ngx_file_reader.c                    \

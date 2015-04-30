@@ -140,7 +140,7 @@ ngx_http_vod_dash_init_frame_processor(
 			submodule_context->mpeg_metadata.first_stream,
 			submodule_context->request_params.segment_index,
 			segment_writer,
-			submodule_context->cur_suburi->file_key,		// iv
+			submodule_context->request_params.suburis->file_key,		// iv
 			size_only,
 			output_buffer,
 			response_size);
