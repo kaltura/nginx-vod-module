@@ -1,48 +1,43 @@
 #include "ngx_file_reader.h"
 #include <ngx_event.h>
 
-ngx_int_t 
-ngx_file_reader_init(
-	ngx_file_reader_state_t* state, 
-	ngx_async_read_callback_t callback,
-	void* callback_context,
+static ngx_int_t
+ngx_file_reader_init_open_file_info(
+	ngx_open_file_info_t* of, 
 	ngx_http_request_t *r,
-	ngx_http_core_loc_conf_t  *clcf, 
+	ngx_http_core_loc_conf_t *clcf, 
 	ngx_str_t* path)
 {
-	ngx_open_file_info_t       of;
-	ngx_uint_t                 level;
-	ngx_int_t    rc;
+	ngx_int_t rc;
 
-	state->log = r->connection->log;
+	ngx_memzero(of, sizeof(ngx_open_file_info_t));
 
-	state->r = r;
-#if (NGX_HAVE_FILE_AIO)
-	state->use_aio = clcf->aio;
-	state->callback = callback;
-	state->callback_context = callback_context;
-#endif
+	of->read_ahead = clcf->read_ahead;
+	of->directio = NGX_MAX_OFF_T_VALUE;
+	of->valid = clcf->open_file_cache_valid;
+	of->min_uses = clcf->open_file_cache_min_uses;
+	of->errors = clcf->open_file_cache_errors;
+	of->events = clcf->open_file_cache_events;
 
-	ngx_memzero(&of, sizeof(ngx_open_file_info_t));
-
-	of.read_ahead = clcf->read_ahead;
-	of.directio = NGX_MAX_OFF_T_VALUE;
-	of.valid = clcf->open_file_cache_valid;
-	of.min_uses = clcf->open_file_cache_min_uses;
-	of.errors = clcf->open_file_cache_errors;
-	of.events = clcf->open_file_cache_events;
-
-	rc = ngx_http_set_disable_symlinks(r, clcf, path, &of);
+	rc = ngx_http_set_disable_symlinks(r, clcf, path, of);
 	if (rc != NGX_OK)
 	{
 		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
-			"ngx_file_reader_init: ngx_http_set_disable_symlinks failed %i", rc);
+			"ngx_file_reader_init_open_file_info: ngx_http_set_disable_symlinks failed %i", rc);
 		return NGX_HTTP_INTERNAL_SERVER_ERROR;
 	}
 
-	if (ngx_open_cached_file(clcf->open_file_cache, path, &of, r->pool) != NGX_OK)
+	return rc;
+}
+
+static ngx_int_t
+ngx_file_reader_update_state_file_info(ngx_file_reader_state_t* state, ngx_open_file_info_t* of, ngx_int_t rc)
+{
+	ngx_uint_t level;
+
+	if (rc != NGX_OK)
 	{
-		switch (of.err) 
+		switch (of->err)
 		{
 		case 0:
 			return NGX_HTTP_INTERNAL_SERVER_ERROR;
@@ -72,33 +67,171 @@ ngx_file_reader_init(
 			break;
 		}
 
-		if (rc != NGX_HTTP_NOT_FOUND || clcf->log_not_found) 
+		if (rc != NGX_HTTP_NOT_FOUND || state->log_not_found)
 		{
-			ngx_log_error(level, state->log, of.err, "ngx_file_reader_init: %s \"%s\" failed", of.failed, path->data);
+			ngx_log_error(level, state->log, of->err, "ngx_file_reader_update_state_file_info: %s \"%s\" failed", of->failed, state->file.name.data);
 		}
 
 		return rc;
 	}
 
-	if (!of.is_file) 
+	if (!of->is_file)
 	{
-		ngx_log_error(NGX_LOG_ERR, state->log, 0, "ngx_file_reader_init: \"%s\" is not a file", path->data);
-		if (ngx_close_file(of.fd) == NGX_FILE_ERROR)
+		ngx_log_error(NGX_LOG_ERR, state->log, 0, "ngx_file_reader_update_state_file_info: \"%s\" is not a file", state->file.name.data);
+		if (ngx_close_file(of->fd) == NGX_FILE_ERROR)
 		{
-			ngx_log_error(NGX_LOG_ALERT, state->log, ngx_errno, "ngx_file_reader_init: " ngx_close_file_n " \"%s\" failed", path->data);
+			ngx_log_error(NGX_LOG_ALERT, state->log, ngx_errno, "ngx_file_reader_update_state_file_info: " ngx_close_file_n " \"%s\" failed", state->file.name.data);
 		}
 
 		return NGX_HTTP_FORBIDDEN;
 	}
 
-	state->file.fd = of.fd;
-	state->file.name = *path;
-	state->file.log = state->log;
-	state->file_size = of.size;
-	state->use_directio = (clcf->directio <= of.size);
+	state->file.fd = of->fd;
+	state->file_size = of->size;
 
 	return NGX_OK;
 }
+
+ngx_int_t
+ngx_file_reader_init(
+	ngx_file_reader_state_t* state,
+	ngx_async_read_callback_t read_callback,
+	void* callback_context,
+	ngx_http_request_t *r,
+	ngx_http_core_loc_conf_t *clcf,
+	ngx_str_t* path)
+{
+	ngx_open_file_info_t of;
+	ngx_int_t rc;
+
+	state->r = r;
+	state->file.name = *path;
+	state->file.log = r->connection->log;
+	state->directio = clcf->directio;
+	state->log_not_found = clcf->log_not_found;
+	state->log = r->connection->log;
+#if (NGX_HAVE_FILE_AIO)
+	state->use_aio = clcf->aio;
+	state->read_callback = read_callback;
+	state->callback_context = callback_context;
+#endif
+
+	rc = ngx_file_reader_init_open_file_info(&of, r, clcf, path);
+	if (rc != NGX_OK)
+	{
+		return rc;
+	}
+
+	rc = ngx_open_cached_file(clcf->open_file_cache, path, &of, r->pool);
+
+	return ngx_file_reader_update_state_file_info(state, &of, rc);
+}
+
+#if (NGX_THREADS)
+
+typedef struct {
+	ngx_file_reader_state_t* state;
+	ngx_open_file_info_t of;
+	ngx_async_open_file_callback_t open_callback;
+	void* callback_context;
+	ngx_thread_task_t *task;
+} ngx_file_reader_async_open_context_t;
+
+static void
+ngx_file_reader_async_open_callback(void* ctx, ngx_int_t rc)
+{
+	ngx_file_reader_async_open_context_t* context = ctx;
+	ngx_file_reader_state_t* state = context->state;
+	ngx_http_request_t *r = state->r;
+	ngx_connection_t *c = r->connection;
+
+	r->main->blocked--;
+	r->aio = 0;
+
+	rc = ngx_file_reader_update_state_file_info(state, &context->of, rc);
+
+	context->open_callback(context->callback_context, rc);
+
+	ngx_http_run_posted_requests(c);
+}
+
+ngx_int_t 
+ngx_file_reader_init_async(
+	ngx_file_reader_state_t* state,
+	void** context,
+	ngx_thread_pool_t *thread_pool,
+	ngx_async_open_file_callback_t open_callback,
+	ngx_async_read_callback_t read_callback,
+	void* callback_context,
+	ngx_http_request_t *r,
+	ngx_http_core_loc_conf_t *clcf,
+	ngx_str_t* path)
+{
+	ngx_file_reader_async_open_context_t* open_context;
+	ngx_int_t rc;
+
+	state->r = r;
+	state->file.name = *path;
+	state->file.log = r->connection->log;
+	state->directio = clcf->directio;
+	state->log_not_found = clcf->log_not_found;
+	state->log = r->connection->log;
+#if (NGX_HAVE_FILE_AIO)
+	state->use_aio = clcf->aio;
+	state->read_callback = read_callback;
+	state->callback_context = callback_context;
+#endif
+
+	open_context = *context;
+
+	if (open_context == NULL)
+	{
+		open_context = ngx_palloc(r->pool, sizeof(ngx_file_reader_async_open_context_t));
+		if (open_context == NULL)
+		{
+			ngx_log_debug0(NGX_LOG_DEBUG_HTTP, state->log, 0,
+				"ngx_file_reader_init_async: ngx_palloc failed");
+			return NGX_HTTP_INTERNAL_SERVER_ERROR;
+		}
+
+		open_context->task = NULL;		// all other fields explicitly set below
+
+		*context = open_context;
+	}
+
+	open_context->state = state;
+	open_context->open_callback = open_callback;
+	open_context->callback_context = callback_context;
+
+	rc = ngx_file_reader_init_open_file_info(&open_context->of, r, clcf, path);
+	if (rc != NGX_OK)
+	{
+		return rc;
+	}
+
+	rc = ngx_async_open_file(
+		r->pool,
+		thread_pool,
+		&open_context->task,
+		path,
+		&open_context->of,
+		ngx_file_reader_async_open_callback,
+		open_context);
+	if (rc != NGX_OK)
+	{
+		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, state->log, 0,
+			"ngx_file_reader_init_async: ngx_async_open_file failed %i", rc);
+		return NGX_HTTP_INTERNAL_SERVER_ERROR;
+	}
+
+	r->main->blocked++;
+	r->aio = 1;
+
+	return NGX_AGAIN;
+}
+
+#endif // NGX_THREADS
+
 
 // Note: this function initializes r->exten in order to have nginx select the correct mime type for the request
 //		the code was copied from nginx's ngx_http_set_exten
@@ -210,7 +343,7 @@ ngx_file_reader_dump_file(ngx_file_reader_state_t* state)
 ngx_int_t 
 ngx_file_reader_enable_directio(ngx_file_reader_state_t* state)
 {
-	if (state->use_directio) 
+	if (state->directio <= state->file_size)
 	{
 		if (ngx_directio_on(state->file.fd) == NGX_FILE_ERROR) 
 		{
@@ -231,14 +364,16 @@ static void
 ngx_async_read_completed_callback(ngx_event_t *ev)
 {
 	ngx_file_reader_state_t* state;
-	ngx_event_aio_t     *aio;
-	ngx_http_request_t  *r;
+	ngx_http_request_t *r;
+	ngx_connection_t *c;
+	ngx_event_aio_t *aio;
 	ssize_t bytes_read;
 	ssize_t rc;
 
 	aio = ev->data;
 	state = aio->data;
 	r = state->r;
+	c = r->connection;
 
 	r->main->blocked--;
 	r->aio = 0;
@@ -259,7 +394,9 @@ ngx_async_read_completed_callback(ngx_event_t *ev)
 		rc = NGX_OK;
 	}
 
-	state->callback(state->callback_context, rc, bytes_read);
+	state->read_callback(state->callback_context, rc, bytes_read);
+
+	ngx_http_run_posted_requests(c);
 }
 
 ssize_t 

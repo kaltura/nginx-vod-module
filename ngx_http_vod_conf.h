@@ -55,6 +55,10 @@ struct ngx_http_vod_loc_conf_s {
 
 	ngx_shm_zone_t* perf_counters_zone;
 
+#if (NGX_THREADS)
+	ngx_thread_pool_t *open_file_thread_pool;
+#endif
+
 	// derived fields
 	ngx_str_t proxy_header;
 	ngx_hash_t uri_params_hash;

@@ -62,7 +62,11 @@ cd to NGINX source directory and execute:
 For asynchronous I/O support add `--with-file-aio` (highly recommended, local and mapped modes only)
 
     ./configure --add-module=/path/to/nginx-vod-module --with-file-aio
-	
+
+For asynchronous file open using thread pool add `--with-threads` (nginx 1.7.11+, local and mapped modes only)
+
+    ./configure --add-module=/path/to/nginx-vod-module --with-threads
+
 To compile nginx with debug messages add `--with-debug`
 
     ./configure --add-module=/path/to/nginx-vod-module --with-debug
@@ -256,6 +260,15 @@ The scheme (http/https) used in the returned URLs is determined by:
 * the existence of a request header whose name matches the value of vod_https_header_name, if vod_https_header_name is not empty
 * the type of connection used to connect to the nginx server
 The setting currently affects only HLS.
+
+#### vod_open_file_thread_pool
+* **syntax**: `vod_open_file_thread_pool pool_name`
+* **default**: `off`
+* **context**: `http`, `server`, `location`
+
+Enables the use of asynchronous file open via thread pool.
+The thread pool must be defined with a thread_pool directive, if no pool name is specified the default pool is used.
+This directive is supported only on nginx 1.7.11 or newer when compiling with --add-threads
 
 #### vod_moov_cache
 * **syntax**: `vod_moov_cache zone_name zone_size`

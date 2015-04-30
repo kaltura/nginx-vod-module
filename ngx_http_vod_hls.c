@@ -160,7 +160,7 @@ ngx_http_vod_hls_handle_encryption_key(
 		return NGX_HTTP_INTERNAL_SERVER_ERROR;
 	}
 
-	ngx_memcpy(encryption_key, submodule_context->cur_suburi->file_key, BUFFER_CACHE_KEY_SIZE);
+	ngx_memcpy(encryption_key, submodule_context->request_params.suburis->file_key, BUFFER_CACHE_KEY_SIZE);
 
 	response->data = encryption_key;
 	response->len = BUFFER_CACHE_KEY_SIZE;

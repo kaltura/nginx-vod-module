@@ -43,6 +43,10 @@ ngx_http_vod_create_loc_conf(ngx_conf_t *cf)
 	ngx_init_upstream_conf(&conf->drm_upstream);
 	conf->drm_max_info_length = NGX_CONF_UNSET_SIZE;
 
+#if (NGX_THREADS)
+	conf->open_file_thread_pool = NGX_CONF_UNSET_PTR;
+#endif
+
 	// submodules
 	for (cur_module = submodules; *cur_module != NULL; cur_module++)
 	{
@@ -169,6 +173,10 @@ ngx_http_vod_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child)
 	{
 		conf->perf_counters_zone = prev->perf_counters_zone;
 	}
+
+#if (NGX_THREADS)
+	ngx_conf_merge_ptr_value(conf->open_file_thread_pool, prev->open_file_thread_pool, NULL);
+#endif
 
 	// validate vod_upstream / vod_upstream_host_header used when needed
 	if (conf->request_handler == ngx_http_vod_remote_request_handler || conf->request_handler == ngx_http_vod_mapped_request_handler)
@@ -372,6 +380,38 @@ ngx_http_vod_segment_count_policy_command(ngx_conf_t *cf, ngx_command_t *cmd, vo
 
 	return NGX_CONF_OK;
 }
+
+#if (NGX_THREADS)
+static char *
+ngx_http_vod_thread_pool_command(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
+{
+	ngx_thread_pool_t **tp = (ngx_thread_pool_t **)((u_char*)conf + cmd->offset);
+	ngx_http_vod_loc_conf_t *vod_conf = conf;
+	ngx_str_t  *value;
+
+	if (*tp != NGX_CONF_UNSET_PTR) {
+		return "is duplicate";
+	}
+
+	value = cf->args->elts;
+
+	if (cf->args->nelts > 1)
+	{
+		*tp = ngx_thread_pool_add(cf, &value[1]);
+	}
+	else
+	{
+		*tp = ngx_thread_pool_add(cf, NULL);
+	}
+
+	if (*tp == NULL)
+	{
+		return NGX_CONF_ERROR;
+	}
+
+	return NGX_CONF_OK;
+}
+#endif // NGX_THREADS
 
 static char *
 ngx_http_vod_manifest_segment_durations_mode_command(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
@@ -848,6 +888,15 @@ ngx_command_t ngx_http_vod_commands[] = {
 	NGX_HTTP_LOC_CONF_OFFSET,
 	offsetof(ngx_http_vod_loc_conf_t, perf_counters_zone),
 	NULL },
+
+#if (NGX_THREADS)
+	{ ngx_string("vod_open_file_thread_pool"),
+	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_NOARGS | NGX_CONF_TAKE1,
+	ngx_http_vod_thread_pool_command,
+	NGX_HTTP_LOC_CONF_OFFSET,
+	offsetof(ngx_http_vod_loc_conf_t, open_file_thread_pool),
+	NULL },
+#endif
 
 #include "ngx_http_vod_dash_commands.h"
 #include "ngx_http_vod_hds_commands.h"
