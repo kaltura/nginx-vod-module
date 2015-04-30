@@ -268,7 +268,8 @@ The setting currently affects only HLS.
 
 Enables the use of asynchronous file open via thread pool.
 The thread pool must be defined with a thread_pool directive, if no pool name is specified the default pool is used.
-This directive is supported only on nginx 1.7.11 or newer when compiling with --add-threads
+This directive is supported only on nginx 1.7.11 or newer when compiling with --add-threads.
+Note: this directive currently disables the use of nginx's open_file_cache by nginx-vod-module
 
 #### vod_moov_cache
 * **syntax**: `vod_moov_cache zone_name zone_size`
