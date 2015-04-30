@@ -386,7 +386,6 @@ static char *
 ngx_http_vod_thread_pool_command(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
 {
 	ngx_thread_pool_t **tp = (ngx_thread_pool_t **)((u_char*)conf + cmd->offset);
-	ngx_http_vod_loc_conf_t *vod_conf = conf;
 	ngx_str_t  *value;
 
 	if (*tp != NGX_CONF_UNSET_PTR) {

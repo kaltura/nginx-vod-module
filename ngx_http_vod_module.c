@@ -1819,9 +1819,6 @@ static void
 ngx_http_vod_file_open_completed_internal(void* context, ngx_int_t rc, ngx_flag_t fallback)
 {
 	ngx_http_vod_ctx_t *ctx = (ngx_http_vod_ctx_t *)context;
-	ngx_connection_t *c;
-
-	c = ctx->submodule_context.r->connection;
 
 	if (rc != NGX_OK)
 	{
