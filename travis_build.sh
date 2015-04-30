@@ -12,7 +12,7 @@ KALTURA_NGINX_AKAMAI_TOKEN_VALIDATE_URI="https://github.com/kaltura/nginx-akamai
 #
 KALTURA_NGINX_SECURE_TOKEN_VERSION=master
 KALTURA_NGINX_SECURE_TOKEN_URI="https://github.com/kaltura/nginx-secure-token-module/archive/$KALTURA_NGINX_SECURE_TOKEN_VERSION.zip"
-NGINX_VERSION=1.6.2
+NGINX_VERSION=1.8.0
 NGINX_URI="http://nginx.org/download/nginx-$NGINX_VERSION.tar.gz"
 
 
@@ -65,6 +65,7 @@ unzip -oqq nginx-akamai-token-validate-module-$KALTURA_NGINX_AKAMAI_TOKEN_VALIDA
         --with-file-aio \
         --with-ipv6 \
         --with-debug \
+	--with-threads \
         --add-module=./nginx-vod-module-$KALTURA_NGINX_VOD_VERSION \
         --add-module=./nginx-secure-token-module-$KALTURA_NGINX_SECURE_TOKEN_VERSION \
         --add-module=./nginx-akamai-token-validate-module-$KALTURA_NGINX_AKAMAI_TOKEN_VALIDATE_VERSION \
