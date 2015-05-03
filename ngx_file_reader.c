@@ -209,25 +209,24 @@ ngx_file_reader_init_async(
 		return rc;
 	}
 
-	rc = ngx_async_open_file(
+	rc = ngx_async_open_cached_file(
+		clcf->open_file_cache,
+		path,
+		&open_context->of,
 		r->pool,
 		thread_pool,
 		&open_context->task,
-		path,
-		&open_context->of,
 		ngx_file_reader_async_open_callback,
 		open_context);
-	if (rc != NGX_OK)
+	if (rc == NGX_AGAIN)
 	{
-		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, state->log, 0,
-			"ngx_file_reader_init_async: ngx_async_open_file failed %i", rc);
-		return NGX_HTTP_INTERNAL_SERVER_ERROR;
+		r->main->blocked++;
+		r->aio = 1;
+
+		return NGX_AGAIN;
 	}
 
-	r->main->blocked++;
-	r->aio = 1;
-
-	return NGX_AGAIN;
+	return ngx_file_reader_update_state_file_info(state, &open_context->of, rc);
 }
 
 #endif // NGX_THREADS

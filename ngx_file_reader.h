@@ -8,7 +8,7 @@
 #include <nginx.h>
 
 #if (NGX_THREADS)
-#include "ngx_async_open_file.h"
+#include "ngx_async_open_file_cache.h"
 #endif
 
 // typedefs
