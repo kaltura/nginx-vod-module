@@ -17,8 +17,6 @@
 typedef void(*ngx_async_open_file_callback_t)(void* context, ngx_int_t rc);
 
 
-ngx_open_file_cache_t *ngx_async_open_file_cache_init(ngx_pool_t *pool,
-    ngx_uint_t max, time_t inactive);
 ngx_int_t ngx_async_open_cached_file(
 	ngx_open_file_cache_t *cache, 
 	ngx_str_t *name,

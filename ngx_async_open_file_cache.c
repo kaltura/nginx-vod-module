@@ -24,7 +24,6 @@
 #define NGX_MIN_READ_AHEAD  (128 * 1024)
 
 
-static void ngx_open_file_cache_cleanup(void *data);
 #if (NGX_HAVE_OPENAT)
 static ngx_fd_t ngx_openat_file_owner(ngx_fd_t at_fd, const u_char *name,
     ngx_int_t mode, ngx_int_t create, ngx_int_t access, ngx_log_t *log);
@@ -48,99 +47,11 @@ static void ngx_close_cached_file(ngx_open_file_cache_t *cache,
 static void ngx_open_file_del_event(ngx_cached_open_file_t *file);
 static void ngx_expire_old_cached_files(ngx_open_file_cache_t *cache,
     ngx_uint_t n, ngx_log_t *log);
-static void ngx_open_file_cache_rbtree_insert_value(ngx_rbtree_node_t *temp,
-    ngx_rbtree_node_t *node, ngx_rbtree_node_t *sentinel);
 static ngx_cached_open_file_t *
     ngx_open_file_lookup(ngx_open_file_cache_t *cache, ngx_str_t *name,
     uint32_t hash);
 static void ngx_open_file_cache_remove(ngx_event_t *ev);
 
-
-ngx_open_file_cache_t *
-ngx_async_open_file_cache_init(ngx_pool_t *pool, ngx_uint_t max, time_t inactive)
-{
-    ngx_pool_cleanup_t     *cln;
-    ngx_open_file_cache_t  *cache;
-
-    cache = ngx_palloc(pool, sizeof(ngx_open_file_cache_t));
-    if (cache == NULL) {
-        return NULL;
-    }
-
-    ngx_rbtree_init(&cache->rbtree, &cache->sentinel,
-                    ngx_open_file_cache_rbtree_insert_value);
-
-    ngx_queue_init(&cache->expire_queue);
-
-    cache->current = 0;
-    cache->max = max;
-    cache->inactive = inactive;
-
-    cln = ngx_pool_cleanup_add(pool, 0);
-    if (cln == NULL) {
-        return NULL;
-    }
-
-    cln->handler = ngx_open_file_cache_cleanup;
-    cln->data = cache;
-
-    return cache;
-}
-
-
-static void
-ngx_open_file_cache_cleanup(void *data)
-{
-    ngx_open_file_cache_t  *cache = data;
-
-    ngx_queue_t             *q;
-    ngx_cached_open_file_t  *file;
-
-    ngx_log_debug0(NGX_LOG_DEBUG_CORE, ngx_cycle->log, 0,
-                   "open file cache cleanup");
-
-    for ( ;; ) {
-
-        if (ngx_queue_empty(&cache->expire_queue)) {
-            break;
-        }
-
-        q = ngx_queue_last(&cache->expire_queue);
-
-        file = ngx_queue_data(q, ngx_cached_open_file_t, queue);
-
-        ngx_queue_remove(q);
-
-        ngx_rbtree_delete(&cache->rbtree, &file->node);
-
-        cache->current--;
-
-        ngx_log_debug1(NGX_LOG_DEBUG_CORE, ngx_cycle->log, 0,
-                       "delete cached open file: %s", file->name);
-
-        if (!file->err && !file->is_dir) {
-            file->close = 1;
-            file->count = 0;
-            ngx_close_cached_file(cache, file, 0, ngx_cycle->log);
-
-        } else {
-            ngx_free(file->name);
-            ngx_free(file);
-        }
-    }
-
-    if (cache->current) {
-        ngx_log_error(NGX_LOG_ALERT, ngx_cycle->log, 0,
-                      "%ui items still leave in open file cache",
-                      cache->current);
-    }
-
-    if (cache->rbtree.root != cache->rbtree.sentinel) {
-        ngx_log_error(NGX_LOG_ALERT, ngx_cycle->log, 0,
-                      "rbtree still is not empty in open file cache");
-
-    }
-}
 
 static ngx_int_t
 ngx_save_open_file_to_cache(ngx_open_file_cache_t *cache, ngx_str_t *name, uint32_t hash,
@@ -1074,47 +985,6 @@ ngx_expire_old_cached_files(ngx_open_file_cache_t *cache, ngx_uint_t n,
             ngx_free(file);
         }
     }
-}
-
-
-static void
-ngx_open_file_cache_rbtree_insert_value(ngx_rbtree_node_t *temp,
-    ngx_rbtree_node_t *node, ngx_rbtree_node_t *sentinel)
-{
-    ngx_rbtree_node_t       **p;
-    ngx_cached_open_file_t    *file, *file_temp;
-
-    for ( ;; ) {
-
-        if (node->key < temp->key) {
-
-            p = &temp->left;
-
-        } else if (node->key > temp->key) {
-
-            p = &temp->right;
-
-        } else { /* node->key == temp->key */
-
-            file = (ngx_cached_open_file_t *) node;
-            file_temp = (ngx_cached_open_file_t *) temp;
-
-            p = (ngx_strcmp(file->name, file_temp->name) < 0)
-                    ? &temp->left : &temp->right;
-        }
-
-        if (*p == sentinel) {
-            break;
-        }
-
-        temp = *p;
-    }
-
-    *p = node;
-    node->parent = temp;
-    node->left = sentinel;
-    node->right = sentinel;
-    ngx_rbt_red(node);
 }
 
 
