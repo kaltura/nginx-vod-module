@@ -53,6 +53,26 @@ without the overhead of short segments for the whole duration of the video
 
 ### Installation
 
+#### Build
+
+cd to NGINX source directory and execute:
+
+    ./configure --add-module=/path/to/nginx-vod-module
+    make
+    make install
+	
+For asynchronous I/O support add `--with-file-aio` (highly recommended, local and mapped modes only)
+
+    ./configure --add-module=/path/to/nginx-vod-module --with-file-aio
+	
+To compile nginx with debug messages add `--with-debug`
+
+    ./configure --add-module=/path/to/nginx-vod-module --with-debug
+
+To disable compiler optimizations (for debugging with gdb) add `CFLAGS="-g -O0"`
+
+	CFLAGS="-g -O0" ./configure ....
+
 #### RHEL/CentOS RPM
 If you are using RHEL or CentOS 6, you can install by setting up the repo:
 ```
@@ -74,26 +94,6 @@ baseurl = http://installrepo.kaltura.org/releases/latest/RPMS/$basearch/
 # echo "deb http://installrepo.kaltura.org/repo/apt/debian jupiter main" > /etc/apt/sources.list.d/kaltura.list
 # apt-get install kaltura-nginx
 ```
-
-#### Build
-
-cd to NGINX source directory and execute:
-
-    ./configure --add-module=/path/to/nginx-vod-module
-    make
-    make install
-	
-For asynchronous I/O support add `--with-file-aio` (highly recommended, local and mapped modes only)
-
-    ./configure --add-module=/path/to/nginx-vod-module --with-file-aio
-	
-To compile nginx with debug messages add `--with-debug`
-
-    ./configure --add-module=/path/to/nginx-vod-module --with-debug
-
-To disable compiler optimizations (for debugging with gdb) add `CFLAGS="-g -O0"`
-
-	CFLAGS="-g -O0" ./configure ....
 
 ### URL structure
 
