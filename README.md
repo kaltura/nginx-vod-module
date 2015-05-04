@@ -51,7 +51,9 @@ without the overhead of short segments for the whole duration of the video
 
 * Tested on Linux only
 
-### Build
+### Installation
+
+#### Build
 
 cd to NGINX source directory and execute:
 
@@ -74,6 +76,28 @@ To compile nginx with debug messages add `--with-debug`
 To disable compiler optimizations (for debugging with gdb) add `CFLAGS="-g -O0"`
 
 	CFLAGS="-g -O0" ./configure ....
+
+#### RHEL/CentOS RPM
+If you are using RHEL or CentOS 6, you can install by setting up the repo:
+```
+# rpm -ihv http://installrepo.kaltura.org/releases/kaltura-release.noarch.rpm
+# yum install kaltura-nginx
+```
+If you are using RHEL/CentOS7, install the kaltura-release RPM and modify /etc/yum.repos.d/kaltura.repo to read:
+```
+baseurl = http://installrepo.kaltura.org/releases/rhel7/RPMS/$basearch/
+```
+Instead of the default:
+```
+baseurl = http://installrepo.kaltura.org/releases/latest/RPMS/$basearch/
+```
+
+#### Debian/Ubuntu deb package
+```
+# wget -O - http://installrepo.kaltura.org/repo/apt/debian/kaltura-deb.gpg.key|apt-key add -
+# echo "deb http://installrepo.kaltura.org/repo/apt/debian jupiter main" > /etc/apt/sources.list.d/kaltura.list
+# apt-get install kaltura-nginx
+```
 
 ### URL structure
 
