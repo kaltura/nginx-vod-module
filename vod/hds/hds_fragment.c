@@ -160,13 +160,9 @@ hds_get_sound_info(request_context_t* request_context, media_info_t* media_info,
 	case 8:
 		sound_size = SOUND_SIZE_8_BIT;
 		break;
-	case 16:
+	default:
 		sound_size = SOUND_SIZE_16_BIT;
 		break;
-	default:
-		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-			"hds_get_sound_info: unsupported bits per sample %uD", (uint32_t)media_info->u.audio.bits_per_sample);
-		return VOD_BAD_DATA;
 	}
 
 	switch (media_info->u.audio.channels)
