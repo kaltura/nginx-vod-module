@@ -693,7 +693,7 @@ The name of the manifest file (has no extension).
 			aio on;
 
 			location /content/ {
-				vod;
+				vod hls;
 				vod_mode local;
 				vod_moov_cache moov_cache 512m;
 				vod_fallback_upstream fallback;
@@ -736,7 +736,7 @@ The name of the manifest file (has no extension).
 			}
 		
 			location ~ ^/p/\d+/(sp/\d+/)?serveFlavor/ {
-				vod;
+				vod hls;
 				vod_mode mapped;
 				vod_moov_cache moov_cache 512m;
 				vod_secret_key mukkaukk;
@@ -770,7 +770,7 @@ The name of the manifest file (has no extension).
 			}
 
 			location ~ ^/p/\d+/(sp/\d+/)?serveFlavor/ {
-				vod;
+				vod hls;
 				vod_mode remote;
 				vod_moov_cache moov_cache 512m;
 				vod_secret_key mukkaukk;
