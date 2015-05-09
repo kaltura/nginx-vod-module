@@ -115,6 +115,19 @@ ngx_http_vod_header_exists(ngx_http_request_t* r, ngx_str_t* searched_header)
 	return 0;
 }
 
+static void *
+ngx_http_vod_memrchr(const u_char *s, int c, size_t n)
+{
+	const u_char *cp;
+
+	for (cp = s + n; cp > s; )
+	{
+		if (*(--cp) == (u_char)c)
+			return (void*)cp;
+	}
+	return NULL;
+}
+
 void
 ngx_http_vod_get_base_url(
 	ngx_http_request_t* r,
@@ -148,7 +161,7 @@ ngx_http_vod_get_base_url(
 
 	if (file_uri->len)
 	{
-		last_slash = memrchr(file_uri->data, '/', file_uri->len);
+		last_slash = ngx_http_vod_memrchr(file_uri->data, '/', file_uri->len);
 		if (last_slash == NULL)
 		{
 			return;
