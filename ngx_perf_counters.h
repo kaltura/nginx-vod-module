@@ -53,8 +53,8 @@ typedef struct timeval ngx_tick_count_t;
 		ngx_get_tick_count(&__end);									\
 																	\
 		__delta = ngx_tick_count_diff(ctx.start, __end);			\
-		ngx_atomic_fetch_add(&state->counters[type].sum, __delta);	\
-		ngx_atomic_fetch_add(&state->counters[type].count, 1);		\
+		(void)ngx_atomic_fetch_add(&state->counters[type].sum, __delta);	\
+		(void)ngx_atomic_fetch_add(&state->counters[type].count, 1);		\
 		if (__delta > state->counters[type].max)					\
 		{															\
 			struct timeval __tv;									\
