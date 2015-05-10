@@ -54,19 +54,80 @@ static void ngx_open_file_cache_remove(ngx_event_t *ev);
 
 
 static ngx_int_t
-ngx_save_open_file_to_cache(ngx_open_file_cache_t *cache, ngx_str_t *name, uint32_t hash,
+ngx_save_open_file_to_cache(ngx_open_file_cache_t *cache, ngx_cached_open_file_t *file, ngx_str_t *name, uint32_t hash,
     ngx_open_file_info_t *of, ngx_log_t *log, ngx_pool_cleanup_t *cln, ngx_int_t open_rc)
 {
     time_t                          now;
     ngx_int_t                       rc;
     ngx_file_info_t                 fi;
-    ngx_cached_open_file_t         *file;
     ngx_pool_cleanup_file_t        *clnf;
     ngx_open_file_cache_cleanup_t  *ofcln;
 
     now = ngx_time();
 
-    file = ngx_open_file_lookup(cache, name, hash);
+    if (file) {
+
+        file->count--;
+
+        if (open_rc != NGX_OK && (of->err == 0 || !of->errors)) {
+
+            ngx_open_file_del_event(file);
+
+            if (file->close) {
+
+                /* file was already removed from rbtree and cache->current was decremented,
+                    cleaning it up here instead of going to failed since that will make it happen again */
+
+                if (file->count == 0) {
+
+                    if (ngx_close_file(file->fd) == NGX_FILE_ERROR) {
+                        ngx_log_error(NGX_LOG_ALERT, log, ngx_errno,
+                            ngx_close_file_n " \"%s\" failed",
+                            file->name);
+                    }
+
+                    ngx_free(file->name);
+                    ngx_free(file);
+                }
+
+                file = NULL;
+
+            } else {
+
+                ngx_queue_remove(&file->queue);
+            }
+
+            goto failed;
+        }
+
+        if (!of->is_dir && of->err == 0 && of->uniq == file->uniq) {
+
+            file->uses++;
+
+            if (!file->close) {
+                ngx_queue_remove(&file->queue);
+            }
+
+            if (file->event) {
+                file->use_event = 1;
+            }
+
+            of->is_directio = file->is_directio;
+
+            goto update;
+        }
+
+        if (file->close) {
+
+            ngx_close_cached_file(cache, file, 0, log);
+
+            file = ngx_open_file_lookup(cache, name, hash);
+        }
+
+    } else {
+
+        file = ngx_open_file_lookup(cache, name, hash);
+    }
 
     if (file) {
 
@@ -94,9 +155,10 @@ ngx_save_open_file_to_cache(ngx_open_file_cache_t *cache, ngx_str_t *name, uint3
 #endif
             ))
         {
-            // initially had a cache miss, but now that the open completed, there's a cache hit
-            // closing the file handle and using the cached handle instead
+            /* initially had a cache miss, but now that the open completed, there's a cache hit
+                closing the file handle and using the cached handle instead */
             if (open_rc == NGX_OK) {
+
                 ngx_log_debug1(NGX_LOG_DEBUG_ALLOC, log, 0, "file cleanup: fd:%d",
                                of->fd);
 
@@ -152,17 +214,6 @@ ngx_save_open_file_to_cache(ngx_open_file_cache_t *cache, ngx_str_t *name, uint3
 
             if (file->is_dir || file->err) {
                 goto add_event;
-            }
-
-            if (of->uniq == file->uniq) {
-
-                if (file->event) {
-                    file->use_event = 1;
-                }
-
-                of->is_directio = file->is_directio;
-
-                goto update;
             }
 
             /* file was changed */
@@ -235,6 +286,7 @@ create:
     file->count = 0;
     file->use_event = 0;
     file->event = NULL;
+    file->close = 0;
 
 add_event:
 
@@ -254,8 +306,6 @@ update:
         file->mtime = of->mtime;
         file->size = of->size;
 
-        file->close = 0;
-
         file->is_dir = of->is_dir;
         file->is_file = of->is_file;
         file->is_link = of->is_link;
@@ -273,7 +323,10 @@ found:
 
     file->accessed = now;
 
-    ngx_queue_insert_head(&cache->expire_queue, &file->queue);
+    if (!file->close)
+    {
+        ngx_queue_insert_head(&cache->expire_queue, &file->queue);
+    }
 
     ngx_log_debug5(NGX_LOG_DEBUG_CORE, log, 0,
                    "cached open file: %s, fd:%d, c:%d, e:%d, u:%d",
@@ -1061,7 +1114,7 @@ ngx_open_file_cache_remove(ngx_event_t *ev)
 /* Note: returns NGX_DONE on cache miss */
 static ngx_int_t
 ngx_get_open_file_from_cache(ngx_open_file_cache_t *cache, ngx_str_t *name,
-    uint32_t hash, ngx_open_file_info_t *of, ngx_pool_t *pool, ngx_pool_cleanup_t *cln)
+uint32_t hash, ngx_open_file_info_t *of, ngx_log_t *log, ngx_pool_cleanup_t *cln, ngx_cached_open_file_t **out_file)
 {
     time_t                          now;
     ngx_int_t                       rc;
@@ -1095,7 +1148,7 @@ ngx_get_open_file_from_cache(ngx_open_file_cache_t *cache, ngx_str_t *name,
 #endif
         ))
     {
-        ngx_log_debug4(NGX_LOG_DEBUG_CORE, pool->log, 0,
+        ngx_log_debug4(NGX_LOG_DEBUG_CORE, log, 0,
                        "retest open file: %s, fd:%d, c:%d, e:%d",
                        file->name, file->fd, file->count, file->err);
 
@@ -1108,6 +1161,13 @@ ngx_get_open_file_from_cache(ngx_open_file_cache_t *cache, ngx_str_t *name,
              */
 
             of->test_dir = 1;
+        }
+        else if (!file->err)
+        {
+            /* increment the count to prevent the handle from getting closed by some other request */
+            file->count++;
+
+            *out_file = file;
         }
 
         of->fd = file->fd;
@@ -1131,7 +1191,7 @@ ngx_get_open_file_from_cache(ngx_open_file_cache_t *cache, ngx_str_t *name,
 
         if (!file->is_dir) {
             file->count++;
-            ngx_open_file_add_event(cache, file, of, pool->log);
+            ngx_open_file_add_event(cache, file, of, log);
         }
 
     } else {
@@ -1152,7 +1212,7 @@ ngx_get_open_file_from_cache(ngx_open_file_cache_t *cache, ngx_str_t *name,
 
     ngx_queue_insert_head(&cache->expire_queue, &file->queue);
 
-    ngx_log_debug5(NGX_LOG_DEBUG_CORE, pool->log, 0,
+    ngx_log_debug5(NGX_LOG_DEBUG_CORE, log, 0,
                    "cached open file: %s, fd:%d, c:%d, e:%d, u:%d",
                    file->name, file->fd, file->count, file->err, file->uses);
 
@@ -1165,7 +1225,7 @@ ngx_get_open_file_from_cache(ngx_open_file_cache_t *cache, ngx_str_t *name,
             ofcln->cache = cache;
             ofcln->file = file;
             ofcln->min_uses = of->min_uses;
-            ofcln->log = pool->log;
+            ofcln->log = log;
         }
 
         return NGX_OK;
@@ -1179,6 +1239,7 @@ typedef struct {
 	ngx_str_t name;
 	uint32_t hash;
 	ngx_open_file_info_t *of;
+	ngx_cached_open_file_t *file;
 	ngx_async_open_file_callback_t callback;
 	void* context;
 	ngx_log_t* log;
@@ -1205,7 +1266,7 @@ ngx_async_open_thread_event_handler(ngx_event_t *ev)
 
 	if (ctx->cache != NULL)
 	{
-		rc = ngx_save_open_file_to_cache(ctx->cache, &ctx->name, ctx->hash, ctx->of, ctx->log, ctx->cln, ctx->err);
+		rc = ngx_save_open_file_to_cache(ctx->cache, ctx->file, &ctx->name, ctx->hash, ctx->of, ctx->log, ctx->cln, ctx->err);
 	}
 	else
 	{
@@ -1238,6 +1299,7 @@ ngx_async_open_cached_file(
 	void* context)
 {
 	ngx_async_open_file_ctx_t* ctx;
+	ngx_cached_open_file_t *file = NULL;
 	ngx_pool_cleanup_t *cln;
 	ngx_thread_task_t *task;
 	ngx_int_t rc;
@@ -1249,14 +1311,15 @@ ngx_async_open_cached_file(
 	if (cache != NULL)
 	{
 		cln = ngx_pool_cleanup_add(pool, sizeof(ngx_open_file_cache_cleanup_t));
-		if (cln == NULL) {
+		if (cln == NULL) 
+		{
 			return NGX_ERROR;
 		}
 
 		hash = ngx_crc32_long(name->data, name->len);
 
 		// try to fetch from cache
-		rc = ngx_get_open_file_from_cache(cache, name, hash, of, pool, cln);
+		rc = ngx_get_open_file_from_cache(cache, name, hash, of, pool->log, cln, &file);
 		if (rc != NGX_DONE)
 		{
 			return rc;
@@ -1268,7 +1331,7 @@ ngx_async_open_cached_file(
 		if (cln == NULL) 
 		{
 			ngx_log_debug0(NGX_LOG_DEBUG_HTTP, pool->log, 0,
-				"ngx_async_open_file: ngx_pool_cleanup_add failed");
+				"ngx_async_open_cached_file: ngx_pool_cleanup_add failed");
 			return NGX_ERROR;
 		}
 	}
@@ -1281,8 +1344,8 @@ ngx_async_open_cached_file(
 		if (task == NULL) 
 		{
 			ngx_log_debug0(NGX_LOG_DEBUG_HTTP, pool->log, 0,
-				"ngx_async_open_file: ngx_thread_task_alloc failed");
-			return NGX_ERROR;
+				"ngx_async_open_cached_file: ngx_thread_task_alloc failed");
+			goto failed;
 		}
 
 		task->handler = ngx_thread_open_handler;
@@ -1296,6 +1359,7 @@ ngx_async_open_cached_file(
 	ctx->name = *name;
 	ctx->hash = hash;
 	ctx->of = of;
+	ctx->file = file;
 	ctx->callback = callback;
 	ctx->context = context;
 	ctx->log = pool->log;
@@ -1308,11 +1372,21 @@ ngx_async_open_cached_file(
 	if (ngx_thread_task_post(tp, task) != NGX_OK) 
 	{
 		ngx_log_debug0(NGX_LOG_DEBUG_HTTP, pool->log, 0,
-			"ngx_async_open_file: ngx_thread_task_post failed");
-		return NGX_ERROR;
+			"ngx_async_open_cached_file: ngx_thread_task_post failed");
+		goto failed;
 	}
 
 	return NGX_AGAIN;
+
+failed:
+
+	if (file != NULL)
+	{
+		file->count--;
+		ngx_close_cached_file(cache, file, of->min_uses, pool->log);
+	}
+
+	return NGX_ERROR;
 }
 
 #endif // NGX_THREADS
