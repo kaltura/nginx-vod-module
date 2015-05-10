@@ -58,9 +58,6 @@ ngx_save_open_file_to_cache(ngx_open_file_cache_t *cache, ngx_cached_open_file_t
     ngx_open_file_info_t *of, ngx_log_t *log, ngx_pool_cleanup_t *cln, ngx_int_t open_rc)
 {
     time_t                          now;
-    ngx_int_t                       rc;
-    ngx_file_info_t                 fi;
-    ngx_pool_cleanup_file_t        *clnf;
     ngx_open_file_cache_cleanup_t  *ofcln;
 
     now = ngx_time();
@@ -1117,10 +1114,7 @@ ngx_get_open_file_from_cache(ngx_open_file_cache_t *cache, ngx_str_t *name,
 uint32_t hash, ngx_open_file_info_t *of, ngx_log_t *log, ngx_pool_cleanup_t *cln, ngx_cached_open_file_t **out_file)
 {
     time_t                          now;
-    ngx_int_t                       rc;
-    ngx_file_info_t                 fi;
     ngx_cached_open_file_t         *file;
-    ngx_pool_cleanup_file_t        *clnf;
     ngx_open_file_cache_cleanup_t  *ofcln;
 
     now = ngx_time();
@@ -1303,7 +1297,7 @@ ngx_async_open_cached_file(
 	ngx_pool_cleanup_t *cln;
 	ngx_thread_task_t *task;
 	ngx_int_t rc;
-	uint32_t hash;
+	uint32_t hash = 0;
 
 	of->fd = NGX_INVALID_FILE;
 	of->err = 0;
