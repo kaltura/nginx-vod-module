@@ -78,9 +78,12 @@ ngx_file_reader_update_state_file_info(ngx_file_reader_state_t* state, ngx_open_
 	if (!of->is_file)
 	{
 		ngx_log_error(NGX_LOG_ERR, state->log, 0, "ngx_file_reader_update_state_file_info: \"%s\" is not a file", state->file.name.data);
-		if (ngx_close_file(of->fd) == NGX_FILE_ERROR)
+		if (of->fd != NGX_INVALID_FILE)
 		{
-			ngx_log_error(NGX_LOG_ALERT, state->log, ngx_errno, "ngx_file_reader_update_state_file_info: " ngx_close_file_n " \"%s\" failed", state->file.name.data);
+			if (ngx_close_file(of->fd) == NGX_FILE_ERROR)
+			{
+				ngx_log_error(NGX_LOG_ALERT, state->log, ngx_errno, "ngx_file_reader_update_state_file_info: " ngx_close_file_n " \"%s\" failed", state->file.name.data);
+			}
 		}
 
 		return NGX_HTTP_FORBIDDEN;
@@ -209,25 +212,24 @@ ngx_file_reader_init_async(
 		return rc;
 	}
 
-	rc = ngx_async_open_file(
+	rc = ngx_async_open_cached_file(
+		clcf->open_file_cache,
+		path,
+		&open_context->of,
 		r->pool,
 		thread_pool,
 		&open_context->task,
-		path,
-		&open_context->of,
 		ngx_file_reader_async_open_callback,
 		open_context);
-	if (rc != NGX_OK)
+	if (rc == NGX_AGAIN)
 	{
-		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, state->log, 0,
-			"ngx_file_reader_init_async: ngx_async_open_file failed %i", rc);
-		return NGX_HTTP_INTERNAL_SERVER_ERROR;
+		r->main->blocked++;
+		r->aio = 1;
+
+		return NGX_AGAIN;
 	}
 
-	r->main->blocked++;
-	r->aio = 1;
-
-	return NGX_AGAIN;
+	return ngx_file_reader_update_state_file_info(state, &open_context->of, rc);
 }
 
 #endif // NGX_THREADS

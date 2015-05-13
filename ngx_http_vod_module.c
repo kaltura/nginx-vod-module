@@ -1774,16 +1774,13 @@ ngx_http_vod_init_upstream_vars(ngx_http_vod_ctx_t *ctx)
 ////// Local & mapped modes
 
 static ngx_int_t
-ngx_http_vod_dump_request_to_fallback(
-ngx_http_request_t *r)
+ngx_http_vod_dump_request_to_fallback(ngx_http_request_t *r)
 {
 	ngx_http_vod_loc_conf_t* conf;
 	ngx_child_request_params_t child_params;
-	ngx_http_vod_ctx_t *ctx;
 	ngx_int_t rc;
 
-	ctx = ngx_http_get_module_ctx(r, ngx_http_vod_module);
-	conf = ctx->submodule_context.conf;
+	conf = ngx_http_get_module_loc_conf(r, ngx_http_vod_module);
 
 	if (conf->fallback_upstream.upstream == NULL)
 	{
@@ -1832,8 +1829,8 @@ ngx_http_vod_file_open_completed_internal(void* context, ngx_int_t rc, ngx_flag_
 			return;
 		}
 
-		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, ctx->submodule_context.request_context.log, 0,
-			"ngx_http_vod_handle_read_completed: read failed %i", rc);
+		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, ctx->submodule_context.r->connection->log, 0,
+			"ngx_http_vod_file_open_completed_internal: read failed %i", rc);
 		goto finalize_request;
 	}
 

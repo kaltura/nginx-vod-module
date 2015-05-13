@@ -2343,7 +2343,7 @@ mp4_parser_process_moov_atom_callback(void* ctx, atom_info_t* atom_info)
 	if (!format_supported)
 	{
 		vod_log_debug3(VOD_LOG_DEBUG_LEVEL, context->request_context->log, 0,
-			"mp4_parser_process_moov_atom_callback: unsupported format - media type %d format 0x%uxD object type id 0x%uxD",
+			"mp4_parser_process_moov_atom_callback: unsupported format - media type %uD format 0x%uxD object type id 0x%uxD",
 			metadata_parse_context.media_info.media_type, metadata_parse_context.media_info.format, (uint32_t)metadata_parse_context.media_info.u.audio.object_type_id);
 		return VOD_OK;
 	}

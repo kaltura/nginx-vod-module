@@ -19,6 +19,7 @@ INGORED_HEADERS = set([
 ])
 
 IGNORE_HEADER_VALUES = set([
+	'server',
 	'date',
 	'content-length',		# ignore content length since we compare the buffer, the content length may be different due to different host name lengths
 	'etag',					# derived from content length
@@ -126,6 +127,8 @@ class TestThread(stress_base.TestThreadBase):
 		
 		if str(code1) != '200':
 			self.writeOutput('Notice: got status code %s' % (code1))
+			body1 = re.sub('nginx/\d+\.\d+\.\d+', 'nginx/0.0.0', body1)
+			body2 = re.sub('nginx/\d+\.\d+\.\d+', 'nginx/0.0.0', body2)
 		
 		if url1.split('?')[0].rsplit('.', 1)[-1] in set(['m3u8', 'mpd']):
 			body1 = body1.replace(URL1_BASE, URL2_BASE)
