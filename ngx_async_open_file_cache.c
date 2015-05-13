@@ -154,7 +154,7 @@ ngx_save_open_file_to_cache(ngx_open_file_cache_t *cache, ngx_cached_open_file_t
         {
             /* initially had a cache miss, but now that the open completed, there's a cache hit
                 closing the file handle and using the cached handle instead */
-            if (open_rc == NGX_OK) {
+            if (of->fd != NGX_INVALID_FILE) {
 
                 ngx_log_debug1(NGX_LOG_DEBUG_ALLOC, log, 0, "file cleanup: fd:%d",
                                of->fd);
@@ -163,9 +163,13 @@ ngx_save_open_file_to_cache(ngx_open_file_cache_t *cache, ngx_cached_open_file_t
                     ngx_log_error(NGX_LOG_ALERT, log, ngx_errno,
                                   ngx_close_file_n " \"%s\" failed", name->data);
                 }
+                of->fd = NGX_INVALID_FILE;
             }
             
             if (file->err == 0) {
+                of->err = 0;
+                of->failed = NULL;
+
                 of->fd = file->fd;
                 of->uniq = file->uniq;
                 of->mtime = file->mtime;
@@ -1245,7 +1249,7 @@ static void
 ngx_thread_open_handler(void *data, ngx_log_t *log)
 {
 	ngx_async_open_file_ctx_t* ctx = data;
-
+	
 	ctx->err = ngx_open_and_stat_file(&ctx->name, ctx->of, log);
 }
 

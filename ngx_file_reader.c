@@ -78,9 +78,12 @@ ngx_file_reader_update_state_file_info(ngx_file_reader_state_t* state, ngx_open_
 	if (!of->is_file)
 	{
 		ngx_log_error(NGX_LOG_ERR, state->log, 0, "ngx_file_reader_update_state_file_info: \"%s\" is not a file", state->file.name.data);
-		if (ngx_close_file(of->fd) == NGX_FILE_ERROR)
+		if (of->fd != NGX_INVALID_FILE)
 		{
-			ngx_log_error(NGX_LOG_ALERT, state->log, ngx_errno, "ngx_file_reader_update_state_file_info: " ngx_close_file_n " \"%s\" failed", state->file.name.data);
+			if (ngx_close_file(of->fd) == NGX_FILE_ERROR)
+			{
+				ngx_log_error(NGX_LOG_ALERT, state->log, ngx_errno, "ngx_file_reader_update_state_file_info: " ngx_close_file_n " \"%s\" failed", state->file.name.data);
+			}
 		}
 
 		return NGX_HTTP_FORBIDDEN;
