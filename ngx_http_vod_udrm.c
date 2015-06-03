@@ -18,6 +18,7 @@ ngx_http_vod_udrm_parse_response(
 	ngx_json_value_t* cur_input_pssh;
 	mp4_encrypt_system_info_t* cur_output_pssh;
 	ngx_json_value_t parsed_info;
+	ngx_json_value_t* element;
 	ngx_array_t *pssh_array;
 	ngx_int_t rc;
 	ngx_uint_t i;
@@ -39,7 +40,16 @@ ngx_http_vod_udrm_parse_response(
 		return NGX_ERROR;
 	}
 
-	rc = ngx_json_get_element_fixed_binary_string(&parsed_info, &drm_info_key, result->key, sizeof(result->key));
+	if (parsed_info.type != NGX_JSON_ARRAY || parsed_info.v.arr.nelts != 1)
+	{
+		ngx_log_error(NGX_LOG_ERR, request_context->log, 0,
+			"ngx_http_vod_udrm_parse_response: expected a single element array");
+		return NGX_ERROR;
+	}
+
+	element = (ngx_json_value_t*)parsed_info.v.arr.elts;
+
+	rc = ngx_json_get_element_fixed_binary_string(element, &drm_info_key, result->key, sizeof(result->key));
 	if (rc != NGX_JSON_OK)
 	{
 		ngx_log_error(NGX_LOG_ERR, request_context->log, 0,
@@ -47,7 +57,7 @@ ngx_http_vod_udrm_parse_response(
 		return NGX_ERROR;
 	}
 
-	rc = ngx_json_get_element_fixed_binary_string(&parsed_info, &drm_info_key_id, result->key_id, sizeof(result->key_id));
+	rc = ngx_json_get_element_fixed_binary_string(element, &drm_info_key_id, result->key_id, sizeof(result->key_id));
 	if (rc != NGX_JSON_OK)
 	{
 		ngx_log_error(NGX_LOG_ERR, request_context->log, 0,
@@ -55,7 +65,7 @@ ngx_http_vod_udrm_parse_response(
 		return NGX_ERROR;
 	}
 
-	rc = ngx_json_get_element_array(&parsed_info, &drm_info_pssh, &pssh_array);
+	rc = ngx_json_get_element_array(element, &drm_info_pssh, &pssh_array);
 	if (rc != NGX_JSON_OK)
 	{
 		ngx_log_error(NGX_LOG_ERR, request_context->log, 0,
