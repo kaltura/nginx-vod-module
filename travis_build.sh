@@ -53,6 +53,6 @@ export LD_LIBRARY_PATH LIBRARY_PATH C_INCLUDE_PATH
         --with-ipv6 \
         --with-debug \
 	--with-threads \
-        --add-module=./nginx-vod-module-$KALTURA_NGINX_VOD_VERSION \
+        --add-module=./nginx-vod-module \
         $*
 make
