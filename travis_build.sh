@@ -9,6 +9,8 @@ KALTURA_NGINX_AKAMAI_TOKEN_VALIDATE_URI="https://github.com/kaltura/nginx-akamai
 #
 KALTURA_NGINX_SECURE_TOKEN_VERSION=master
 KALTURA_NGINX_SECURE_TOKEN_URI="https://github.com/kaltura/nginx-secure-token-module/archive/$KALTURA_NGINX_SECURE_TOKEN_VERSION.zip"
+KALTURA_NGINX_PARALLEL_VERSION=master
+KALTURA_NGINX_PARALLEL_URI="https://github.com/kaltura/nginx-parallel-module/archive/$KALTURA_NGINX_PARALLEL_VERSION.zip"
 NGINX_VERSION=1.8.0
 NGINX_URI="http://nginx.org/download/nginx-$NGINX_VERSION.tar.gz"
 
@@ -27,8 +29,8 @@ wget $KALTURA_NGINX_SECURE_TOKEN_URI -O nginx-secure-token-module-$KALTURA_NGINX
 unzip -oqq nginx-secure-token-module-$KALTURA_NGINX_SECURE_TOKEN_VERSION.zip
 wget $KALTURA_NGINX_AKAMAI_TOKEN_VALIDATE_URI -O nginx-akamai-token-validate-module-$KALTURA_NGINX_AKAMAI_TOKEN_VALIDATE_VERSION.zip
 unzip -oqq nginx-akamai-token-validate-module-$KALTURA_NGINX_AKAMAI_TOKEN_VALIDATE_VERSION.zip
-#wget $KALTURA_NGINX_VOD_URI -O nginx-vod-module-$KALTURA_NGINX_VOD_VERSION.zip
-#unzip nginx-vod-module-$KALTURA_NGINX_VOD_VERSION.zip
+wget $KALTURA_NGINX_PARALLEL_URI -O nginx-parallel-module-$KALTURA_NGINX_PARALLEL_VERSION.zip
+unzip -oqq nginx-parallel-module-$KALTURA_NGINX_PARALLEL_VERSION.zip
 
 LD_LIBRARY_PATH=/opt/kaltura/ffmpeg-2.1.3/lib
 LIBRARY_PATH=/opt/kaltura/ffmpeg-2.1.3/lib
@@ -70,5 +72,6 @@ export LD_LIBRARY_PATH LIBRARY_PATH C_INCLUDE_PATH
         --add-module=./nginx-vod-module-$KALTURA_NGINX_VOD_VERSION \
         --add-module=./nginx-secure-token-module-$KALTURA_NGINX_SECURE_TOKEN_VERSION \
         --add-module=./nginx-akamai-token-validate-module-$KALTURA_NGINX_AKAMAI_TOKEN_VALIDATE_VERSION \
+        --add-module=./nginx-parallel-module-$KALTURA_NGINX_PARALLEL_VERSION \
         $*
 make
