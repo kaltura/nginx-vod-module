@@ -98,6 +98,7 @@ baseurl = http://installrepo.kaltura.org/releases/latest/RPMS/$basearch/
 # echo "deb http://installrepo.kaltura.org/repo/apt/debian jupiter main" > /etc/apt/sources.list.d/kaltura.list
 # apt-get install kaltura-nginx
 ```
+*Ubuntu NOTE: You must also make sure the multiverse repo is enabled in /etc/apt/sources.list*
 
 ### URL structure
 
