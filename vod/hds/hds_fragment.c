@@ -170,13 +170,9 @@ hds_get_sound_info(request_context_t* request_context, media_info_t* media_info,
 	case 1:
 		sound_type = SOUND_TYPE_MONO;
 		break;
-	case 2:
+	default:
 		sound_type = SOUND_TYPE_STEREO;
 		break;
-	default:
-		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-			"hds_get_sound_info: unsupported channels %uD", (uint32_t)media_info->u.audio.channels);
-		return VOD_BAD_DATA;
 	}
 
 	*result = (SOUND_FORMAT_AAC << 4) | (sound_rate << 2) | (sound_size << 1) | (sound_type);

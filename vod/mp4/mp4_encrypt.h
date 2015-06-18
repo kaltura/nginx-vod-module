@@ -3,9 +3,9 @@
 
 // includes
 #include <openssl/aes.h>
-#include "dynamic_buffer.h"
+#include "../dynamic_buffer.h"
+#include "../common.h"
 #include "mp4_parser.h"
-#include "common.h"
 
 // encryption constants
 #define MP4_ENCRYPT_IV_SIZE (8)
@@ -77,7 +77,7 @@ struct mp4_encrypt_video_state_s {
 	uint32_t nal_packet_size_length;
 
 	// auxiliary data state
-	vod_buf_t auxiliary_data;
+	vod_dynamic_buf_t auxiliary_data;
 	u_char* auxiliary_sample_sizes;
 	u_char* auxiliary_sample_sizes_pos;
 	uint16_t subsample_count;

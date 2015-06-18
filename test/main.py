@@ -48,7 +48,7 @@ MSS_MANIFEST_FILE = '/manifest'
 MSS_FRAGMENT_FILE = '/QualityLevels(%s)/Fragments(video=0)' % MSS_BITRATE
 
 EDASH_PREFIX = '/edash'
-DRM_SERVICE_RESPONSE = '''{
+DRM_SERVICE_RESPONSE = '''[{
                 "key_id": "%s",
                 "pssh": [{
                                 "data": "%s",
@@ -56,7 +56,7 @@ DRM_SERVICE_RESPONSE = '''{
                 }],
                 "next_key_id": null,
                 "key": "%s"
-}''' % (base64.b64encode('0' * 16), base64.b64encode('abcd'), base64.b64encode('1' * 16))
+}]''' % (base64.b64encode('0' * 16), base64.b64encode('abcd'), base64.b64encode('1' * 16))
 
 M3U8_PREFIX = '''#EXTM3U
 #EXT-X-TARGETDURATION:10

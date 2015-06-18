@@ -1,14 +1,14 @@
 #include "dynamic_buffer.h"
 
 vod_status_t
-vod_buf_init(vod_buf_t* buffer, request_context_t* request_context, size_t initial_size)
+vod_dynamic_buf_init(vod_dynamic_buf_t* buffer, request_context_t* request_context, size_t initial_size)
 {
 	buffer->request_context = request_context;
 	buffer->start = vod_alloc(request_context->pool, initial_size);
 	if (buffer->start == NULL)
 	{
 		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
-			"vod_buf_init: vod_alloc failed");
+			"vod_dynamic_buf_init: vod_alloc failed");
 		return VOD_ALLOC_FAILED;
 	}
 	buffer->end = buffer->start + initial_size;
@@ -17,7 +17,7 @@ vod_buf_init(vod_buf_t* buffer, request_context_t* request_context, size_t initi
 }
 
 vod_status_t
-vod_buf_reserve(vod_buf_t* buffer, size_t size)
+vod_dynamic_buf_reserve(vod_dynamic_buf_t* buffer, size_t size)
 {
 	u_char* new_buffer;
 	size_t used_buffer_size;
@@ -35,7 +35,7 @@ vod_buf_reserve(vod_buf_t* buffer, size_t size)
 	if (new_buffer == NULL)
 	{
 		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, buffer->request_context->log, 0,
-			"vod_buf_reserve: vod_alloc failed");
+			"vod_dynamic_buf_reserve: vod_alloc failed");
 		return VOD_ALLOC_FAILED;
 	}
 

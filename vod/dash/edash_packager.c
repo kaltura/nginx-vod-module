@@ -3,6 +3,7 @@
 #include "../read_stream.h"
 #include "../mp4_builder.h"
 #include "../mp4_encrypt.h"
+#include "../mp4_defs.h"
 #include "../common.h"
 
 // manifest constants
