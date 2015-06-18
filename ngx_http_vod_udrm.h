@@ -2,7 +2,7 @@
 #define _NGX_HTTP_VOD_UDRM_H_INCLUDED_
 
 // includes
-#include "vod/mp4_encrypt.h"
+#include "vod/mp4/mp4_encrypt.h"
 
 // functions
 ngx_int_t

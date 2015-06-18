@@ -682,9 +682,9 @@ found:
 	iterator->samples_per_chunk = samples_per_chunk;
 	iterator->sample_desc = sample_desc;
 	
-    *target_chunk = cur_chunk - 1;
-    *target_chunk += (required_index - frame_index) / samples_per_chunk;
-    *sample_count = (required_index - frame_index) % samples_per_chunk;
+	*target_chunk = cur_chunk - 1;
+	*target_chunk += (required_index - frame_index) / samples_per_chunk;
+	*sample_count = (required_index - frame_index) % samples_per_chunk;
 	*next_chunk_out = next_chunk;
 
 	return VOD_OK;

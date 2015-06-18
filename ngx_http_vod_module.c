@@ -15,8 +15,8 @@
 #include "ngx_file_reader.h"
 #include "ngx_buffer_cache.h"
 #include "vod/aes_encrypt.h"
-#include "vod/mp4_parser.h"
-#include "vod/mp4_clipper.h"
+#include "vod/mp4/mp4_parser.h"
+#include "vod/mp4/mp4_clipper.h"
 #include "vod/read_cache.h"
 #include "vod/audio_filter.h"
 #include "vod/full_frame_processor.h"
@@ -1712,7 +1712,7 @@ ngx_http_vod_run_state_machine(ngx_http_vod_ctx_t *ctx)
 				ctx->async_reader_context[ctx->submodule_context.cur_suburi->file_index],
 				ctx->clipper_parse_result.min_first_offset,
 				ctx->clipper_parse_result.max_last_offset);
-			if (rc != VOD_OK)
+			if (rc != NGX_OK)
 			{
 				return rc;
 			}
