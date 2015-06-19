@@ -2,7 +2,7 @@
 #define __AUDIO_FILTER_H__
 
 // includes
-#include "mp4_parser.h"
+#include "mp4/mp4_parser.h"
 
 // functions
 void audio_filter_process_init(vod_log_t* log);
