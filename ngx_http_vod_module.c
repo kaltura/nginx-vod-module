@@ -809,7 +809,7 @@ ngx_http_vod_state_machine_parse_moov_atoms(ngx_http_vod_ctx_t *ctx)
 					cache_size > sizeof(size_t))
 				{
 					ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
-						"ngx_http_vod_state_machine_parse_moov_atoms: moov atom cache hit, size is %uz", moov_size);
+						"ngx_http_vod_state_machine_parse_moov_atoms: moov atom cache hit, size is %uz", cache_size);
 
 					ctx->ftyp_size = *(size_t*)cache_buffer;
 					ctx->ftyp_ptr = cache_buffer + sizeof(ctx->ftyp_size);
