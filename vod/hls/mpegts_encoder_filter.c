@@ -1,6 +1,6 @@
 #include "mpegts_encoder_filter.h"
 #include "bit_fields.h"
-#include "../mp4_parser.h"		// for MEDIA_TYPE_XXX
+#include "../mp4/mp4_parser.h"		// for MEDIA_TYPE_XXX
 #include "../common.h"
 
 #define PCR_PID (0x100)

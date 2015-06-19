@@ -1570,6 +1570,70 @@ ngx_http_vod_state_machine_filter_audio(ngx_http_vod_ctx_t *ctx)
 	return NGX_OK;
 }
 
+////// Clipping
+
+static ngx_int_t
+ngx_http_vod_send_clip_header(ngx_http_vod_ctx_t *ctx)
+{
+	ngx_http_request_t* r = ctx->submodule_context.r;
+	ngx_chain_t* out;
+	size_t response_size;
+	ngx_int_t rc;
+
+	rc = mp4_clipper_build_header(
+		&ctx->submodule_context.request_context,
+		ctx->ftyp_ptr,
+		ctx->ftyp_size,
+		&ctx->clipper_parse_result,
+		&out,
+		&response_size);
+	if (rc != VOD_OK)
+	{
+		return ngx_http_vod_status_to_ngx_error(rc);
+	}
+
+	r->headers_out.content_type_len = mp4_content_type.len;
+	r->headers_out.content_type.len = mp4_content_type.len;
+	r->headers_out.content_type.data = mp4_content_type.data;
+
+	// set the status line
+	r->headers_out.status = NGX_HTTP_OK;
+	r->headers_out.content_length_n = response_size;
+
+	// set the etag
+	rc = ngx_http_set_etag(r);
+	if (rc != NGX_OK)
+	{
+		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+			"ngx_http_vod_init_frame_processing: ngx_http_set_etag failed %i", rc);
+		return NGX_HTTP_INTERNAL_SERVER_ERROR;
+	}
+
+	// send the response headers
+	rc = ngx_http_send_header(r);
+	if (rc == NGX_ERROR || rc > NGX_OK)
+	{
+		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+			"ngx_http_vod_init_frame_processing: ngx_http_send_header failed %i", rc);
+		return rc;
+	}
+
+	if (r->header_only || r->method == NGX_HTTP_HEAD)
+	{
+		return NGX_DONE;
+	}
+
+	rc = ngx_http_output_filter(r, out);
+	if (rc != NGX_OK && rc != NGX_AGAIN)
+	{
+		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+			"ngx_http_vod_run_state_machine: ngx_http_output_filter failed %i", rc);
+		return rc;
+	}
+
+	return NGX_OK;
+}
+
 ////// Common
 
 static ngx_int_t
@@ -1603,58 +1667,18 @@ ngx_http_vod_run_state_machine(ngx_http_vod_ctx_t *ctx)
 
 		if (ctx->submodule_context.request_params.request == NULL)
 		{
-			ngx_http_request_t* r = ctx->submodule_context.r;
-			ngx_chain_t* out;
-			size_t response_size;
-
-			rc = mp4_clipper_build_header(
-				&ctx->submodule_context.request_context,
-				ctx->ftyp_ptr,
-				ctx->ftyp_size,
-				&ctx->clipper_parse_result, 
-				&out, 
-				&response_size);
-			if (rc != VOD_OK)
-			{
-				return ngx_http_vod_status_to_ngx_error(rc);
-			}
-
-			r->headers_out.content_type_len = mp4_content_type.len;
-			r->headers_out.content_type.len = mp4_content_type.len;
-			r->headers_out.content_type.data = mp4_content_type.data;
-
-			// set the status line
-			r->headers_out.status = NGX_HTTP_OK;
-			r->headers_out.content_length_n = response_size;
-
-			// set the etag
-			rc = ngx_http_set_etag(r);
+			rc = ngx_http_vod_send_clip_header(ctx);
 			if (rc != NGX_OK)
 			{
-				ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
-					"ngx_http_vod_init_frame_processing: ngx_http_set_etag failed %i", rc);
-				return NGX_HTTP_INTERNAL_SERVER_ERROR;
-			}
-
-			// send the response headers
-			rc = ngx_http_send_header(r);
-			if (rc == NGX_ERROR || rc > NGX_OK)
-			{
-				ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
-					"ngx_http_vod_init_frame_processing: ngx_http_send_header failed %i", rc);
-				return rc;
-			}
-
-			if (r->header_only || r->method == NGX_HTTP_HEAD)
-			{
-				return NGX_OK;
-			}
-
-			rc = ngx_http_output_filter(r, out);
-			if (rc != NGX_OK && rc != NGX_AGAIN)
-			{
-				ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
-					"ngx_http_vod_run_state_machine: ngx_http_output_filter failed %i", rc);
+				if (rc == NGX_DONE)
+				{
+					rc = NGX_OK;
+				}
+				else
+				{
+					ngx_log_debug1(NGX_LOG_DEBUG_HTTP, ctx->submodule_context.request_context.log, 0,
+						"ngx_http_vod_run_state_machine: ngx_http_vod_send_clip_header failed %i", rc);
+				}
 				return rc;
 			}
 

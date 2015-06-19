@@ -2,7 +2,7 @@
 #define __HDS_AMF0_ENCODER_H__
 
 // includes
-#include "../mp4_parser.h"
+#include "../mp4/mp4_parser.h"
 #include "../common.h"
 
 // codecs

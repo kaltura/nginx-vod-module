@@ -6,7 +6,7 @@
 #include "adts_encoder_filter.h"
 #include "mpegts_encoder_filter.h"
 #include "buffer_filter.h"
-#include "../mp4_parser.h"
+#include "../mp4/mp4_parser.h"
 #include "../read_cache.h"
 #include "../segmenter.h"
 
