@@ -29,6 +29,10 @@ in order to run the tests nginx should be compiled with the --with-debug switch
 
 compares the nginx-vod hls implementation to some reference implementation
 
+### clip_compare.py
+
+compares the nginx-vod mp4 clipping implementation to nginx-mp4-module
+
 ### validate_iframes.py
 
 verifies using ffprobe that the byte ranges returned in an EXT-X-I-FRAMES-ONLY m3u8 indeed represent iframes
@@ -39,7 +43,7 @@ setup_test_entries.py - crafts different types of corrupted mp4 files and upload
 verify_test_entries.py - feeds the entries created by setup_test_entries.py to nginx-vod-module and validates the result.
 	gets the output of setup_test_entries.py as input (contains the test uris and their expected results).
 
-### test_converage.py
+### test_coverage.py
 
 prints a list of nginx-vod-module log lines that do not appear in the provided log file.
 can be executed after running main.py and verify_test_entries.py to get a sense of missing test cases.
