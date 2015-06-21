@@ -1835,7 +1835,7 @@ ngx_http_vod_handle_read_completed(void* context, ngx_int_t rc, ssize_t bytes_re
 		goto finalize_request;
 	}
 
-	if (bytes_read <= 0)
+	if (bytes_read <= 0 && ctx->state != STATE_DUMP_FILE_PART)
 	{
 		ngx_log_error(NGX_LOG_ERR, ctx->submodule_context.request_context.log, 0,
 			"ngx_http_vod_handle_read_completed: bytes read is zero");

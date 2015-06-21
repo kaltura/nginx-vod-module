@@ -28,8 +28,15 @@
 #define full_atom_start(atom) ((atom).ptr - (atom).header_size)
 #define full_atom_size(atom) ((atom).size + (atom).header_size)
 #define copy_full_atom(p, atom) p = vod_copy(p, full_atom_start(atom), full_atom_size(atom))
-#define write_full_atom(write_context, index, atom) \
-	mp4_clipper_write_tail(write_context, index, (u_char*)full_atom_start(atom), full_atom_size(atom))
+#define write_full_atom(write_context, index, atom)		\
+	if (full_atom_size(atom) > 0)						\
+	{													\
+		mp4_clipper_write_tail(							\
+			write_context,								\
+			index,										\
+			(u_char*)full_atom_start(atom),				\
+			full_atom_size(atom));						\
+	}
 
 // enums
 enum {
@@ -786,14 +793,9 @@ mp4_clipper_ctts_clip_data(
 	result->first_entry = iterator.cur_entry;
 	result->first_count = iterator.sample_count;
 
-	if (context->parse_params.clip_to != UINT_MAX)
+	if (context->parse_params.clip_to != UINT_MAX && 
+		mp4_parser_ctts_iterator(&iterator, context->last_frame))
 	{
-		if (!mp4_parser_ctts_iterator(&iterator, context->last_frame))
-		{
-			vod_log_error(VOD_LOG_ERR, context->request_context->log, 0,
-				"mp4_clipper_ctts_clip_data: failed to find last frame");
-			return VOD_BAD_DATA;
-		}
 		result->last_entry = iterator.cur_entry + 1;
 		result->last_count = iterator.sample_count;
 	}

@@ -741,14 +741,11 @@ ngx_http_vod_wev_handler(ngx_http_request_t *r)
 
 	// make sure all data was read
 	rc = ctx->error_code;
-	if (rc == NGX_OK)
+	if (rc == NGX_OK && ctx->in_memory && u->length != 0)
 	{
-		if (u->length != 0)
-		{
-			ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
-				"ngx_http_vod_wev_handler: upstream connection was closed with %O bytes left to read", u->length);
-			rc = NGX_HTTP_BAD_GATEWAY;
-		}
+		ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
+			"ngx_http_vod_wev_handler: upstream connection was closed with %O bytes left to read", u->length);
+		rc = NGX_HTTP_BAD_GATEWAY;
 	}
 
 	// notify the caller

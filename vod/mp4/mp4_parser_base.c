@@ -450,7 +450,7 @@ mp4_parser_stts_iterator(
 	{
 		if (offset != ULLONG_MAX &&
 			sample_duration > 0 &&
-			offset + sample_duration - 1 < next_accum_duration)
+			offset < next_accum_duration)		// Note: need to add sample_duration - 1 to offset, if changing skip_count calculation below to use div_ceil
 		{
 			break;
 		}
