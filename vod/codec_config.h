@@ -2,7 +2,7 @@
 #define __CODEC_CONFIG_H__
 
 // includes
-#include "mp4_parser.h"
+#include "mp4/mp4_parser.h"
 #include "common.h"
 
 // typedefs

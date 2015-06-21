@@ -1,8 +1,9 @@
 #include "edash_packager.h"
 #include "dash_packager.h"
 #include "../read_stream.h"
-#include "../mp4_builder.h"
-#include "../mp4_encrypt.h"
+#include "../mp4/mp4_builder.h"
+#include "../mp4/mp4_encrypt.h"
+#include "../mp4/mp4_defs.h"
 #include "../common.h"
 
 // manifest constants

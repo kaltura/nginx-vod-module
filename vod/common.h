@@ -105,6 +105,8 @@
 #define vod_pool_t ngx_pool_t
 #define vod_log_t ngx_log_t
 #define vod_str_t ngx_str_t
+#define vod_buf_t ngx_buf_t
+#define vod_chain_t ngx_chain_t
 #define vod_string(str) ngx_string(str)
 #define vod_encode_base64(base64, binary) ngx_encode_base64(base64, binary)
 #define vod_base64_encoded_length(len) ngx_base64_encoded_length(len)

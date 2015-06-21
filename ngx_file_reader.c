@@ -265,9 +265,7 @@ ngx_int_t
 ngx_file_reader_dump_file(ngx_file_reader_state_t* state)
 {
 	ngx_http_request_t* r = state->r;
-	ngx_buf_t                 *b;
 	ngx_int_t                  rc;
-	ngx_chain_t                out;
 
 	ngx_file_reader_set_request_extension(r, &state->file.name);
 
@@ -277,7 +275,7 @@ ngx_file_reader_dump_file(ngx_file_reader_state_t* state)
 	r->headers_out.content_length_n = state->file_size;
 
 	rc = ngx_http_set_etag(r);
-	if (rc != NGX_OK) 
+	if (rc != NGX_OK)
 	{
 		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, state->log, 0,
 			"ngx_file_reader_dump_file: ngx_http_set_etag failed %i", rc);
@@ -285,39 +283,62 @@ ngx_file_reader_dump_file(ngx_file_reader_state_t* state)
 	}
 
 	rc = ngx_http_set_content_type(r);
-	if (rc != NGX_OK) 
+	if (rc != NGX_OK)
 	{
 		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, state->log, 0,
 			"ngx_file_reader_dump_file: ngx_http_set_content_type failed %i", rc);
 		return NGX_HTTP_INTERNAL_SERVER_ERROR;
 	}
 
-	b = ngx_pcalloc(r->pool, sizeof(ngx_buf_t));
-	if (b == NULL) 
-	{
-		ngx_log_debug0(NGX_LOG_DEBUG_HTTP, state->log, 0,
-			"ngx_file_reader_dump_file: ngx_pcalloc failed (1)");
-		return NGX_HTTP_INTERNAL_SERVER_ERROR;
-	}
-
-	b->file = ngx_pcalloc(r->pool, sizeof(ngx_file_t));
-	if (b->file == NULL) 
-	{
-		ngx_log_debug0(NGX_LOG_DEBUG_HTTP, state->log, 0,
-			"ngx_file_reader_dump_file: ngx_pcalloc failed (2)");
-		return NGX_HTTP_INTERNAL_SERVER_ERROR;
-	}
-
 	rc = ngx_http_send_header(r);
-	if (rc == NGX_ERROR || rc > NGX_OK || r->header_only) 
+	if (rc == NGX_ERROR || rc > NGX_OK)
 	{
 		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, state->log, 0,
 			"ngx_file_reader_dump_file: ngx_http_send_header failed %i", rc);
 		return rc;
 	}
 
-	b->file_pos = 0;
-	b->file_last = state->file_size;
+	if (r->header_only || r->method == NGX_HTTP_HEAD)
+	{
+		return NGX_OK;
+	}
+
+	return ngx_file_reader_dump_file_part(state, 0, 0);
+}
+
+ngx_int_t
+ngx_file_reader_dump_file_part(ngx_file_reader_state_t* state, off_t start, off_t end)
+{
+	ngx_http_request_t* r = state->r;
+	ngx_buf_t                 *b;
+	ngx_int_t                  rc;
+	ngx_chain_t                out;
+
+	b = ngx_calloc_buf(r->pool);
+	if (b == NULL)
+	{
+		ngx_log_debug0(NGX_LOG_DEBUG_HTTP, state->log, 0,
+			"ngx_file_reader_dump_file_part: ngx_pcalloc failed (1)");
+		return NGX_HTTP_INTERNAL_SERVER_ERROR;
+	}
+
+	b->file = ngx_pcalloc(r->pool, sizeof(ngx_file_t));
+	if (b->file == NULL)
+	{
+		ngx_log_debug0(NGX_LOG_DEBUG_HTTP, state->log, 0,
+			"ngx_file_reader_dump_file_part: ngx_pcalloc failed (2)");
+		return NGX_HTTP_INTERNAL_SERVER_ERROR;
+	}
+
+	b->file_pos = start;
+	if (end != 0)
+	{
+		b->file_last = end;
+	}
+	else
+	{
+		b->file_last = state->file_size;
+	}
 
 	b->in_file = b->file_last ? 1 : 0;
 	b->last_buf = (r == r->main) ? 1 : 0;
@@ -335,14 +356,14 @@ ngx_file_reader_dump_file(ngx_file_reader_state_t* state)
 	if (rc != NGX_OK && rc != NGX_AGAIN)
 	{
 		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, state->log, 0,
-			"ngx_file_reader_dump_file: ngx_http_output_filter failed %i", rc);
+			"ngx_file_reader_dump_file_part: ngx_http_output_filter failed %i", rc);
 		return rc;
 	}
 
 	return NGX_OK;
 }
 
-ngx_int_t 
+ngx_int_t
 ngx_file_reader_enable_directio(ngx_file_reader_state_t* state)
 {
 	if (state->directio <= state->file_size)

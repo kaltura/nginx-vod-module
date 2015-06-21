@@ -1,6 +1,6 @@
 #include "mp4_encrypt.h"
 #include "mp4_builder.h"
-#include "read_stream.h"
+#include "../read_stream.h"
 
 // fragment writer state
 enum {
@@ -168,11 +168,11 @@ mp4_encrypt_video_start_frame(mp4_encrypt_video_state_t* state)
 	vod_status_t rc;
 
 	// add an auxiliary data entry
-	rc = vod_buf_reserve(&state->auxiliary_data, sizeof(cenc_sample_auxiliary_data_t));
+	rc = vod_dynamic_buf_reserve(&state->auxiliary_data, sizeof(cenc_sample_auxiliary_data_t));
 	if (rc != VOD_OK)
 	{
 		vod_log_debug1(VOD_LOG_DEBUG_LEVEL, state->base.request_context->log, 0,
-			"mp4_encrypt_video_start_frame: vod_buf_reserve failed %i", rc);
+			"mp4_encrypt_video_start_frame: vod_dynamic_buf_reserve failed %i", rc);
 		return rc;
 	}
 
@@ -197,11 +197,11 @@ mp4_encrypt_video_add_subsample(mp4_encrypt_video_state_t* state, uint16_t bytes
 {
 	vod_status_t rc;
 
-	rc = vod_buf_reserve(&state->auxiliary_data, sizeof(cenc_sample_auxiliary_data_subsample_t));
+	rc = vod_dynamic_buf_reserve(&state->auxiliary_data, sizeof(cenc_sample_auxiliary_data_subsample_t));
 	if (rc != VOD_OK)
 	{
 		vod_log_debug1(VOD_LOG_DEBUG_LEVEL, state->base.request_context->log, 0,
-			"mp4_encrypt_video_add_subsample: vod_buf_reserve failed %i", rc);
+			"mp4_encrypt_video_add_subsample: vod_dynamic_buf_reserve failed %i", rc);
 		return rc;
 	}
 	write_word(state->auxiliary_data.pos, bytes_of_clear_data);
@@ -458,11 +458,11 @@ mp4_encrypt_video_get_fragment_writer(
 	initial_size = 
 		(sizeof(cenc_sample_auxiliary_data_t) + sizeof(cenc_sample_auxiliary_data_subsample_t)) * stream_metadata->frame_count + 
 		sizeof(cenc_sample_auxiliary_data_subsample_t);
-	rc = vod_buf_init(&state->auxiliary_data, request_context, initial_size);
+	rc = vod_dynamic_buf_init(&state->auxiliary_data, request_context, initial_size);
 	if (rc != VOD_OK)
 	{
 		vod_log_debug1(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
-			"mp4_encrypt_video_get_fragment_writer: vod_buf_init failed %i", rc);
+			"mp4_encrypt_video_get_fragment_writer: vod_dynamic_buf_init failed %i", rc);
 		return rc;
 	}
 

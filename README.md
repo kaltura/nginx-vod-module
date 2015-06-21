@@ -29,7 +29,7 @@
 * Support for variable segment lengths - enabling the player to select the optimal bitrate fast,
 without the overhead of short segments for the whole duration of the video
 
-* Serving of files for progressive download playback
+* Clipping of MP4 files for progressive download playback
 
 * DASH: common encryption (cenc) support
 
@@ -43,7 +43,7 @@ without the overhead of short segments for the whole duration of the video
 
 * Only AAC audio is supported (MP3 audio is not)
 
-* Clipping is not supported in progressive download
+* Track selection and playback rate change are not supported in progressive download
 
 * I-frames playlist generation is not supported when encryption is enabled
 
@@ -504,7 +504,7 @@ Configures the shared memory object name of the performance counters
 * **context**: `http`, `server`, `location`
 
 When enabled, the module encrypts the media segments according to the response it gets from the drm upstream.
-Currently supported only for dash.
+Currently supported only for dash and mss (play ready).
 
 #### vod_drm_clear_lead_segment_count
 * **syntax**: `vod_drm_clear_lead_segment_count count`

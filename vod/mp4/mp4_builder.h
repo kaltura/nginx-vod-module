@@ -2,11 +2,8 @@
 #define __MP4_BUILDER_H__
 
 // includes
-#include "read_cache.h"
+#include "../read_cache.h"
 #include "mp4_parser.h"
-
-// constants
-#define ATOM_HEADER_SIZE (8)
 
 // macros
 #define write_word(p, w)			\
@@ -36,6 +33,13 @@
 	{										\
 	write_dword(p, size);					\
 	write_atom_name(p, c1, c2, c3, c4);		\
+	}
+
+#define write_atom_header64(p, size, c1, c2, c3, c4) \
+	{										\
+	write_dword(p, 1);						\
+	write_atom_name(p, c1, c2, c3, c4);		\
+	write_qword(p, size);					\
 	}
 
 // typedefs

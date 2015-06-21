@@ -104,9 +104,12 @@ NGX_ADDON_DEPS="$NGX_ADDON_DEPS                                     \
                 $ngx_addon_dir/vod/hls/mp4_to_annexb_filter.h       \
                 $ngx_addon_dir/vod/hls/mpegts_encoder_filter.h      \
                 $ngx_addon_dir/vod/list_entry.h                     \
-                $ngx_addon_dir/vod/mp4_builder.h                    \
-                $ngx_addon_dir/vod/mp4_encrypt.h                    \
-                $ngx_addon_dir/vod/mp4_parser.h                     \
+                $ngx_addon_dir/vod/mp4/mp4_builder.h                \
+                $ngx_addon_dir/vod/mp4/mp4_clipper.h                \
+                $ngx_addon_dir/vod/mp4/mp4_defs.h                   \
+                $ngx_addon_dir/vod/mp4/mp4_encrypt.h                \
+                $ngx_addon_dir/vod/mp4/mp4_parser.h                 \
+                $ngx_addon_dir/vod/mp4/mp4_parser_base.h            \
                 $ngx_addon_dir/vod/mss/mss_packager.h               \
                 $ngx_addon_dir/vod/mss/mss_playready.h              \
                 $ngx_addon_dir/vod/read_cache.h                     \
@@ -150,9 +153,11 @@ NGX_ADDON_SRCS="$NGX_ADDON_SRCS                                     \
                 $ngx_addon_dir/vod/hls/m3u8_builder.c               \
                 $ngx_addon_dir/vod/hls/mp4_to_annexb_filter.c       \
                 $ngx_addon_dir/vod/hls/mpegts_encoder_filter.c      \
-                $ngx_addon_dir/vod/mp4_builder.c                    \
-                $ngx_addon_dir/vod/mp4_encrypt.c                    \
-                $ngx_addon_dir/vod/mp4_parser.c                     \
+                $ngx_addon_dir/vod/mp4/mp4_builder.c                \
+                $ngx_addon_dir/vod/mp4/mp4_clipper.c                \
+                $ngx_addon_dir/vod/mp4/mp4_encrypt.c                \
+                $ngx_addon_dir/vod/mp4/mp4_parser.c                 \
+                $ngx_addon_dir/vod/mp4/mp4_parser_base.c            \
                 $ngx_addon_dir/vod/mss/mss_packager.c               \
                 $ngx_addon_dir/vod/mss/mss_playready.c              \
                 $ngx_addon_dir/vod/read_cache.c                     \

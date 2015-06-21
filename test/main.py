@@ -48,7 +48,7 @@ MSS_MANIFEST_FILE = '/manifest'
 MSS_FRAGMENT_FILE = '/QualityLevels(%s)/Fragments(video=0)' % MSS_BITRATE
 
 EDASH_PREFIX = '/edash'
-DRM_SERVICE_RESPONSE = '''{
+DRM_SERVICE_RESPONSE = '''[{
                 "key_id": "%s",
                 "pssh": [{
                                 "data": "%s",
@@ -56,7 +56,7 @@ DRM_SERVICE_RESPONSE = '''{
                 }],
                 "next_key_id": null,
                 "key": "%s"
-}''' % (base64.b64encode('0' * 16), base64.b64encode('abcd'), base64.b64encode('1' * 16))
+}]''' % (base64.b64encode('0' * 16), base64.b64encode('abcd'), base64.b64encode('1' * 16))
 
 M3U8_PREFIX = '''#EXTM3U
 #EXT-X-TARGETDURATION:10
@@ -230,6 +230,9 @@ def createRandomSymLink(sourcePath):
     return linkPath
 
 ### Socket functions
+class SocketException(Exception):
+    pass
+    
 def createTcpServer(port):
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)     # prevent Address already in use errors
@@ -243,7 +246,7 @@ def socketSendRegular(s, msg):
     while totalSent < len(msg):
         sent = s.send(msg[totalSent:])
         if sent == 0:
-            raise RuntimeError("socket connection broken")
+            raise SocketException("socket connection broken")
         totalSent += sent
 
 def socketSendByteByByte(s, msg):
@@ -253,7 +256,7 @@ def socketSendByteByByte(s, msg):
     for curByte in msg:
         try:
             if s.send(curByte) == 0:
-                raise RuntimeError("socket connection broken")
+                raise SocketException("socket connection broken")
         except socket.error:        # the server may terminate the connection due to bad data in some tests
             break
 
@@ -273,7 +276,7 @@ def socketReadHttpHeaders(s):
     while not '\r\n\r\n' in buffer:
         curChunk = s.recv(1024)
         if len(curChunk) == 0:
-            raise RuntimeError("socket connection broken")
+            raise SocketException("socket connection broken")
         buffer += curChunk
     return buffer
 
@@ -310,7 +313,7 @@ def socketReadHttpResponse(s):
     while len(body) < contentLength:
         curChunk = s.recv(1024)
         if len(curChunk) == 0:
-            raise RuntimeError("socket connection broken")
+            raise SocketException("socket connection broken")
         body += curChunk
     return body
 
@@ -348,8 +351,13 @@ def serveFileHandler(s, path, mimeType, headers):
     socketSendAndShutdown(s, getHttpResponse(body, status, headers={'Content-Type':mimeType}))
 
 def serveFile(s, path, mimeType):
-    headers = socketReadHttpHeaders(s)
-    serveFileHandler(s, path, mimeType, headers)
+    try:
+        headers = socketReadHttpHeaders(s)
+        serveFileHandler(s, path, mimeType, headers)
+    except SocketException:
+        pass
+    except IOError:
+        pass
 
 ### TCP server
 class TcpServer(Thread):

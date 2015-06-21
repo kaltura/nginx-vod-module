@@ -19,18 +19,25 @@ typedef struct {
 typedef struct {
 	ngx_child_request_base_context_t base;		// must be first
 
+	// fixed
+	ngx_http_upstream_conf_t* upstream_conf;
 	ngx_child_request_callback_t callback;
 	void* callback_context;
+	ngx_flag_t in_memory;
 
+	// in memory only
 	u_char* headers_buffer;
 	size_t headers_buffer_size;
-
 	off_t read_body_size;
-
 	u_char* response_buffer;
 	off_t response_buffer_size;
 
-	ngx_http_upstream_conf_t* upstream_conf;
+	// temporary completion state
+	ngx_http_upstream_t *upstream;
+	void *original_context;
+	ngx_int_t error_code;
+	ngx_http_event_handler_pt original_write_event_handler;
+
 } ngx_child_request_context_t;
 
 // globals
@@ -157,7 +164,7 @@ ngx_http_vod_process_header(ngx_http_request_t *r)
 				}
 
 				// Note: not validating the content length in case of dump, since we don't load the whole response into memory
-				if (!is_dump_request(r) && u->headers_in.content_length_n > ctx->response_buffer_size)
+				if (!is_dump_request(r) && ctx->in_memory && u->headers_in.content_length_n > ctx->response_buffer_size)
 				{
 					ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
 						"ngx_http_vod_process_header: content length %O exceeds the limit %O", u->headers_in.content_length_n, ctx->response_buffer_size);
@@ -184,6 +191,11 @@ ngx_http_vod_process_header(ngx_http_request_t *r)
 				ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
 					"ngx_http_vod_process_header: upstream returned a bad status %ui", u->state->status);
 				return NGX_HTTP_UPSTREAM_INVALID_HEADER;
+			}
+
+			if (!ctx->in_memory)
+			{
+				return NGX_OK;
 			}
 
 			// make sure we got some content length
@@ -620,10 +632,14 @@ ngx_dump_request(
 		return NGX_ERROR;
 	}
 
+#if defined nginx_version && nginx_version >= 8011
+	r->main->count++;
+#endif
+	
 	// start the request
 	ngx_http_upstream_init(r);
 
-	return NGX_AGAIN;
+	return NGX_DONE;
 }
 
 ngx_int_t
@@ -643,27 +659,30 @@ ngx_child_request_internal_handler(ngx_http_request_t *r)
 		return rc;
 	}
 
-	u = r->upstream;
-
-	// initialize the upstream buffer
-	u->buffer.start = ctx->headers_buffer;
-	u->buffer.pos = u->buffer.start;
-	u->buffer.last = u->buffer.start;
-	u->buffer.end = u->buffer.start + ctx->headers_buffer_size;
-	u->buffer.temporary = 1;
-
-	// create the headers list
-	if (ngx_list_init(&u->headers_in.headers, r->pool, 8, sizeof(ngx_table_elt_t)) != NGX_OK)
+	if (ctx->in_memory)
 	{
-		ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
-			"ngx_child_request_internal_handler: ngx_list_init failed");
-		return NGX_ERROR;
-	}
+		u = r->upstream;
 
-	// initialize the input filter
-	u->input_filter_init = ngx_http_vod_filter_init;
-	u->input_filter = ngx_http_vod_filter;
-	u->input_filter_ctx = r;
+		// initialize the upstream buffer
+		u->buffer.start = ctx->headers_buffer;
+		u->buffer.pos = u->buffer.start;
+		u->buffer.last = u->buffer.start;
+		u->buffer.end = u->buffer.start + ctx->headers_buffer_size;
+		u->buffer.temporary = 1;
+
+		// create the headers list
+		if (ngx_list_init(&u->headers_in.headers, r->pool, 8, sizeof(ngx_table_elt_t)) != NGX_OK)
+		{
+			ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+				"ngx_child_request_internal_handler: ngx_list_init failed");
+			return NGX_ERROR;
+		}
+
+		// initialize the input filter
+		u->input_filter_init = ngx_http_vod_filter_init;
+		u->input_filter = ngx_http_vod_filter;
+		u->input_filter_ctx = r;
+	}
 
 #if defined nginx_version && nginx_version >= 8011
 	r->main->count++;
@@ -675,34 +694,115 @@ ngx_child_request_internal_handler(ngx_http_request_t *r)
 	return NGX_DONE;
 }
 
-static ngx_int_t
-ngx_child_request_finished_handler(ngx_http_request_t *r, void *data, ngx_int_t rc)
+static void
+ngx_http_vod_wev_handler(ngx_http_request_t *r)
 {
 	ngx_child_request_context_t* ctx;
 	ngx_http_upstream_t *u;
+	ngx_int_t rc;
 
 	ctx = ngx_http_get_module_ctx(r, ngx_http_vod_module);
-	if (ctx->callback == NULL)
+
+	// restore the write event handler
+	r->write_event_handler = ctx->original_write_event_handler;
+	ctx->original_write_event_handler = NULL;
+
+	// restore the original context
+	ngx_http_set_ctx(r, ctx->original_context, ngx_http_vod_module);
+
+	// get the completed upstream
+	u = ctx->upstream;
+	ctx->upstream = NULL;
+
+	if (u == NULL)
 	{
-		return NGX_OK;	// already called the callback
+		ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
+			"ngx_http_vod_wev_handler: unexpected, upstream is null");
+		return;
 	}
 
-	ngx_log_debug2(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
-		"ngx_child_request_finished_handler: called rc=%i, r=%p", rc, r);
+	// code taken from echo-nginx-module to work around nginx subrequest issues
+	if (r == r->connection->data && r->postponed) {
 
-	u = r->upstream;
+		if (r->postponed->request) {
+			r->connection->data = r->postponed->request;
+
+#if defined(nginx_version) && nginx_version >= 8012
+			ngx_http_post_request(r->postponed->request, NULL);
+#else
+			ngx_http_post_request(r->postponed->request);
+#endif
+
+		}
+		else {
+			ngx_http_output_filter(r, NULL);
+		}
+	}
+
+	// make sure all data was read
+	rc = ctx->error_code;
 	if (rc == NGX_OK)
 	{
 		if (u->length != 0)
 		{
 			ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
-				"ngx_child_request_finished_handler: upstream connection was closed with %O bytes left to read", u->length);
+				"ngx_http_vod_wev_handler: upstream connection was closed with %O bytes left to read", u->length);
 			rc = NGX_HTTP_BAD_GATEWAY;
 		}
 	}
 
+	// notify the caller
 	ctx->callback(ctx->callback_context, rc, &u->buffer);
-	ctx->callback = NULL;
+}
+
+static ngx_int_t
+ngx_child_request_finished_handler(
+	ngx_http_request_t *r, 
+	void *data, 
+	ngx_int_t rc)
+{
+	ngx_http_request_t          *pr;
+	ngx_child_request_context_t* ctx;
+
+	// make sure we are not called twice for the same request
+	r->post_subrequest = NULL;
+
+	// save the completed upstream and error code in the context for the write event handler
+	ctx = ngx_http_get_module_ctx(r, ngx_http_vod_module);
+
+	ctx->upstream = r->upstream;
+	ctx->error_code = rc;
+
+	if (ctx->original_write_event_handler != NULL)
+	{
+		ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
+			"ngx_child_request_finished_handler: "
+			"unexpected original_write_event_handler not null");
+		return NGX_ERROR;
+	}
+
+	// replace the parent write event handler
+	pr = r->parent;
+
+	ctx->original_write_event_handler = pr->write_event_handler;
+	pr->write_event_handler = ngx_http_vod_wev_handler;
+
+	// temporarily replace the parent context
+	ctx->original_context = ngx_http_get_module_ctx(pr, ngx_http_vod_module);
+	ngx_http_set_ctx(pr, ctx, ngx_http_vod_module);
+
+	// work-around issues in nginx's event module (from echo-nginx-module)
+	if (r != r->connection->data
+		&& r->postponed
+		&& (r->main->posted_requests == NULL
+		|| r->main->posted_requests->request != pr))
+	{
+#if defined(nginx_version) && nginx_version >= 8012
+		ngx_http_post_request(pr, NULL);
+#else
+		ngx_http_post_request(pr);
+#endif
+	}
 
 	return NGX_OK;
 }
@@ -723,6 +823,7 @@ ngx_child_request_start(
 	ngx_child_request_context_t* child_ctx;
 	ngx_http_post_subrequest_t *psr;
 	ngx_http_request_t *sr;
+	ngx_uint_t flags;
 	ngx_str_t args = ngx_null_string;
 	ngx_str_t uri;
 	ngx_int_t rc;
@@ -772,6 +873,7 @@ ngx_child_request_start(
 	child_ctx->headers_buffer_size = buffers->headers_buffer_size;
 	child_ctx->headers_buffer = buffers->headers_buffer;
 	child_ctx->base.request_buffer = buffers->request_buffer;
+	child_ctx->in_memory = max_response_length != 0;
 
 	// build the subrequest uri
 	// Note: this uri is not important, we could have just used internal_location as is
@@ -800,7 +902,16 @@ ngx_child_request_start(
 	psr->handler = ngx_child_request_finished_handler;
 	psr->data = r;
 
-	rc = ngx_http_subrequest(r, &uri, &args, &sr, psr, NGX_HTTP_SUBREQUEST_WAITED | NGX_HTTP_SUBREQUEST_IN_MEMORY);
+	if (child_ctx->in_memory)
+	{
+		flags = NGX_HTTP_SUBREQUEST_WAITED | NGX_HTTP_SUBREQUEST_IN_MEMORY;
+	}
+	else
+	{
+		flags = NGX_HTTP_SUBREQUEST_WAITED;
+	}
+
+	rc = ngx_http_subrequest(r, &uri, &args, &sr, psr, flags);
 	if (rc == NGX_ERROR) 
 	{
 		ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,

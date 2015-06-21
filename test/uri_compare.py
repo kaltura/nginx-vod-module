@@ -4,6 +4,7 @@ import stress_base
 import urlparse
 import hashlib
 import urllib2
+import random
 import base64
 import socket
 import time
@@ -105,9 +106,11 @@ class TestThread(stress_base.TestThreadBase):
 			self.writeOutput('Error: got socket error %s %s' % (url, e))
 			return 0, {}, ''
 		
-	def runTest(self, uri):		
-		url1 = URL1_BASE + uri
-		url2 = URL2_BASE + uri
+	def runTest(self, uri):
+		urlBase1 = random.choice(URL1_BASE)
+		urlBase2 = random.choice(URL2_BASE)
+		url1 = urlBase1 + uri
+		url2 = urlBase2 + uri
 		
 		self.writeOutput('Info: testing %s %s' % (url1, url2))
 
@@ -131,9 +134,12 @@ class TestThread(stress_base.TestThreadBase):
 			body2 = re.sub('nginx/\d+\.\d+\.\d+', 'nginx/0.0.0', body2)
 		
 		if url1.split('?')[0].rsplit('.', 1)[-1] in set(['m3u8', 'mpd']):
-			body1 = body1.replace(URL1_BASE, URL2_BASE)
+			body1 = body1.replace(urlBase1, urlBase2)
 			body1 = body1.replace('-a1-v1', '-v1-a1')
 			body2 = body2.replace('-a1-v1', '-v1-a1')
+			# must strip CF tokens since they sign the domain
+			body1 = re.sub('&Signature=[^&]+', '&Signature=', re.sub('\?Policy=[^&]+', '?Policy=', body1))
+			body2 = re.sub('&Signature=[^&]+', '&Signature=', re.sub('\?Policy=[^&]+', '?Policy=', body2))
 		
 		if body1.startswith('<?xml'):
 			body1 = re.sub('<executionTime>[0-9\.]+<\/executionTime>', '', body1)

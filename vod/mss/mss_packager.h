@@ -2,9 +2,9 @@
 #define __MSS_PACKAGER_H__
 
 // includes
-#include "../mp4_builder.h"
-#include "../mp4_encrypt.h"
-#include "../mp4_parser.h"
+#include "../mp4/mp4_builder.h"
+#include "../mp4/mp4_encrypt.h"
+#include "../mp4/mp4_parser.h"
 #include "../segmenter.h"
 #include "../common.h"
 

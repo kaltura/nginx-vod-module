@@ -1,6 +1,6 @@
 #include "mss_playready.h"
 #include "mss_packager.h"
-#include "../mp4_encrypt.h"
+#include "../mp4/mp4_encrypt.h"
 
 // manifest constants
 #define VOD_MSS_PLAYREADY_PROTECTION_PREFIX						\

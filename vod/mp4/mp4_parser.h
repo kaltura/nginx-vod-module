@@ -2,7 +2,8 @@
 #define __MP4_PARSER_H__
 
 // includes
-#include "common.h"
+#include "mp4_parser_base.h"
+#include "../common.h"
 
 // macros
 #define rescale_time(time, cur_scale, new_scale) ((((uint64_t)(time)) * (new_scale) + (cur_scale) / 2) / (cur_scale))
@@ -43,7 +44,6 @@
 	}
 
 // constants
-#define MAX_FRAME_SIZE (10 * 1024 * 1024)
 #define MAX_CODEC_NAME_SIZE (64)
 
 // h264 4cc tags
@@ -103,17 +103,6 @@ enum {			// raw track atoms
 };
 
 // typedefs
-typedef struct {
-	u_char	version[1];
-	u_char	flags[3];
-	u_char	entries[4];
-} stsd_atom_t;
-
-typedef struct {
-	u_char	size[4];
-	u_char	format[4];
-} stsd_entry_header_t;
-
 typedef struct {
 	const u_char* ptr;
 	uint64_t size;
@@ -208,15 +197,14 @@ typedef struct {
 	mpeg_stream_metadata_t* longest_stream[MEDIA_TYPE_COUNT];
 } mpeg_metadata_t;
 
-typedef struct {
-	uint32_t* required_tracks_mask;
-	uint32_t clip_from;
-	uint32_t clip_to;
-	uint32_t speed_nom;
-	uint32_t speed_denom;
-} mpeg_parse_params_t;
-
 // functions
+vod_status_t mp4_parser_get_ftyp_atom_into(
+	request_context_t* request_context,
+	const u_char* buffer,
+	size_t buffer_size,
+	const u_char** ptr,
+	size_t* size);
+
 vod_status_t mp4_parser_get_moov_atom_info(
 	request_context_t* request_context, 
 	const u_char* buffer, 
