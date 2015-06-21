@@ -912,6 +912,23 @@ mp4_clipper_stsc_clip_data(
 	result->last_sample_count = sample_count;
 	result->last_entry_sample_desc = iterator.sample_desc;
 
+	// get the first chunk of the last entry
+	if (result->first_entry == result->last_entry)
+	{
+		if (result->pre_entry)
+		{
+			last_entry_first_chunk = result->first_chunk + 2;
+		}
+		else
+		{
+			last_entry_first_chunk = result->first_chunk + 1;
+		}
+	}
+	else
+	{
+		last_entry_first_chunk = iterator.cur_chunk;
+	}
+
 	// special handling for the case in which the pre entry has all the frames
 	if (result->pre_entry &&
 		result->first_entry_samples_per_chunk >= context->last_frame - context->first_frame)
@@ -957,27 +974,7 @@ mp4_clipper_stsc_clip_data(
 		}
 	}
 
-	// check whether a post entry is needed
-	if (result->last_sample_count)
-	{
-		if (result->first_entry == result->last_entry)
-		{
-			if (result->pre_entry)
-			{
-				last_entry_first_chunk = result->first_chunk + 2;
-			}
-			else
-			{
-				last_entry_first_chunk = result->first_chunk + 1;
-			}
-		}
-		else
-		{
-			last_entry_first_chunk = iterator.cur_chunk;
-		}
-
-		result->post_entry = last_entry_first_chunk != result->last_chunk;
-	}
+	result->post_entry = (result->last_sample_count && last_entry_first_chunk != result->last_chunk);
 
 	*first_chunk_frame_index = context->first_frame - result->first_sample_count;
 	*last_chunk_frame_index = context->last_frame - last_entry_samples_per_chunk;
