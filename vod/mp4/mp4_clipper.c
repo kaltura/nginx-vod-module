@@ -736,7 +736,10 @@ mp4_clipper_stss_write_atom(u_char* p, void* write_context, stss_clip_result_t* 
 
 		// add to chain
 		mp4_clipper_write_tail(write_context, MP4_CLIPPER_TRAK_INDEX_STSS_HEADER, start, p - start);
-		mp4_clipper_write_tail(write_context, MP4_CLIPPER_TRAK_INDEX_STSS_DATA, stss->first_entry, stss->data_size);
+		if (stss->data_size > 0)
+		{
+			mp4_clipper_write_tail(write_context, MP4_CLIPPER_TRAK_INDEX_STSS_DATA, stss->first_entry, stss->data_size);
+		}
 	}
 
 	return p;
