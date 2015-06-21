@@ -62,13 +62,8 @@
 #define VOD_HAVE_LIB_AV_FILTER NGX_HAVE_LIB_AV_FILTER
 
 // macros
-#ifndef vod_min
 #define vod_min(x, y) ngx_min(x, y)
-#endif // vod_min
-
-#ifndef vod_max
 #define vod_max(x, y) ngx_max(x, y)
-#endif // vod_max
 
 // errors codes
 #define  VOD_OK         NGX_OK
