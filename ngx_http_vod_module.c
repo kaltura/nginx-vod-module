@@ -1302,7 +1302,7 @@ ngx_http_vod_init_frame_processing(ngx_http_vod_ctx_t *ctx)
 	// calculate the response size
 	if (conf->secret_key.len != 0)
 	{
-		ctx->content_length = AES_ROUND_TO_BLOCK(ctx->content_length);
+		ctx->content_length = aes_round_to_block(ctx->content_length);
 	}
 
 	// set the status line

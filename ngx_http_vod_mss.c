@@ -253,15 +253,15 @@ ngx_http_vod_mss_parse_uri_file_name(
 			return NGX_HTTP_BAD_REQUEST;
 		}
 
-		request_params->required_files = (1 << MSS_FILE_INDEX(fragment_params.bitrate));
+		request_params->required_files = (1 << mss_file_index(fragment_params.bitrate));
 
 		if (ngx_memcmp(fragment_params.media_type.data, MSS_STREAM_TYPE_VIDEO, sizeof(MSS_STREAM_TYPE_VIDEO) - 1) == 0)
 		{
-			request_params->required_tracks[MEDIA_TYPE_VIDEO] = (1 << MSS_TRACK_INDEX(fragment_params.bitrate));
+			request_params->required_tracks[MEDIA_TYPE_VIDEO] = (1 << mss_track_index(fragment_params.bitrate));
 		}
 		else if (ngx_memcmp(fragment_params.media_type.data, MSS_STREAM_TYPE_AUDIO, sizeof(MSS_STREAM_TYPE_AUDIO) - 1) == 0)
 		{
-			request_params->required_tracks[MEDIA_TYPE_AUDIO] = (1 << MSS_TRACK_INDEX(fragment_params.bitrate));
+			request_params->required_tracks[MEDIA_TYPE_AUDIO] = (1 << mss_track_index(fragment_params.bitrate));
 		}
 		else
 		{

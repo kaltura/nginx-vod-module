@@ -83,7 +83,7 @@ segmenter_get_segment_count_last_short(segmenter_conf_t* conf, uint32_t duration
 	if (duration_millis > conf->bootstrap_segments_total_duration)
 	{
 		duration_millis -= conf->bootstrap_segments_total_duration;
-		result = conf->bootstrap_segments_count + DIV_CEIL(duration_millis, conf->segment_duration);
+		result = conf->bootstrap_segments_count + vod_div_ceil(duration_millis, conf->segment_duration);
 		if (result > MAX_SEGMENT_COUNT)
 		{
 			return INVALID_SEGMENT_COUNT;
@@ -462,7 +462,7 @@ post_bootstrap:
 		{
 			segment_limit_millis = segmenter_boundary_iterator_next(&boundary_iterator);
 			segment_limit = rescale_time(segment_limit_millis, 1000, result->timescale);
-			segment_limit = MIN(segment_limit, total_duration);
+			segment_limit = vod_min(segment_limit, total_duration);
 
 			accum_duration = segment_limit;
 
@@ -551,7 +551,7 @@ segmenter_boundary_iterator_next(segmenter_boundary_iterator_context_t* context)
 void
 segmenter_boundary_iterator_skip(segmenter_boundary_iterator_context_t* context, uint32_t count)
 {
-	context->segment_index = MIN(context->segment_index + count, context->segment_count);
+	context->segment_index = vod_min(context->segment_index + count, context->segment_count);
 
 	if (context->segment_index > context->conf->bootstrap_segments_count)
 	{

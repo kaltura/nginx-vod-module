@@ -50,7 +50,7 @@ codec_config_avcc_get_nal_units(
 				return VOD_BAD_DATA;
 			}
 
-			unit_size = PARSE_BE16(cur_pos);
+			unit_size = parse_be16(cur_pos);
 			cur_pos += sizeof(uint16_t);
 			if (cur_pos + unit_size > extra_data_end)
 			{
@@ -86,7 +86,7 @@ codec_config_avcc_get_nal_units(
 	{
 		for (unit_count = *cur_pos++ & 0x1f; unit_count; unit_count--)
 		{
-			unit_size = PARSE_BE16(cur_pos);
+			unit_size = parse_be16(cur_pos);
 			cur_pos += sizeof(uint16_t);
 
 			*((uint32_t*)sps_pps_pos) = 0x01000000;
@@ -635,7 +635,7 @@ avcc_config_parse_sps(
 		{
 		}
 
-		unit_size = PARSE_BE16(cur_pos);
+		unit_size = parse_be16(cur_pos);
 		cur_pos += sizeof(uint16_t);
 		if (cur_pos + unit_size > extra_data_end)
 		{

@@ -207,7 +207,7 @@ mss_packager_build_manifest(
 			}
 
 			bitrate = cur_stream->media_info.bitrate;
-			bitrate = MSS_ENCODE_INDEXES(bitrate, cur_stream->file_info.file_index, cur_stream->track_index);
+			bitrate = mss_encode_indexes(bitrate, cur_stream->file_info.file_index, cur_stream->track_index);
 			p = vod_sprintf(p, MSS_VIDEO_QUALITY_LEVEL_HEADER,
 				stream_index++,
 				bitrate,
@@ -241,7 +241,7 @@ mss_packager_build_manifest(
 			}
 
 			bitrate = cur_stream->media_info.bitrate;
-			bitrate = MSS_ENCODE_INDEXES(bitrate, cur_stream->file_info.file_index, cur_stream->track_index);
+			bitrate = mss_encode_indexes(bitrate, cur_stream->file_info.file_index, cur_stream->track_index);
 			p = vod_sprintf(p, MSS_AUDIO_QUALITY_LEVEL_HEADER,
 				stream_index++,
 				bitrate,

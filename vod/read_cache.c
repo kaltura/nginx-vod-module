@@ -87,7 +87,7 @@ read_cache_get_read_buffer(read_cache_state_t* state, uint32_t* file_index, uint
 	{
 		if (cur_buffer != target_buffer && cur_buffer->start_offset > target_buffer->start_offset)
 		{
-			read_size = MIN(read_size, cur_buffer->start_offset - target_buffer->start_offset);
+			read_size = vod_min(read_size, cur_buffer->start_offset - target_buffer->start_offset);
 		}
 	}
 	

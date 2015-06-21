@@ -314,7 +314,7 @@ hls_muxer_process(hls_muxer_state_t* state)
 		wrote_data = TRUE;
 		
 		// write the frame
-		write_size = MIN(state->cur_frame->size - state->cur_frame_pos, read_size);
+		write_size = vod_min(state->cur_frame->size - state->cur_frame_pos, read_size);
 		rc = state->cur_writer->write(state->cur_writer_context, read_buffer, write_size);
 		if (rc != VOD_OK)
 		{

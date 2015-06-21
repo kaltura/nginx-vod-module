@@ -195,7 +195,7 @@ mp4_builder_frame_writer_process(fragment_writer_state_t* state)
 		}
 
 		// update the frame position
-		cur_write_size = MIN(state->cur_frame->size - state->cur_frame_pos, read_size);
+		cur_write_size = vod_min(state->cur_frame->size - state->cur_frame_pos, read_size);
 		state->cur_frame_pos += cur_write_size;
 
 		// move to the next frame if done

@@ -176,7 +176,7 @@ mp4_to_annexb_write(void* context, const u_char* buffer, uint32_t size)
 			
 		case STATE_COPY_PACKET:
 		case STATE_SKIP_PACKET:
-			write_size = MIN(state->packet_size_left, buffer_end - buffer);
+			write_size = vod_min(state->packet_size_left, buffer_end - buffer);
 			if (state->cur_state == STATE_COPY_PACKET)
 			{
 				state->frame_size_left -= write_size;

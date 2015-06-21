@@ -17,8 +17,8 @@
 #define INVALID_FILE_INDEX ((uint32_t)-1)
 
 // macros
-#define DIV_CEIL(x, y) (((x) + (y) - 1) / (y))
-#define ARRAY_ENTRIES(x) (sizeof(x) / sizeof(x[0]))
+#define vod_div_ceil(x, y) (((x) + (y) - 1) / (y))
+#define vod_array_entries(x) (sizeof(x) / sizeof(x[0]))
 
 #ifdef VOD_STAND_ALONE
 
@@ -27,8 +27,8 @@
 #include <string.h>
 
 // macros
-#define MIN(x, y) (((x) < (y)) ? (x) : (y))
-#define MAX(x, y) (((x) > (y)) ? (x) : (y))
+#define vod_min(x, y) (((x) < (y)) ? (x) : (y))
+#define vod_max(x, y) (((x) > (y)) ? (x) : (y))
 
 #ifndef offsetof
 #define offsetof(TYPE, MEMBER) ((size_t) &((TYPE *)0)->MEMBER)
@@ -62,13 +62,13 @@
 #define VOD_HAVE_LIB_AV_FILTER NGX_HAVE_LIB_AV_FILTER
 
 // macros
-#ifndef MIN
-#define MIN(x, y) ngx_min(x, y)
-#endif // MIN
+#ifndef vod_min
+#define vod_min(x, y) ngx_min(x, y)
+#endif // vod_min
 
-#ifndef MAX
-#define MAX(x, y) ngx_max(x, y)
-#endif // MAX
+#ifndef vod_max
+#define vod_max(x, y) ngx_max(x, y)
+#endif // vod_max
 
 // errors codes
 #define  VOD_OK         NGX_OK
@@ -163,7 +163,7 @@ log_buffer(unsigned level, vod_log_t* log, int err, const char* prefix, const u_
 	char hex[MAX_DUMP_BUFFER_SIZE * 3 + 1];
 	char* hex_pos = hex;
 	
-	size = MIN(size, MAX_DUMP_BUFFER_SIZE);
+	size = vod_min(size, MAX_DUMP_BUFFER_SIZE);
 	for (; size > 0; size--, buffer++)
 	{
 		*hex_pos++ = hex_chars[*buffer >> 4];

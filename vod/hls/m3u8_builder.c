@@ -240,7 +240,7 @@ m3u8_builder_build_iframe_playlist(
 		return VOD_BAD_DATA;
 	}
 
-	iframe_length = sizeof("#EXTINF:.000,\n") - 1 + m3u8_builder_get_int_print_len(DIV_CEIL(mpeg_metadata->duration_millis, 1000)) +
+	iframe_length = sizeof("#EXTINF:.000,\n") - 1 + m3u8_builder_get_int_print_len(vod_div_ceil(mpeg_metadata->duration_millis, 1000)) +
 		sizeof(byte_range_tag_format) + VOD_INT32_LEN + m3u8_builder_get_int_print_len(MAX_FRAME_SIZE) - (sizeof("%uD%uD") - 1) +
 		base_url->len + conf->segment_file_name_prefix.len + 1 + m3u8_builder_get_int_print_len(segment_count) + ctx.required_tracks.len + sizeof(".ts\n") - 1;
 
@@ -336,7 +336,7 @@ m3u8_builder_build_index_playlist(
 	}
 
 	// get the required buffer length
-	segment_length = sizeof("#EXTINF:.000,\n") - 1 + m3u8_builder_get_int_print_len(DIV_CEIL(mpeg_metadata->duration_millis, 1000)) +
+	segment_length = sizeof("#EXTINF:.000,\n") - 1 + m3u8_builder_get_int_print_len(vod_div_ceil(mpeg_metadata->duration_millis, 1000)) +
 		segments_base_url->len + conf->segment_file_name_prefix.len + 1 + m3u8_builder_get_int_print_len(segment_durations.segment_count) + required_tracks.len + sizeof(".ts\n") - 1;
 
 	result_size =
@@ -573,5 +573,5 @@ m3u8_builder_init_config(
 		conf->iframes_m3u8_header,
 		sizeof(conf->iframes_m3u8_header) - 1,
 		iframes_m3u8_header_format,
-		DIV_CEIL(max_segment_duration, 1000)) - conf->iframes_m3u8_header;
+		vod_div_ceil(max_segment_duration, 1000)) - conf->iframes_m3u8_header;
 }

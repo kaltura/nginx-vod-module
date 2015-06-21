@@ -385,7 +385,7 @@ audio_filter_alloc_state(
 	state->decoder->bits_per_coded_sample = stream_metadata->media_info.u.audio.bits_per_sample;
 	state->decoder->sample_rate = stream_metadata->media_info.u.audio.sample_rate;
 	state->decoder->channel_layout = 0;
-	if (codec_config.channel_config < ARRAY_ENTRIES(aac_channel_layout))
+	if (codec_config.channel_config < vod_array_entries(aac_channel_layout))
 	{
 		state->decoder->channel_layout = aac_channel_layout[codec_config.channel_config];
 	}

@@ -263,7 +263,7 @@ hds_packager_build_manifest(
 		return VOD_ALLOC_FAILED;
 	}
 
-	temp_buffer = vod_alloc(request_context->pool, MAX(amf0_max_total_size, max_abst_atom_size));
+	temp_buffer = vod_alloc(request_context->pool, vod_max(amf0_max_total_size, max_abst_atom_size));
 	if (temp_buffer == NULL)
 	{
 		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
