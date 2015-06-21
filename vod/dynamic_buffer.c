@@ -29,7 +29,7 @@ vod_dynamic_buf_reserve(vod_dynamic_buf_t* buffer, size_t size)
 	}
 
 	new_size = 2 * (buffer->end - buffer->start);
-	new_size = MAX(new_size, size);
+	new_size = vod_max(new_size, size);
 
 	new_buffer = vod_alloc(buffer->request_context->pool, new_size);
 	if (new_buffer == NULL)

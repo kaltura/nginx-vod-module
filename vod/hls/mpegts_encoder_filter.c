@@ -463,7 +463,7 @@ mpegts_encoder_write(void* context, const u_char* buffer, uint32_t size)
 		
 		// copy as much as possible to the current packet
 		packet_size_left = state->cur_packet_end - state->cur_pos;
-		cur_size = MIN(packet_size_left, input_buffer_left);
+		cur_size = vod_min(packet_size_left, input_buffer_left);
 		
 		vod_memcpy(state->cur_pos, buffer, cur_size);
 		buffer += cur_size;
@@ -579,7 +579,7 @@ mpegts_encoder_simulated_write(void* context, output_frame_t* frame)
 
 	frame->original_size += SIZEOF_PES_HEADER + SIZEOF_PES_OPTIONAL_HEADER + 2 * SIZEOF_PES_PTS;	// pts & dts
 
-	packet_count = DIV_CEIL(frame->original_size, MPEGTS_PACKET_SIZE - SIZEOF_MPEGTS_HEADER);		// 4 = mpegts header
+	packet_count = vod_div_ceil(frame->original_size, MPEGTS_PACKET_SIZE - SIZEOF_MPEGTS_HEADER);		// 4 = mpegts header
 
 	(*frame->cc) += packet_count;
 

@@ -146,8 +146,8 @@ edash_packager_init_stsd_writer_context(
 	}
 
 	result->original_stsd_entry = (stsd_entry_header_t*)(original_stsd->ptr + original_stsd->header_size + sizeof(stsd_atom_t));
-	result->original_stsd_entry_size = PARSE_BE32(result->original_stsd_entry->size);
-	result->original_stsd_entry_format = PARSE_BE32(result->original_stsd_entry->format);
+	result->original_stsd_entry_size = parse_be32(result->original_stsd_entry->size);
+	result->original_stsd_entry_format = parse_be32(result->original_stsd_entry->format);
 
 	if (result->original_stsd_entry_size < sizeof(stsd_entry_header_t))
 	{

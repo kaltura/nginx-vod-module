@@ -344,13 +344,13 @@ mp4_clipper_mvhd_clip_data(
 			return VOD_BAD_DATA;
 		}
 
-		*timescale = PARSE_BE32(atom64->timescale) * context->parse_params.speed_nom;
-		duration = PARSE_BE64(atom64->duration) * context->parse_params.speed_denom;
+		*timescale = parse_be32(atom64->timescale) * context->parse_params.speed_nom;
+		duration = parse_be64(atom64->duration) * context->parse_params.speed_denom;
 	}
 	else
 	{
-		*timescale = PARSE_BE32(atom->timescale) * context->parse_params.speed_nom;
-		duration = PARSE_BE32(atom->duration) * context->parse_params.speed_denom;
+		*timescale = parse_be32(atom->timescale) * context->parse_params.speed_nom;
+		duration = parse_be32(atom->duration) * context->parse_params.speed_denom;
 	}
 
 	rc = mp4_clipper_clip_duration(context->request_context, &context->parse_params, &duration, *timescale);
@@ -414,11 +414,11 @@ mp4_clipper_tkhd_clip_data(
 			return VOD_BAD_DATA;
 		}
 
-		duration = PARSE_BE64(atom64->duration) * context->parse_params.speed_denom;
+		duration = parse_be64(atom64->duration) * context->parse_params.speed_denom;
 	}
 	else
 	{
-		duration = PARSE_BE32(atom->duration) * context->parse_params.speed_denom;
+		duration = parse_be32(atom->duration) * context->parse_params.speed_denom;
 	}
 
 	rc = mp4_clipper_clip_duration(context->request_context, &context->parse_params, &duration, context->mvhd_timescale);
@@ -480,13 +480,13 @@ mp4_clipper_mdhd_clip_data(
 			return VOD_BAD_DATA;
 		}
 
-		*timescale = PARSE_BE32(atom64->timescale) * context->parse_params.speed_nom;
-		duration = PARSE_BE64(atom64->duration) * context->parse_params.speed_denom;
+		*timescale = parse_be32(atom64->timescale) * context->parse_params.speed_nom;
+		duration = parse_be64(atom64->duration) * context->parse_params.speed_denom;
 	}
 	else
 	{
-		*timescale = PARSE_BE32(atom->timescale) * context->parse_params.speed_nom;
-		duration = PARSE_BE32(atom->duration) * context->parse_params.speed_denom;
+		*timescale = parse_be32(atom->timescale) * context->parse_params.speed_nom;
+		duration = parse_be32(atom->duration) * context->parse_params.speed_denom;
 	}
 
 	rc = mp4_clipper_clip_duration(context->request_context, &context->parse_params, &duration, *timescale);
@@ -636,7 +636,7 @@ mp4_clipper_stts_write_atom(u_char* p, void* write_context, stts_clip_result_t* 
 
 	// update
 	set_be32(first_entry->count, stts->first_count);
-	last_count = PARSE_BE32(last_entry[-1].count) - stts->last_count;
+	last_count = parse_be32(last_entry[-1].count) - stts->last_count;
 	set_be32(last_entry[-1].count, last_count);
 
 	return p;
@@ -721,7 +721,7 @@ mp4_clipper_stss_write_atom(u_char* p, void* write_context, stss_clip_result_t* 
 	{
 		for (cur_entry = stss->first_entry; cur_entry < stss->last_entry; cur_entry++)
 		{
-			frame_index = PARSE_BE32(cur_entry) - stss->first_frame;
+			frame_index = parse_be32(cur_entry) - stss->first_frame;
 			write_dword(p, frame_index);
 		}
 	}
@@ -730,7 +730,7 @@ mp4_clipper_stss_write_atom(u_char* p, void* write_context, stss_clip_result_t* 
 		// update in place
 		for (cur_entry = stss->first_entry; cur_entry < stss->last_entry; cur_entry++)
 		{
-			frame_index = PARSE_BE32(cur_entry) - stss->first_frame;
+			frame_index = parse_be32(cur_entry) - stss->first_frame;
 			set_be32(cur_entry, frame_index);
 		}
 
@@ -851,7 +851,7 @@ mp4_clipper_ctts_write_atom(u_char* p, void* write_context, ctts_clip_result_t* 
 
 	// update
 	set_be32(first_entry->count, ctts->first_count);
-	last_count = PARSE_BE32(last_entry[-1].count) - ctts->last_count;
+	last_count = parse_be32(last_entry[-1].count) - ctts->last_count;
 	set_be32(last_entry[-1].count, last_count);
 
 	return p;
@@ -1070,7 +1070,7 @@ mp4_clipper_stsc_write_atom(u_char* p, void* write_context, stsc_clip_result_t* 
 	chunk_diff = stsc->first_chunk;
 	for (cur_entry = first_entry + 1; cur_entry < last_entry; cur_entry++)
 	{
-		first_chunk = PARSE_BE32(cur_entry->first_chunk) - chunk_diff;
+		first_chunk = parse_be32(cur_entry->first_chunk) - chunk_diff;
 		set_be32(cur_entry->first_chunk, first_chunk);
 	}
 
@@ -1143,13 +1143,13 @@ mp4_clipper_stsz_clip_data(
 		cur_pos = data_start + context->first_chunk_frame_index * sizeof(uint32_t);
 		for (; first_frame_index_in_chunk; first_frame_index_in_chunk--, cur_pos += sizeof(uint32_t))
 		{
-			(*first_frame_chunk_offset) += PARSE_BE32(cur_pos);
+			(*first_frame_chunk_offset) += parse_be32(cur_pos);
 		}
 
 		cur_pos = data_start + context->last_chunk_frame_index * sizeof(uint32_t);
 		for (; last_frame_index_in_chunk; last_frame_index_in_chunk--, cur_pos += sizeof(uint32_t))
 		{
-			(*last_frame_chunk_offset) += PARSE_BE32(cur_pos);
+			(*last_frame_chunk_offset) += parse_be32(cur_pos);
 		}
 		break;
 
@@ -1157,13 +1157,13 @@ mp4_clipper_stsz_clip_data(
 		cur_pos = data_start + context->first_chunk_frame_index * sizeof(uint16_t);
 		for (; first_frame_index_in_chunk; first_frame_index_in_chunk--, cur_pos += sizeof(uint16_t))
 		{
-			(*first_frame_chunk_offset) += PARSE_BE16(cur_pos);
+			(*first_frame_chunk_offset) += parse_be16(cur_pos);
 		}
 
 		cur_pos = data_start + context->last_chunk_frame_index * sizeof(uint16_t);
 		for (; last_frame_index_in_chunk; last_frame_index_in_chunk--, cur_pos += sizeof(uint16_t))
 		{
-			(*last_frame_chunk_offset) += PARSE_BE16(cur_pos);
+			(*last_frame_chunk_offset) += parse_be16(cur_pos);
 		}
 		break;
 
@@ -1251,7 +1251,7 @@ mp4_clipper_stco_init_chunk_count(
 	}
 
 	stco_atom = (stco_atom_t*)atom_info->ptr;
-	context->chunks = PARSE_BE32(stco_atom->entries);
+	context->chunks = parse_be32(stco_atom->entries);
 
 	return VOD_OK;
 }
@@ -1286,15 +1286,15 @@ mp4_clipper_stco_clip_data(
 
 	if (atom_info->name == ATOM_NAME_CO64)
 	{
-		*first_offset = PARSE_BE64(result->first_entry);
+		*first_offset = parse_be64(result->first_entry);
 		last_entry = result->last_entry - sizeof(uint64_t);
-		*last_offset = PARSE_BE64(last_entry);
+		*last_offset = parse_be64(last_entry);
 	}
 	else
 	{
-		*first_offset = PARSE_BE32(result->first_entry);
+		*first_offset = parse_be32(result->first_entry);
 		last_entry = result->last_entry - sizeof(uint32_t);
-		*last_offset = PARSE_BE32(last_entry);
+		*last_offset = parse_be32(last_entry);
 	}
 	(*first_offset) += context->first_frame_chunk_offset;
 	(*last_offset) += context->last_frame_chunk_offset;
@@ -1327,23 +1327,23 @@ mp4_clipper_stco_write_atom(u_char* p, void* write_context, stco_clip_result_t* 
 
 		if (copy_data)
 		{
-			chunk_offset = PARSE_BE32(stco->first_entry) - chunk_pos_diff + stco->first_frame_chunk_offset;
+			chunk_offset = parse_be32(stco->first_entry) - chunk_pos_diff + stco->first_frame_chunk_offset;
 			write_dword(p, chunk_offset);
 
 			for (cur_pos = stco->first_entry + sizeof(uint32_t); cur_pos < stco->last_entry; cur_pos += sizeof(uint32_t))
 			{
-				chunk_offset = PARSE_BE32(cur_pos) - chunk_pos_diff;
+				chunk_offset = parse_be32(cur_pos) - chunk_pos_diff;
 				write_dword(p, chunk_offset);
 			}
 		}
 		else
 		{
-			chunk_offset = PARSE_BE32(stco->first_entry) - chunk_pos_diff + stco->first_frame_chunk_offset;
+			chunk_offset = parse_be32(stco->first_entry) - chunk_pos_diff + stco->first_frame_chunk_offset;
 			set_be32(stco->first_entry, chunk_offset);
 
 			for (cur_pos = stco->first_entry + sizeof(uint32_t); cur_pos < stco->last_entry; cur_pos += sizeof(uint32_t))
 			{
-				chunk_offset = PARSE_BE32(cur_pos) - chunk_pos_diff;
+				chunk_offset = parse_be32(cur_pos) - chunk_pos_diff;
 				set_be32(cur_pos, chunk_offset);
 			}
 
@@ -1360,23 +1360,23 @@ mp4_clipper_stco_write_atom(u_char* p, void* write_context, stco_clip_result_t* 
 
 		if (copy_data)
 		{
-			chunk_offset = PARSE_BE64(stco->first_entry) - chunk_pos_diff + stco->first_frame_chunk_offset;
+			chunk_offset = parse_be64(stco->first_entry) - chunk_pos_diff + stco->first_frame_chunk_offset;
 			write_qword(p, chunk_offset);
 
 			for (cur_pos = stco->first_entry + sizeof(uint64_t); cur_pos < stco->last_entry; cur_pos += sizeof(uint64_t))
 			{
-				chunk_offset = PARSE_BE64(cur_pos) - chunk_pos_diff;
+				chunk_offset = parse_be64(cur_pos) - chunk_pos_diff;
 				write_qword(p, chunk_offset);
 			}
 		}
 		else
 		{
-			chunk_offset = PARSE_BE64(stco->first_entry) - chunk_pos_diff + stco->first_frame_chunk_offset;
+			chunk_offset = parse_be64(stco->first_entry) - chunk_pos_diff + stco->first_frame_chunk_offset;
 			set_be64(stco->first_entry, chunk_offset);
 
 			for (cur_pos = stco->first_entry + sizeof(uint64_t); cur_pos < stco->last_entry; cur_pos += sizeof(uint64_t))
 			{
-				chunk_offset = PARSE_BE64(cur_pos) - chunk_pos_diff;
+				chunk_offset = parse_be64(cur_pos) - chunk_pos_diff;
 				set_be64(cur_pos, chunk_offset);
 			}
 

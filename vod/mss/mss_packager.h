@@ -16,9 +16,9 @@
 // Note: in order to be able to process fragment requests efficiently, we need to know the file index and track index
 //		of the fragment. since we only have the bitrate on the URL, we encode this parameters on the bitrate.
 //		since both parameters are limited to 32, this results in a maximum of 1kpbs diviation from the real bitrate.
-#define MSS_ENCODE_INDEXES(bitrate, file_index, track_index) (((bitrate) & ~0x3FF) | (((file_index) & 0x1F) << 5) | ((track_index) & 0x1F))
-#define MSS_FILE_INDEX(bitrate)	(((bitrate) >> 5) & 0x1F)
-#define MSS_TRACK_INDEX(bitrate)	((bitrate) & 0x1F)
+#define mss_encode_indexes(bitrate, file_index, track_index) (((bitrate) & ~0x3FF) | (((file_index) & 0x1F) << 5) | ((track_index) & 0x1F))
+#define mss_file_index(bitrate)	(((bitrate) >> 5) & 0x1F)
+#define mss_track_index(bitrate)	((bitrate) & 0x1F)
 
 //typedefs
 typedef u_char* (*mss_write_tags_callback_t)(void* context, u_char* p, mpeg_metadata_t* stream);

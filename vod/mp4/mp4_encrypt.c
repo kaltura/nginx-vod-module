@@ -77,7 +77,7 @@ mp4_encrypt_encrypt(mp4_encrypt_state_t* state, u_char* buffer, uint32_t size)
 
 		encrypted_counter_pos = state->encrypted_counter + state->block_offset;
 		cur_end_pos = buffer + MP4_ENCRYPT_COUNTER_SIZE - state->block_offset;
-		cur_end_pos = MIN(cur_end_pos, buffer_end);
+		cur_end_pos = vod_min(cur_end_pos, buffer_end);
 
 		state->block_offset += cur_end_pos - buffer;
 		state->block_offset &= (MP4_ENCRYPT_COUNTER_SIZE - 1);
@@ -117,7 +117,7 @@ mp4_encrypt_init_state(
 	}
 
 	// increment the iv by the index of the first frame
-	iv_int = PARSE_BE64(iv);
+	iv_int = parse_be64(iv);
 	iv_int += stream_metadata->first_frame_index;
 	p = state->iv;
 	write_qword(p, iv_int);
@@ -364,7 +364,7 @@ mp4_encrypt_video_write_buffer(void* context, u_char* buffer, uint32_t size, boo
 			// fall through
 
 		case STATE_PACKET_DATA:
-			write_size = MIN(state->packet_size_left, buffer_end - cur_pos);
+			write_size = vod_min(state->packet_size_left, buffer_end - cur_pos);
 
 			mp4_encrypt_encrypt(&state->base, cur_pos, write_size);
 
@@ -564,7 +564,7 @@ mp4_encrypt_audio_write_buffer(void* context, u_char* buffer, uint32_t size, boo
 			}
 		}
 
-		write_size = MIN(state->frame_size_left, buffer_end - cur_pos);
+		write_size = vod_min(state->frame_size_left, buffer_end - cur_pos);
 
 		mp4_encrypt_encrypt(state, cur_pos, write_size);
 

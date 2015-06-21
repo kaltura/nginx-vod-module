@@ -117,7 +117,7 @@ full_frame_processor_process(full_frame_processor_t* state)
 		}
 		
 		// copy as much as possible from the frame
-		cur_copy_size = MIN(state->cur_frame->size - state->cur_frame_pos, read_size);
+		cur_copy_size = vod_min(state->cur_frame->size - state->cur_frame_pos, read_size);
 		vod_memcpy(state->frame_buffer + state->cur_frame_pos, read_buffer, cur_copy_size);
 		state->cur_frame_pos += cur_copy_size;
 

@@ -51,7 +51,7 @@ aes_encrypt_write(
 
 	*reuse_buffer = TRUE;			// we allocate a new buffer
 
-	encrypted_buffer = vod_alloc(ctx->request_context->pool, AES_ROUND_TO_BLOCK(size));
+	encrypted_buffer = vod_alloc(ctx->request_context->pool, aes_round_to_block(size));
 	if (encrypted_buffer == NULL)
 	{
 		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, ctx->request_context->log, 0,
