@@ -193,17 +193,17 @@ ngx_http_vod_process_header(ngx_http_request_t *r)
 				return NGX_HTTP_UPSTREAM_INVALID_HEADER;
 			}
 
+			if (!ctx->in_memory)
+			{
+				return NGX_OK;
+			}
+
 			// make sure we got some content length
 			if (u->headers_in.content_length_n < 0)
 			{
 				ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
 					"ngx_http_vod_process_header: got no content-length header");
 				return NGX_HTTP_UPSTREAM_INVALID_HEADER;
-			}
-
-			if (!ctx->in_memory)
-			{
-				return NGX_OK;
 			}
 
 			// allocate a response buffer if needed
@@ -908,7 +908,7 @@ ngx_child_request_start(
 	}
 	else
 	{
-		flags = 0;
+		flags = NGX_HTTP_SUBREQUEST_WAITED;
 	}
 
 	rc = ngx_http_subrequest(r, &uri, &args, &sr, psr, flags);

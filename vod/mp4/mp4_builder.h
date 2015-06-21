@@ -5,10 +5,6 @@
 #include "../read_cache.h"
 #include "mp4_parser.h"
 
-// constants
-#define ATOM_HEADER_SIZE (8)
-#define ATOM_HEADER64_SIZE (16)
-
 // macros
 #define write_word(p, w)			\
 	{								\

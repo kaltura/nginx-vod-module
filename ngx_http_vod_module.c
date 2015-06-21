@@ -483,7 +483,7 @@ ngx_http_vod_read_moov_atom(ngx_http_vod_ctx_t *ctx)
 
 		if (ctx->ftyp_ptr == NULL)
 		{
-			// save the ftyp atom
+			// try to find the ftyp atom
 			rc = mp4_parser_get_ftyp_atom_into(&ctx->submodule_context.request_context, ctx->read_buffer + ctx->atom_start_offset, ctx->buffer_size - ctx->atom_start_offset, &ftyp_ptr, &ftyp_size);
 			if (rc != VOD_OK)
 			{
@@ -492,16 +492,21 @@ ngx_http_vod_read_moov_atom(ngx_http_vod_ctx_t *ctx)
 				return ngx_http_vod_status_to_ngx_error(rc);
 			}
 
-			ctx->ftyp_ptr = ngx_pnalloc(ctx->submodule_context.request_context.pool, ftyp_size);
-			if (ctx->ftyp_ptr == NULL)
+			if (ftyp_size > 0 && 
+				ftyp_ptr + ftyp_size <= ctx->read_buffer + ctx->buffer_size)
 			{
-				ngx_log_debug0(NGX_LOG_DEBUG_HTTP, ctx->submodule_context.request_context.log, 0,
-					"ngx_http_vod_read_moov_atom: ngx_pnalloc failed");
-				return NGX_HTTP_INTERNAL_SERVER_ERROR;
-			}
+				// got a full ftyp atom
+				ctx->ftyp_ptr = ngx_pnalloc(ctx->submodule_context.request_context.pool, ftyp_size);
+				if (ctx->ftyp_ptr == NULL)
+				{
+					ngx_log_debug0(NGX_LOG_DEBUG_HTTP, ctx->submodule_context.request_context.log, 0,
+						"ngx_http_vod_read_moov_atom: ngx_pnalloc failed");
+					return NGX_HTTP_INTERNAL_SERVER_ERROR;
+				}
 
-			ngx_memcpy(ctx->ftyp_ptr, ftyp_ptr, ftyp_size);
-			ctx->ftyp_size = ftyp_size;
+				ngx_memcpy(ctx->ftyp_ptr, ftyp_ptr, ftyp_size);
+				ctx->ftyp_size = ftyp_size;
+			}
 		}
 
 		// get moov atom offset and size
@@ -1605,7 +1610,7 @@ ngx_http_vod_send_clip_header(ngx_http_vod_ctx_t *ctx)
 	if (rc != NGX_OK)
 	{
 		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
-			"ngx_http_vod_init_frame_processing: ngx_http_set_etag failed %i", rc);
+			"ngx_http_vod_send_clip_header: ngx_http_set_etag failed %i", rc);
 		return NGX_HTTP_INTERNAL_SERVER_ERROR;
 	}
 
@@ -1614,7 +1619,7 @@ ngx_http_vod_send_clip_header(ngx_http_vod_ctx_t *ctx)
 	if (rc == NGX_ERROR || rc > NGX_OK)
 	{
 		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
-			"ngx_http_vod_init_frame_processing: ngx_http_send_header failed %i", rc);
+			"ngx_http_vod_send_clip_header: ngx_http_send_header failed %i", rc);
 		return rc;
 	}
 
@@ -1627,7 +1632,7 @@ ngx_http_vod_send_clip_header(ngx_http_vod_ctx_t *ctx)
 	if (rc != NGX_OK && rc != NGX_AGAIN)
 	{
 		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
-			"ngx_http_vod_run_state_machine: ngx_http_output_filter failed %i", rc);
+			"ngx_http_vod_send_clip_header: ngx_http_output_filter failed %i", rc);
 		return rc;
 	}
 
@@ -1681,9 +1686,6 @@ ngx_http_vod_run_state_machine(ngx_http_vod_ctx_t *ctx)
 				}
 				return rc;
 			}
-
-			ctx->state = STATE_OPEN_FILE;
-			ctx->submodule_context.cur_suburi = ctx->submodule_context.request_params.suburis;
 		}
 		else
 		{

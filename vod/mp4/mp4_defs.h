@@ -3,6 +3,10 @@
 
 #include "../common.h"
 
+// constants
+#define ATOM_HEADER_SIZE (8)
+#define ATOM_HEADER64_SIZE (16)
+
 // these constants can be generated with python - 'moov'[::-1].encode('hex')
 #define ATOM_NAME_FTYP (0x70797466)		// file type
 #define ATOM_NAME_MOOV (0x766f6f6d)		// movie header

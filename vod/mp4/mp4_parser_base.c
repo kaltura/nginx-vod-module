@@ -12,11 +12,12 @@ mp4_parser_parse_atoms(
 {
 	const u_char* cur_pos = buffer;
 	const u_char* end_pos = buffer + buffer_size;
+	bool_t atom_size_overflow = FALSE;
 	uint64_t atom_size;
 	atom_info_t atom_info;
 	vod_status_t rc;
 	
-	while (cur_pos + 2 * sizeof(uint32_t) <= end_pos)
+	while (cur_pos + ATOM_HEADER_SIZE <= end_pos)
 	{
 		READ_BE32(cur_pos, atom_size);
 		READ_LE32(cur_pos, atom_info.name);
@@ -29,17 +30,22 @@ mp4_parser_parse_atoms(
 			// atom_size == 1 => atom uses 64 bit size
 			if (cur_pos + sizeof(uint64_t) > end_pos)
 			{
+				if (!validate_full_atom)
+				{
+					return VOD_OK;
+				}
+
 				vod_log_error(VOD_LOG_ERR, request_context->log, 0,
 					"mp4_parser_parse_atoms: atom size is 1 but there is not enough room for the 64 bit size");
 				return VOD_BAD_DATA;
 			}
 			
 			READ_BE64(cur_pos, atom_size);
-			atom_info.header_size = 16;
+			atom_info.header_size = ATOM_HEADER64_SIZE;
 		}
 		else
 		{
-			atom_info.header_size = 8;
+			atom_info.header_size = ATOM_HEADER_SIZE;
 			if (atom_size == 0)
 			{
 				// atom_size == 0 => atom extends till the end of the buffer
@@ -55,11 +61,16 @@ mp4_parser_parse_atoms(
 		}
 		
 		atom_size -= atom_info.header_size;
-		if (validate_full_atom && atom_size > (uint64_t)(end_pos - cur_pos))
+		if (atom_size > (uint64_t)(end_pos - cur_pos))
 		{
-			vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-				"mp4_parser_parse_atoms: atom size %uL overflows the input stream size %uL", atom_size, (uint64_t)(end_pos - cur_pos));
-			return VOD_BAD_DATA;
+			if (validate_full_atom)
+			{
+				vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+					"mp4_parser_parse_atoms: atom size %uL overflows the input stream size %uL", atom_size, (uint64_t)(end_pos - cur_pos));
+				return VOD_BAD_DATA;
+			}
+
+			atom_size_overflow = TRUE;
 		}
 		
 		atom_info.ptr = cur_pos;
@@ -70,7 +81,7 @@ mp4_parser_parse_atoms(
 			return rc;
 		}
 		
-		if (atom_size > (uint64_t)(end_pos - cur_pos))
+		if (atom_size_overflow)
 		{
 			vod_log_debug2(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
 				"mp4_parser_parse_atoms: atom size %uL overflows the input stream size %uL", atom_size, (uint64_t)(end_pos - cur_pos));
@@ -128,7 +139,6 @@ mp4_parser_validate_stts_data(
 	uint32_t* entries)
 {
 	const stts_atom_t* atom = (const stts_atom_t*)atom_info->ptr;
-	stts_iterator_state_t iterator;
 
 	if (atom_info->size < sizeof(*atom))
 	{
@@ -145,14 +155,14 @@ mp4_parser_validate_stts_data(
 		return VOD_BAD_DATA;
 	}
 
-	if (*entries >= (INT_MAX - sizeof(*atom)) / sizeof(*iterator.cur_entry))			// integer overflow protection
+	if (*entries >= (INT_MAX - sizeof(*atom)) / sizeof(stts_entry_t))			// integer overflow protection
 	{
 		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
 			"mp4_parser_validate_stts_data: number of entries %uD too big", *entries);
 		return VOD_BAD_DATA;
 	}
 
-	if (atom_info->size < sizeof(*atom) + *entries * sizeof(*iterator.cur_entry))
+	if (atom_info->size < sizeof(*atom) + *entries * sizeof(stts_entry_t))
 	{
 		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
 			"mp4_parser_validate_stts_data: atom size %uL too small to hold %uD entries", atom_info->size, *entries);
@@ -181,7 +191,7 @@ mp4_parser_validate_stss_atom(
 	if (*entries >= (INT_MAX - sizeof(*atom)) / sizeof(uint32_t))			// integer overflow protection
 	{
 		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-			"mp4_parser_validate_stss_atom: number of entries %uD too big ", *entries);
+			"mp4_parser_validate_stss_atom: number of entries %uD too big", *entries);
 		return VOD_BAD_DATA;
 	}
 
@@ -211,17 +221,17 @@ mp4_parser_validate_ctts_atom(
 	}
 
 	*entries = PARSE_BE32(atom->entries);
-	if (*entries >= (INT_MAX - sizeof(*atom)) / sizeof(ctts_entry_t))			// integer overflow protection
-	{
-		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-			"mp4_parser_validate_ctts_atom: number of entries %uD too big", *entries);
-		return VOD_BAD_DATA;
-	}
-
 	if (*entries <= 0)
 	{
 		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
 			"mp4_parser_validate_ctts_atom: zero entries");
+		return VOD_BAD_DATA;
+	}
+
+	if (*entries >= (INT_MAX - sizeof(*atom)) / sizeof(ctts_entry_t))			// integer overflow protection
+	{
+		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+			"mp4_parser_validate_ctts_atom: number of entries %uD too big", *entries);
 		return VOD_BAD_DATA;
 	}
 
@@ -368,7 +378,7 @@ mp4_parser_validate_stco_data(
 	if (*entries < last_chunk_index)
 	{
 		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-			"mp4_parser_validate_stco_data: zero entries");
+			"mp4_parser_validate_stco_data: number of entries %uD smaller than last chunk %uD", *entries, last_chunk_index);
 		return VOD_BAD_DATA;
 	}
 
@@ -381,14 +391,14 @@ mp4_parser_validate_stco_data(
 		*entry_size = sizeof(uint32_t);
 	}
 
-	if (*entries >= (INT_MAX - sizeof(*atom)) / *entry_size)			// integer overflow protection
+	if (*entries >= (INT_MAX - sizeof(*atom)) / (*entry_size))			// integer overflow protection
 	{
 		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
 			"mp4_parser_validate_stco_data: number of entries %uD too big", *entries);
 		return VOD_BAD_DATA;
 	}
 
-	if (atom_info->size < sizeof(*atom) + *entries * *entry_size)
+	if (atom_info->size < sizeof(*atom) + (*entries) * (*entry_size))
 	{
 		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
 			"mp4_parser_validate_stco_data: atom size %uL too small to hold %uD entries", atom_info->size, *entries);
@@ -464,7 +474,8 @@ mp4_parser_stts_iterator(
 		next_accum_duration = accum_duration + sample_duration * sample_count;
 	}
 
-	// Note: the below was done to match nginx mp4, may be better to do DIV_CEIL(offset - accum_duration, sample_duration);
+	// Note: the below was done to match nginx mp4, may be better to do 
+	// DIV_CEIL(offset - accum_duration, sample_duration);
 	skip_count = (offset - accum_duration) / sample_duration;
 	iterator->cur_entry = cur_entry;
 	iterator->sample_count = sample_count - skip_count;
@@ -514,7 +525,6 @@ mp4_parser_find_stss_entry(
 void
 mp4_parser_ctts_iterator_init(
 	ctts_iterator_state_t* iterator, 
-	mpeg_parse_params_t* parse_params,
 	ctts_entry_t* first_entry, 
 	uint32_t entries)
 {
@@ -571,7 +581,6 @@ vod_status_t
 mp4_parser_stsc_iterator_init(
 	stsc_iterator_state_t* iterator,
 	request_context_t* request_context,
-	mpeg_parse_params_t* parse_params,
 	stsc_entry_t* first_entry,
 	uint32_t entries, 
 	uint32_t chunks)
@@ -633,7 +642,7 @@ mp4_parser_stsc_iterator(
 			return VOD_BAD_DATA;
 		}
 
-		if (next_chunk - cur_chunk > UINT_MAX / samples_per_chunk)		// integer overflow protection
+		if (next_chunk - cur_chunk > (UINT_MAX - frame_index) / samples_per_chunk)		// integer overflow protection
 		{
 			vod_log_error(VOD_LOG_ERR, iterator->request_context->log, 0,
 				"mp4_parser_stsc_iterator: chunk index %uD is too big for previous index %uD and samples per chunk %uD", next_chunk, cur_chunk, samples_per_chunk);
@@ -641,12 +650,6 @@ mp4_parser_stsc_iterator(
 		}
 
 		cur_entry_samples = (next_chunk - cur_chunk) * samples_per_chunk;
-		if (cur_entry_samples > UINT_MAX - frame_index)		// integer overflow protection
-		{
-			vod_log_error(VOD_LOG_ERR, iterator->request_context->log, 0,
-				"mp4_parser_stsc_iterator: number of samples per entry %uD is too big", cur_entry_samples);
-			return VOD_BAD_DATA;
-		}
 
 		if (frame_index + cur_entry_samples > required_index)
 		{
@@ -666,6 +669,20 @@ mp4_parser_stsc_iterator(
 	}
 
 	next_chunk = iterator->chunks + 1;
+	if (next_chunk < cur_chunk)
+	{
+		vod_log_error(VOD_LOG_ERR, iterator->request_context->log, 0,
+			"mp4_parser_stsc_iterator: chunk index %uD is smaller than the previous index %uD (1)", next_chunk, cur_chunk);
+		return VOD_BAD_DATA;
+	}
+
+	if (next_chunk - cur_chunk > (UINT_MAX - frame_index) / samples_per_chunk)		// integer overflow protection
+	{
+		vod_log_error(VOD_LOG_ERR, iterator->request_context->log, 0,
+			"mp4_parser_stsc_iterator: chunk index %uD is too big for previous index %uD and samples per chunk %uD", next_chunk, cur_chunk, samples_per_chunk);
+		return VOD_BAD_DATA;
+	}
+
 	cur_entry_samples = (next_chunk - cur_chunk) * samples_per_chunk;
 	if (frame_index + cur_entry_samples < required_index)
 	{

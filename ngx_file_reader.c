@@ -291,11 +291,16 @@ ngx_file_reader_dump_file(ngx_file_reader_state_t* state)
 	}
 
 	rc = ngx_http_send_header(r);
-	if (rc == NGX_ERROR || rc > NGX_OK || r->header_only)
+	if (rc == NGX_ERROR || rc > NGX_OK)
 	{
 		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, state->log, 0,
 			"ngx_file_reader_dump_file: ngx_http_send_header failed %i", rc);
 		return rc;
+	}
+
+	if (r->header_only || r->method == NGX_HTTP_HEAD)
+	{
+		return NGX_OK;
 	}
 
 	return ngx_file_reader_dump_file_part(state, 0, 0);

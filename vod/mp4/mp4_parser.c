@@ -1933,7 +1933,7 @@ mp4_parser_get_ftyp_atom_into(request_context_t* request_context, const u_char* 
 	atom_info_t find_context = { NULL, 0, ATOM_NAME_FTYP, 0 };
 
 	// not checking the result of mp4_parser_parse_atoms since we always stop the enumeration here
-	mp4_parser_parse_atoms(request_context, buffer, buffer_size, TRUE, &mp4_parser_find_atom_callback, &find_context);
+	mp4_parser_parse_atoms(request_context, buffer, buffer_size, FALSE, &mp4_parser_find_atom_callback, &find_context);
 	if (find_context.ptr == NULL)
 	{
 		vod_log_error(VOD_LOG_ERR, request_context->log, 0,

@@ -105,9 +105,9 @@ vod_status_t mp4_parser_validate_stsz_atom(
 	request_context_t* request_context,
 	atom_info_t* atom_info,
 	uint32_t last_frame,
-	uint32_t* uniform_size_result,
-	uint32_t* field_size_result,
-	uint32_t* entries_result);
+	uint32_t* uniform_size,
+	uint32_t* field_size,
+	uint32_t* entries);
 
 vod_status_t mp4_parser_validate_stco_data(
 	request_context_t* request_context,
@@ -138,7 +138,6 @@ uint32_t mp4_parser_find_stss_entry(
 // ctts
 void mp4_parser_ctts_iterator_init(
 	ctts_iterator_state_t* iterator,
-	mpeg_parse_params_t* parse_params,
 	ctts_entry_t* first_entry,
 	uint32_t entries);
 
@@ -150,7 +149,6 @@ bool_t mp4_parser_ctts_iterator(
 vod_status_t mp4_parser_stsc_iterator_init(
 	stsc_iterator_state_t* iterator,
 	request_context_t* request_context,
-	mpeg_parse_params_t* parse_params,
 	stsc_entry_t* first_entry,
 	uint32_t entries, 
 	uint32_t chunks);

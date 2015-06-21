@@ -25,9 +25,9 @@
 	((u_char*)p)[7] = (qw) & 0xFF;			\
 	}
 
-#define full_atom_start(x) ((x).ptr - (x).header_size)
-#define full_atom_size(x) ((x).size + (x).header_size)
-#define copy_full_atom(p, x) p = vod_copy(p, full_atom_start(x), full_atom_size(x))
+#define full_atom_start(atom) ((atom).ptr - (atom).header_size)
+#define full_atom_size(atom) ((atom).size + (atom).header_size)
+#define copy_full_atom(p, atom) p = vod_copy(p, full_atom_start(atom), full_atom_size(atom))
 #define write_full_atom(write_context, index, atom) \
 	mp4_clipper_write_tail(write_context, index, (u_char*)full_atom_start(atom), full_atom_size(atom))
 
@@ -112,8 +112,8 @@ typedef struct {
 
 typedef struct {
 	stts_entry_t* first_entry;
-	uint32_t first_count;
 	stts_entry_t* last_entry;
+	uint32_t first_count;
 	uint32_t last_count;
 	size_t data_size;
 	size_t atom_size;
@@ -131,8 +131,8 @@ typedef struct {
 
 typedef struct {
 	ctts_entry_t* first_entry;
-	uint32_t first_count;
 	ctts_entry_t* last_entry;
+	uint32_t first_count;
 	uint32_t last_count;
 	size_t data_size;
 	size_t atom_size;
@@ -145,12 +145,14 @@ typedef struct {
 	uint32_t first_entry_samples_per_chunk;
 	uint32_t first_entry_sample_desc;
 	uint32_t first_chunk;
+	bool_t pre_entry;
+
 	stsc_entry_t* last_entry;
 	uint32_t last_sample_count;
 	uint32_t last_entry_sample_desc;
 	uint32_t last_chunk;
-	bool_t pre_entry;
 	bool_t post_entry;
+
 	size_t atom_size;
 	uint32_t entries;
 } stsc_clip_result_t;
@@ -526,7 +528,6 @@ mp4_clipper_stts_clip_data(
 	uint32_t* first_frame, 
 	uint32_t* last_frame)
 {
-	const stts_atom_t* atom = (const stts_atom_t*)atom_info->ptr;
 	stts_iterator_state_t iterator;
 	vod_status_t rc;
 	uint32_t entries;
@@ -544,7 +545,7 @@ mp4_clipper_stts_clip_data(
 	mp4_parser_stts_iterator_init(
 		&iterator,
 		&context->parse_params,
-		(stts_entry_t*)(atom_info->ptr + sizeof(*atom)),
+		(stts_entry_t*)(atom_info->ptr + sizeof(stts_atom_t)),
 		entries);
 
 	if (context->parse_params.clip_from > 0)
@@ -564,7 +565,8 @@ mp4_clipper_stts_clip_data(
 
 	if (context->parse_params.clip_to != UINT_MAX)
 	{
-		// Note: the below was done to match nginx mp4, may be better to do clip_to = (((uint64_t)context->parse_params.clip_to * context->timescale) / 1000);
+		// Note: the below was done to match nginx mp4, may be better to do 
+		// clip_to = (((uint64_t)context->parse_params.clip_to * context->timescale) / 1000);
 		clip_to = iterator.accum_duration + (((uint64_t)(context->parse_params.clip_to - context->parse_params.clip_from) * context->timescale) / 1000);
 	}
 	else
@@ -620,23 +622,22 @@ mp4_clipper_stts_write_atom(u_char* p, void* write_context, stts_clip_result_t* 
 		first_entry = (stts_entry_t*)p;
 		p = vod_copy(p, stts->first_entry, stts->data_size);
 		last_entry = (stts_entry_t*)p;
-
-		// update
-		set_be32(first_entry->count, stts->first_count);
-		last_count = PARSE_BE32(last_entry[-1].count) - stts->last_count;
-		set_be32(last_entry[-1].count, last_count);
 	}
 	else
 	{
 		// update in place
-		set_be32(stts->first_entry->count, stts->first_count);
-		last_count = PARSE_BE32(stts->last_entry[-1].count) - stts->last_count;
-		set_be32(stts->last_entry[-1].count, last_count);
+		first_entry = stts->first_entry;
+		last_entry = stts->last_entry;
 
-		// build chain
+		// add to chain
 		mp4_clipper_write_tail(write_context, MP4_CLIPPER_TRAK_INDEX_STTS_HEADER, start, p - start);
-		mp4_clipper_write_tail(write_context, MP4_CLIPPER_TRAK_INDEX_STTS_DATA, stts->first_entry, stts->data_size);
+		mp4_clipper_write_tail(write_context, MP4_CLIPPER_TRAK_INDEX_STTS_DATA, first_entry, stts->data_size);
 	}
+
+	// update
+	set_be32(first_entry->count, stts->first_count);
+	last_count = PARSE_BE32(last_entry[-1].count) - stts->last_count;
+	set_be32(last_entry[-1].count, last_count);
 
 	return p;
 }
@@ -733,7 +734,7 @@ mp4_clipper_stss_write_atom(u_char* p, void* write_context, stss_clip_result_t* 
 			set_be32(cur_entry, frame_index);
 		}
 
-		// build chain
+		// add to chain
 		mp4_clipper_write_tail(write_context, MP4_CLIPPER_TRAK_INDEX_STSS_HEADER, start, p - start);
 		mp4_clipper_write_tail(write_context, MP4_CLIPPER_TRAK_INDEX_STSS_DATA, stss->first_entry, stss->data_size);
 	}
@@ -747,7 +748,6 @@ mp4_clipper_ctts_clip_data(
 	atom_info_t* atom_info,
 	ctts_clip_result_t* result)
 {
-	const ctts_atom_t* atom = (const ctts_atom_t*)atom_info->ptr;
 	ctts_iterator_state_t iterator;
 	uint32_t entries;
 	vod_status_t rc;
@@ -767,8 +767,7 @@ mp4_clipper_ctts_clip_data(
 	// parse the first sample
 	mp4_parser_ctts_iterator_init(
 		&iterator,
-		&context->parse_params,
-		(ctts_entry_t*)(atom_info->ptr + sizeof(*atom)),
+		(ctts_entry_t*)(atom_info->ptr + sizeof(ctts_atom_t)),
 		entries);
 
 	if (context->first_frame > 0)
@@ -835,23 +834,22 @@ mp4_clipper_ctts_write_atom(u_char* p, void* write_context, ctts_clip_result_t* 
 		first_entry = (ctts_entry_t*)p;
 		p = vod_copy(p, ctts->first_entry, ctts->data_size);
 		last_entry = (ctts_entry_t*)p;
-
-		// update
-		set_be32(first_entry->count, ctts->first_count);
-		last_count = PARSE_BE32(last_entry[-1].count) - ctts->last_count;
-		set_be32(last_entry[-1].count, last_count);
 	}
 	else
 	{
 		// update in place
-		set_be32(ctts->first_entry->count, ctts->first_count);
-		last_count = PARSE_BE32(ctts->last_entry[-1].count) - ctts->last_count;
-		set_be32(ctts->last_entry[-1].count, last_count);
+		first_entry = ctts->first_entry;
+		last_entry = ctts->last_entry;
 
-		// build chain
+		// add to chain
 		mp4_clipper_write_tail(write_context, MP4_CLIPPER_TRAK_INDEX_CTTS_HEADER, start, p - start);
 		mp4_clipper_write_tail(write_context, MP4_CLIPPER_TRAK_INDEX_CTTS_DATA, ctts->first_entry, ctts->data_size);
 	}
+
+	// update
+	set_be32(first_entry->count, ctts->first_count);
+	last_count = PARSE_BE32(last_entry[-1].count) - ctts->last_count;
+	set_be32(last_entry[-1].count, last_count);
 
 	return p;
 }
@@ -865,7 +863,6 @@ mp4_clipper_stsc_clip_data(
 	uint32_t* last_chunk_frame_index)
 {
 	stsc_iterator_state_t iterator;
-	const stsc_atom_t* atom = (const stsc_atom_t*)atom_info->ptr;
 	bool_t single_chunk = 0;
 	uint32_t last_entry_samples_per_chunk;
 	uint32_t last_entry_first_chunk;
@@ -886,8 +883,7 @@ mp4_clipper_stsc_clip_data(
 	mp4_parser_stsc_iterator_init(
 		&iterator,
 		context->request_context,
-		&context->parse_params,
-		(stsc_entry_t*)(atom_info->ptr + sizeof(*atom)),
+		(stsc_entry_t*)(atom_info->ptr + sizeof(stsc_atom_t)),
 		entries, 
 		context->chunks);
 
@@ -915,20 +911,6 @@ mp4_clipper_stsc_clip_data(
 	result->last_entry = iterator.cur_entry;
 	result->last_sample_count = sample_count;
 	result->last_entry_sample_desc = iterator.sample_desc;
-
-	// get the first chunk of the last entry
-	last_entry_first_chunk = iterator.cur_chunk;
-	if (result->first_entry == result->last_entry)
-	{
-		if (result->pre_entry)
-		{
-			last_entry_first_chunk = result->first_chunk + 2;
-		}
-		else
-		{
-			last_entry_first_chunk = result->first_chunk + 1;
-		}
-	}
 
 	// special handling for the case in which the pre entry has all the frames
 	if (result->pre_entry &&
@@ -975,7 +957,27 @@ mp4_clipper_stsc_clip_data(
 		}
 	}
 
-	result->post_entry = (result->last_sample_count && last_entry_first_chunk != result->last_chunk);
+	// check whether a post entry is needed
+	if (result->last_sample_count)
+	{
+		if (result->first_entry == result->last_entry)
+		{
+			if (result->pre_entry)
+			{
+				last_entry_first_chunk = result->first_chunk + 2;
+			}
+			else
+			{
+				last_entry_first_chunk = result->first_chunk + 1;
+			}
+		}
+		else
+		{
+			last_entry_first_chunk = iterator.cur_chunk;
+		}
+
+		result->post_entry = last_entry_first_chunk != result->last_chunk;
+	}
 
 	*first_chunk_frame_index = context->first_frame - result->first_sample_count;
 	*last_chunk_frame_index = context->last_frame - last_entry_samples_per_chunk;
@@ -1058,15 +1060,15 @@ mp4_clipper_stsc_write_atom(u_char* p, void* write_context, stsc_clip_result_t* 
 	// fix first chunks
 	if (stsc->pre_entry)
 	{
-		set_be32(first_entry->first_chunk, stsc->first_chunk + 2);
+		set_be32(first_entry->first_chunk, 2);
 	}
 	else
 	{
-		set_be32(first_entry->first_chunk, stsc->first_chunk + 1);
+		set_be32(first_entry->first_chunk, 1);
 	}
 
 	chunk_diff = stsc->first_chunk;
-	for (cur_entry = first_entry; cur_entry < last_entry; cur_entry++)
+	for (cur_entry = first_entry + 1; cur_entry < last_entry; cur_entry++)
 	{
 		first_chunk = PARSE_BE32(cur_entry->first_chunk) - chunk_diff;
 		set_be32(cur_entry->first_chunk, first_chunk);
@@ -1225,7 +1227,10 @@ mp4_clipper_stsz_write_atom(u_char* p, void* write_context, stsz_clip_result_t* 
 	else
 	{
 		mp4_clipper_write_tail(write_context, MP4_CLIPPER_TRAK_INDEX_STSZ_HEADER, start, p - start);
-		mp4_clipper_write_tail(write_context, MP4_CLIPPER_TRAK_INDEX_STSZ_DATA, stsz->first_entry, stsz->data_size);
+		if (stsz->data_size > 0)
+		{
+			mp4_clipper_write_tail(write_context, MP4_CLIPPER_TRAK_INDEX_STSZ_DATA, stsz->first_entry, stsz->data_size);
+		}
 	}
 
 	return p;
@@ -1259,10 +1264,10 @@ mp4_clipper_stco_clip_data(
 	uint64_t* first_offset,
 	uint64_t* last_offset)
 {
-	const stco_atom_t* atom = (const stco_atom_t*)atom_info->ptr;
 	uint32_t entries;
 	uint32_t entry_size;
 	vod_status_t rc;
+	u_char* last_entry;
 
 	rc = mp4_parser_validate_stco_data(
 		context->request_context,
@@ -1276,18 +1281,20 @@ mp4_clipper_stco_clip_data(
 	}
 
 	result->entry_size = entry_size;
-	result->first_entry = (u_char*)atom_info->ptr + sizeof(*atom) + context->first_chunk_index * entry_size;
-	result->last_entry = (u_char*)atom_info->ptr + sizeof(*atom) + context->last_chunk_index * entry_size;
+	result->first_entry = (u_char*)atom_info->ptr + sizeof(stco_atom_t) + context->first_chunk_index * entry_size;
+	result->last_entry = (u_char*)atom_info->ptr + sizeof(stco_atom_t) + context->last_chunk_index * entry_size;
 
 	if (atom_info->name == ATOM_NAME_CO64)
 	{
 		*first_offset = PARSE_BE64(result->first_entry);
-		*last_offset = PARSE_BE64(result->last_entry - sizeof(uint64_t));
+		last_entry = result->last_entry - sizeof(uint64_t);
+		*last_offset = PARSE_BE64(last_entry);
 	}
 	else
 	{
 		*first_offset = PARSE_BE32(result->first_entry);
-		*last_offset = PARSE_BE32(result->last_entry - sizeof(uint32_t));
+		last_entry = result->last_entry - sizeof(uint32_t);
+		*last_offset = PARSE_BE32(last_entry);
 	}
 	(*first_offset) += context->first_frame_chunk_offset;
 	(*last_offset) += context->last_frame_chunk_offset;
@@ -1684,6 +1691,7 @@ mp4_clipper_build_header(
 	parsed_trak_t** last_trak;
 	uint64_t mdat_atom_size;
 	int64_t chunk_pos_diff;
+	size_t ftyp_header_size;
 	size_t ftyp_atom_size;
 	size_t mdat_header_size;
 	size_t buffer_count;
@@ -1713,8 +1721,11 @@ mp4_clipper_build_header(
 	write_context.elts = write_elts;
 	write_context.last = result;
 
+	// calculate ftyp size
+	ftyp_header_size = ftyp_size > 0 ? ATOM_HEADER_SIZE : 0;
+	ftyp_atom_size = ftyp_header_size + ftyp_size;
+
 	// calculate the mdat size and chunk offset
-	ftyp_atom_size = ATOM_HEADER_SIZE + ftyp_size;
 	mdat_atom_size = ATOM_HEADER_SIZE + parse_result->max_last_offset - parse_result->min_first_offset;
 	if (mdat_atom_size > (uint64_t)0xffffffff)
 	{
@@ -1728,7 +1739,7 @@ mp4_clipper_build_header(
 	chunk_pos_diff = parse_result->min_first_offset - (ftyp_atom_size + parse_result->moov_atom_size + mdat_header_size);
 
 	// allocate the data buffer
-	parse_result->alloc_size += ATOM_HEADER_SIZE + mdat_header_size; // ftyp, mdat
+	parse_result->alloc_size += ftyp_header_size + mdat_header_size;
 	if (parse_result->copy_data)
 	{
 		parse_result->alloc_size += ftyp_size;
@@ -1745,15 +1756,18 @@ mp4_clipper_build_header(
 	p = output;
 
 	// ftyp
-	write_atom_header(p, ftyp_atom_size, 'f', 't', 'y', 'p');
-	if (parse_result->copy_data)
+	if (ftyp_size > 0)
 	{
-		p = vod_copy(p, ftyp_buffer, ftyp_size);
-	}
-	else
-	{
-		mp4_clipper_write_tail(&write_context, MP4_CLIPPER_INDEX_FTYP_HEADER, p - ATOM_HEADER_SIZE, ATOM_HEADER_SIZE);
-		mp4_clipper_write_tail(&write_context, MP4_CLIPPER_INDEX_FTYP_DATA, ftyp_buffer, ftyp_size);
+		write_atom_header(p, ftyp_atom_size, 'f', 't', 'y', 'p');
+		if (parse_result->copy_data)
+		{
+			p = vod_copy(p, ftyp_buffer, ftyp_size);
+		}
+		else
+		{
+			mp4_clipper_write_tail(&write_context, MP4_CLIPPER_INDEX_FTYP_HEADER, p - ATOM_HEADER_SIZE, ATOM_HEADER_SIZE);
+			mp4_clipper_write_tail(&write_context, MP4_CLIPPER_INDEX_FTYP_DATA, ftyp_buffer, ftyp_size);
+		}
 	}
 
 	// moov
