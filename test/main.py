@@ -632,7 +632,7 @@ class BasicTestSuite(TestSuite):
                     expectedResponse = fullResponse[startOffset:]
                     rangeHeader = '%s-' % startOffset
                 elif rangeType == 1:    # suffix (-123)
-                    startOffset = random.randint(0, len(fullResponse) - 1)
+                    startOffset = random.randint(0, len(fullResponse) - 1) + 1
                     expectedResponse = fullResponse[-startOffset:]
                     rangeHeader = '-%s' % startOffset
                 else:                   # regular range (100-200)

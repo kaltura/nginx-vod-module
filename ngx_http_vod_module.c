@@ -1796,9 +1796,11 @@ ngx_http_vod_run_state_machine(ngx_http_vod_ctx_t *ctx)
 				}
 			}
 
-			rc = ngx_http_vod_finalize_segment_response(ctx);
-			if (rc != NGX_OK)
+			rc = ngx_http_send_special(ctx->submodule_context.r, NGX_HTTP_LAST);
+			if (rc != NGX_OK && rc != NGX_AGAIN)
 			{
+				ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+					"ngx_http_vod_run_state_machine: ngx_http_send_special failed %i", rc);
 				return rc;
 			}
 
@@ -1868,7 +1870,15 @@ ngx_http_vod_run_state_machine(ngx_http_vod_ctx_t *ctx)
 		return ctx->dump_request(ctx->async_reader_context[ctx->submodule_context.cur_suburi->file_index]);
 
 	case STATE_DUMP_FILE_PART:
-		return ngx_http_vod_finalize_segment_response(ctx);
+		rc = ngx_http_send_special(ctx->submodule_context.r, NGX_HTTP_LAST);
+		if (rc != NGX_OK && rc != NGX_AGAIN)
+		{
+			ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+				"ngx_http_vod_run_state_machine: ngx_http_send_special failed %i", rc);
+			return rc;
+		}
+
+		return NGX_OK;
 	}
 
 	ngx_log_debug1(NGX_LOG_DEBUG_HTTP, ctx->submodule_context.request_context.log, 0,
