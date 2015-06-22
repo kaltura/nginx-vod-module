@@ -10,6 +10,8 @@ import random
 import time
 import os
 
+# note: debug logs must be enabled as well as moov cache
+
 # environment specific parameters
 from main_params import *
 
@@ -341,11 +343,19 @@ def serveFileHandler(s, path, mimeType, headers):
     
     # get the request body
     f = file(path, 'rb')
+    fileSize = os.path.getsize(path)
     range = getHttpHeader(headers, 'range')
     if range != None:
         assertStartsWith(range, 'bytes=')
-        range = range.split('=', 1)[1]
-        startOffset, endOffset = map(lambda x: int(x.strip()), range.split('-', 1))
+        range = range.split('=', 1)[1].strip()
+        if range.endswith('-'):
+            startOffset = int(range[:-1].strip())
+            endOffset = fileSize - 1
+        elif range.startswith('-'):
+            startOffset = fileSize - int(range[1:].strip())
+            endOffset = fileSize - 1
+        else:
+            startOffset, endOffset = map(lambda x: int(x.strip()), range.split('-', 1))
         f.seek(startOffset, os.SEEK_SET)
         body = f.read(endOffset - startOffset + 1)
         status = '206 Partial Content'
@@ -615,13 +625,25 @@ class BasicTestSuite(TestSuite):
             response = urllib2.urlopen(url)
             assertEquals(response.info().getheader('Content-Type'), contentType)
             fullResponse = response.read()
-            for i in xrange(10):
-                startOffset = random.randint(0, len(fullResponse) - 1)
-                endOffset = random.randint(startOffset, len(fullResponse) - 1)
-                request = urllib2.Request(url, headers={'Range': 'bytes=%s-%s' % (startOffset, endOffset)})
+            for i in xrange(30):
+                rangeType = random.randint(0, 3)
+                if rangeType == 0:      # prefix (132-)
+                    startOffset = random.randint(0, len(fullResponse) - 1)
+                    expectedResponse = fullResponse[startOffset:]
+                    rangeHeader = '%s-' % startOffset
+                elif rangeType == 1:    # suffix (-123)
+                    startOffset = random.randint(0, len(fullResponse) - 1)
+                    expectedResponse = fullResponse[-startOffset:]
+                    rangeHeader = '-%s' % startOffset
+                else:                   # regular range (100-200)
+                    startOffset = random.randint(0, len(fullResponse) - 1)
+                    endOffset = random.randint(startOffset, len(fullResponse) - 1)
+                    expectedResponse = fullResponse[startOffset:(endOffset + 1)]
+                    rangeHeader = '%s-%s' % (startOffset, endOffset)
+                request = urllib2.Request(url, headers={'Range': 'bytes=%s' % rangeHeader})
                 response = urllib2.urlopen(request)
                 assertEquals(response.info().getheader('Content-Type'), contentType)
-                assert(response.read() == fullResponse[startOffset:(endOffset + 1)])
+                assert(response.read() == expectedResponse)
 
     def testEncryptionSanity(self):
         url = self.getUrl(HLS_PREFIX, HLS_PLAYLIST_FILE)
