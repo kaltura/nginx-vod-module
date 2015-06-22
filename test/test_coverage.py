@@ -64,6 +64,6 @@ for logPrefix, logMessage in logMessages:
     if not foundPrefixes.has_key(logPrefix):
         print '\t' + logMessage
 
-print 'convered:'
+print 'covered:'
 for curLine in foundPrefixes.values():
     print '\t' + curLine[:140]

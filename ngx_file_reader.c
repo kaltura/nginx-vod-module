@@ -333,6 +333,12 @@ ngx_file_reader_dump_file_part(ngx_file_reader_state_t* state, off_t start, off_
 	b->file_pos = start;
 	if (end != 0)
 	{
+		if (end > state->file_size)
+		{
+			ngx_log_error(NGX_LOG_ERR, state->log, ngx_errno,
+				"ngx_file_reader_dump_file_part: end offset %O exceeds file size %O, probably a truncated file", end, state->file_size);
+			return NGX_HTTP_NOT_FOUND;
+		}
 		b->file_last = end;
 	}
 	else

@@ -3,7 +3,8 @@ import urllib2
 import socket
 import time
 
-# note: run with moov cache enabled and moov cache disabled
+# note: run once with moov cache enabled and once with moov cache disabled
+# 	it's recommended to disable debug logs since this test generates a lot of log lines
 
 '''
 nginx.conf

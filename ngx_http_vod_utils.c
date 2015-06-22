@@ -257,3 +257,101 @@ ngx_http_vod_merge_string_parts(ngx_http_request_t* r, ngx_str_t* parts, uint32_
 
 	return NGX_OK;
 }
+
+// Implemented according to nginx's ngx_http_range_parse, dropping multi range support
+ngx_int_t
+ngx_http_vod_range_parse(ngx_str_t* range, off_t content_length, off_t* out_start, off_t* out_end)
+{
+    u_char            *p;
+    off_t              start, end, cutoff, cutlim;
+    ngx_uint_t         suffix;
+
+    if (range->len < 7 ||
+        ngx_strncasecmp(range->data,
+        (u_char *) "bytes=", 6) != 0) {
+        return NGX_HTTP_RANGE_NOT_SATISFIABLE;
+    }
+
+    p = range->data + 6;
+
+    cutoff = NGX_MAX_OFF_T_VALUE / 10;
+    cutlim = NGX_MAX_OFF_T_VALUE % 10;
+
+    start = 0;
+    end = 0;
+    suffix = 0;
+
+    while (*p == ' ') { p++; }
+
+    if (*p != '-') {
+        if (*p < '0' || *p > '9') {
+            return NGX_HTTP_RANGE_NOT_SATISFIABLE;
+        }
+
+        while (*p >= '0' && *p <= '9') {
+            if (start >= cutoff && (start > cutoff || *p - '0' > cutlim)) {
+                return NGX_HTTP_RANGE_NOT_SATISFIABLE;
+            }
+
+            start = start * 10 + *p++ - '0';
+        }
+
+        while (*p == ' ') { p++; }
+
+        if (*p++ != '-') {
+            return NGX_HTTP_RANGE_NOT_SATISFIABLE;
+        }
+
+        while (*p == ' ') { p++; }
+
+        if (*p == '\0') {
+            end = content_length;
+            goto found;
+        }
+
+    } else {
+        suffix = 1;
+        p++;
+    }
+
+    if (*p < '0' || *p > '9') {
+        return NGX_HTTP_RANGE_NOT_SATISFIABLE;
+    }
+
+    while (*p >= '0' && *p <= '9') {
+        if (end >= cutoff && (end > cutoff || *p - '0' > cutlim)) {
+            return NGX_HTTP_RANGE_NOT_SATISFIABLE;
+        }
+
+        end = end * 10 + *p++ - '0';
+    }
+
+    while (*p == ' ') { p++; }
+
+    if (*p != '\0') {
+        return NGX_HTTP_RANGE_NOT_SATISFIABLE;
+    }
+
+    if (suffix) {
+        start = content_length - end;
+        end = content_length - 1;
+    }
+
+    if (end >= content_length) {
+        end = content_length;
+
+    } else {
+        end++;
+    }
+
+found:
+
+    if (start >= end) {
+        return NGX_HTTP_RANGE_NOT_SATISFIABLE;
+    }
+
+    *out_start = start;
+    *out_end = end;
+
+    return NGX_OK;
+}

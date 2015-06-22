@@ -296,7 +296,7 @@ ngx_http_vod_init_aes_encryption(ngx_http_vod_ctx_t *ctx, write_callback_t write
 ////// DRM
 
 static void
-ngx_http_vod_drm_info_request_finished(void* context, ngx_int_t rc, ngx_buf_t* response)
+ngx_http_vod_drm_info_request_finished(void* context, ngx_int_t rc, off_t content_length, ngx_buf_t* response)
 {
 	ngx_http_vod_loc_conf_t *conf;
 	ngx_http_vod_ctx_t *ctx;
@@ -316,7 +316,7 @@ ngx_http_vod_drm_info_request_finished(void* context, ngx_int_t rc, ngx_buf_t* r
 	ngx_perf_counter_end(ctx->perf_counters, ctx->perf_counter_context, PC_GET_DRM_INFO);
 
 	drm_info.data = response->pos;
-	drm_info.len = response->last - response->pos;
+	drm_info.len = content_length;
 	*response->last = '\0';		// this is ok since ngx_child_http_request always allocates the content-length + 1
 
 	ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0, "ngx_http_vod_drm_info_request_finished: result %V", &drm_info);
@@ -506,6 +506,11 @@ ngx_http_vod_read_moov_atom(ngx_http_vod_ctx_t *ctx)
 
 				ngx_memcpy(ctx->ftyp_ptr, ftyp_ptr, ftyp_size);
 				ctx->ftyp_size = ftyp_size;
+			}
+			else
+			{
+				ngx_log_debug0(NGX_LOG_DEBUG_HTTP, ctx->submodule_context.request_context.log, 0,
+					"ngx_http_vod_read_moov_atom: ftyp atom not found");
 			}
 		}
 
@@ -1584,6 +1589,10 @@ ngx_http_vod_send_clip_header(ngx_http_vod_ctx_t *ctx)
 	ngx_chain_t* out;
 	size_t response_size;
 	ngx_int_t rc;
+	off_t range_start;
+	off_t range_end;
+	off_t header_size;
+	off_t mdat_size;
 
 	rc = mp4_clipper_build_header(
 		&ctx->submodule_context.request_context,
@@ -1634,6 +1643,47 @@ ngx_http_vod_send_clip_header(ngx_http_vod_ctx_t *ctx)
 		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
 			"ngx_http_vod_send_clip_header: ngx_http_output_filter failed %i", rc);
 		return rc;
+	}
+
+	if (ctx->submodule_context.conf->request_handler == ngx_http_vod_remote_request_handler && 
+		ctx->submodule_context.r->headers_in.range)
+	{
+		// in case of range request in remote mode, apply the requested range to the mdat dump offsets.
+		// nginx's range filter module does not touch the dumped part since it is written in the context
+		// a subrequest. 
+
+		// TODO: apply the range on the mp4 header as well and return 206, to avoid making assumptions on
+		//		nginx subrequest/range filter implementations
+
+		rc = ngx_http_vod_range_parse(
+			&ctx->submodule_context.r->headers_in.range->value,
+			response_size,
+			&range_start,
+			&range_end);
+		if (rc != NGX_OK)
+		{
+			ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
+				"ngx_http_vod_send_clip_header: failed to parse range header \"%V\"",
+				&ctx->submodule_context.r->headers_in.range->value);
+			return rc;
+		}
+
+		mdat_size = ctx->clipper_parse_result.max_last_offset - ctx->clipper_parse_result.min_first_offset;
+		header_size = response_size - mdat_size;
+
+		if (range_end < header_size)
+		{
+			ctx->clipper_parse_result.max_last_offset = 0;
+		}
+		else if (mdat_size > range_end - header_size)
+		{
+			ctx->clipper_parse_result.max_last_offset = ctx->clipper_parse_result.min_first_offset + range_end - header_size;
+		}
+
+		if (range_start > header_size)
+		{
+			ctx->clipper_parse_result.min_first_offset += range_start - header_size;
+		}
 	}
 
 	return NGX_OK;
@@ -1730,22 +1780,27 @@ ngx_http_vod_run_state_machine(ngx_http_vod_ctx_t *ctx)
 
 		if (ctx->submodule_context.request_params.request == NULL)
 		{
-			ctx->submodule_context.cur_suburi = ctx->submodule_context.request_params.suburis;
-
-			ctx->state = STATE_DUMP_FILE_PART;
-
-			rc = ctx->dump_part(
-				ctx->async_reader_context[ctx->submodule_context.cur_suburi->file_index],
-				ctx->clipper_parse_result.min_first_offset,
-				ctx->clipper_parse_result.max_last_offset);
-			if (rc != NGX_OK)
+			if (ctx->clipper_parse_result.min_first_offset < ctx->clipper_parse_result.max_last_offset)
 			{
-				return rc;
+				ctx->submodule_context.cur_suburi = ctx->submodule_context.request_params.suburis;
+
+				ctx->state = STATE_DUMP_FILE_PART;
+
+				rc = ctx->dump_part(
+					ctx->async_reader_context[ctx->submodule_context.cur_suburi->file_index],
+					ctx->clipper_parse_result.min_first_offset,
+					ctx->clipper_parse_result.max_last_offset);
+				if (rc != NGX_OK)
+				{
+					return rc;
+				}
 			}
 
-			rc = ngx_http_vod_finalize_segment_response(ctx);
-			if (rc != NGX_OK)
+			rc = ngx_http_send_special(ctx->submodule_context.r, NGX_HTTP_LAST);
+			if (rc != NGX_OK && rc != NGX_AGAIN)
 			{
+				ngx_log_debug1(NGX_LOG_DEBUG_HTTP, ctx->submodule_context.request_context.log, 0,
+					"ngx_http_vod_run_state_machine: ngx_http_send_special failed %i", rc);
 				return rc;
 			}
 
@@ -1815,7 +1870,15 @@ ngx_http_vod_run_state_machine(ngx_http_vod_ctx_t *ctx)
 		return ctx->dump_request(ctx->async_reader_context[ctx->submodule_context.cur_suburi->file_index]);
 
 	case STATE_DUMP_FILE_PART:
-		return ngx_http_vod_finalize_segment_response(ctx);
+		rc = ngx_http_send_special(ctx->submodule_context.r, NGX_HTTP_LAST);
+		if (rc != NGX_OK && rc != NGX_AGAIN)
+		{
+			ngx_log_debug1(NGX_LOG_DEBUG_HTTP, ctx->submodule_context.request_context.log, 0,
+				"ngx_http_vod_run_state_machine: ngx_http_send_special failed %i", rc);
+			return rc;
+		}
+
+		return NGX_OK;
 	}
 
 	ngx_log_debug1(NGX_LOG_DEBUG_HTTP, ctx->submodule_context.request_context.log, 0,
@@ -1827,6 +1890,7 @@ static void
 ngx_http_vod_handle_read_completed(void* context, ngx_int_t rc, ssize_t bytes_read)
 {
 	ngx_http_vod_ctx_t *ctx = (ngx_http_vod_ctx_t *)context;
+	ssize_t expected_size;
 
 	if (rc != NGX_OK)
 	{
@@ -1835,7 +1899,19 @@ ngx_http_vod_handle_read_completed(void* context, ngx_int_t rc, ssize_t bytes_re
 		goto finalize_request;
 	}
 
-	if (bytes_read <= 0 && ctx->state != STATE_DUMP_FILE_PART)
+	if (ctx->state == STATE_DUMP_FILE_PART)
+	{
+		expected_size = ctx->clipper_parse_result.max_last_offset - ctx->clipper_parse_result.min_first_offset;
+		if (bytes_read != expected_size)
+		{
+			ngx_log_error(NGX_LOG_ERR, ctx->submodule_context.request_context.log, 0,
+				"ngx_http_vod_handle_read_completed: read size %z different than expected %z, probably a truncated file", 
+				bytes_read, expected_size);
+			rc = ngx_http_vod_status_to_ngx_error(VOD_BAD_DATA);
+			goto finalize_request;
+		}
+	}
+	else if (bytes_read <= 0)
 	{
 		ngx_log_error(NGX_LOG_ERR, ctx->submodule_context.request_context.log, 0,
 			"ngx_http_vod_handle_read_completed: bytes read is zero");
@@ -2022,11 +2098,12 @@ ngx_http_vod_file_open_completed_internal(void* context, ngx_int_t rc, ngx_flag_
 		if (fallback && rc == NGX_HTTP_NOT_FOUND)
 		{
 			// try the fallback
-			if (ngx_http_vod_dump_request_to_fallback(ctx->submodule_context.r) != NGX_DONE)
+			rc = ngx_http_vod_dump_request_to_fallback(ctx->submodule_context.r);
+			if (rc != NGX_DONE)
 			{
-				goto finalize_request;
+				rc = NGX_HTTP_NOT_FOUND;
 			}
-			return;
+			goto finalize_request;
 		}
 
 		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, ctx->submodule_context.r->connection->log, 0,
@@ -2122,10 +2199,14 @@ ngx_http_vod_init_file_reader_internal(ngx_http_request_t *r, ngx_str_t* path, u
 			{
 				return NGX_HTTP_NOT_FOUND;
 			}
+			return rc;
 		}
 
-		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
-			"ngx_http_vod_init_file_reader_internal: ngx_file_reader_init failed %i", rc);
+		if (rc != NGX_AGAIN)
+		{
+			ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+				"ngx_http_vod_init_file_reader_internal: ngx_file_reader_init failed %i", rc);
+		}
 		return rc;
 	}
 
@@ -2205,7 +2286,7 @@ ngx_http_vod_local_request_handler(ngx_http_request_t *r)
 
 ////// Mapped mode only
 
-static void ngx_http_vod_path_request_finished(void* context, ngx_int_t rc, ngx_buf_t* response);
+static void ngx_http_vod_path_request_finished(void* context, ngx_int_t rc, off_t content_length, ngx_buf_t* response);
 
 static ngx_int_t
 ngx_http_vod_run_mapped_mode_state_machine(ngx_http_request_t *r)
@@ -2314,7 +2395,7 @@ ngx_http_vod_run_mapped_mode_state_machine(ngx_http_request_t *r)
 }
 
 static void 
-ngx_http_vod_path_request_finished(void* context, ngx_int_t rc, ngx_buf_t* response)
+ngx_http_vod_path_request_finished(void* context, ngx_int_t rc, off_t content_length, ngx_buf_t* response)
 {
 	ngx_http_vod_loc_conf_t *conf;
 	ngx_http_vod_ctx_t *ctx;
@@ -2337,7 +2418,7 @@ ngx_http_vod_path_request_finished(void* context, ngx_int_t rc, ngx_buf_t* respo
 	ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0, "ngx_http_vod_path_request_finished: result %s", response->pos);
 
 	path.data = response->pos;
-	path.len = response->last - path.data;
+	path.len = content_length;
 
 	if (path.len == 0)
 	{
@@ -2374,9 +2455,8 @@ ngx_http_vod_path_request_finished(void* context, ngx_int_t rc, ngx_buf_t* respo
 		if (rc != NGX_DONE)
 		{
 			rc = NGX_HTTP_NOT_FOUND;
-			goto finalize_request;
 		}
-		return;
+		goto finalize_request;
 	}
 
 	// save to cache
@@ -2441,7 +2521,7 @@ ngx_http_vod_mapped_request_handler(ngx_http_request_t *r)
 ////// Remote mode only
 
 static void
-ngx_http_vod_http_read_completed(void* context, ngx_int_t rc, ngx_buf_t* response)
+ngx_http_vod_http_read_completed(void* context, ngx_int_t rc, off_t content_length, ngx_buf_t* response)
 {
 	ngx_http_vod_ctx_t *ctx = (ngx_http_vod_ctx_t *)context;
 
@@ -2453,7 +2533,7 @@ ngx_http_vod_http_read_completed(void* context, ngx_int_t rc, ngx_buf_t* respons
 		return;
 	}
 
-	ngx_http_vod_handle_read_completed(context, NGX_OK, response->last - response->pos);
+	ngx_http_vod_handle_read_completed(context, NGX_OK, content_length);
 }
 
 static ngx_int_t

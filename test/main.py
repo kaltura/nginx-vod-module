@@ -10,6 +10,8 @@ import random
 import time
 import os
 
+# note: debug logs must be enabled as well as moov cache
+
 # environment specific parameters
 from main_params import *
 
@@ -24,6 +26,7 @@ API_SERVER_PORT = 8002
 FALLBACK_PORT = 8003
 DRM_SERVER_PORT = 8004
 ENCRYPTED_PREFIX = '/enc'
+KEEPALIVE_PREFIX = '/self'
 NGINX_LOCAL = NGINX_HOST + '/tlocal'
 NGINX_MAPPED = NGINX_HOST + '/tmapped'
 NGINX_REMOTE = NGINX_HOST + '/tremote'
@@ -102,9 +105,14 @@ MSS_REQUESTS = [
     (MSS_PREFIX, MSS_FRAGMENT_FILE, 'video/mp4')]
 
 VOD_REQUESTS = DASH_REQUESTS + HDS_REQUESTS + HLS_REQUESTS + MSS_REQUESTS
-    
-ALL_REQUESTS = VOD_REQUESTS + [
-    ('', '', 'video/mp4')]      # '' returns the full file
+
+PD_REQUESTS = [
+    ('', '', 'video/mp4'),      # '' returns the full file
+    ('', '/clipTo/10000', 'video/mp4'),
+    ('', '/clipFrom/10000', 'video/mp4'),
+]
+
+ALL_REQUESTS = VOD_REQUESTS + PD_REQUESTS
 
 ### Assertions
 def assertEquals(v1, v2):
@@ -146,6 +154,7 @@ def assertRequestFails(url, statusCode, expectedBody = None, headers = {}, postD
 
 def validatePlaylistM3U8(buffer, expectedBaseUrl):
     expectedBaseUrl = expectedBaseUrl.rsplit('/', 1)[0]
+    expectedBaseUrl = expectedBaseUrl.replace(KEEPALIVE_PREFIX, '')
     encryptedHeader = M3U8_PREFIX_ENCRYPTED_PART1 + expectedBaseUrl + '/' + M3U8_PREFIX_ENCRYPTED_PART2
     if buffer.startswith(encryptedHeader):
         buffer = buffer[len(encryptedHeader):]
@@ -334,11 +343,19 @@ def serveFileHandler(s, path, mimeType, headers):
     
     # get the request body
     f = file(path, 'rb')
+    fileSize = os.path.getsize(path)
     range = getHttpHeader(headers, 'range')
     if range != None:
         assertStartsWith(range, 'bytes=')
-        range = range.split('=', 1)[1]
-        startOffset, endOffset = map(lambda x: int(x.strip()), range.split('-', 1))
+        range = range.split('=', 1)[1].strip()
+        if range.endswith('-'):
+            startOffset = int(range[:-1].strip())
+            endOffset = fileSize - 1
+        elif range.startswith('-'):
+            startOffset = fileSize - int(range[1:].strip())
+            endOffset = fileSize - 1
+        else:
+            startOffset, endOffset = map(lambda x: int(x.strip()), range.split('-', 1))
         f.seek(startOffset, os.SEEK_SET)
         body = f.read(endOffset - startOffset + 1)
         status = '206 Partial Content'
@@ -608,13 +625,25 @@ class BasicTestSuite(TestSuite):
             response = urllib2.urlopen(url)
             assertEquals(response.info().getheader('Content-Type'), contentType)
             fullResponse = response.read()
-            for i in xrange(10):
-                startOffset = random.randint(0, len(fullResponse) - 1)
-                endOffset = random.randint(startOffset, len(fullResponse) - 1)
-                request = urllib2.Request(url, headers={'Range': 'bytes=%s-%s' % (startOffset, endOffset)})
+            for i in xrange(30):
+                rangeType = random.randint(0, 3)
+                if rangeType == 0:      # prefix (132-)
+                    startOffset = random.randint(0, len(fullResponse) - 1)
+                    expectedResponse = fullResponse[startOffset:]
+                    rangeHeader = '%s-' % startOffset
+                elif rangeType == 1:    # suffix (-123)
+                    startOffset = random.randint(0, len(fullResponse) - 1) + 1
+                    expectedResponse = fullResponse[-startOffset:]
+                    rangeHeader = '-%s' % startOffset
+                else:                   # regular range (100-200)
+                    startOffset = random.randint(0, len(fullResponse) - 1)
+                    endOffset = random.randint(startOffset, len(fullResponse) - 1)
+                    expectedResponse = fullResponse[startOffset:(endOffset + 1)]
+                    rangeHeader = '%s-%s' % (startOffset, endOffset)
+                request = urllib2.Request(url, headers={'Range': 'bytes=%s' % rangeHeader})
                 response = urllib2.urlopen(request)
                 assertEquals(response.info().getheader('Content-Type'), contentType)
-                assert(response.read() == fullResponse[startOffset:(endOffset + 1)])
+                assert(response.read() == expectedResponse)
 
     def testEncryptionSanity(self):
         url = self.getUrl(HLS_PREFIX, HLS_PLAYLIST_FILE)
@@ -809,6 +838,8 @@ class MemoryUpstreamTestSuite(UpstreamTestSuite):
         self.validateResponse(response.read(), url.replace(NGINX_HOST, 'http://blabla.com'))
 
     def testUpstreamHostHeaderHttp10(self):
+        if KEEPALIVE_PREFIX in self.baseUrl:
+            return        # cannot test HTTP/1.0 with keepalive
         TcpServer(self.serverPort, lambda s: socketExpectHttpHeaderAndHandle(s, 'Host: %s' % SERVER_NAME, self.upstreamHandler))
         url = getUniqueUrl(self.baseUrl, self.urlFile)
         body = sendHttp10Request(url)
@@ -889,7 +920,7 @@ class ModeTestSuite(TestSuite):
         self.encryptionPrefix = encryptionPrefix
 
     def getBaseUrl(self, filePath):
-        if len(filePath) == 0:
+        if filePath in map(lambda x: x[1], PD_REQUESTS):
             baseUrl = self.baseUrl.replace(HLS_PREFIX, '').replace(ENCRYPTED_PREFIX, '')
         else:
             baseUrl = self.baseUrl
@@ -1025,6 +1056,8 @@ class RemoteTestSuite(ModeTestSuite):
             urllib2.urlopen(url).read()
         except BadStatusLine:
             pass        # the error may be handled before the headers buffer is flushed
+        except urllib2.HTTPError:
+            pass        # this error is received when testing with keepalive
         self.logTracker.assertContains('upstream request failed')
 
     def testZeroBytesRead(self):
@@ -1063,15 +1096,12 @@ class MainTestSuite(TestSuite):
     def runChildSuites(self):
         DrmTestSuite(NGINX_REMOTE).run()
 
-        # non encrypted
-        LocalTestSuite(NGINX_LOCAL).run()
-        MappedTestSuite(NGINX_MAPPED).run()
-        RemoteTestSuite(NGINX_REMOTE).run()
-
-        # encrypted
-        LocalTestSuite(NGINX_LOCAL, ENCRYPTED_PREFIX).run()
-        MappedTestSuite(NGINX_MAPPED, ENCRYPTED_PREFIX).run()
-        RemoteTestSuite(NGINX_REMOTE, ENCRYPTED_PREFIX).run()       
+        # all combinations of (encrypted, non encrypted) x (keep alive, no keep alive)
+        for encryptionPrefix in [ENCRYPTED_PREFIX, '']:
+            for keepAlivePrefix in [KEEPALIVE_PREFIX, '']:
+                LocalTestSuite(NGINX_HOST + keepAlivePrefix + '/tlocal', encryptionPrefix).run()
+                MappedTestSuite(NGINX_HOST + keepAlivePrefix + '/tmapped', encryptionPrefix).run()
+                RemoteTestSuite(NGINX_HOST + keepAlivePrefix + '/tremote', encryptionPrefix).run()
 
 socketSend = socketSendRegular
 MainTestSuite().run()
