@@ -1799,7 +1799,7 @@ ngx_http_vod_run_state_machine(ngx_http_vod_ctx_t *ctx)
 			rc = ngx_http_send_special(ctx->submodule_context.r, NGX_HTTP_LAST);
 			if (rc != NGX_OK && rc != NGX_AGAIN)
 			{
-				ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+				ngx_log_debug1(NGX_LOG_DEBUG_HTTP, ctx->submodule_context.request_context.log, 0,
 					"ngx_http_vod_run_state_machine: ngx_http_send_special failed %i", rc);
 				return rc;
 			}
@@ -1873,7 +1873,7 @@ ngx_http_vod_run_state_machine(ngx_http_vod_ctx_t *ctx)
 		rc = ngx_http_send_special(ctx->submodule_context.r, NGX_HTTP_LAST);
 		if (rc != NGX_OK && rc != NGX_AGAIN)
 		{
-			ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+			ngx_log_debug1(NGX_LOG_DEBUG_HTTP, ctx->submodule_context.request_context.log, 0,
 				"ngx_http_vod_run_state_machine: ngx_http_send_special failed %i", rc);
 			return rc;
 		}
