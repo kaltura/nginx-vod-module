@@ -885,12 +885,16 @@ mp4_clipper_stsc_clip_data(
 	}
 
 	// init the iterator
-	mp4_parser_stsc_iterator_init(
+	rc = mp4_parser_stsc_iterator_init(
 		&iterator,
 		context->request_context,
 		(stsc_entry_t*)(atom_info->ptr + sizeof(stsc_atom_t)),
 		entries, 
 		context->chunks);
+	if (rc != VOD_OK)
+	{
+		return rc;
+	}
 
 	// jump to the first frame
 	rc = mp4_parser_stsc_iterator(&iterator, context->first_frame, &target_chunk, &sample_count, &next_chunk, &prev_samples);

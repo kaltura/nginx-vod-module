@@ -257,7 +257,7 @@ mp4_parser_parse_mdhd_atom(atom_info_t* atom_info, metadata_parse_context_t* con
 	if (context->media_info.timescale == 0)
 	{
 		vod_log_error(VOD_LOG_ERR, context->request_context->log, 0,
-			"mp4_parser_parse_mdhd_atom: time scale is zero");
+			"mp4_parser_parse_mdhd_atom: timescale is zero");
 		return VOD_BAD_DATA;
 	}
 

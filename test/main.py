@@ -24,6 +24,7 @@ API_SERVER_PORT = 8002
 FALLBACK_PORT = 8003
 DRM_SERVER_PORT = 8004
 ENCRYPTED_PREFIX = '/enc'
+KEEPALIVE_PREFIX = '/self'
 NGINX_LOCAL = NGINX_HOST + '/tlocal'
 NGINX_MAPPED = NGINX_HOST + '/tmapped'
 NGINX_REMOTE = NGINX_HOST + '/tremote'
@@ -102,9 +103,14 @@ MSS_REQUESTS = [
     (MSS_PREFIX, MSS_FRAGMENT_FILE, 'video/mp4')]
 
 VOD_REQUESTS = DASH_REQUESTS + HDS_REQUESTS + HLS_REQUESTS + MSS_REQUESTS
-    
-ALL_REQUESTS = VOD_REQUESTS + [
-    ('', '', 'video/mp4')]      # '' returns the full file
+
+PD_REQUESTS = [
+    ('', '', 'video/mp4'),      # '' returns the full file
+    ('', '/clipTo/10000', 'video/mp4'),
+    ('', '/clipFrom/10000', 'video/mp4'),
+]
+
+ALL_REQUESTS = VOD_REQUESTS + PD_REQUESTS
 
 ### Assertions
 def assertEquals(v1, v2):
@@ -146,6 +152,7 @@ def assertRequestFails(url, statusCode, expectedBody = None, headers = {}, postD
 
 def validatePlaylistM3U8(buffer, expectedBaseUrl):
     expectedBaseUrl = expectedBaseUrl.rsplit('/', 1)[0]
+    expectedBaseUrl = expectedBaseUrl.replace(KEEPALIVE_PREFIX, '')
     encryptedHeader = M3U8_PREFIX_ENCRYPTED_PART1 + expectedBaseUrl + '/' + M3U8_PREFIX_ENCRYPTED_PART2
     if buffer.startswith(encryptedHeader):
         buffer = buffer[len(encryptedHeader):]
@@ -809,6 +816,8 @@ class MemoryUpstreamTestSuite(UpstreamTestSuite):
         self.validateResponse(response.read(), url.replace(NGINX_HOST, 'http://blabla.com'))
 
     def testUpstreamHostHeaderHttp10(self):
+        if KEEPALIVE_PREFIX in self.baseUrl:
+            return        # cannot test HTTP/1.0 with keepalive
         TcpServer(self.serverPort, lambda s: socketExpectHttpHeaderAndHandle(s, 'Host: %s' % SERVER_NAME, self.upstreamHandler))
         url = getUniqueUrl(self.baseUrl, self.urlFile)
         body = sendHttp10Request(url)
@@ -889,7 +898,7 @@ class ModeTestSuite(TestSuite):
         self.encryptionPrefix = encryptionPrefix
 
     def getBaseUrl(self, filePath):
-        if len(filePath) == 0:
+        if filePath in map(lambda x: x[1], PD_REQUESTS):
             baseUrl = self.baseUrl.replace(HLS_PREFIX, '').replace(ENCRYPTED_PREFIX, '')
         else:
             baseUrl = self.baseUrl
@@ -1025,6 +1034,8 @@ class RemoteTestSuite(ModeTestSuite):
             urllib2.urlopen(url).read()
         except BadStatusLine:
             pass        # the error may be handled before the headers buffer is flushed
+        except urllib2.HTTPError:
+            pass        # this error is received when testing with keepalive
         self.logTracker.assertContains('upstream request failed')
 
     def testZeroBytesRead(self):
@@ -1063,15 +1074,12 @@ class MainTestSuite(TestSuite):
     def runChildSuites(self):
         DrmTestSuite(NGINX_REMOTE).run()
 
-        # non encrypted
-        LocalTestSuite(NGINX_LOCAL).run()
-        MappedTestSuite(NGINX_MAPPED).run()
-        RemoteTestSuite(NGINX_REMOTE).run()
-
-        # encrypted
-        LocalTestSuite(NGINX_LOCAL, ENCRYPTED_PREFIX).run()
-        MappedTestSuite(NGINX_MAPPED, ENCRYPTED_PREFIX).run()
-        RemoteTestSuite(NGINX_REMOTE, ENCRYPTED_PREFIX).run()       
+        # all combinations of (encrypted, non encrypted) x (keep alive, no keep alive)
+        for encryptionPrefix in [ENCRYPTED_PREFIX, '']:
+            for keepAlivePrefix in [KEEPALIVE_PREFIX, '']:
+                LocalTestSuite(NGINX_HOST + keepAlivePrefix + '/tlocal', encryptionPrefix).run()
+                MappedTestSuite(NGINX_HOST + keepAlivePrefix + '/tmapped', encryptionPrefix).run()
+                RemoteTestSuite(NGINX_HOST + keepAlivePrefix + '/tremote', encryptionPrefix).run()
 
 socketSend = socketSendRegular
 MainTestSuite().run()

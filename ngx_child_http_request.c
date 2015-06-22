@@ -642,6 +642,67 @@ ngx_dump_request(
 	return NGX_DONE;
 }
 
+static ngx_int_t
+ngx_http_vod_upstream_non_buffered_filter_init(void *data)
+{
+	ngx_http_request_t *r = data;
+	ngx_http_upstream_t *u;
+
+	u = r->upstream;
+
+	if (u->headers_in.content_length_n > 0)
+	{
+		u->length = u->headers_in.content_length_n;
+	}
+
+	return NGX_OK;
+}
+
+// Note: this function is a copy of ngx_http_upstream_non_buffered_filter, only reason to have
+//		it here is in order to override input_filter_init to set the response length
+//		(it is not possible to override only input_filter_init)
+static ngx_int_t
+ngx_http_vod_upstream_non_buffered_filter(void *data, ssize_t bytes)
+{
+	ngx_http_request_t  *r = data;
+
+	ngx_buf_t            *b;
+	ngx_chain_t          *cl, **ll;
+	ngx_http_upstream_t  *u;
+
+	u = r->upstream;
+
+	for (cl = u->out_bufs, ll = &u->out_bufs; cl; cl = cl->next) {
+		ll = &cl->next;
+	}
+
+	cl = ngx_chain_get_free_buf(r->pool, &u->free_bufs);
+	if (cl == NULL) {
+		return NGX_ERROR;
+	}
+
+	*ll = cl;
+
+	cl->buf->flush = 1;
+	cl->buf->memory = 1;
+
+	b = &u->buffer;
+
+	cl->buf->pos = b->last;
+	b->last += bytes;
+	cl->buf->last = b->last;
+	cl->buf->tag = u->output.tag;
+
+	if (u->length == -1) {
+		return NGX_OK;
+	}
+
+	u->length -= bytes;
+
+	return NGX_OK;
+}
+
+
 ngx_int_t
 ngx_child_request_internal_handler(ngx_http_request_t *r)
 {
@@ -659,10 +720,10 @@ ngx_child_request_internal_handler(ngx_http_request_t *r)
 		return rc;
 	}
 
+	u = r->upstream;
+
 	if (ctx->in_memory)
 	{
-		u = r->upstream;
-
 		// initialize the upstream buffer
 		u->buffer.start = ctx->headers_buffer;
 		u->buffer.pos = u->buffer.start;
@@ -683,6 +744,13 @@ ngx_child_request_internal_handler(ngx_http_request_t *r)
 		u->input_filter = ngx_http_vod_filter;
 		u->input_filter_ctx = r;
 	}
+	else
+	{
+		// initialize the input filter
+		u->input_filter_init = ngx_http_vod_upstream_non_buffered_filter_init;
+		u->input_filter = ngx_http_vod_upstream_non_buffered_filter;
+		u->input_filter_ctx = r;
+	}
 
 #if defined nginx_version && nginx_version >= 8011
 	r->main->count++;
@@ -700,6 +768,7 @@ ngx_http_vod_wev_handler(ngx_http_request_t *r)
 	ngx_child_request_context_t* ctx;
 	ngx_http_upstream_t *u;
 	ngx_int_t rc;
+	off_t content_length;
 
 	ctx = ngx_http_get_module_ctx(r, ngx_http_vod_module);
 
@@ -741,15 +810,29 @@ ngx_http_vod_wev_handler(ngx_http_request_t *r)
 
 	// make sure all data was read
 	rc = ctx->error_code;
-	if (rc == NGX_OK && ctx->in_memory && u->length != 0)
+	if (rc == NGX_OK && u->length != 0 && u->length != -1)
 	{
 		ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
 			"ngx_http_vod_wev_handler: upstream connection was closed with %O bytes left to read", u->length);
 		rc = NGX_HTTP_BAD_GATEWAY;
 	}
+	
+	// get the content length
+	if (ctx->in_memory)
+	{
+		content_length = u->buffer.last - u->buffer.pos;
+	}
+	else if (u->state != NULL)
+	{
+		content_length = u->state->response_length;
+	}
+	else
+	{
+		content_length = 0;
+	}
 
 	// notify the caller
-	ctx->callback(ctx->callback_context, rc, &u->buffer);
+	ctx->callback(ctx->callback_context, rc, content_length, &u->buffer);
 }
 
 static ngx_int_t

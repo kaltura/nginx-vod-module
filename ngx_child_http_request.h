@@ -37,7 +37,7 @@
 
 
 // typedefs
-typedef void (*ngx_child_request_callback_t)(void* context, ngx_int_t rc, ngx_buf_t* response);
+typedef void (*ngx_child_request_callback_t)(void* context, ngx_int_t rc, off_t content_length, ngx_buf_t* response);
 
 typedef struct {
 	ngx_uint_t method;

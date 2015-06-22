@@ -28,4 +28,10 @@ ngx_int_t ngx_http_vod_merge_string_parts(
 	uint32_t part_count,
 	ngx_str_t* result);
 
+ngx_int_t ngx_http_vod_range_parse(
+	ngx_str_t* range, 
+	off_t content_length, 
+	off_t* out_start, 
+	off_t* out_end);
+
 #endif // _NGX_HTTP_VOD_UTILS_H_INCLUDED_
