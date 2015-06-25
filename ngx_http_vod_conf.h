@@ -41,6 +41,10 @@ struct ngx_http_vod_loc_conf_s {
 	ngx_str_t proxy_header_name;
 	ngx_str_t proxy_header_value;
 
+	time_t last_modified_time;
+	ngx_hash_t  last_modified_types;
+	ngx_array_t *last_modified_types_keys;
+
 	ngx_flag_t drm_enabled;
 	ngx_uint_t drm_clear_lead_segment_count;
 	ngx_http_upstream_conf_t drm_upstream;
