@@ -496,6 +496,24 @@ The name of the speed request parameter.
 
 Configures the shared memory object name of the performance counters
 
+#### vod_last_modified
+* **syntax**: `vod_last_modified time`
+* **default**: `none`
+* **context**: `http`, `server`, `location`
+
+Sets the value of the Last-Modified header returned on the response, by default the module does not return a Last-Modified header.
+The reason for having this parameter here is in order to support If-Modified-Since / If-Unmodified-Since.
+Since nginx's builtin ngx_http_not_modified_filter_module runs before any other header filter module, it will not see any headers set by add_headers / more_set_headers.
+This makes nginx always reply as if the content changed (412 for If-Unmodified-Since / 200 for If-Modified-Since)
+
+#### vod_last_modified_types
+* **syntax**: `vod_last_modified_types mime-type1 mime-type2 ...`
+* **default**: `none`
+* **context**: `http`, `server`, `location`
+
+Sets the MIME types for which the Last-Modified header should be set.
+The special value "*" matches any MIME type.
+
 ### Configuration directives - DRM
 
 #### vod_drm_enabled

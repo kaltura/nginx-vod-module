@@ -8,41 +8,43 @@ static const ngx_int_t error_map[VOD_ERROR_LAST - VOD_ERROR_FIRST] = {
 };
 
 ngx_int_t
-ngx_http_vod_send_response(ngx_http_request_t *r, ngx_str_t *response, u_char* content_type, size_t content_type_len)
+ngx_http_vod_send_response(ngx_http_request_t *r, ngx_str_t *response, ngx_str_t* content_type)
 {
 	ngx_chain_t  out;
 	ngx_int_t    rc;
 	ngx_buf_t* b;
 
-	// set the content type
-	r->headers_out.content_type_len = content_type_len;
-	r->headers_out.content_type.len = content_type_len;
-	r->headers_out.content_type.data = (u_char *)content_type;
-
-	// set the status line
-	r->headers_out.status = NGX_HTTP_OK;
-	r->headers_out.content_length_n = response->len;
-
-	rc = ngx_http_set_etag(r);
-	if (rc != NGX_OK) 
+	if (!r->header_sent)
 	{
-		ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
-			"ngx_http_vod_send_response: ngx_http_set_etag failed");
-		return NGX_HTTP_INTERNAL_SERVER_ERROR;
-	}
-	
-	// send the headers
-	rc = ngx_http_send_header(r);
-	if (rc == NGX_ERROR || rc > NGX_OK)
-	{
-		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
-			"ngx_http_vod_send_response: ngx_http_send_header failed %i", rc);
-		return rc;
+		// set the content type
+		r->headers_out.content_type = *content_type;
+		r->headers_out.content_type_len = content_type->len;
+
+		// set the status line
+		r->headers_out.status = NGX_HTTP_OK;
+		r->headers_out.content_length_n = response->len;
+
+		rc = ngx_http_set_etag(r);
+		if (rc != NGX_OK)
+		{
+			ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+				"ngx_http_vod_send_response: ngx_http_set_etag failed");
+			return NGX_HTTP_INTERNAL_SERVER_ERROR;
+		}
+
+		// send the headers
+		rc = ngx_http_send_header(r);
+		if (rc == NGX_ERROR || rc > NGX_OK)
+		{
+			ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+				"ngx_http_vod_send_response: ngx_http_send_header failed %i", rc);
+			return rc;
+		}
 	}
 
 	if (r->header_only || r->method == NGX_HTTP_HEAD)
 	{
-		return rc;
+		return NGX_OK;
 	}
 
 	// wrap the response with ngx_buf_t

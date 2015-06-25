@@ -8,7 +8,7 @@
 #include "vod/common.h"
 
 // functions
-ngx_int_t ngx_http_vod_send_response(ngx_http_request_t *r, ngx_str_t *response, u_char* content_type, size_t content_type_len);
+ngx_int_t ngx_http_vod_send_response(ngx_http_request_t *r, ngx_str_t *response, ngx_str_t* content_type);
 
 ngx_int_t ngx_http_vod_status_to_ngx_error(vod_status_t rc);
 

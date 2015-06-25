@@ -35,8 +35,8 @@ static const u_char status_prefix[] =
 	"<built>" __DATE__ " " __TIME__ "</built>\r\n";
 static const u_char status_postfix[] = "</vod>\r\n";
 
-static u_char xml_content_type[] = "text/xml";
-static u_char text_content_type[] = "text/plain";
+static ngx_str_t xml_content_type = ngx_string("text/xml");
+static ngx_str_t text_content_type = ngx_string("text/plain");
 static ngx_str_t reset_response = ngx_string("OK\r\n");
 
 static ngx_http_vod_stat_def_t buffer_cache_stat_defs[] = {
@@ -141,7 +141,7 @@ ngx_http_vod_status_reset(ngx_http_request_t *r)
 		}
 	}
 
-	return ngx_http_vod_send_response(r, &reset_response, text_content_type, sizeof(text_content_type) - 1);
+	return ngx_http_vod_send_response(r, &reset_response, &text_content_type);
 }
 
 ngx_int_t
@@ -255,5 +255,5 @@ ngx_http_vod_status_handler(ngx_http_request_t *r)
 		return NGX_HTTP_INTERNAL_SERVER_ERROR;
 	}
 
-	return ngx_http_vod_send_response(r, &response, xml_content_type, sizeof(xml_content_type) - 1);
+	return ngx_http_vod_send_response(r, &response, &xml_content_type);
 }

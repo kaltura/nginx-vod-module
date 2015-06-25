@@ -8,6 +8,10 @@
 #include "ngx_buffer_cache.h"
 #include "vod/common.h"
 
+static ngx_str_t  ngx_http_vod_last_modified_default_types[] = {
+	ngx_null_string
+};
+
 static void *
 ngx_http_vod_create_loc_conf(ngx_conf_t *cf)
 {
@@ -37,6 +41,8 @@ ngx_http_vod_create_loc_conf(ngx_conf_t *cf)
 	conf->max_moov_size = NGX_CONF_UNSET_SIZE;
 	conf->cache_buffer_size = NGX_CONF_UNSET_SIZE;
 	conf->max_path_length = NGX_CONF_UNSET_SIZE;
+
+	conf->last_modified_time = NGX_CONF_UNSET;
 
 	conf->drm_enabled = NGX_CONF_UNSET;
 	conf->drm_clear_lead_segment_count = NGX_CONF_UNSET_UINT;
@@ -144,6 +150,18 @@ ngx_http_vod_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child)
 	}
 	ngx_conf_merge_str_value(conf->proxy_header_name, prev->proxy_header_name, "X-Kaltura-Proxy");
 	ngx_conf_merge_str_value(conf->proxy_header_value, prev->proxy_header_value, "dumpApiRequest");
+
+	ngx_conf_merge_value(conf->last_modified_time, prev->last_modified_time, -1);
+	if (ngx_http_merge_types(
+		cf, 
+		&conf->last_modified_types_keys, 
+		&conf->last_modified_types,
+		&prev->last_modified_types_keys, 
+		&prev->last_modified_types,
+		ngx_http_vod_last_modified_default_types) != NGX_OK)
+	{
+		return NGX_CONF_ERROR;
+	}
 
 	ngx_conf_merge_value(conf->drm_enabled, prev->drm_enabled, 0);
 	ngx_conf_merge_uint_value(conf->drm_clear_lead_segment_count, prev->drm_clear_lead_segment_count, 1);
@@ -315,6 +333,36 @@ ngx_http_vod_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child)
 	}
 
     return NGX_CONF_OK;
+}
+
+static char *
+ngx_http_vod_set_time_slot(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
+{
+	char  *p = conf;
+
+	time_t           *sp;
+	ngx_str_t        *value;
+	ngx_conf_post_t  *post;
+
+
+	sp = (time_t *)(p + cmd->offset);
+	if (*sp != NGX_CONF_UNSET) {
+		return "is duplicate";
+	}
+
+	value = cf->args->elts;
+
+	*sp = ngx_http_parse_time(value[1].data, value[1].len);
+	if (*sp == (time_t)NGX_ERROR) {
+		return "invalid value";
+	}
+
+	if (cmd->post) {
+		post = cmd->post;
+		return post->post_handler(cf, post, sp);
+	}
+
+	return NGX_CONF_OK;
 }
 
 static char *
@@ -812,6 +860,21 @@ ngx_command_t ngx_http_vod_commands[] = {
 	ngx_conf_set_str_slot,
 	NGX_HTTP_LOC_CONF_OFFSET,
 	offsetof(ngx_http_vod_loc_conf_t, proxy_header_value),
+	NULL },
+
+	// last modified
+	{ ngx_string("vod_last_modified"),
+	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1,
+	ngx_http_vod_set_time_slot,
+	NGX_HTTP_LOC_CONF_OFFSET,
+	offsetof(ngx_http_vod_loc_conf_t, last_modified_time),
+	NULL },
+
+	{ ngx_string("vod_last_modified_types"),
+	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_1MORE,
+	ngx_http_types_slot,
+	NGX_HTTP_LOC_CONF_OFFSET,
+	offsetof(ngx_http_vod_loc_conf_t, last_modified_types_keys),
 	NULL },
 
 	// drm
