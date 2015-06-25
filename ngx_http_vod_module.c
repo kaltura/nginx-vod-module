@@ -2274,8 +2274,6 @@ ngx_http_vod_dump_file(ngx_http_vod_ctx_t* ctx)
 		return NGX_HTTP_INTERNAL_SERVER_ERROR;
 	}
 
-	ngx_file_reader_enable_directio(state);		// ignore errors
-
 	// send the response header
 	rc = ngx_http_vod_send_header(r, state->file_size, NULL);
 	if (rc != NGX_OK)
@@ -2287,6 +2285,8 @@ ngx_http_vod_dump_file(ngx_http_vod_ctx_t* ctx)
 	{
 		return NGX_OK;
 	}
+
+	ngx_file_reader_enable_directio(state);		// ignore errors
 
 	return ngx_file_reader_dump_file_part(state, 0, 0);
 }
