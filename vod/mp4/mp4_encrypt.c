@@ -364,7 +364,7 @@ mp4_encrypt_video_write_buffer(void* context, u_char* buffer, uint32_t size, boo
 			// fall through
 
 		case STATE_PACKET_DATA:
-			write_size = vod_min(state->packet_size_left, buffer_end - cur_pos);
+			write_size = vod_min(state->packet_size_left, (uint32_t)(buffer_end - cur_pos));
 
 			mp4_encrypt_encrypt(&state->base, cur_pos, write_size);
 
@@ -564,7 +564,7 @@ mp4_encrypt_audio_write_buffer(void* context, u_char* buffer, uint32_t size, boo
 			}
 		}
 
-		write_size = vod_min(state->frame_size_left, buffer_end - cur_pos);
+		write_size = vod_min(state->frame_size_left, (uint32_t)(buffer_end - cur_pos));
 
 		mp4_encrypt_encrypt(state, cur_pos, write_size);
 
