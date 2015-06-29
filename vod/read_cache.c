@@ -24,7 +24,7 @@ read_cache_get_from_cache(
 
 	if (file_index == INVALID_FILE_INDEX)
 	{
-		*buffer = (u_char*)offset;
+		*buffer = (u_char*)(uintptr_t)offset;
 		*size = frame_size_left;
 		return TRUE;
 	}
