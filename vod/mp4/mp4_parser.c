@@ -1378,7 +1378,7 @@ mp4_parser_read_config_descriptor(metadata_parse_context_t* context, simple_read
 	len = mp4_parser_read_descriptor(stream, &tag);
 	if (tag == MP4DecSpecificDescrTag)
 	{
-		if (len > stream->end_pos - stream->cur_pos)
+		if (len > (unsigned)(stream->end_pos - stream->cur_pos))
 		{
 			vod_log_error(VOD_LOG_ERR, context->request_context->log, 0,
 				"mp4_parser_read_config_descriptor: tag length %ud too big", len);
