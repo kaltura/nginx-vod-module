@@ -163,6 +163,55 @@ Where:
 	The default is to include the first audio and first video tracks of each file.
 	The tracks selected on the file name are AND-ed with the tracks selected with the /tracks/ path parameter.
 
+### DRM
+
+Nginx-vod-module has the ability to perform on-the-fly encryption for MPEG DASH (CENC) and MSS Play Ready.
+The encryption is performed while serving a video/audio segment to the client, therefore, when working with DRM 
+it is highly recommended not to serve the content directly from nginx-vod-module to end-users.
+A more scalable architecture would be to use proxy servers or a CDN in order to cache the encrypted segments.
+
+In order to perform the encryption, this module needs several parameters, including key & key_id, these parameters
+are fetched from an external server via HTTP GET request.
+The hostname of that server is configured using the vod_drm_upstream parameter, and the request uri is configured 
+using vod_drm_request_uri (this parameter can include nginx variables like $uri). 
+The response of that server is a JSON, with the following format:
+
+`[{"pssh": [{"data": "CAESEGMyZjg2MTczN2NjNGYzODIaB2thbHR1cmEiCjBfbmptaWlwbXAqBVNEX0hE", "uuid": "edef8ba9-79d6-4ace-a3c8-27dcd51d21ed"}], "key": "GzoNU9Dfwc//Iq3/zbzMUw==", "key_id": "YzJmODYxNzM3Y2M0ZjM4Mg=="}]`
+
+* `pssh.data` - base64 encoded binary data, the format of this data is drm vendor specific
+* `pssh.uuid` - the drm system UUID, in this case, edef8ba9-79d6-4ace-a3c8-27dcd51d21ed stands for Widevine
+* `key` - base64 encoded encryption key (128 bit)
+* `key_id` - base64 encoded key identifier (128 bit)
+
+### Performance recommendations
+
+1. For medium/large scale deployments, don't have users play the videos directly from nginx-vod-module.
+	Since all the different streaming protocols supported by nginx vod are HTTP based, they can be cached by standard HTTP proxies / CDNs. 
+	For medium scale add a layer of caching proxies between the vod module and the end users 
+	(can use standard nginx servers with proxy_pass & proxy_cache). 
+	For large scale deployments, it is recommended to use a CDN (such as Akamai, Level3 etc.). 
+	
+	In general, it's best to have nginx vod as close as possible to where the mp4 files are stored, 
+	and have the caching proxies as close as possible to the end users.
+2. Enable nginx-vod-module caches:
+	* vod_moov_cache - saves the need to re-read the video metadata for each segment. This cache should be rather large, in the order of GBs.
+	* vod_response_cache - saves the responses of manifest requests. This cache may not be required when using a second layer of caching servers before nginx vod. 
+		No need to allocate a large buffer for this cache, 128M is probably more than enough for most deployments.
+	* vod_path_mapping_cache - for mapped mode only, few MBs is usually enough.
+	* nginx's open_file_cache - caches open file handles.
+
+	The hit/miss ratios of these caches can be tracked by enabling performance counters (vod_performance_counters) 
+	and setting up a status page for nginx vod (vod_status)
+3. In local & mapped modes, enable aio. - nginx has to be compiled with aio support, and it has to be enabled in nginx conf (aio on). 
+	You can verify it works by looking at the performance counters on the vod status page - read_file (aio off) vs. async_read_file (aio on)
+4. In local & mapped modes, enable asynchronous file open - nginx has to be compiled with threads support, and vod_open_file_thread_pool 
+	has to be specified in nginx.conf. You can verify it works by looking at the performance counters on the vod status page - 
+	open_file vs. async_open_file
+5. Enable gzip compression on manifest responses - 
+
+	`gzip_types application/vnd.apple.mpegurl video/f4m application/dash+xml text/xml`
+6. Apply common nginx performance best practices, such as tcp_nodelay=on, client_header_timeout etc.
+
 ### Common configuration directives
 
 #### vod
@@ -749,7 +798,7 @@ The name of the manifest file (has no extension).
 
 			aio on;
 			
-			location /__child_request__/ {
+			location ^~ /__child_request__/ {
 				internal;
 				vod_child_request;
 			}
@@ -783,7 +832,7 @@ The name of the manifest file (has no extension).
 		}
 
 		server {		
-			location /__child_request__/ {
+			location ^~ /__child_request__/ {
 				internal;
 				vod_child_request;
 			}
