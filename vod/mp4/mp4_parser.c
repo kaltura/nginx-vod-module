@@ -1,4 +1,5 @@
 #include <limits.h>
+#include <zlib.h>
 #include "mp4_parser.h"
 #include "mp4_defs.h"
 #include "../read_stream.h"
@@ -133,6 +134,23 @@ const raw_atom_mapping_t raw_atom_mapping[] = {
 	{ RTA_MDHD, offsetof(trak_atom_infos_t, mdhd) },
 	{ RTA_DINF, offsetof(trak_atom_infos_t, dinf) },
 	{ RTA_STSD, offsetof(trak_atom_infos_t, stsd) },
+};
+
+// compressed moov
+typedef struct {
+	atom_info_t dcom;
+	atom_info_t cmvd;
+} moov_atom_infos_t;
+
+static const relevant_atom_t relevant_atoms_cmov[] = {
+	{ ATOM_NAME_DCOM, offsetof(moov_atom_infos_t, dcom), NULL },
+	{ ATOM_NAME_CMVD, offsetof(moov_atom_infos_t, cmvd), NULL },
+	{ ATOM_NAME_NULL, 0, NULL }
+};
+
+static const relevant_atom_t relevant_atoms_moov[] = {
+	{ ATOM_NAME_CMOV, 0, relevant_atoms_cmov },
+	{ ATOM_NAME_NULL, 0, NULL }
 };
 
 // implementation
@@ -2250,4 +2268,118 @@ mp4_parser_finalize_mpeg_metadata(
 {
 	mpeg_metadata->first_stream = (mpeg_stream_metadata_t*)mpeg_metadata->streams.elts;
 	mpeg_metadata->last_stream = mpeg_metadata->first_stream + mpeg_metadata->streams.nelts;
+}
+
+vod_status_t 
+mp4_parser_uncompress_moov(
+	request_context_t* request_context,
+	const u_char* buffer,
+	size_t size,
+	size_t max_moov_size,
+	u_char** out_buffer,
+	off_t* moov_offset,
+	size_t* moov_size)
+{
+	save_relevant_atoms_context_t save_atoms_context;
+	moov_atom_infos_t moov_atom_infos;
+	atom_info_t find_context;
+	dcom_atom_t* dcom;
+	cmvd_atom_t* cmvd;
+	u_char* uncomp_buffer;
+	size_t uncomp_size;
+	vod_status_t rc;
+	int zrc;
+
+	// get the relevant atoms
+	vod_memzero(&moov_atom_infos, sizeof(moov_atom_infos));
+	save_atoms_context.relevant_atoms = relevant_atoms_moov;
+	save_atoms_context.result = &moov_atom_infos;
+	save_atoms_context.request_context = request_context;
+	rc = mp4_parser_parse_atoms(request_context, buffer, size, TRUE, &mp4_parser_save_relevant_atoms_callback, &save_atoms_context);
+	if (rc != VOD_OK)
+	{
+		return rc;
+	}
+
+	if (moov_atom_infos.dcom.ptr == NULL || moov_atom_infos.cmvd.ptr == NULL)
+	{
+		*out_buffer = NULL;
+		return VOD_OK;		// non compressed or corrupt, if corrupt, will fail in trak parsing
+	}
+
+	// validate the compression type
+	if (moov_atom_infos.dcom.size < sizeof(*dcom))
+	{
+		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+			"mp4_parser_uncompress_moov: dcom atom size %uL too small", moov_atom_infos.dcom.size);
+		return VOD_BAD_DATA;
+	}
+
+	dcom = (dcom_atom_t*)moov_atom_infos.dcom.ptr;
+	if (parse_le32(dcom->type) != DCOM_TYPE_ZLIB)
+	{
+		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+			"mp4_parser_uncompress_moov: dcom type %*s is not zlib", (size_t)sizeof(dcom->type), dcom->type);
+		return VOD_BAD_DATA;
+	}
+
+	// get the uncompressed size and compressed buffer
+	if (moov_atom_infos.cmvd.size < sizeof(*cmvd))
+	{
+		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+			"mp4_parser_uncompress_moov: cmvd atom size %uL too small", moov_atom_infos.cmvd.size);
+		return VOD_BAD_DATA;
+	}
+
+	cmvd = (cmvd_atom_t*)moov_atom_infos.cmvd.ptr;
+	uncomp_size = parse_be32(cmvd->uncomp_size);
+
+	if (uncomp_size > max_moov_size)
+	{
+		ngx_log_error(NGX_LOG_ERR, request_context->log, 0,
+			"mp4_parser_uncompress_moov: moov size %uz exceeds the max %uz", uncomp_size, max_moov_size);
+		return VOD_BAD_DATA;
+	}
+
+	// uncompress to a new buffer
+	uncomp_buffer = vod_alloc(request_context->pool, uncomp_size);
+	if (uncomp_buffer == NULL)
+	{
+		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
+			"mp4_parser_uncompress_moov: vod_alloc failed");
+		return VOD_ALLOC_FAILED;
+	}
+
+	zrc = uncompress(
+		uncomp_buffer,
+		&uncomp_size,
+		moov_atom_infos.cmvd.ptr + sizeof(*cmvd),
+		moov_atom_infos.cmvd.size - sizeof(*cmvd));
+	if (zrc != Z_OK)
+	{
+		ngx_log_error(NGX_LOG_ERR, request_context->log, 0,
+			"mp4_parser_uncompress_moov: uncompress failed %d", zrc);
+		return VOD_BAD_DATA;
+	}
+
+	// find the moov atom
+	find_context.ptr = NULL;
+	find_context.size = 0;
+	find_context.name = ATOM_NAME_MOOV;
+	find_context.header_size = 0;
+
+	mp4_parser_parse_atoms(request_context, uncomp_buffer, uncomp_size, TRUE, &mp4_parser_find_atom_callback, &find_context);
+	if (find_context.ptr == NULL)
+	{
+		ngx_log_error(NGX_LOG_ERR, request_context->log, 0,
+			"mp4_parser_uncompress_moov: failed to find moov atom");
+		return VOD_BAD_DATA;
+	}
+
+	// return the result
+	*out_buffer = uncomp_buffer;
+	*moov_offset = find_context.ptr - uncomp_buffer;
+	*moov_size = find_context.size;
+
+	return VOD_OK;
 }

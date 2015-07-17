@@ -212,6 +212,15 @@ vod_status_t mp4_parser_get_moov_atom_info(
 	off_t* offset, 
 	size_t* size);
 
+vod_status_t mp4_parser_uncompress_moov(
+	request_context_t* request_context,
+	const u_char* buffer,
+	size_t size,
+	size_t max_moov_size,
+	u_char** out_buffer,
+	off_t* moov_offset,
+	size_t* moov_size);
+
 vod_status_t mp4_parser_init_mpeg_metadata(
 	request_context_t* request_context,
 	mpeg_metadata_t* mpeg_metadata);

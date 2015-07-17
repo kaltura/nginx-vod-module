@@ -849,6 +849,7 @@ ngx_http_vod_state_machine_parse_moov_atoms(ngx_http_vod_ctx_t *ctx)
 	size_t cache_size;
 	u_char* moov_buffer;
 	size_t moov_size;
+	u_char* uncomp_buffer;
 	ngx_int_t rc;
 
 	for (;
@@ -958,6 +959,29 @@ ngx_http_vod_state_machine_parse_moov_atoms(ngx_http_vod_ctx_t *ctx)
 				ngx_log_error(NGX_LOG_ERR, ctx->submodule_context.request_context.log, 0,
 					"ngx_http_vod_state_machine_parse_moov_atoms: buffer size %uD is smaller than moov end offset %uD", ctx->buffer_size, ctx->moov_offset + ctx->moov_size);
 				return ngx_http_vod_status_to_ngx_error(VOD_BAD_DATA);
+			}
+
+			// uncompress the moov atom if needed
+			rc = mp4_parser_uncompress_moov(
+				&ctx->submodule_context.request_context,
+				ctx->read_buffer + ctx->moov_offset,
+				ctx->moov_size,
+				conf->max_moov_size,
+				&uncomp_buffer,
+				&ctx->moov_offset, 
+				&ctx->moov_size);
+			if (rc != VOD_OK)
+			{
+				return ngx_http_vod_status_to_ngx_error(rc);
+			}
+
+			if (uncomp_buffer != NULL)
+			{
+				// free the compressed buffer
+				ngx_pfree(ctx->submodule_context.r->pool, ctx->read_buffer);
+
+				// replace the compressed buffer with the uncompressed
+				ctx->read_buffer = uncomp_buffer;
 			}
 
 			// parse the moov atom
