@@ -34,11 +34,16 @@
 #define ATOM_NAME_MVHD (0x6468766d)		// movie header
 #define ATOM_NAME_VMHD (0x64686d76)		// video media header
 #define ATOM_NAME_SMHD (0x64686d73)		// sound media header
+#define ATOM_NAME_CMOV (0x766f6d63)		// compressed movie
+#define ATOM_NAME_DCOM (0x6d6f6364)		// data compression
+#define ATOM_NAME_CMVD (0x64766d63)		// compressed movie data
 
 #define ATOM_NAME_NULL (0x00000000)
 
 #define HDLR_TYPE_VIDE (0x65646976)		// video track
 #define HDLR_TYPE_SOUN (0x6e756f73)		// audio track
+
+#define DCOM_TYPE_ZLIB (0x62696c7a)
 
 // MP4 constants from ffmpeg
 #define MP4ODescrTag				0x01
@@ -267,5 +272,13 @@ typedef struct {
 	u_char max_bitrate[4];
 	u_char avg_bitrate[4];
 } config_descr_t;
+
+typedef struct {
+	u_char	type[4];
+} dcom_atom_t;
+
+typedef struct {
+	u_char	uncomp_size[4];
+} cmvd_atom_t;
 
 #endif // __MP4_DEFS_H__
