@@ -2286,7 +2286,8 @@ mp4_parser_uncompress_moov(
 	dcom_atom_t* dcom;
 	cmvd_atom_t* cmvd;
 	u_char* uncomp_buffer;
-	size_t uncomp_size;
+	uLongf uncomp_size;
+	size_t alloc_size;
 	vod_status_t rc;
 	int zrc;
 
@@ -2332,17 +2333,17 @@ mp4_parser_uncompress_moov(
 	}
 
 	cmvd = (cmvd_atom_t*)moov_atom_infos.cmvd.ptr;
-	uncomp_size = parse_be32(cmvd->uncomp_size);
+	alloc_size = parse_be32(cmvd->uncomp_size);
 
-	if (uncomp_size > max_moov_size)
+	if (alloc_size > max_moov_size)
 	{
 		ngx_log_error(NGX_LOG_ERR, request_context->log, 0,
-			"mp4_parser_uncompress_moov: moov size %uz exceeds the max %uz", uncomp_size, max_moov_size);
+			"mp4_parser_uncompress_moov: moov size %uz exceeds the max %uz", alloc_size, max_moov_size);
 		return VOD_BAD_DATA;
 	}
 
 	// uncompress to a new buffer
-	uncomp_buffer = vod_alloc(request_context->pool, uncomp_size);
+	uncomp_buffer = vod_alloc(request_context->pool, alloc_size);
 	if (uncomp_buffer == NULL)
 	{
 		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
@@ -2350,6 +2351,7 @@ mp4_parser_uncompress_moov(
 		return VOD_ALLOC_FAILED;
 	}
 
+	uncomp_size = alloc_size;
 	zrc = uncompress(
 		uncomp_buffer,
 		&uncomp_size,
