@@ -662,6 +662,16 @@ The name of the MP4 initialization file (an mp4 extension is implied).
 
 The name of the fragment files (an m4s extension is implied).
 
+#### vod_dash_manifest_format
+* **syntax**: `vod_dash_manifest_format format`
+* **default**: `segmenttimeline`
+* **context**: `http`, `server`, `location`
+
+Sets the MPD format, available options are:
+* `segmentlist` - uses SegmentList and SegmentURL tags, in this format the URL of each fragment is explicitly set in the MPD
+* `segmenttemplate` - uses SegmentTemplate, reporting a single duration for all fragments
+* `segmenttimeline` - uses SegmentTemplate and SegmentTimeline to explicitly set the duration of the fragments
+
 ### Configuration directives - HDS
 
 #### vod_hds_manifest_file_name_prefix

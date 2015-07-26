@@ -186,7 +186,8 @@ enum {
 };
 
 typedef intptr_t bool_t;
-typedef intptr_t vod_status_t;
+typedef ngx_int_t vod_status_t;
+typedef ngx_uint_t vod_uint_t;
 
 struct media_info_s;
 typedef struct media_info_s media_info_t;
@@ -212,5 +213,8 @@ typedef struct {
 	uint32_t max_frame_count;
 	bool_t simulation_only;
 } request_context_t;
+
+// functions
+int vod_get_int_print_len(uint64_t n);
 
 #endif // __COMMON_H__
