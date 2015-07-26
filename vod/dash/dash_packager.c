@@ -398,7 +398,7 @@ dash_packager_build_mpd(
 	uint32_t max_framerate_timescale = 0;
 	uint32_t media_type;
 	vod_status_t rc;
-	u_char* base_url_temp_buffer;
+	u_char* base_url_temp_buffer = NULL;
 	u_char* p;
 
 	// calculate the total size
