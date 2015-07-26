@@ -13,6 +13,10 @@ extern ngx_module_t  ngx_http_vod_module;
 // main
 ngx_int_t ngx_http_vod_handler(ngx_http_request_t *r);
 
+// variables
+ngx_int_t ngx_http_vod_set_filepath_var(ngx_http_request_t *r, ngx_http_variable_value_t *v, uintptr_t data);
+ngx_int_t ngx_http_vod_set_suburi_var(ngx_http_request_t *r, ngx_http_variable_value_t *v, uintptr_t data);
+
 // handlers
 ngx_int_t ngx_http_vod_local_request_handler(ngx_http_request_t *r);
 ngx_int_t ngx_http_vod_mapped_request_handler(ngx_http_request_t *r);

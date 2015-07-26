@@ -78,7 +78,7 @@ ngx_http_vod_hls_handle_index_playlist(
 		&base_url,
 		&segments_base_url,
 		submodule_context->request_params.uses_multi_uri,
-		submodule_context->conf->secret_key.len != 0,
+		submodule_context->conf->secret_key != NULL,
 		&submodule_context->conf->segmenter,
 		&submodule_context->mpeg_metadata,
 		response);
@@ -160,7 +160,7 @@ ngx_http_vod_hls_handle_encryption_key(
 		return NGX_HTTP_INTERNAL_SERVER_ERROR;
 	}
 
-	ngx_memcpy(encryption_key, submodule_context->request_params.suburis->file_key, BUFFER_CACHE_KEY_SIZE);
+	ngx_memcpy(encryption_key, submodule_context->request_params.suburis->encryption_key, BUFFER_CACHE_KEY_SIZE);
 
 	response->data = encryption_key;
 	response->len = BUFFER_CACHE_KEY_SIZE;

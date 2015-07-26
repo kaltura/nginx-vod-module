@@ -55,6 +55,7 @@ typedef struct {
 	uint32_t required_tracks[MEDIA_TYPE_COUNT];
 
 	u_char file_key[BUFFER_CACHE_KEY_SIZE];
+	u_char encryption_key[BUFFER_CACHE_KEY_SIZE];
 	void* drm_info;
 } ngx_http_vod_suburi_params_t;
 
