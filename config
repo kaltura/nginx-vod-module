@@ -140,6 +140,7 @@ NGX_ADDON_SRCS="$NGX_ADDON_SRCS                                     \
                 $ngx_addon_dir/vod/aes_encrypt.c                    \
                 $ngx_addon_dir/vod/audio_filter.c                   \
                 $ngx_addon_dir/vod/codec_config.c                   \
+                $ngx_addon_dir/vod/common.c                         \
                 $ngx_addon_dir/vod/dash/dash_packager.c             \
                 $ngx_addon_dir/vod/dash/edash_packager.c            \
                 $ngx_addon_dir/vod/dynamic_buffer.c                 \

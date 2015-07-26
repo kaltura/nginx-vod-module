@@ -5,6 +5,13 @@
 #include "vod/dash/dash_packager.h"
 #include "vod/dash/edash_packager.h"
 
+ngx_conf_enum_t  dash_manifest_formats[] = {
+	{ ngx_string("segmentlist"), FORMAT_SEGMENT_LIST },
+	{ ngx_string("segmenttemplate"), FORMAT_SEGMENT_TEMPLATE },
+	{ ngx_string("segmenttimeline"), FORMAT_SEGMENT_TIMELINE },
+	{ ngx_null_string, 0 }
+};
+
 // content types
 static u_char mpd_content_type[] = "application/dash+xml";
 static u_char mp4_audio_content_type[] = "audio/mp4";
@@ -23,10 +30,21 @@ ngx_http_vod_dash_handle_manifest(
 {
 	ngx_str_t base_url = ngx_null_string;
 	vod_status_t rc;
+	ngx_str_t file_uri;
 
 	if (submodule_context->conf->dash.absolute_manifest_urls)
 	{
-		ngx_http_vod_get_base_url(submodule_context->r, &submodule_context->conf->https_header_name, NULL, 0, &submodule_context->r->uri, &base_url);
+		if (submodule_context->conf->dash.mpd_config.manifest_format == FORMAT_SEGMENT_LIST)
+		{
+			file_uri.data = NULL;
+			file_uri.len = 0;
+		}
+		else
+		{
+			file_uri = submodule_context->r->uri;
+		}
+
+		ngx_http_vod_get_base_url(submodule_context->r, &submodule_context->conf->https_header_name, NULL, 0, &file_uri, &base_url);
 	}
 
 	if (submodule_context->conf->drm_enabled)
@@ -258,7 +276,7 @@ ngx_http_vod_dash_create_loc_conf(
 	ngx_http_vod_dash_loc_conf_t *conf)
 {
 	conf->absolute_manifest_urls = NGX_CONF_UNSET;
-	conf->mpd_config.segment_timeline = NGX_CONF_UNSET;
+	conf->mpd_config.manifest_format = NGX_CONF_UNSET_UINT;
 }
 
 static char *
@@ -273,7 +291,7 @@ ngx_http_vod_dash_merge_loc_conf(
 	ngx_conf_merge_str_value(conf->manifest_file_name_prefix, prev->manifest_file_name_prefix, "manifest");
 	ngx_conf_merge_str_value(conf->mpd_config.init_file_name_prefix, prev->mpd_config.init_file_name_prefix, "init");
 	ngx_conf_merge_str_value(conf->mpd_config.fragment_file_name_prefix, prev->mpd_config.fragment_file_name_prefix, "fragment");
-	ngx_conf_merge_value(conf->mpd_config.segment_timeline, prev->mpd_config.segment_timeline, 1);
+	ngx_conf_merge_uint_value(conf->mpd_config.manifest_format, prev->mpd_config.manifest_format, FORMAT_SEGMENT_TIMELINE);
 
 	return NGX_CONF_OK;
 }

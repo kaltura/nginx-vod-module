@@ -28,11 +28,11 @@
 	BASE_OFFSET + offsetof(ngx_http_vod_dash_loc_conf_t, mpd_config.fragment_file_name_prefix),
 	NULL },
 
-	{ ngx_string("vod_dash_include_segment_timeline"),
+	{ ngx_string("vod_dash_manifest_format"),
 	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1,
-	ngx_conf_set_flag_slot,
+	ngx_conf_set_enum_slot,
 	NGX_HTTP_LOC_CONF_OFFSET,
-	BASE_OFFSET + offsetof(ngx_http_vod_dash_loc_conf_t, mpd_config.segment_timeline),
-	NULL },
+	BASE_OFFSET + offsetof(ngx_http_vod_dash_loc_conf_t, mpd_config.manifest_format),
+	dash_manifest_formats },
 
 #undef BASE_OFFSET

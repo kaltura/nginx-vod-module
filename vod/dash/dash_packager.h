@@ -9,6 +9,12 @@
 #include "../common.h"
 
 // typedefs
+enum {
+	FORMAT_SEGMENT_LIST,
+	FORMAT_SEGMENT_TIMELINE,
+	FORMAT_SEGMENT_TEMPLATE,
+};
+
 typedef u_char* (*write_tags_callback_t)(void* context, u_char* p, mpeg_stream_metadata_t* stream);
 
 typedef u_char* (*atom_writer_func_t)(void* context, u_char* p);
@@ -22,7 +28,7 @@ typedef struct {
 typedef struct {
 	vod_str_t init_file_name_prefix;
 	vod_str_t fragment_file_name_prefix;
-	bool_t segment_timeline;
+	vod_uint_t manifest_format;
 } dash_manifest_config_t;
 
 // functions

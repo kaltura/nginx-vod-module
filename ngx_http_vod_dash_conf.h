@@ -13,4 +13,7 @@ typedef struct
 	dash_manifest_config_t mpd_config;
 } ngx_http_vod_dash_loc_conf_t;
 
+// globals
+extern ngx_conf_enum_t dash_manifest_formats[];
+
 #endif // _NGX_HTTP_VOD_DASH_CONF_H_INCLUDED_

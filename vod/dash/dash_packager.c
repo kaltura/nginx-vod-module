@@ -66,6 +66,7 @@
 #define VOD_DASH_MANIFEST_AUDIO_FOOTER											\
     "    </AdaptationSet>\n"
 
+// SegmentTemplate
 #define VOD_DASH_MANIFEST_SEGMENT_TEMPLATE_FIXED								\
 	"        <SegmentTemplate\n"												\
 	"            timescale=\"1000\"\n"											\
@@ -92,6 +93,17 @@
 #define VOD_DASH_MANIFEST_SEGMENT_TEMPLATE_FOOTER								\
 	"            </SegmentTimeline>\n"											\
 	"        </SegmentTemplate>\n"
+
+// SegmentList
+#define VOD_DASH_MANIFEST_SEGMENT_LIST_HEADER									\
+	"        <SegmentList timescale=\"1000\" duration=\"%ui\">\n"				\
+	"          <Initialization sourceURL=\"%V%V-f%uD-%c%uD.mp4\"/>\n"
+
+#define VOD_DASH_MANIFEST_SEGMENT_URL											\
+	"          <SegmentURL media=\"%V%V-%uD-f%uD-%c%uD.m4s\"/>\n"
+
+#define VOD_DASH_MANIFEST_SEGMENT_LIST_FOOTER									\
+	"        </SegmentList>\n"
 
 #define VOD_DASH_MANIFEST_FOOTER												\
     "  </Period>\n"																\
@@ -261,10 +273,10 @@ dash_packager_write_segment_template(
 	segment_durations_t* segment_durations)
 {
 	segment_duration_item_t* cur_item;
-	segment_duration_item_t* last_item = segment_durations->items + segment_durations->item_count;
+	segment_duration_item_t* last_item;
 	uint32_t duration;
 
-	if (!conf->segment_timeline)
+	if (conf->manifest_format != FORMAT_SEGMENT_TIMELINE)
 	{
 		return vod_sprintf(p,
 			VOD_DASH_MANIFEST_SEGMENT_TEMPLATE_FIXED,
@@ -281,6 +293,8 @@ dash_packager_write_segment_template(
 		&conf->fragment_file_name_prefix,
 		base_url,
 		&conf->init_file_name_prefix);
+
+	last_item = segment_durations->items + segment_durations->item_count;
 
 	for (cur_item = segment_durations->items; cur_item < last_item; cur_item++)
 	{
@@ -301,6 +315,63 @@ dash_packager_write_segment_template(
 	return p;
 }
 
+static u_char*
+dash_packager_write_segment_list(
+	u_char* p,
+	dash_manifest_config_t* conf,
+	segmenter_conf_t* segmenter_conf,
+	vod_str_t* base_url,
+	u_char* base_url_temp_buffer,
+	mpeg_stream_metadata_t* cur_stream,
+	uint32_t segment_count)
+{
+	int media_type_char = cur_stream->media_info.media_type == MEDIA_TYPE_VIDEO ? 'v' : 'a';
+	vod_str_t cur_base_url;
+	uint32_t file_index;
+	uint32_t i;
+
+	if (base_url->len != 0)
+	{
+		cur_base_url.data = base_url_temp_buffer;
+		base_url_temp_buffer = vod_copy(base_url_temp_buffer, base_url->data, base_url->len);
+		base_url_temp_buffer = vod_copy(base_url_temp_buffer, cur_stream->file_info.uri.data, cur_stream->file_info.uri.len);
+		*base_url_temp_buffer++ = '/';
+		cur_base_url.len = base_url_temp_buffer - cur_base_url.data;
+		file_index = 0;
+	}
+	else
+	{
+		cur_base_url.data = NULL;
+		cur_base_url.len = 0;
+		file_index = cur_stream->file_info.file_index;
+	}
+
+	p = vod_sprintf(p,
+		VOD_DASH_MANIFEST_SEGMENT_LIST_HEADER,
+		segmenter_conf->segment_duration,
+		&cur_base_url,
+		&conf->init_file_name_prefix,
+		file_index + 1,
+		media_type_char,
+		cur_stream->track_index + 1);
+
+	for (i = 0; i < segment_count; i++)
+	{
+		p = vod_sprintf(p,
+			VOD_DASH_MANIFEST_SEGMENT_URL,
+			&cur_base_url,
+			&conf->fragment_file_name_prefix,
+			i + 1,
+			file_index + 1,
+			media_type_char,
+			cur_stream->track_index + 1);
+	}
+
+	p = vod_copy(p, VOD_DASH_MANIFEST_SEGMENT_LIST_FOOTER, sizeof(VOD_DASH_MANIFEST_SEGMENT_LIST_FOOTER) - 1);
+
+	return p;
+}
+
 vod_status_t 
 dash_packager_build_mpd(
 	request_context_t* request_context, 
@@ -315,14 +386,19 @@ dash_packager_build_mpd(
 {
 	mpeg_stream_metadata_t* cur_stream;
 	segment_durations_t segment_durations[MEDIA_TYPE_COUNT];
+	uint32_t segment_count[MEDIA_TYPE_COUNT];
+	size_t segment_url_length;
 	size_t result_size;
 	size_t urls_length;
+	size_t base_url_temp_buffer_size = 0;
+	size_t cur_base_url_length;
 	uint32_t max_width = 0;
 	uint32_t max_height = 0;
 	uint32_t max_framerate_duration = 0;
 	uint32_t max_framerate_timescale = 0;
 	uint32_t media_type;
 	vod_status_t rc;
+	u_char* base_url_temp_buffer;
 	u_char* p;
 
 	// calculate the total size
@@ -343,34 +419,87 @@ dash_packager_build_mpd(
 		representation_tags_size;
 
 	// get the segment count
-	for (media_type = 0; media_type < MEDIA_TYPE_COUNT; media_type++)
+	if (conf->manifest_format == FORMAT_SEGMENT_LIST)
 	{
-		if (mpeg_metadata->longest_stream[media_type] == NULL)
+		// get segment count for each media type
+		for (media_type = 0; media_type < MEDIA_TYPE_COUNT; media_type++)
 		{
-			continue;
-		}
+			if (mpeg_metadata->longest_stream[media_type] == NULL)
+			{
+				continue;
+			}
 
-		rc = segmenter_conf->get_segment_durations(
-			request_context,
-			segmenter_conf,
-			&mpeg_metadata->longest_stream[media_type],
-			1,
-			&segment_durations[media_type]);
-		if (rc != VOD_OK)
-		{
-			return rc;
+			segment_count[media_type] = segmenter_conf->get_segment_count(
+				segmenter_conf,
+				mpeg_metadata->longest_stream[media_type]->media_info.duration_millis);
+			if (segment_count[media_type] == INVALID_SEGMENT_COUNT)
+			{
+				vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+					"dash_packager_build_mpd: segment count is invalid");
+				return VOD_BAD_DATA;
+			}
 		}
+		
+		// calculate the total size of the segment lists
+		cur_base_url_length = 0;
 
-		if (conf->segment_timeline)
+		for (cur_stream = mpeg_metadata->first_stream; cur_stream < mpeg_metadata->last_stream; cur_stream++)
 		{
-			result_size += 
-				sizeof(VOD_DASH_MANIFEST_SEGMENT_TEMPLATE_HEADER) - 1 + urls_length +
+			if (base_url->len != 0)
+			{
+				cur_base_url_length = base_url->len + cur_stream->file_info.uri.len + 1;
+
+				if (cur_base_url_length > base_url_temp_buffer_size)
+				{
+					base_url_temp_buffer_size = cur_base_url_length;
+				}
+			}
+
+			segment_url_length =
+				sizeof(VOD_DASH_MANIFEST_SEGMENT_URL) - 1 +
+				cur_base_url_length + conf->fragment_file_name_prefix.len +
+				vod_get_int_print_len(segment_count[cur_stream->media_info.media_type]) +
+				vod_get_int_print_len(cur_stream->file_info.file_index + 1) +
+				vod_get_int_print_len(cur_stream->track_index + 1);
+
+			result_size +=
+				sizeof(VOD_DASH_MANIFEST_SEGMENT_LIST_HEADER) - 1 + VOD_INT64_LEN + 2 * VOD_INT32_LEN +
+				cur_base_url_length + conf->init_file_name_prefix.len +
+				segment_url_length * segment_count[cur_stream->media_info.media_type] +
+				sizeof(VOD_DASH_MANIFEST_SEGMENT_LIST_FOOTER) - 1;
+		}
+	}
+	else
+	{
+		for (media_type = 0; media_type < MEDIA_TYPE_COUNT; media_type++)
+		{
+			if (mpeg_metadata->longest_stream[media_type] == NULL)
+			{
+				continue;
+			}
+
+			if (conf->manifest_format == FORMAT_SEGMENT_TIMELINE)
+			{
+				rc = segmenter_conf->get_segment_durations(
+					request_context,
+					segmenter_conf,
+					&mpeg_metadata->longest_stream[media_type],
+					1,
+					&segment_durations[media_type]);
+				if (rc != VOD_OK)
+				{
+					return rc;
+				}
+
+				result_size +=
+					sizeof(VOD_DASH_MANIFEST_SEGMENT_TEMPLATE_HEADER) - 1 + urls_length +
 					(sizeof(VOD_DASH_MANIFEST_SEGMENT_REPEAT) - 1 + 2 * VOD_INT32_LEN) * segment_durations[media_type].item_count +
-				sizeof(VOD_DASH_MANIFEST_SEGMENT_TEMPLATE_FOOTER) - 1;
-		}
-		else
-		{
-			result_size += sizeof(VOD_DASH_MANIFEST_SEGMENT_TEMPLATE_FIXED) - 1 + urls_length + VOD_INT64_LEN;
+					sizeof(VOD_DASH_MANIFEST_SEGMENT_TEMPLATE_FOOTER) - 1;
+			}
+			else
+			{
+				result_size += sizeof(VOD_DASH_MANIFEST_SEGMENT_TEMPLATE_FIXED) - 1 + urls_length + VOD_INT64_LEN;
+			}
 		}
 	}
 
@@ -379,8 +508,19 @@ dash_packager_build_mpd(
 	if (result->data == NULL)
 	{
 		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
-			"dash_packager_build_mpd: vod_alloc failed");
+			"dash_packager_build_mpd: vod_alloc failed (1)");
 		return VOD_ALLOC_FAILED;
+	}
+
+	if (base_url_temp_buffer_size != 0)
+	{
+		base_url_temp_buffer = vod_alloc(request_context->pool, base_url_temp_buffer_size);
+		if (base_url_temp_buffer == NULL)
+		{
+			vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
+				"dash_packager_build_mpd: vod_alloc failed (2)");
+			return VOD_ALLOC_FAILED;
+		}
 	}
 	
 	// print the manifest header
@@ -429,12 +569,15 @@ dash_packager_build_mpd(
 			(uint32_t)(((uint64_t)max_framerate_timescale * 1000) / max_framerate_duration % 1000));
 
 		// print the segment template
-		p = dash_packager_write_segment_template(
-			p,
-			conf,
-			segmenter_conf,
-			base_url,
-			&segment_durations[MEDIA_TYPE_VIDEO]);
+		if (conf->manifest_format != FORMAT_SEGMENT_LIST)
+		{
+			p = dash_packager_write_segment_template(
+				p,
+				conf,
+				segmenter_conf,
+				base_url,
+				&segment_durations[MEDIA_TYPE_VIDEO]);
+		}
 			
 		// print the representations
 		for (cur_stream = mpeg_metadata->first_stream; cur_stream < mpeg_metadata->last_stream; cur_stream++)
@@ -456,6 +599,18 @@ dash_packager_build_mpd(
 				cur_stream->media_info.bitrate
 				);
 
+			if (conf->manifest_format == FORMAT_SEGMENT_LIST)
+			{
+				p = dash_packager_write_segment_list(
+					p, 
+					conf, 
+					segmenter_conf, 
+					base_url, 
+					base_url_temp_buffer, 
+					cur_stream, 
+					segment_count[MEDIA_TYPE_VIDEO]);
+			}
+
 			// write any additional tags
 			if (write_representation_tags != NULL)
 			{
@@ -476,12 +631,15 @@ dash_packager_build_mpd(
 		p = vod_copy(p, VOD_DASH_MANIFEST_AUDIO_HEADER, sizeof(VOD_DASH_MANIFEST_AUDIO_HEADER) - 1);
 
 		// print the segment template
-		p = dash_packager_write_segment_template(
-			p,
-			conf,
-			segmenter_conf,
-			base_url,
-			&segment_durations[MEDIA_TYPE_AUDIO]);
+		if (conf->manifest_format != FORMAT_SEGMENT_LIST)
+		{
+			p = dash_packager_write_segment_template(
+				p,
+				conf,
+				segmenter_conf,
+				base_url,
+				&segment_durations[MEDIA_TYPE_AUDIO]);
+		}
 
 		// print the representations
 		for (cur_stream = mpeg_metadata->first_stream; cur_stream < mpeg_metadata->last_stream; cur_stream++)
@@ -498,6 +656,18 @@ dash_packager_build_mpd(
 				&cur_stream->media_info.codec_name,
 				cur_stream->media_info.u.audio.sample_rate,
 				cur_stream->media_info.bitrate);
+
+			if (conf->manifest_format == FORMAT_SEGMENT_LIST)
+			{
+				p = dash_packager_write_segment_list(
+					p,
+					conf,
+					segmenter_conf,
+					base_url,
+					base_url_temp_buffer, 
+					cur_stream,
+					segment_count[MEDIA_TYPE_AUDIO]);
+			}
 
 			// write any additional tags
 			if (write_representation_tags != NULL)
