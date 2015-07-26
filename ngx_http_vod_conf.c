@@ -12,6 +12,35 @@ static ngx_str_t  ngx_http_vod_last_modified_default_types[] = {
 	ngx_null_string
 };
 
+static ngx_str_t  ngx_http_vod_filepath = ngx_string("vod_filepath");
+static ngx_str_t  ngx_http_vod_suburi = ngx_string("vod_suburi");
+
+static ngx_int_t
+ngx_http_vod_add_variables(ngx_conf_t *cf)
+{
+	ngx_http_variable_t  *var;
+
+	// filepath
+	var = ngx_http_add_variable(cf, &ngx_http_vod_filepath, NGX_HTTP_VAR_NOCACHEABLE);
+	if (var == NULL) 
+	{
+		return NGX_ERROR;
+	}
+
+	var->get_handler = ngx_http_vod_set_filepath_var;
+
+	// suburi
+	var = ngx_http_add_variable(cf, &ngx_http_vod_suburi, NGX_HTTP_VAR_NOCACHEABLE);
+	if (var == NULL)
+	{
+		return NGX_ERROR;
+	}
+
+	var->get_handler = ngx_http_vod_set_suburi_var;
+
+	return NGX_OK;
+}
+
 static void *
 ngx_http_vod_create_loc_conf(ngx_conf_t *cf)
 {
@@ -96,7 +125,10 @@ ngx_http_vod_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child)
 	ngx_conf_merge_ptr_value(conf->segmenter.get_segment_count, prev->segmenter.get_segment_count, segmenter_get_segment_count_last_short);
 	ngx_conf_merge_ptr_value(conf->segmenter.get_segment_durations, prev->segmenter.get_segment_durations, segmenter_get_segment_durations_estimate);
 
-	ngx_conf_merge_str_value(conf->secret_key, prev->secret_key, "");
+	if (conf->secret_key == NULL) 
+	{
+		conf->secret_key = prev->secret_key;
+	}
 	ngx_conf_merge_uint_value(conf->duplicate_bitrate_threshold, prev->duplicate_bitrate_threshold, 4096);
 	ngx_conf_merge_str_value(conf->https_header_name, prev->https_header_name, "");
 	ngx_conf_merge_str_value(conf->segments_base_url, prev->segments_base_url, "");
@@ -723,7 +755,7 @@ ngx_command_t ngx_http_vod_commands[] = {
 
 	{ ngx_string("vod_secret_key"),
 	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1,
-	ngx_conf_set_str_slot,
+	ngx_http_set_complex_value_slot,
 	NGX_HTTP_LOC_CONF_OFFSET,
 	offsetof(ngx_http_vod_loc_conf_t, secret_key),
 	NULL },
@@ -969,7 +1001,7 @@ ngx_command_t ngx_http_vod_commands[] = {
 };
 
 ngx_http_module_t  ngx_http_vod_module_ctx = {
-	NULL,                               /* preconfiguration */
+	ngx_http_vod_add_variables,         /* preconfiguration */
 	NULL,                               /* postconfiguration */
 
 	NULL,                               /* create main configuration */

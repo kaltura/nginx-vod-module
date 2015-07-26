@@ -173,7 +173,7 @@ A more scalable architecture would be to use proxy servers or a CDN in order to 
 In order to perform the encryption, this module needs several parameters, including key & key_id, these parameters
 are fetched from an external server via HTTP GET request.
 The hostname of that server is configured using the vod_drm_upstream parameter, and the request uri is configured 
-using vod_drm_request_uri (this parameter can include nginx variables like $uri). 
+using vod_drm_request_uri (this parameter can include nginx variables). 
 The response of that server is a JSON, with the following format:
 
 `[{"pssh": [{"data": "CAESEGMyZjg2MTczN2NjNGYzODIaB2thbHR1cmEiCjBfbmptaWlwbXAqBVNEX0hE", "uuid": "edef8ba9-79d6-4ace-a3c8-27dcd51d21ed"}], "key": "GzoNU9Dfwc//Iq3/zbzMUw==", "key_id": "YzJmODYxNzM3Y2M0ZjM4Mg=="}]`
@@ -303,7 +303,9 @@ takes into account the key frame alignment, in case vod_align_segments_to_key_fr
 * **default**: `empty`
 * **context**: `http`, `server`, `location`
 
-Sets the secret that is used to generate the TS encryption key, if empty, no encryption is performed.
+Sets the seed that is used to generate the TS encryption key, if empty, no encryption is performed.
+The parameter value can contain variables, and will usually have the structure "secret-$vod_filepath".
+See the list of nginx variables added by this module below.
 
 #### vod_duplicate_bitrate_threshold
 * **syntax**: `vod_duplicate_bitrate_threshold threshold`
@@ -624,11 +626,11 @@ Configures the size and shared memory object name of the drm info cache.
 
 #### vod_drm_request_uri
 * **syntax**: `vod_drm_request_uri uri`
-* **default**: `$uri`
+* **default**: `$vod_suburi`
 * **context**: `http`, `server`, `location`
 
 Sets the uri of drm info requests, the parameter value can contain variables.
-In case of multi url, $uri will one of the sub URLs (a separate drm info request is issued per sub URL)
+In case of multi url, $vod_suburi will be the current sub uri (a separate drm info request is issued per sub URL)
 
 ### Configuration directives - DASH
 
@@ -743,6 +745,17 @@ The name of the encryption key file name (only relevant when vod_secret_key is u
 
 The name of the manifest file (has no extension).
 
+### Nginx variables
+
+The module adds the following nginx variables:
+* `$vod_suburi` - the current sub uri. For example, if the url is:
+  `http://<domain>/<location>/<prefix>,<middle1>,<middle2>,<middle3>,<postfix>.urlset/<filename>`
+  `$vod_suburi` will have the value `http://<domain>/<location>/<prefix><middle1><postfix>.urlset/<filename>` 
+  when processing the first uri.
+* `$vod_filepath` - in local / mapped modes, the file path of current sub uri. In remote mode, has the same value as `$vod_suburi`.
+
+Note: Configuration directives that can accept variables are explicitly marked as such.
+
 ### Sample configurations
 
 #### Local configuration
@@ -807,7 +820,7 @@ The name of the manifest file (has no extension).
 				vod hls;
 				vod_mode mapped;
 				vod_moov_cache moov_cache 512m;
-				vod_secret_key mukkaukk;
+				vod_secret_key "mukkaukk$vod_filepath";
 				vod_child_request_path /__child_request__/;
 				vod_upstream kalapi;
 				vod_upstream_host_header www.kaltura.com;
@@ -841,7 +854,7 @@ The name of the manifest file (has no extension).
 				vod hls;
 				vod_mode remote;
 				vod_moov_cache moov_cache 512m;
-				vod_secret_key mukkaukk;
+				vod_secret_key "mukkaukk$vod_suburi";
 				vod_child_request_path /__child_request__/;
 				vod_upstream kalapi;
 				vod_upstream_host_header www.kaltura.com;

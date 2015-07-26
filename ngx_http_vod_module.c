@@ -134,6 +134,62 @@ ngx_module_t  ngx_http_vod_module = {
 static ngx_str_t options_content_type = ngx_string("text/plain");
 static ngx_str_t mp4_content_type = ngx_string("video/mp4");
 
+////// Variables
+
+ngx_int_t
+ngx_http_vod_set_filepath_var(ngx_http_request_t *r, ngx_http_variable_value_t *v, uintptr_t data)
+{
+	ngx_http_vod_ctx_t *ctx;
+	ngx_str_t* value;
+
+	ctx = ngx_http_get_module_ctx(r, ngx_http_vod_module);
+
+	if (ctx == NULL ||
+		ctx->submodule_context.cur_suburi < ctx->submodule_context.request_params.suburis ||
+		ctx->submodule_context.cur_suburi >= ctx->submodule_context.request_params.suburis_end)
+	{
+		v->not_found = 1;
+		return NGX_OK;
+	}
+
+	v->valid = 1;
+	v->no_cacheable = 1;
+	v->not_found = 0;
+
+	value = &ctx->submodule_context.cur_suburi->stripped_uri;
+	v->len = value->len;
+	v->data = value->data;
+
+	return NGX_OK;
+}
+
+ngx_int_t
+ngx_http_vod_set_suburi_var(ngx_http_request_t *r, ngx_http_variable_value_t *v, uintptr_t data)
+{
+	ngx_http_vod_ctx_t *ctx;
+	ngx_str_t* value;
+
+	ctx = ngx_http_get_module_ctx(r, ngx_http_vod_module);
+
+	if (ctx == NULL ||
+		ctx->submodule_context.cur_suburi < ctx->submodule_context.request_params.suburis ||
+		ctx->submodule_context.cur_suburi >= ctx->submodule_context.request_params.suburis_end)
+	{
+		v->not_found = 1;
+		return NGX_OK;
+	}
+
+	v->valid = 1;
+	v->no_cacheable = 1;
+	v->not_found = 0;
+
+	value = &ctx->submodule_context.cur_suburi->uri;
+	v->len = value->len;
+	v->data = value->data;
+
+	return NGX_OK;
+}
+
 ////// Perf counter wrappers
 
 static ngx_flag_t
@@ -327,7 +383,7 @@ ngx_http_vod_init_aes_encryption(ngx_http_vod_ctx_t *ctx, write_callback_t write
 		&ctx->submodule_context.request_context, 
 		write_callback, 
 		callback_context, 
-		ctx->submodule_context.cur_suburi->file_key,
+		ctx->submodule_context.cur_suburi->encryption_key,
 		ctx->submodule_context.request_params.segment_index);
 	if (rc != VOD_OK)
 	{
@@ -424,7 +480,6 @@ ngx_http_vod_state_machine_get_drm_info(ngx_http_vod_ctx_t *ctx)
 	ngx_http_request_t* r = ctx->submodule_context.r;
 	ngx_int_t rc;
 	ngx_str_t drm_info;
-	ngx_str_t original_uri;
 
 	for (;
 		ctx->submodule_context.cur_suburi < ctx->submodule_context.request_params.suburis_end;
@@ -463,9 +518,6 @@ ngx_http_vod_state_machine_get_drm_info(ngx_http_vod_ctx_t *ctx)
 
 		if (conf->drm_request_uri != NULL)
 		{
-			original_uri = r->uri;
-			r->uri = ctx->submodule_context.cur_suburi->uri;		// switch the uri so that $uri would be replaced with the sub uri
-
 			if (ngx_http_complex_value(
 				r,
 				conf->drm_request_uri,
@@ -475,8 +527,6 @@ ngx_http_vod_state_machine_get_drm_info(ngx_http_vod_ctx_t *ctx)
 					"ngx_http_vod_state_machine_get_drm_info: ngx_http_complex_value failed");
 				return NGX_ERROR;
 			}
-
-			r->uri = original_uri;
 		}
 		else
 		{
@@ -1328,7 +1378,7 @@ ngx_http_vod_init_frame_processing(ngx_http_vod_ctx_t *ctx)
 	ctx->write_segment_buffer_context.chain_end = &ctx->out;
 	ctx->write_segment_buffer_context.total_size = 0;
 
-	if (conf->secret_key.len != 0)
+	if (conf->secret_key != NULL)
 	{
 		rc = ngx_http_vod_init_aes_encryption(ctx, ngx_http_vod_write_segment_buffer, &ctx->write_segment_buffer_context);
 		if (rc != VOD_OK)
@@ -1381,7 +1431,7 @@ ngx_http_vod_init_frame_processing(ngx_http_vod_ctx_t *ctx)
 	}
 
 	// calculate the response size
-	if (conf->secret_key.len != 0)
+	if (conf->secret_key != NULL)
 	{
 		ctx->content_length = aes_round_to_block(ctx->content_length);
 	}
@@ -1983,7 +2033,6 @@ ngx_http_vod_init_file_key(ngx_http_vod_loc_conf_t* conf, ngx_http_vod_suburi_pa
 	ngx_md5_t md5;
 
 	ngx_md5_init(&md5);
-	ngx_md5_update(&md5, conf->secret_key.data, conf->secret_key.len);
 	if (prefix != NULL)
 	{
 		ngx_md5_update(&md5, prefix->data, prefix->len);
@@ -1993,10 +2042,46 @@ ngx_http_vod_init_file_key(ngx_http_vod_loc_conf_t* conf, ngx_http_vod_suburi_pa
 }
 
 static ngx_int_t
+ngx_http_vod_init_encryption_key(
+	ngx_http_request_t *r, 
+	ngx_http_vod_loc_conf_t* conf, 
+	ngx_http_vod_suburi_params_t* cur_suburi)
+{
+	ngx_str_t encryption_key_seed;
+	ngx_md5_t md5;
+
+	if (conf->secret_key != NULL)
+	{
+		// calculate the encryption key seed
+		if (ngx_http_complex_value(
+			r,
+			conf->secret_key,
+			&encryption_key_seed) != NGX_OK)
+		{
+			ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+				"ngx_http_vod_init_encryption_key: ngx_http_complex_value failed");
+			return NGX_ERROR;
+		}
+	}
+	else
+	{
+		encryption_key_seed = cur_suburi->uri;
+	}
+
+	// hash the seed to get the key
+	ngx_md5_init(&md5);
+	ngx_md5_update(&md5, encryption_key_seed.data, encryption_key_seed.len);
+	ngx_md5_final(cur_suburi->encryption_key, &md5);
+
+	return NGX_OK;
+}
+
+static ngx_int_t
 ngx_http_vod_start_processing_mp4_file(ngx_http_request_t *r)
 {
-	ngx_http_vod_suburi_params_t* cur_suburi;
+	ngx_http_vod_loc_conf_t* conf;
 	ngx_http_vod_ctx_t *ctx;
+	ngx_flag_t init_encryption_key;
 	ngx_int_t rc;
 
 	// update request flags
@@ -2040,12 +2125,26 @@ ngx_http_vod_start_processing_mp4_file(ngx_http_request_t *r)
 	}
 
 	// initialize the file keys
-	for (cur_suburi = ctx->submodule_context.request_params.suburis;
-		cur_suburi < ctx->submodule_context.request_params.suburis_end;
-		cur_suburi++)
+	conf = ctx->submodule_context.conf;
+	init_encryption_key = (conf->drm_enabled || conf->secret_key != NULL);
+	for (ctx->submodule_context.cur_suburi = ctx->submodule_context.request_params.suburis;
+		ctx->submodule_context.cur_suburi < ctx->submodule_context.request_params.suburis_end;
+		ctx->submodule_context.cur_suburi++)
 	{
-		ngx_http_vod_init_file_key(ctx->submodule_context.conf, cur_suburi, ctx->file_key_prefix);
+		ngx_http_vod_init_file_key(conf, ctx->submodule_context.cur_suburi, ctx->file_key_prefix);
+		
+		if (init_encryption_key)
+		{
+			rc = ngx_http_vod_init_encryption_key(r, conf, ctx->submodule_context.cur_suburi);
+			if (rc != NGX_OK)
+			{
+				return rc;
+			}
+		}
 	}
+
+	// restart the file index/uri params
+	ctx->submodule_context.cur_suburi = ctx->submodule_context.request_params.suburis;
 
 	ctx->state = ctx->submodule_context.conf->drm_enabled ? STATE_READ_DRM_INFO : STATE_PARSE_MOOV_INITIAL;
 
@@ -2465,9 +2564,6 @@ ngx_http_vod_run_mapped_mode_state_machine(ngx_http_request_t *r)
 
 	// free the child request buffers - no need to issue any more http requests at this point
 	ngx_child_request_free_buffers(r->pool, &ctx->child_request_buffers);
-
-	// restart the file index/uri params
-	ctx->submodule_context.cur_suburi = ctx->submodule_context.request_params.suburis;
 
 	// initialize for reading files
 	clcf = ngx_http_get_module_loc_conf(r, ngx_http_core_module);
