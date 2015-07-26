@@ -127,9 +127,9 @@ The structure of a multi URL is:
 `http://<domain>/<location>/<prefix>,<middle1>,<middle2>,<middle3>,<postfix>.urlset/<filename>`
 
 The sample URL above represents 3 URLs:
-* `http://<domain>/<location>/<prefix><middle1><postfix>.urlset/<filename>`
-* `http://<domain>/<location>/<prefix><middle2><postfix>.urlset/<filename>`
-* `http://<domain>/<location>/<prefix><middle3><postfix>.urlset/<filename>`
+* `http://<domain>/<location>/<prefix><middle1><postfix>/<filename>`
+* `http://<domain>/<location>/<prefix><middle2><postfix>/<filename>`
+* `http://<domain>/<location>/<prefix><middle3><postfix>/<filename>`
 
 The suffix `.urlset` (can be changed with vod_multi_uri_suffix) indicates that the URL should be treated as a multi URL.
 
@@ -750,7 +750,7 @@ The name of the manifest file (has no extension).
 The module adds the following nginx variables:
 * `$vod_suburi` - the current sub uri. For example, if the url is:
   `http://<domain>/<location>/<prefix>,<middle1>,<middle2>,<middle3>,<postfix>.urlset/<filename>`
-  `$vod_suburi` will have the value `http://<domain>/<location>/<prefix><middle1><postfix>.urlset/<filename>` 
+  `$vod_suburi` will have the value `http://<domain>/<location>/<prefix><middle1><postfix>/<filename>` 
   when processing the first uri.
 * `$vod_filepath` - in local / mapped modes, the file path of current sub uri. In remote mode, has the same value as `$vod_suburi`.
 
