@@ -2065,7 +2065,7 @@ ngx_http_vod_init_encryption_key(
 	}
 	else
 	{
-		encryption_key_seed = cur_suburi->uri;
+		encryption_key_seed = cur_suburi->stripped_uri;
 	}
 
 	// hash the seed to get the key
