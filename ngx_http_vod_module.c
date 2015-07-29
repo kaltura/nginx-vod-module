@@ -2095,6 +2095,7 @@ ngx_http_vod_start_processing_mp4_file(ngx_http_request_t *r)
 		ctx->submodule_context.request_params.suburis[0].clip_to == UINT_MAX)
 	{
 		ctx->state = STATE_DUMP_OPEN_FILE;
+		ctx->submodule_context.cur_suburi = ctx->submodule_context.request_params.suburis;
 
 		rc = ctx->open_file(r, &ctx->submodule_context.cur_suburi->stripped_uri, ctx->submodule_context.cur_suburi->file_index);
 		if (rc != NGX_OK)
