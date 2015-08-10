@@ -14,6 +14,7 @@
 #include "ngx_http_vod_conf.h"
 #include "ngx_file_reader.h"
 #include "ngx_buffer_cache.h"
+#include "ngx_http_vod_hls.h"
 #include "vod/aes_encrypt.h"
 #include "vod/mp4/mp4_parser.h"
 #include "vod/mp4/mp4_clipper.h"
@@ -156,7 +157,7 @@ ngx_http_vod_set_filepath_var(ngx_http_request_t *r, ngx_http_variable_value_t *
 	v->no_cacheable = 1;
 	v->not_found = 0;
 
-	value = &ctx->submodule_context.cur_suburi->stripped_uri;
+	value = &ctx->submodule_context.cur_suburi->mapped_uri;
 	v->len = value->len;
 	v->data = value->data;
 
@@ -183,7 +184,7 @@ ngx_http_vod_set_suburi_var(ngx_http_request_t *r, ngx_http_variable_value_t *v,
 	v->no_cacheable = 1;
 	v->not_found = 0;
 
-	value = &ctx->submodule_context.cur_suburi->uri;
+	value = &ctx->submodule_context.cur_suburi->stripped_uri;
 	v->len = value->len;
 	v->data = value->data;
 
@@ -439,7 +440,7 @@ ngx_http_vod_drm_info_request_finished(void* context, ngx_int_t rc, off_t conten
 		if (ngx_buffer_cache_store_perf(
 			ctx->perf_counters,
 			conf->drm_info_cache_zone,
-			ctx->submodule_context.cur_suburi->file_key,
+			ctx->submodule_context.cur_suburi->uri_key,
 			drm_info.data,
 			drm_info.len))
 		{
@@ -488,7 +489,7 @@ ngx_http_vod_state_machine_get_drm_info(ngx_http_vod_ctx_t *ctx)
 		if (conf->drm_info_cache_zone != NULL)
 		{
 			// try to read the drm info from cache
-			if (ngx_buffer_cache_fetch_copy_perf(r, ctx->perf_counters, conf->drm_info_cache_zone, ctx->submodule_context.cur_suburi->file_key, &drm_info.data, &drm_info.len))
+			if (ngx_buffer_cache_fetch_copy_perf(r, ctx->perf_counters, conf->drm_info_cache_zone, ctx->submodule_context.cur_suburi->uri_key, &drm_info.data, &drm_info.len))
 			{
 				ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
 					"ngx_http_vod_state_machine_get_drm_info: drm info cache hit, size is %uz", drm_info.len);
@@ -943,7 +944,7 @@ ngx_http_vod_state_machine_parse_moov_atoms(ngx_http_vod_ctx_t *ctx)
 			// open the file
 			ctx->state = STATE_PARSE_MOOV_OPEN_FILE;
 
-			rc = ctx->open_file(r, &ctx->submodule_context.cur_suburi->stripped_uri, ctx->submodule_context.cur_suburi->file_index);
+			rc = ctx->open_file(r, &ctx->submodule_context.cur_suburi->mapped_uri, ctx->submodule_context.cur_suburi->file_index);
 			if (rc != NGX_OK)
 			{
 				if (rc != NGX_AGAIN && rc != NGX_DONE)
@@ -1213,7 +1214,7 @@ ngx_http_vod_state_machine_open_files(ngx_http_vod_ctx_t *ctx)
 			continue;
 		}
 
-		path = &ctx->submodule_context.cur_suburi->stripped_uri;
+		path = &ctx->submodule_context.cur_suburi->mapped_uri;
 
 		rc = ctx->open_file(ctx->submodule_context.r, path, file_index);
 		if (rc != NGX_OK)
@@ -1378,7 +1379,7 @@ ngx_http_vod_init_frame_processing(ngx_http_vod_ctx_t *ctx)
 	ctx->write_segment_buffer_context.chain_end = &ctx->out;
 	ctx->write_segment_buffer_context.total_size = 0;
 
-	if (conf->secret_key != NULL)
+	if (conf->secret_key != NULL && conf->submodule.name == hls.name)
 	{
 		rc = ngx_http_vod_init_aes_encryption(ctx, ngx_http_vod_write_segment_buffer, &ctx->write_segment_buffer_context);
 		if (rc != VOD_OK)
@@ -1431,7 +1432,7 @@ ngx_http_vod_init_frame_processing(ngx_http_vod_ctx_t *ctx)
 	}
 
 	// calculate the response size
-	if (conf->secret_key != NULL)
+	if (conf->secret_key != NULL && conf->submodule.name == hls.name)
 	{
 		ctx->content_length = aes_round_to_block(ctx->content_length);
 	}
@@ -2028,7 +2029,7 @@ finalize_request:
 }
 
 static void
-ngx_http_vod_init_file_key(ngx_http_vod_loc_conf_t* conf, ngx_http_vod_suburi_params_t* cur_suburi, ngx_str_t* prefix)
+ngx_http_vod_init_uri_key(ngx_http_vod_loc_conf_t* conf, ngx_http_vod_suburi_params_t* cur_suburi, ngx_str_t* prefix)
 {
 	ngx_md5_t md5;
 
@@ -2038,6 +2039,20 @@ ngx_http_vod_init_file_key(ngx_http_vod_loc_conf_t* conf, ngx_http_vod_suburi_pa
 		ngx_md5_update(&md5, prefix->data, prefix->len);
 	}
 	ngx_md5_update(&md5, cur_suburi->stripped_uri.data, cur_suburi->stripped_uri.len);
+	ngx_md5_final(cur_suburi->uri_key, &md5);
+}
+
+static void
+ngx_http_vod_init_file_key(ngx_http_vod_loc_conf_t* conf, ngx_http_vod_suburi_params_t* cur_suburi, ngx_str_t* prefix)
+{
+	ngx_md5_t md5;
+
+	ngx_md5_init(&md5);
+	if (prefix != NULL)
+	{
+		ngx_md5_update(&md5, prefix->data, prefix->len);
+	}
+	ngx_md5_update(&md5, cur_suburi->mapped_uri.data, cur_suburi->mapped_uri.len);
 	ngx_md5_final(cur_suburi->file_key, &md5);
 }
 
@@ -2065,7 +2080,7 @@ ngx_http_vod_init_encryption_key(
 	}
 	else
 	{
-		encryption_key_seed = cur_suburi->stripped_uri;
+		encryption_key_seed = cur_suburi->mapped_uri;
 	}
 
 	// hash the seed to get the key
@@ -2097,7 +2112,7 @@ ngx_http_vod_start_processing_mp4_file(ngx_http_request_t *r)
 		ctx->state = STATE_DUMP_OPEN_FILE;
 		ctx->submodule_context.cur_suburi = ctx->submodule_context.request_params.suburis;
 
-		rc = ctx->open_file(r, &ctx->submodule_context.cur_suburi->stripped_uri, ctx->submodule_context.cur_suburi->file_index);
+		rc = ctx->open_file(r, &ctx->submodule_context.cur_suburi->mapped_uri, ctx->submodule_context.cur_suburi->file_index);
 		if (rc != NGX_OK)
 		{
 			if (rc != NGX_AGAIN && rc != NGX_DONE)
@@ -2134,6 +2149,11 @@ ngx_http_vod_start_processing_mp4_file(ngx_http_request_t *r)
 	{
 		ngx_http_vod_init_file_key(conf, ctx->submodule_context.cur_suburi, ctx->file_key_prefix);
 		
+		if (conf->drm_enabled)
+		{
+			ngx_http_vod_init_uri_key(conf, ctx->submodule_context.cur_suburi, ctx->file_key_prefix);
+		}
+
 		if (init_encryption_key)
 		{
 			rc = ngx_http_vod_init_encryption_key(r, conf, ctx->submodule_context.cur_suburi);
@@ -2449,7 +2469,7 @@ ngx_http_vod_local_request_handler(ngx_http_request_t *r)
 
 		path.len = last - path.data;
 
-		cur_suburi->stripped_uri = path;
+		cur_suburi->mapped_uri = path;
 	}
 
 	// initialize for reading files
@@ -2514,7 +2534,7 @@ ngx_http_vod_run_mapped_mode_state_machine(ngx_http_request_t *r)
 					"ngx_http_vod_run_mapped_mode_state_machine: path mapping cache hit %V", &path);
 
 				// replace the stripped uri with the corresponding path
-				ctx->submodule_context.cur_suburi->stripped_uri = path;
+				ctx->submodule_context.cur_suburi->mapped_uri = path;
 				continue;
 			}
 			else
@@ -2665,7 +2685,7 @@ ngx_http_vod_path_request_finished(void* context, ngx_int_t rc, off_t content_le
 	}
 
 	// save the path
-	ctx->submodule_context.cur_suburi->stripped_uri = path;
+	ctx->submodule_context.cur_suburi->mapped_uri = path;
 
 	// move to the next suburi
 	ctx->submodule_context.cur_suburi++;

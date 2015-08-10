@@ -47,6 +47,7 @@ typedef struct {
 typedef struct {
 	ngx_str_t uri;
 	ngx_str_t stripped_uri;
+	ngx_str_t mapped_uri;
 	uint32_t clip_to;
 	uint32_t clip_from;
 	uint32_t speed_nom;
@@ -54,6 +55,7 @@ typedef struct {
 	uint32_t file_index;
 	uint32_t required_tracks[MEDIA_TYPE_COUNT];
 
+	u_char uri_key[BUFFER_CACHE_KEY_SIZE];
 	u_char file_key[BUFFER_CACHE_KEY_SIZE];
 	u_char encryption_key[BUFFER_CACHE_KEY_SIZE];
 	void* drm_info;

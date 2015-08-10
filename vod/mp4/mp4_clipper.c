@@ -595,9 +595,9 @@ mp4_clipper_stts_clip_data(
 
 	if (*first_frame >= *last_frame)
 	{
-		vod_log_error(VOD_LOG_ERR, context->request_context->log, 0,
+		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, context->request_context->log, 0,
 			"mp4_clipper_stts_clip_data: no frames were found between clip from and clip to");
-		return VOD_BAD_REQUEST;
+		return VOD_OK;
 	}
 
 	result->data_size = (u_char*)result->last_entry - (u_char*)result->first_entry;
@@ -1474,6 +1474,11 @@ mp4_clipper_process_moov_atom_callback(void* ctx, atom_info_t* atom_info)
 	if (rc != VOD_OK)
 	{
 		return rc;
+	}
+
+	if (parse_context.first_frame >= parse_context.last_frame)
+	{
+		return VOD_OK;
 	}
 
 	rc = mp4_clipper_stss_clip_data(&parse_context, &parsed_trak->atoms[TRAK_ATOM_STSS], &parsed_trak->stss);

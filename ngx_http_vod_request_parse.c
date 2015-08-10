@@ -562,6 +562,7 @@ ngx_http_vod_extract_uri_params(
 	*p = '\0';
 
 	suburi->stripped_uri.len = p - suburi->stripped_uri.data;
+	suburi->mapped_uri = suburi->stripped_uri;
 
 	return NGX_OK;
 }
