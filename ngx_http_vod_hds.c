@@ -56,6 +56,7 @@ ngx_http_vod_hds_init_frame_processor(
 	
 	rc = hds_muxer_init_fragment(
 		&submodule_context->request_context,
+		&submodule_context->conf->hds.fragment_config,
 		submodule_context->request_params.segment_index,
 		&submodule_context->mpeg_metadata,
 		read_cache_state,
@@ -107,6 +108,7 @@ ngx_http_vod_hds_create_loc_conf(
 	ngx_conf_t *cf,
 	ngx_http_vod_hds_loc_conf_t *conf)
 {
+	conf->fragment_config.generate_moof_atom = NGX_CONF_UNSET;
 }
 
 static char *
@@ -118,6 +120,7 @@ ngx_http_vod_hds_merge_loc_conf(
 {
 	ngx_conf_merge_str_value(conf->manifest_config.fragment_file_name_prefix, prev->manifest_config.fragment_file_name_prefix, "frag");
 	ngx_conf_merge_str_value(conf->manifest_file_name_prefix, prev->manifest_file_name_prefix, "manifest");
+	ngx_conf_merge_value(conf->fragment_config.generate_moof_atom, prev->fragment_config.generate_moof_atom, 1);
 
 	return NGX_CONF_OK;
 }

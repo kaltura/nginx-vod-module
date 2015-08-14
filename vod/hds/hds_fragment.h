@@ -13,9 +13,14 @@
 struct hds_muxer_state_s;
 typedef struct hds_muxer_state_s hds_muxer_state_t;
 
+typedef struct {
+	bool_t generate_moof_atom;
+} hds_fragment_config_t;
+
 // functions
 vod_status_t hds_muxer_init_fragment(
 	request_context_t* request_context,
+	hds_fragment_config_t* conf,
 	uint32_t segment_index,
 	mpeg_metadata_t *mpeg_metadata,
 	read_cache_state_t* read_cache_state,

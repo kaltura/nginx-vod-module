@@ -530,6 +530,7 @@ hds_muxer_write_codec_config(u_char* p, hds_muxer_state_t* state, uint64_t cur_f
 vod_status_t
 hds_muxer_init_fragment(
 	request_context_t* request_context,
+	hds_fragment_config_t* conf,
 	uint32_t segment_index,
 	mpeg_metadata_t *mpeg_metadata,
 	read_cache_state_t* read_cache_state,
@@ -584,7 +585,15 @@ hds_muxer_init_fragment(
 	mdat_atom_size += mpeg_metadata->video_key_frame_count * state->codec_config_size;
 
 	// get the fragment header size
-	afra_atom_size = ATOM_HEADER_SIZE + sizeof(afra_atom_t) + sizeof(afra_entry_t) * mpeg_metadata->video_key_frame_count;
+	if (conf->generate_moof_atom)
+	{
+		afra_atom_size = ATOM_HEADER_SIZE + sizeof(afra_atom_t)+sizeof(afra_entry_t)* mpeg_metadata->video_key_frame_count;
+	}
+	else
+	{
+		afra_atom_size = 0;
+		moof_atom_size = 0;
+	}
 
 	result_size =
 		afra_atom_size +
@@ -618,49 +627,54 @@ hds_muxer_init_fragment(
 		return VOD_ALLOC_FAILED;
 	}
 
-	// afra
-	p = hds_write_afra_atom_header(header->data, afra_atom_size, mpeg_metadata->video_key_frame_count);
+	p = header->data;
 
-	p = hds_calculate_output_offsets_and_write_afra_entries(state, ATOM_HEADER_SIZE, afra_atom_size + moof_atom_size, p);
-
-	// moof
-	write_atom_header(p, moof_atom_size, 'm', 'o', 'o', 'f');
-
-	// moof.mfhd
-	p = mp4_builder_write_mfhd_atom(p, segment_index);
-
-	for (stream_state = state->first_stream; stream_state < state->last_stream; stream_state++)
+	if (conf->generate_moof_atom)
 	{
-		cur_stream = stream_state->metadata;
+		// afra
+		p = hds_write_afra_atom_header(p, afra_atom_size, mpeg_metadata->video_key_frame_count);
 
-		// moof.traf
-		traf_atom_size = hds_get_traf_atom_size(cur_stream);
-		write_atom_header(p, traf_atom_size, 't', 'r', 'a', 'f');
+		p = hds_calculate_output_offsets_and_write_afra_entries(state, ATOM_HEADER_SIZE, afra_atom_size + moof_atom_size, p);
 
-		// moof.traf.tfhd
-		p = hds_write_tfhd_atom(p, track_id, ATOM_HEADER_SIZE + sizeof(afra_atom_t) + moof_atom_size);
+		// moof
+		write_atom_header(p, moof_atom_size, 'm', 'o', 'o', 'f');
 
-		// moof.traf.trun
-		frames_end = cur_stream->frames + cur_stream->frame_count;
-		switch (cur_stream->media_info.media_type)
+		// moof.mfhd
+		p = mp4_builder_write_mfhd_atom(p, segment_index);
+
+		for (stream_state = state->first_stream; stream_state < state->last_stream; stream_state++)
 		{
-		case MEDIA_TYPE_VIDEO:
-			for (cur_frame = cur_stream->frames, output_offset = stream_state->first_frame_output_offset; 
-				cur_frame < frames_end; 
-				cur_frame++, output_offset++)
-			{
-				p = hds_write_single_video_frame_trun_atom(p, cur_frame, *output_offset);
-			}
-			break;
+			cur_stream = stream_state->metadata;
 
-		case MEDIA_TYPE_AUDIO:
-			for (cur_frame = cur_stream->frames, output_offset = stream_state->first_frame_output_offset;
-				cur_frame < frames_end;
-				cur_frame++, output_offset++)
+			// moof.traf
+			traf_atom_size = hds_get_traf_atom_size(cur_stream);
+			write_atom_header(p, traf_atom_size, 't', 'r', 'a', 'f');
+
+			// moof.traf.tfhd
+			p = hds_write_tfhd_atom(p, track_id, ATOM_HEADER_SIZE + sizeof(afra_atom_t)+moof_atom_size);
+
+			// moof.traf.trun
+			frames_end = cur_stream->frames + cur_stream->frame_count;
+			switch (cur_stream->media_info.media_type)
 			{
-				p = hds_write_single_audio_frame_trun_atom(p, cur_frame, *output_offset);
+			case MEDIA_TYPE_VIDEO:
+				for (cur_frame = cur_stream->frames, output_offset = stream_state->first_frame_output_offset;
+					cur_frame < frames_end;
+					cur_frame++, output_offset++)
+				{
+					p = hds_write_single_video_frame_trun_atom(p, cur_frame, *output_offset);
+				}
+				break;
+
+			case MEDIA_TYPE_AUDIO:
+				for (cur_frame = cur_stream->frames, output_offset = stream_state->first_frame_output_offset;
+					cur_frame < frames_end;
+					cur_frame++, output_offset++)
+				{
+					p = hds_write_single_audio_frame_trun_atom(p, cur_frame, *output_offset);
+				}
+				break;
 			}
-			break;
 		}
 	}
 
