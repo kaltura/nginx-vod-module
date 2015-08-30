@@ -363,7 +363,7 @@ hds_calculate_output_offsets_and_write_afra_entries(
 		}
 
 		// video key frames start with the codec info
-		if (selected_stream->media_type == MEDIA_TYPE_VIDEO && selected_stream->cur_frame->key_frame)
+		if (selected_stream->cur_frame->key_frame && selected_stream->media_type == MEDIA_TYPE_VIDEO && p != NULL)
 		{
 			p = hds_write_afra_atom_entry(p, 
 				rescale_time(selected_stream->next_frame_dts, selected_stream->timescale, HDS_TIMESCALE),
@@ -587,7 +587,7 @@ hds_muxer_init_fragment(
 	// get the fragment header size
 	if (conf->generate_moof_atom)
 	{
-		afra_atom_size = ATOM_HEADER_SIZE + sizeof(afra_atom_t)+sizeof(afra_entry_t)* mpeg_metadata->video_key_frame_count;
+		afra_atom_size = ATOM_HEADER_SIZE + sizeof(afra_atom_t) + sizeof(afra_entry_t) * mpeg_metadata->video_key_frame_count;
 	}
 	else
 	{
@@ -676,6 +676,11 @@ hds_muxer_init_fragment(
 				break;
 			}
 		}
+	}
+	else
+	{
+		// calculate the output offsets
+		hds_calculate_output_offsets_and_write_afra_entries(state, 0, 0, NULL);
 	}
 
 	// mdat
