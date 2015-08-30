@@ -539,7 +539,7 @@ mp4_parser_parse_stts_atom(atom_info_t* atom_info, frames_parse_context_t* conte
 		if (entries == 1)
 		{
 			// optimization - pre-allocate the correct size for constant frame rate
-			initial_alloc_size = parse_be32(cur_entry->count) - first_frame;
+			initial_alloc_size = sample_count;
 		}
 	}
 	else
@@ -556,7 +556,12 @@ mp4_parser_parse_stts_atom(atom_info_t* atom_info, frames_parse_context_t* conte
 					"mp4_parser_parse_stts_atom: sample duration is zero (1)");
 				return VOD_BAD_DATA;
 			}
+
 			initial_alloc_size = (end_time - start_time) / sample_duration + 1;
+			if (initial_alloc_size > sample_count)
+			{
+				initial_alloc_size = sample_count;
+			}
 		}
 	}
 
@@ -580,7 +585,9 @@ mp4_parser_parse_stts_atom(atom_info_t* atom_info, frames_parse_context_t* conte
 	{
 		for (;;)
 		{
-			if (sample_duration != 0 && end_time != ULLONG_MAX)
+			if (sample_duration != 0 && 
+				end_time != ULLONG_MAX && 
+				end_time < accum_duration + ((uint64_t)UINT_MAX) * sample_duration)
 			{
 				cur_count = vod_div_ceil(end_time - accum_duration, sample_duration);
 				cur_count = vod_min(cur_count, sample_count);
