@@ -1614,7 +1614,8 @@ ngx_http_vod_state_machine_filter_audio(ngx_http_vod_ctx_t *ctx)
 		ctx->cur_stream++)
 	{
 		if (ctx->cur_stream->media_info.media_type != MEDIA_TYPE_AUDIO ||
-			ctx->cur_stream->media_info.speed_nom == ctx->cur_stream->media_info.speed_denom)
+			ctx->cur_stream->media_info.speed_nom == ctx->cur_stream->media_info.speed_denom ||
+			ctx->cur_stream->frame_count == 0)
 		{
 			continue;
 		}
