@@ -392,6 +392,7 @@ mss_packager_build_fragment_header(
 	for (cur_frame = stream_metadata->frames; cur_frame < last_frame; cur_frame++)
 	{
 		cur_frame->duration = rescale_time(cur_frame->duration, stream_metadata->media_info.timescale, MSS_TIMESCALE);
+		cur_frame->pts_delay = rescale_time(cur_frame->pts_delay, stream_metadata->media_info.timescale, MSS_TIMESCALE);
 	}
 
 	p = mp4_builder_write_trun_atom(
