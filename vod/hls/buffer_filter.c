@@ -22,6 +22,9 @@ buffer_filter_init(
 
 	state->cur_state = STATE_INITIAL;
 
+	state->used_size = 0;
+	state->last_flush_size = 0;
+
 	if (request_context->simulation_only)
 	{
 		return VOD_OK;
@@ -37,7 +40,6 @@ buffer_filter_init(
 	state->end_pos = state->start_pos + size;
 	state->cur_pos = state->start_pos;
 	state->last_flush_pos = state->cur_pos;
-	state->margin_size = 0;
 	
 	return VOD_OK;
 }
@@ -69,7 +71,7 @@ buffer_filter_start_frame(void* context, output_frame_t* frame)
 }
 
 vod_status_t 
-buffer_filter_force_flush(buffer_filter_t* state)
+buffer_filter_force_flush(buffer_filter_t* state, bool_t last_stream_frame)
 {
 	vod_status_t rc;
 
@@ -80,12 +82,7 @@ buffer_filter_force_flush(buffer_filter_t* state)
 	}
 	
 	// Note: at this point state can only be either STATE_FRAME_STARTED or STATE_FRAME_FLUSHED
-	
-	if (state->cur_state == STATE_FRAME_FLUSHED)
-	{
-		state->cur_frame.last_stream_frame = state->last_frame.last_stream_frame;
-	}
-	
+		
 	// write all buffered data up to the last frame flush position
 	rc = state->next_filter->start_frame(state->next_filter_context, &state->cur_frame);
 	if (rc != VOD_OK)
@@ -99,7 +96,7 @@ buffer_filter_force_flush(buffer_filter_t* state)
 		return rc;
 	}
 	
-	rc = state->next_filter->flush_frame(state->next_filter_context, state->margin_size);
+	rc = state->next_filter->flush_frame(state->next_filter_context, last_stream_frame);
 	if (rc != VOD_OK)
 	{
 		return rc;
@@ -109,7 +106,6 @@ buffer_filter_force_flush(buffer_filter_t* state)
 	vod_memmove(state->start_pos, state->last_flush_pos, state->cur_pos - state->last_flush_pos);
 	state->cur_pos -= (state->last_flush_pos - state->start_pos);
 	state->last_flush_pos = state->start_pos;
-	state->margin_size = 0;
 
 	switch (state->cur_state)
 	{
@@ -149,7 +145,7 @@ buffer_filter_write(void* context, const u_char* buffer, uint32_t size)
 	// if there is not enough room try flushing the buffer
 	if (state->cur_pos + size > state->end_pos)
 	{
-		rc = buffer_filter_force_flush(state);
+		rc = buffer_filter_force_flush(state, FALSE);
 		if (rc != VOD_OK)
 		{
 			return rc;
@@ -159,8 +155,7 @@ buffer_filter_write(void* context, const u_char* buffer, uint32_t size)
 	// if there is enough room in the buffer, copy the input data
 	if (state->cur_pos + size <= state->end_pos)
 	{
-		vod_memcpy(state->cur_pos, buffer, size);
-		state->cur_pos += size;
+		state->cur_pos = vod_copy(state->cur_pos, buffer, size);
 		return VOD_OK;
 	}
 	
@@ -190,7 +185,7 @@ buffer_filter_write(void* context, const u_char* buffer, uint32_t size)
 }
 
 static vod_status_t 
-buffer_filter_flush_frame(void* context, int32_t margin_size)
+buffer_filter_flush_frame(void* context, bool_t last_stream_frame)
 {
 	buffer_filter_t* state = (buffer_filter_t*)context;
 	vod_status_t rc;
@@ -201,12 +196,20 @@ buffer_filter_flush_frame(void* context, int32_t margin_size)
 		// update the last flush position
 		state->last_flush_pos = state->cur_pos;
 		state->cur_state = STATE_FRAME_FLUSHED;
-		state->margin_size += margin_size;
+
+		if (last_stream_frame)
+		{
+			rc = buffer_filter_force_flush(state, TRUE);
+			if (rc != VOD_OK)
+			{
+				return rc;
+			}
+		}
 		break;
 	
 	case STATE_DIRECT:
 		// pass the frame flush to the next filter
-		rc = state->next_filter->flush_frame(state->next_filter_context, margin_size);
+		rc = state->next_filter->flush_frame(state->next_filter_context, last_stream_frame);
 		if (rc != VOD_OK)
 		{
 			return rc;
@@ -232,42 +235,111 @@ buffer_filter_get_dts(buffer_filter_t* state, uint64_t* dts)
 	return TRUE;
 }
 
-void 
-buffer_filter_simulated_force_flush(buffer_filter_t* state)
-{
-	if (state->cur_state == STATE_FRAME_FLUSHED)
-	{
-		vod_log_debug2(VOD_LOG_DEBUG_LEVEL, state->request_context->log, 0,
-			"buffer_filter_simulated_force_flush: writing %uD dts %uL", state->cur_frame.original_size, state->cur_frame.dts);
 
-		state->next_filter->simulated_write(state->next_filter_context, &state->cur_frame);
+void
+buffer_filter_simulated_force_flush(buffer_filter_t* state, bool_t last_stream_frame)
+{
+	if (state->last_flush_size <= 0)
+	{
+		return;
+	}
+	
+	state->next_filter->simulated_start_frame(state->next_filter_context, &state->cur_frame);	
+	state->next_filter->simulated_write(state->next_filter_context, state->last_flush_size);
+	state->next_filter->simulated_flush_frame(state->next_filter_context, last_stream_frame);
+	
+	state->used_size -= state->last_flush_size;
+	state->last_flush_size = 0;
+
+	switch (state->cur_state)
+	{
+	case STATE_FRAME_STARTED:
+		state->cur_frame = state->last_frame;
+		break;
+		
+	case STATE_FRAME_FLUSHED:
 		state->cur_state = STATE_INITIAL;
+		break;
 	}
 }
 
 static void 
-buffer_filter_simulated_write(void* context, output_frame_t* frame)
+buffer_filter_simulated_start_frame(void* context, output_frame_t* frame)
 {
 	buffer_filter_t* state = (buffer_filter_t*)context;
 	
-	if (state->cur_state == STATE_FRAME_FLUSHED)
+	switch (state->cur_state)
 	{
-		if (state->cur_frame.original_size + frame->original_size <= state->size)
-		{
-			state->cur_frame.last_stream_frame = frame->last_stream_frame;
-			state->cur_frame.original_size += frame->original_size;
-			return;
-		}
-
-		buffer_filter_simulated_force_flush(state);
+	case STATE_INITIAL:
+		state->cur_frame = *frame;
+		break;
+		
+	case STATE_FRAME_FLUSHED:
+		break;
 	}
 
-	state->cur_frame = *frame;
-	state->cur_state = STATE_FRAME_FLUSHED;
+	state->last_frame = *frame;
+	state->cur_state = STATE_FRAME_STARTED;
+}
 
-	if (state->cur_frame.original_size > state->size)
+static void 
+buffer_filter_simulated_write(void* context, uint32_t size)
+{
+	buffer_filter_t* state = (buffer_filter_t*)context;
+
+	switch (state->cur_state)
 	{
-		buffer_filter_simulated_force_flush(state);
+	case STATE_DIRECT:
+		state->next_filter->simulated_write(state->next_filter_context, size);
+		return;
+		
+	case STATE_FRAME_STARTED:
+		break;				// handled outside the switch
+	}
+	
+	if (state->used_size + size > state->size)
+	{
+		buffer_filter_simulated_force_flush(state, FALSE);
+	}
+	
+	if (state->used_size + size <= state->size)
+	{
+		state->used_size += size;
+		return;
+	}
+	
+	state->cur_state = STATE_DIRECT;
+	
+	state->next_filter->simulated_start_frame(state->next_filter_context, &state->cur_frame);
+	
+	state->next_filter->simulated_write(state->next_filter_context, state->used_size + size);
+
+	state->used_size = 0;
+}
+
+static void 
+buffer_filter_simulated_flush_frame(void* context, bool_t last_stream_frame)
+{
+	buffer_filter_t* state = (buffer_filter_t*)context;
+
+	switch (state->cur_state)
+	{
+	case STATE_FRAME_STARTED:
+		// update the last flush position
+		state->last_flush_size = state->used_size;
+		state->cur_state = STATE_FRAME_FLUSHED;
+
+		if (last_stream_frame)
+		{
+			buffer_filter_simulated_force_flush(state, TRUE);
+		}
+		break;
+	
+	case STATE_DIRECT:
+		// pass the frame flush to the next filter
+		state->next_filter->simulated_flush_frame(state->next_filter_context, last_stream_frame);
+		state->cur_state = STATE_INITIAL;
+		break;
 	}
 }
 
@@ -275,5 +347,7 @@ const media_filter_t buffer_filter = {
 	buffer_filter_start_frame,
 	buffer_filter_write,
 	buffer_filter_flush_frame,
+	buffer_filter_simulated_start_frame,
 	buffer_filter_simulated_write,
+	buffer_filter_simulated_flush_frame,
 };

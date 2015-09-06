@@ -47,7 +47,7 @@ static const uint8_t piff_uuid[] = {
 static u_char*
 mss_playready_write_protection_tag(void* context, u_char* p, mpeg_metadata_t* mpeg_metadata)
 {
-	// XXXX taking only the first stream
+	// Note: taking only the first stream, in mss all renditions must have the same key
 	mp4_encrypt_info_t* drm_info = (mp4_encrypt_info_t*)mpeg_metadata->first_stream->file_info.drm_info;
 	mp4_encrypt_system_info_t* cur_info;
 	vod_str_t base64;
@@ -74,7 +74,7 @@ mss_playready_build_manifest(
 	mpeg_metadata_t* mpeg_metadata,
 	vod_str_t* result)
 {
-	// XXXX taking only the first stream
+	// Note: taking only the first stream, in mss all renditions must have the same key
 	mp4_encrypt_info_t* drm_info = (mp4_encrypt_info_t*)mpeg_metadata->first_stream->file_info.drm_info;
 	mp4_encrypt_system_info_t* cur_info;
 	size_t extra_tags_size;

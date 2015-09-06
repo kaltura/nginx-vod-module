@@ -4,6 +4,7 @@
 // includes
 #include "../mp4/mp4_parser.h"
 #include "../segmenter.h"
+#include "hls_muxer.h"
 
 // constants
 #define MAX_IFRAMES_M3U8_HEADER_SIZE (sizeof(iframes_m3u8_header_format) + VOD_INT64_LEN)
@@ -47,6 +48,7 @@ vod_status_t m3u8_builder_build_index_playlist(
 vod_status_t m3u8_builder_build_iframe_playlist(
 	request_context_t* request_context,
 	m3u8_config_t* conf,
+	hls_muxer_conf_t* muxer_conf,
 	vod_str_t* base_url,
 	bool_t include_file_index,
 	segmenter_conf_t* segmenter_conf,

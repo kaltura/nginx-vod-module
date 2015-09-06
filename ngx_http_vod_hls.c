@@ -126,6 +126,7 @@ ngx_http_vod_hls_handle_iframe_playlist(
 	rc = m3u8_builder_build_iframe_playlist(
 		&submodule_context->request_context,
 		&submodule_context->conf->hls.m3u8_config,
+		&submodule_context->conf->hls.muxer_config,
 		&base_url,
 		submodule_context->request_params.uses_multi_uri,
 		&submodule_context->conf->segmenter,
@@ -197,6 +198,7 @@ ngx_http_vod_hls_init_frame_processor(
 	rc = hls_muxer_init(
 		state,
 		&submodule_context->request_context,
+		&submodule_context->conf->hls.muxer_config,
 		submodule_context->request_params.segment_index,
 		&submodule_context->mpeg_metadata,
 		read_cache_state,
@@ -283,6 +285,8 @@ ngx_http_vod_hls_create_loc_conf(
 	conf->absolute_master_urls = NGX_CONF_UNSET;
 	conf->absolute_index_urls = NGX_CONF_UNSET;
 	conf->absolute_iframe_urls = NGX_CONF_UNSET;
+	conf->muxer_config.interleave_frames = NGX_CONF_UNSET;
+	conf->muxer_config.align_frames = NGX_CONF_UNSET;
 }
 
 static char *
@@ -301,6 +305,9 @@ ngx_http_vod_hls_merge_loc_conf(
 	ngx_conf_merge_str_value(conf->iframes_file_name_prefix, prev->iframes_file_name_prefix, "iframes");
 	ngx_conf_merge_str_value(conf->m3u8_config.segment_file_name_prefix, prev->m3u8_config.segment_file_name_prefix, "seg");
 	ngx_conf_merge_str_value(conf->m3u8_config.encryption_key_file_name, prev->m3u8_config.encryption_key_file_name, "encryption");
+
+	ngx_conf_merge_value(conf->muxer_config.interleave_frames, prev->muxer_config.interleave_frames, 0);
+	ngx_conf_merge_value(conf->muxer_config.align_frames, prev->muxer_config.align_frames, 1);
 
 	m3u8_builder_init_config(
 		&conf->m3u8_config,

@@ -13,24 +13,44 @@
 
 // typedefs
 typedef struct {
+	int media_type;
+	unsigned pid;
+	unsigned sid;
+} mpegts_stream_info_t;
+
+typedef struct {
 	request_context_t* request_context;
 
+	// stream info
+	mpegts_stream_info_t stream_info;
+
+	// options
+	bool_t interleave_frames;
+	bool_t align_frames;
+
 	// buffer queue
-	write_buffer_queue_t queue;
+	write_buffer_queue_t* queue;
+	off_t send_queue_offset;
+	off_t last_queue_offset;
 
 	// packet state
 	u_char* cur_packet_start;
 	u_char* cur_packet_end;
 	u_char* cur_pos;
+	u_char* temp_packet;
 	
 	// frame state
-	unsigned pid;
-	unsigned* cc;
-	bool_t last_stream_frame;
-	unsigned cur_pes_header_size;
+	unsigned cc;
 	u_char* cur_pes_size_ptr;
 	uint32_t pes_bytes_written;
-	uint32_t simulated_offset;		// simulated mode only
+	bool_t wrote_frame_packet;
+
+	// simulation only
+	uint32_t temp_packet_size;
+	off_t cur_frame_start_pos;
+	off_t cur_frame_end_pos;
+	off_t last_frame_start_pos;
+	off_t last_frame_end_pos;
 } mpegts_encoder_state_t;
 
 typedef struct {
@@ -48,20 +68,24 @@ typedef struct {
 extern const media_filter_t mpegts_encoder;
 
 // functions
+vod_status_t mpegts_encoder_init_streams(
+	request_context_t* request_context,
+	write_buffer_queue_t* queue,
+	mpegts_encoder_init_streams_state_t* stream_state,
+	uint32_t segment_index);
+
+void mpegts_encoder_finalize_streams(
+	mpegts_encoder_init_streams_state_t* stream_state);
+
 vod_status_t mpegts_encoder_init(
-	mpegts_encoder_state_t* state, 
-	request_context_t* request_context, 
-	uint32_t segment_index,
-	write_callback_t write_callback, 
-	void* write_context);
+	mpegts_encoder_state_t* state,
+	mpegts_encoder_init_streams_state_t* stream_state,
+	int media_type,
+	request_context_t* request_context,
+	write_buffer_queue_t* queue,
+	bool_t interleave_frames,
+	bool_t align_frames);
 
-vod_status_t mpegts_encoder_init_streams(mpegts_encoder_state_t* state, mpegts_encoder_init_streams_state_t* stream_state, uint32_t segment_index);
-vod_status_t mpegts_encoder_add_stream(mpegts_encoder_init_streams_state_t* stream_state, int media_type, unsigned* pid, unsigned* sid);
-void mpegts_encoder_finalize_streams(mpegts_encoder_init_streams_state_t* stream_state);
-
-vod_status_t mpegts_encoder_flush(mpegts_encoder_state_t* state);
-
-void mpegts_encoder_simulated_start_segment(mpegts_encoder_state_t* state);
-uint32_t mpegts_encoder_simulated_get_offset(mpegts_encoder_state_t* state);
+void mpegts_encoder_simulated_start_segment(write_buffer_queue_t* queue);
 
 #endif // __MPEGTS_ENCODER_FILTER_H__

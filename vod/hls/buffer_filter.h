@@ -22,7 +22,10 @@ typedef struct {
 	output_frame_t last_frame;
 	u_char* cur_pos;
 	u_char* last_flush_pos;
-	int32_t margin_size;
+
+	// simulation mode
+	uint32_t used_size;
+	uint32_t last_flush_size;
 } buffer_filter_t;
 
 // globals
@@ -35,9 +38,9 @@ vod_status_t buffer_filter_init(
 	const media_filter_t* next_filter,
 	void* next_filter_context,
 	uint32_t size);
-vod_status_t buffer_filter_force_flush(buffer_filter_t* state);
+vod_status_t buffer_filter_force_flush(buffer_filter_t* state, bool_t last_stream_frame);
 bool_t buffer_filter_get_dts(buffer_filter_t* state, uint64_t* dts);
 
-void buffer_filter_simulated_force_flush(buffer_filter_t* state);
+void buffer_filter_simulated_force_flush(buffer_filter_t* state, bool_t last_stream_frame);
 
 #endif // __BUFFER_FILTER_H__
