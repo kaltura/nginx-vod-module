@@ -147,7 +147,7 @@ mpegts_write_pts(u_char *p, unsigned fb, uint64_t pts)
 	return p;
 }
 
-static u_char *
+static vod_inline u_char *
 mpegts_write_packet_header(u_char *p, unsigned pid, unsigned cc)
 {	
 	*p++ = 0x47;
@@ -718,84 +718,103 @@ static vod_status_t
 mpegts_encoder_write(void* context, const u_char* buffer, uint32_t size)
 {
 	mpegts_encoder_state_t* state = (mpegts_encoder_state_t*)context;
-	uint32_t input_buffer_left;
 	uint32_t packet_used_size;
 	uint32_t cur_size;
-	const u_char* buffer_end = buffer + size;
 	u_char* cur_packet;
 	vod_status_t rc;
 	bool_t write_direct;
 
-	for (;;)
+	state->pes_bytes_written += size;
+
+	// make sure we have a packet
+	if (state->cur_pos >= state->cur_packet_end)
 	{
-		input_buffer_left = buffer_end - buffer;
-		if (input_buffer_left <= 0)
+		write_direct = size >= MPEGTS_PACKET_USABLE_SIZE;
+
+		rc = mpegts_encoder_init_packet(state, write_direct);
+		if (rc != VOD_OK)
 		{
-			break;
+			return rc;
 		}
-		
-		if (state->cur_pos >= state->cur_packet_end)
-		{
-			write_direct = input_buffer_left >= MPEGTS_PACKET_USABLE_SIZE;
-
-			rc = mpegts_encoder_init_packet(state, write_direct);
-			if (rc != VOD_OK)
-			{
-				return rc;
-			}
-		}
-		
-		// copy as much as possible to the current packet
-		if (state->cur_pos + input_buffer_left >= state->cur_packet_end)
-		{
-			state->wrote_frame_packet = TRUE;
-
-			cur_size = state->cur_packet_end - state->cur_pos;
-
-			if (state->cur_packet_start == state->temp_packet &&
-				state->interleave_frames)
-			{
-				// flush the temp packet
-				state->last_queue_offset = state->queue->cur_offset;
-
-				cur_packet = write_buffer_queue_get_buffer(state->queue, MPEGTS_PACKET_SIZE, state);
-				if (cur_packet == NULL)
-				{
-					vod_log_debug0(VOD_LOG_DEBUG_LEVEL, state->request_context->log, 0,
-						"mpegts_encoder_write: write_buffer_queue_get_buffer failed");
-					return VOD_ALLOC_FAILED;
-				}
-
-				state->cur_packet_start = NULL;
-
-				// update the pes size ptr if needed
-				if (state->cur_pes_size_ptr >= state->temp_packet && state->cur_pes_size_ptr < state->temp_packet + MPEGTS_PACKET_SIZE)
-				{
-					state->cur_pes_size_ptr = cur_packet + (state->cur_pes_size_ptr - state->temp_packet);
-				}
-
-				// write the packet
-				packet_used_size = state->cur_pos - state->temp_packet;
-				vod_memcpy(cur_packet, state->temp_packet, packet_used_size);
-				vod_memcpy(cur_packet + packet_used_size, buffer, cur_size);
-			}
-			else
-			{
-				vod_memcpy(state->cur_pos, buffer, cur_size);
-			}
-
-			state->cur_pos = state->cur_packet_end;
-		}
-		else
-		{
-			cur_size = input_buffer_left;
-			state->cur_pos = vod_copy(state->cur_pos, buffer, cur_size);
-		}
-
-		buffer += cur_size;
-		state->pes_bytes_written += cur_size;
 	}
-	
+
+	// if current packet has enough room for the whole buffer, just add it
+	if (state->cur_pos + size < state->cur_packet_end)
+	{
+		state->cur_pos = vod_copy(state->cur_pos, buffer, size);
+		return VOD_OK;
+	}
+
+	// fill the current packet
+	state->wrote_frame_packet = TRUE;
+
+	cur_size = state->cur_packet_end - state->cur_pos;
+
+	if (state->cur_packet_start == state->temp_packet &&
+		state->interleave_frames)
+	{
+		// flush the temp packet
+		state->last_queue_offset = state->queue->cur_offset;
+
+		cur_packet = write_buffer_queue_get_buffer(state->queue, MPEGTS_PACKET_SIZE, state);
+		if (cur_packet == NULL)
+		{
+			vod_log_debug0(VOD_LOG_DEBUG_LEVEL, state->request_context->log, 0,
+				"mpegts_encoder_write: write_buffer_queue_get_buffer failed");
+			return VOD_ALLOC_FAILED;
+		}
+
+		state->cur_packet_start = NULL;
+
+		// update the pes size ptr if needed
+		if (state->cur_pes_size_ptr >= state->temp_packet && state->cur_pes_size_ptr < state->temp_packet + MPEGTS_PACKET_SIZE)
+		{
+			state->cur_pes_size_ptr = cur_packet + (state->cur_pes_size_ptr - state->temp_packet);
+		}
+
+		// write the packet
+		packet_used_size = state->cur_pos - state->temp_packet;
+		vod_memcpy(cur_packet, state->temp_packet, packet_used_size);
+		vod_memcpy(cur_packet + packet_used_size, buffer, cur_size);
+	}
+	else
+	{
+		vod_memcpy(state->cur_pos, buffer, cur_size);
+	}
+
+	buffer += cur_size;
+	size -= cur_size;
+
+	// write full packets
+	while (size >= MPEGTS_PACKET_USABLE_SIZE)
+	{
+		rc = mpegts_encoder_init_packet(state, TRUE);
+		if (rc != VOD_OK)
+		{
+			return rc;
+		}
+
+		vod_memcpy(state->cur_pos, buffer, MPEGTS_PACKET_USABLE_SIZE);
+		buffer += MPEGTS_PACKET_USABLE_SIZE;
+		size -= MPEGTS_PACKET_USABLE_SIZE;
+	}
+
+	// write any residue
+	if (size > 0)
+	{
+		rc = mpegts_encoder_init_packet(state, FALSE);
+		if (rc != VOD_OK)
+		{
+			return rc;
+		}
+
+		state->cur_pos = vod_copy(state->cur_pos, buffer, size);
+	}
+	else
+	{
+		state->cur_pos = state->cur_packet_end;
+	}
+
 	return VOD_OK;
 }
 

@@ -616,7 +616,7 @@ hls_muxer_simulate_get_iframes(
 		if (!selected_stream->is_first_segment_frame && cur_frame[-1].key_frame)
 		{
 			// get the frame time
-			cur_frame_time = rescale_time(cur_frame_time_offset + cur_frame[-1].pts_delay, selected_stream->timescale, 1000);		// in millis
+			cur_frame_time = rescale_time(cur_frame_time_offset - cur_frame[-1].duration + cur_frame[-1].pts_delay, selected_stream->timescale, 1000);		// in millis
 			if (frame_size != 0)
 			{
 				callback(context, frame_segment_index, cur_frame_time - frame_start_time, frame_start, frame_size);

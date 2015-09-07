@@ -168,12 +168,15 @@ buffer_filter_write(void* context, const u_char* buffer, uint32_t size)
 		return rc;
 	}
 	
-	rc = state->next_filter->write(state->next_filter_context, state->start_pos, state->cur_pos - state->start_pos);
-	if (rc != VOD_OK)
+	if (state->cur_pos > state->start_pos)
 	{
-		return rc;
+		rc = state->next_filter->write(state->next_filter_context, state->start_pos, state->cur_pos - state->start_pos);
+		if (rc != VOD_OK)
+		{
+			return rc;
+		}
+		state->cur_pos = state->start_pos;
 	}
-	state->cur_pos = state->start_pos;
 	
 	rc = state->next_filter->write(state->next_filter_context, buffer, size);
 	if (rc != VOD_OK)
