@@ -88,6 +88,7 @@ mp4_to_annexb_start_frame(void* context, output_frame_t* frame)
 	vod_status_t rc;
 
 	frame->size += sizeof(aud_nal_packet);
+	frame->header_size += sizeof(aud_nal_packet);
 	if (frame->key)
 	{
 		frame->size += state->sps_pps_size;
@@ -251,6 +252,8 @@ mp4_to_annexb_simulated_start_frame(void* context, output_frame_t* frame)
 {
 	mp4_to_annexb_state_t* state = (mp4_to_annexb_state_t*)context;
 	uint32_t size;
+
+	frame->header_size += sizeof(aud_nal_packet);
 
 	state->next_filter->simulated_start_frame(state->next_filter_context, frame);
 

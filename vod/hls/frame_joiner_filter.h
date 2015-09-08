@@ -12,6 +12,9 @@ typedef struct {
 	void* next_filter_context;
 
 	uint64_t frame_dts;
+
+	uint64_t last_frame_pts;
+	off_t last_frame_queue_offset;
 } frame_joiner_t;
 
 // globals

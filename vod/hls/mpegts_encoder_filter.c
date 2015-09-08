@@ -601,7 +601,8 @@ mpegts_encoder_start_frame(void* context, output_frame_t* frame)
 		}
 	}
 
-	state->wrote_frame_packet = FALSE;
+	state->flushed_frame_bytes = 0;
+	state->header_size = frame->header_size;
 
 	state->send_queue_offset = state->last_queue_offset;
 
@@ -619,6 +620,8 @@ mpegts_encoder_start_frame(void* context, output_frame_t* frame)
 		}
 
 		state->cur_pos = mpegts_write_pes_header(state->cur_packet_start, &state->stream_info, frame, &state->cur_pes_size_ptr, TRUE);
+
+		state->packet_bytes_left = state->cur_packet_end - state->cur_pos;
 
 		return VOD_OK;
 	}
@@ -638,6 +641,8 @@ mpegts_encoder_start_frame(void* context, output_frame_t* frame)
 
 		// write the pes
 		mpegts_write_pes_header(pes_packet_start, &state->stream_info, frame, &state->cur_pes_size_ptr, FALSE);
+
+		state->packet_bytes_left = state->cur_packet_end - state->cur_pos;
 
 		return VOD_OK;
 	}
@@ -690,13 +695,18 @@ mpegts_encoder_start_frame(void* context, output_frame_t* frame)
 
 		vod_memmove(state->cur_pos, excess_pos, excess_size);
 		state->cur_pos += excess_size;
+
+		state->packet_bytes_left = state->cur_packet_end - state->cur_pos;
 	}
 	else
 	{
 		state->cur_pos = state->cur_packet_end;
 		state->cur_packet_start = NULL;
+
+		state->packet_bytes_left = MPEGTS_PACKET_USABLE_SIZE;
 	}
-	
+
+
 	if (pes_packet_start != NULL)
 	{
 		// make room for the pes
@@ -720,6 +730,7 @@ mpegts_encoder_write(void* context, const u_char* buffer, uint32_t size)
 	mpegts_encoder_state_t* state = (mpegts_encoder_state_t*)context;
 	uint32_t packet_used_size;
 	uint32_t cur_size;
+	uint32_t initial_size;
 	u_char* cur_packet;
 	vod_status_t rc;
 	bool_t write_direct;
@@ -746,8 +757,6 @@ mpegts_encoder_write(void* context, const u_char* buffer, uint32_t size)
 	}
 
 	// fill the current packet
-	state->wrote_frame_packet = TRUE;
-
 	cur_size = state->cur_packet_end - state->cur_pos;
 
 	if (state->cur_packet_start == state->temp_packet &&
@@ -782,10 +791,15 @@ mpegts_encoder_write(void* context, const u_char* buffer, uint32_t size)
 		vod_memcpy(state->cur_pos, buffer, cur_size);
 	}
 
+	state->flushed_frame_bytes += state->packet_bytes_left;
+	state->packet_bytes_left = MPEGTS_PACKET_USABLE_SIZE;
+
 	buffer += cur_size;
 	size -= cur_size;
 
 	// write full packets
+	initial_size = size;
+
 	while (size >= MPEGTS_PACKET_USABLE_SIZE)
 	{
 		rc = mpegts_encoder_init_packet(state, TRUE);
@@ -798,6 +812,8 @@ mpegts_encoder_write(void* context, const u_char* buffer, uint32_t size)
 		buffer += MPEGTS_PACKET_USABLE_SIZE;
 		size -= MPEGTS_PACKET_USABLE_SIZE;
 	}
+
+	state->flushed_frame_bytes += initial_size - size;
 
 	// write any residue
 	if (size > 0)
@@ -848,7 +864,7 @@ mpegts_encoder_flush_frame(void* context, bool_t last_stream_frame)
 
 	stuff_packet = state->align_frames ||
 		state->cur_pos >= state->cur_packet_end ||
-		!state->wrote_frame_packet ||
+		state->flushed_frame_bytes < state->header_size ||
 		last_stream_frame;
 
 	// update the size in the pes header
@@ -912,6 +928,22 @@ mpegts_encoder_flush_frame(void* context, bool_t last_stream_frame)
 	return VOD_OK;
 }
 
+bool_t 
+mpegts_encoder_is_new_packet(void* context, off_t* marker)
+{
+	mpegts_encoder_state_t* state = (mpegts_encoder_state_t*)context;
+
+	if (state->last_queue_offset != *marker ||
+		state->cur_pos >= state->cur_packet_end)
+	{
+		*marker = state->last_queue_offset;
+		return TRUE;
+	}
+
+	return FALSE;
+}
+
+
 void 
 mpegts_encoder_simulated_start_segment(write_buffer_queue_t* queue)
 {
@@ -964,8 +996,10 @@ mpegts_encoder_simulated_start_frame(void* context, output_frame_t* frame)
 		mpegts_encoder_simulated_stuff_cur_packet(last_writer_state);
 	}
 
+	state->flushed_frame_bytes = 0;
+	state->header_size = frame->header_size;
+
 	state->temp_packet_size += mpegts_get_pes_header_size(&state->stream_info);
-	state->wrote_frame_packet = FALSE;
 
 	if (state->temp_packet_size >= MPEGTS_PACKET_USABLE_SIZE)
 	{
@@ -981,6 +1015,8 @@ mpegts_encoder_simulated_start_frame(void* context, output_frame_t* frame)
 			state->last_frame_end_pos = queue->cur_offset;
 		}
 	}
+
+	state->packet_bytes_left = MPEGTS_PACKET_USABLE_SIZE - state->temp_packet_size;
 }
 
 static void
@@ -1000,6 +1036,9 @@ mpegts_encoder_simulated_write(void* context, uint32_t size)
 		return;
 	}
 
+	state->flushed_frame_bytes += state->packet_bytes_left + (packet_count - 1) * MPEGTS_PACKET_USABLE_SIZE;
+	state->packet_bytes_left = MPEGTS_PACKET_USABLE_SIZE;
+
 	queue = state->queue;
 
 	if (state->cur_frame_start_pos == -1)
@@ -1015,7 +1054,6 @@ mpegts_encoder_simulated_write(void* context, uint32_t size)
 	queue->cur_offset += packet_count * MPEGTS_PACKET_SIZE;
 	queue->last_writer_context = state;
 	state->cc += packet_count;
-	state->wrote_frame_packet = TRUE;
 }
 
 static void
@@ -1026,7 +1064,7 @@ mpegts_encoder_simulated_flush_frame(void* context, bool_t last_stream_frame)
 
 	if (state->align_frames ||
 		state->temp_packet_size == 0 ||
-		!state->wrote_frame_packet ||
+		state->flushed_frame_bytes < state->header_size ||
 		last_stream_frame)
 	{
 		mpegts_encoder_simulated_stuff_cur_packet(state);

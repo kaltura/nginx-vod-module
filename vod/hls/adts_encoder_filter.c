@@ -53,6 +53,7 @@ adts_encoder_start_frame(void* context, output_frame_t* frame)
 	vod_status_t rc;
 
 	frame->size += sizeof(state->header);
+	frame->header_size += 1;
 	
 	rc = state->next_filter->start_frame(state->next_filter_context, frame);
 	if (rc != VOD_OK)
@@ -86,6 +87,8 @@ static void
 adts_encoder_simulated_start_frame(void* context, output_frame_t* frame)
 {
 	adts_encoder_state_t* state = (adts_encoder_state_t*)context;
+
+	frame->header_size += 1;
 
 	state->next_filter->simulated_start_frame(state->next_filter_context, frame);
 	state->next_filter->simulated_write(state->next_filter_context, sizeof(state->header));

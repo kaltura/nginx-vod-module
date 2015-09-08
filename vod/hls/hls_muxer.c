@@ -273,6 +273,7 @@ hls_muxer_start_frame(hls_muxer_state_t* state)
 	output_frame.dts = cur_frame_dts;
 	output_frame.key = state->cur_frame->key_frame;
 	output_frame.size = state->cur_frame->size;
+	output_frame.header_size = 0;
 
 	state->cache_slot_id = selected_stream->mpegts_encoder_state.stream_info.pid;
 
@@ -421,6 +422,7 @@ hls_muxer_simulation_write_frame(hls_muxer_stream_state_t* selected_stream, inpu
 	// Note: no need to initialize the pts or original size
 	output_frame.dts = cur_frame_dts;
 	output_frame.key = cur_frame->key_frame;
+	output_frame.header_size = 0;
 
 	selected_stream->top_filter->simulated_start_frame(selected_stream->top_filter_context, &output_frame);
 	selected_stream->top_filter->simulated_write(selected_stream->top_filter_context, cur_frame->size);
@@ -728,9 +730,7 @@ hls_muxer_simulation_reset(hls_muxer_state_t* state)
 {
 	hls_muxer_stream_state_t* cur_stream;
 
-	state->queue.cur_offset = 0;
-
-	state->cur_frame = NULL;
+	mpegts_encoder_simulated_start_segment(&state->queue);
 
 	for (cur_stream = state->first_stream; cur_stream < state->last_stream; cur_stream++)
 	{
@@ -740,4 +740,6 @@ hls_muxer_simulation_reset(hls_muxer_state_t* state)
 		cur_stream->next_frame_dts = rescale_time(cur_stream->next_frame_time_offset, cur_stream->timescale, HLS_TIMESCALE);
 		cur_stream->mpegts_encoder_state.cc = 0;
 	}
+
+	state->cur_frame = NULL;
 }

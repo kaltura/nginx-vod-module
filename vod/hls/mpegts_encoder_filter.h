@@ -43,7 +43,9 @@ typedef struct {
 	unsigned cc;
 	u_char* cur_pes_size_ptr;
 	uint32_t pes_bytes_written;
-	bool_t wrote_frame_packet;
+	uint32_t flushed_frame_bytes;
+	uint32_t packet_bytes_left;
+	uint32_t header_size;
 
 	// simulation only
 	uint32_t temp_packet_size;
@@ -85,6 +87,8 @@ vod_status_t mpegts_encoder_init(
 	write_buffer_queue_t* queue,
 	bool_t interleave_frames,
 	bool_t align_frames);
+
+bool_t mpegts_encoder_is_new_packet(void* context, off_t* marker);
 
 void mpegts_encoder_simulated_start_segment(write_buffer_queue_t* queue);
 

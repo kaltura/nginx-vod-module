@@ -10,6 +10,7 @@ typedef struct {
 	uint64_t dts;
 	int key;
 	uint32_t size;
+	uint32_t header_size;
 } output_frame_t;
 
 typedef struct {

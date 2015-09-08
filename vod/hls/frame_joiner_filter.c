@@ -1,4 +1,5 @@
 #include "frame_joiner_filter.h"
+#include "mpegts_encoder_filter.h"
 
 #define NO_FRAME ((uint64_t)-1)
 #define FRAME_OUTPUT_INTERVAL (63000)	// 0.7 sec
@@ -15,6 +16,7 @@ frame_joiner_init(
 	state->next_filter_context = next_filter_context;
 
 	state->frame_dts = NO_FRAME;
+	state->last_frame_queue_offset = 0;
 }
 
 static vod_status_t
@@ -34,8 +36,15 @@ frame_joiner_start_frame(void* context, output_frame_t* frame)
 		state->frame_dts = NO_FRAME;
 	}
 
+	if (mpegts_encoder_is_new_packet(state->next_filter_context, &state->last_frame_queue_offset))
+	{
+		state->last_frame_pts = frame->pts;
+	}
+
 	if (state->frame_dts == NO_FRAME)
 	{
+		frame->pts = state->last_frame_pts;
+
 		rc = state->next_filter->start_frame(state->next_filter_context, frame);
 		if (rc != VOD_OK)
 		{
