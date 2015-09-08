@@ -7,11 +7,9 @@
 void 
 frame_joiner_init(
 	frame_joiner_t* state, 
-	request_context_t* request_context,
 	const media_filter_t* next_filter,
 	void* next_filter_context)
 {
-	state->request_context = request_context;
 	state->next_filter = next_filter;
 	state->next_filter_context = next_filter_context;
 

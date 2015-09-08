@@ -60,7 +60,6 @@ hls_muxer_init(
 	for (cur_stream = state->first_stream; cur_stream < state->last_stream; cur_stream++, cur_stream_metadata++)
 	{
 		cur_stream->media_type = cur_stream_metadata->media_info.media_type;
-		cur_stream->stream_index = cur_stream_metadata->track_index;
 		cur_stream->timescale = cur_stream_metadata->media_info.timescale;
 		cur_stream->frames_file_index = cur_stream_metadata->frames_file_index;
 		cur_stream->first_frame = cur_stream_metadata->frames;
@@ -138,7 +137,7 @@ hls_muxer_init(
 					return VOD_ALLOC_FAILED;
 				}
 
-				frame_joiner_init(next_filter_context, request_context, &mpegts_encoder, &cur_stream->mpegts_encoder_state);
+				frame_joiner_init(next_filter_context, &mpegts_encoder, &cur_stream->mpegts_encoder_state);
 
 				next_filter = &frame_joiner;
 			}
@@ -738,7 +737,6 @@ hls_muxer_simulation_reset(hls_muxer_state_t* state)
 		cur_stream->cur_frame_offset = cur_stream->first_frame_offset;
 		cur_stream->next_frame_time_offset = cur_stream->first_frame_time_offset;
 		cur_stream->next_frame_dts = rescale_time(cur_stream->next_frame_time_offset, cur_stream->timescale, HLS_TIMESCALE);
-		cur_stream->mpegts_encoder_state.cc = 0;
 	}
 
 	state->cur_frame = NULL;

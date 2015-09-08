@@ -25,7 +25,6 @@ typedef struct {
 
 typedef struct {
 	int media_type;
-	uint32_t stream_index;
 	uint32_t timescale;
 	uint32_t frames_file_index;
 	
