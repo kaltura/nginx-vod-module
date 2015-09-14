@@ -152,7 +152,13 @@ hls_muxer_init(
 					return VOD_ALLOC_FAILED;
 				}
 
-				rc = buffer_filter_init(cur_stream->buffer_state, request_context, &mpegts_encoder, &cur_stream->mpegts_encoder_state, DEFAULT_PES_PAYLOAD_SIZE);
+				rc = buffer_filter_init(
+					cur_stream->buffer_state, 
+					request_context, 
+					&mpegts_encoder, 
+					&cur_stream->mpegts_encoder_state, 
+					conf->align_frames,
+					DEFAULT_PES_PAYLOAD_SIZE);
 				if (rc != VOD_OK)
 				{
 					return rc;

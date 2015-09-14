@@ -1,4 +1,5 @@
 #include "buffer_filter.h"
+#include "mpegts_encoder_filter.h"
 
 enum {
 	STATE_INITIAL,
@@ -13,11 +14,13 @@ buffer_filter_init(
 	request_context_t* request_context,
 	const media_filter_t* next_filter,
 	void* next_filter_context,
+	bool_t align_frames,
 	uint32_t size)
 {
 	state->request_context = request_context;
 	state->next_filter = next_filter;
 	state->next_filter_context = next_filter_context;
+	state->align_frames = align_frames;
 	state->size = size;
 
 	state->cur_state = STATE_INITIAL;
@@ -41,6 +44,11 @@ buffer_filter_init(
 	state->cur_pos = state->start_pos;
 	state->last_flush_pos = state->cur_pos;
 	
+	state->buffered_frames.read_pos = 0;
+	state->buffered_frames.write_pos = 0;
+	state->buffered_frames.is_full = FALSE;
+	state->last_frame_queue_offset = 0;
+
 	return VOD_OK;
 }
 
@@ -66,7 +74,7 @@ buffer_filter_start_frame(void* context, output_frame_t* frame)
 
 	state->last_frame = *frame;
 	state->cur_state = STATE_FRAME_STARTED;
-	
+
 	return VOD_OK;
 }
 
@@ -74,6 +82,8 @@ vod_status_t
 buffer_filter_force_flush(buffer_filter_t* state, bool_t last_stream_frame)
 {
 	vod_status_t rc;
+	u_char* np;
+	u_char* p;
 
 	// if nothing was written since the last frame flush, nothing to do
 	if (state->last_flush_pos <= state->start_pos)
@@ -83,17 +93,72 @@ buffer_filter_force_flush(buffer_filter_t* state, bool_t last_stream_frame)
 	
 	// Note: at this point state can only be either STATE_FRAME_STARTED or STATE_FRAME_FLUSHED
 		
+	if (mpegts_encoder_is_new_packet(state->next_filter_context, &state->last_frame_queue_offset))
+	{
+		state->last_frame_pts = state->cur_frame.pts;
+	}
+	else
+	{
+		state->cur_frame.pts = state->last_frame_pts;
+	}
+
 	// write all buffered data up to the last frame flush position
+
 	rc = state->next_filter->start_frame(state->next_filter_context, &state->cur_frame);
 	if (rc != VOD_OK)
 	{
 		return rc;
 	}
-	
-	rc = state->next_filter->write(state->next_filter_context, state->start_pos, state->last_flush_pos - state->start_pos);
-	if (rc != VOD_OK)
+
+	if (!state->align_frames)
 	{
-		return rc;
+		if (state->buffered_frames.is_full)
+		{
+			state->buffered_frames.is_full = FALSE;
+
+			// queue is full, make the loop below start from the oldest frame
+			state->buffered_frames.read_pos = state->buffered_frames.write_pos + 1;
+			if (state->buffered_frames.read_pos >= BUFFERED_FRAMES_QUEUE_SIZE)
+			{
+				state->buffered_frames.read_pos = 0;
+			}
+		}
+
+		// when the frames are not aligned, need to write each frame separately since the pts
+		// that is outputted may be the pts of some previous frame
+		p = state->start_pos;
+
+		while (state->buffered_frames.write_pos != state->buffered_frames.read_pos)
+		{
+			if (mpegts_encoder_is_new_packet(state->next_filter_context, &state->last_frame_queue_offset))
+			{
+				state->last_frame_pts = state->buffered_frames.data[state->buffered_frames.read_pos].pts;
+			}
+
+			np = state->buffered_frames.data[state->buffered_frames.read_pos].end_pos;
+
+			rc = state->next_filter->write(state->next_filter_context, p, np - p);
+			if (rc != VOD_OK)
+			{
+				return rc;
+			}
+
+			p = np;
+
+			state->buffered_frames.read_pos++;
+			if (state->buffered_frames.read_pos >= BUFFERED_FRAMES_QUEUE_SIZE)
+			{
+				state->buffered_frames.read_pos = 0;
+			}
+		}
+	}
+	else
+	{
+		rc = state->next_filter->write(state->next_filter_context, state->start_pos, state->last_flush_pos - state->start_pos);
+		if (rc != VOD_OK)
+		{
+			return rc;
+		}
 	}
 	
 	rc = state->next_filter->flush_frame(state->next_filter_context, last_stream_frame);
@@ -162,6 +227,15 @@ buffer_filter_write(void* context, const u_char* buffer, uint32_t size)
 	// still not enough room after flushing - write directly to the next filter
 	state->cur_state = STATE_DIRECT;
 	
+	if (mpegts_encoder_is_new_packet(state->next_filter_context, &state->last_frame_queue_offset))
+	{
+		state->last_frame_pts = state->cur_frame.pts;
+	}
+	else
+	{
+		state->cur_frame.pts = state->last_frame_pts;
+	}
+
 	rc = state->next_filter->start_frame(state->next_filter_context, &state->cur_frame);
 	if (rc != VOD_OK)
 	{
@@ -196,6 +270,24 @@ buffer_filter_flush_frame(void* context, bool_t last_stream_frame)
 	switch (state->cur_state)
 	{
 	case STATE_FRAME_STARTED:
+
+		if (!state->align_frames)
+		{
+			// add the frame to the buffered frames queue
+			state->buffered_frames.data[state->buffered_frames.write_pos].pts = state->last_frame.pts;
+			state->buffered_frames.data[state->buffered_frames.write_pos].end_pos = state->cur_pos;
+			state->buffered_frames.write_pos++;
+			if (state->buffered_frames.write_pos >= BUFFERED_FRAMES_QUEUE_SIZE)
+			{
+				state->buffered_frames.write_pos = 0;
+			}
+
+			if (state->buffered_frames.write_pos == state->buffered_frames.read_pos)
+			{
+				state->buffered_frames.is_full = TRUE;
+			}
+		}
+
 		// update the last flush position
 		state->last_flush_pos = state->cur_pos;
 		state->cur_state = STATE_FRAME_FLUSHED;
