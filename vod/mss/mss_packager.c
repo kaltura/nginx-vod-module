@@ -122,6 +122,7 @@ mss_packager_build_manifest(
 	mpeg_stream_metadata_t* cur_stream;
 	segment_durations_t segment_durations[MEDIA_TYPE_COUNT];
 	uint64_t duration_100ns;
+	uint32_t max_sample_rate = 0;
 	uint32_t media_type;
 	uint32_t stream_index;
 	uint32_t bitrate;
@@ -173,6 +174,11 @@ mss_packager_build_manifest(
 			result_size += 
 				sizeof(MSS_AUDIO_QUALITY_LEVEL_HEADER) - 1 + 6 * VOD_INT32_LEN + cur_stream->media_info.extra_data_size * 2 +
 				sizeof(MSS_QUALITY_LEVEL_FOOTER) - 1;
+
+			if (cur_stream->media_info.u.audio.sample_rate > max_sample_rate)
+			{
+				max_sample_rate = cur_stream->media_info.u.audio.sample_rate;
+			}
 			break;
 		}
 	}
@@ -235,7 +241,8 @@ mss_packager_build_manifest(
 		stream_index = 0;
 		for (cur_stream = mpeg_metadata->first_stream; cur_stream < mpeg_metadata->last_stream; cur_stream++)
 		{
-			if (cur_stream->media_info.media_type != MEDIA_TYPE_AUDIO)
+			if (cur_stream->media_info.media_type != MEDIA_TYPE_AUDIO || 
+				cur_stream->media_info.u.audio.sample_rate != max_sample_rate)			// must not output different sample rates in MSS
 			{
 				continue;
 			}
