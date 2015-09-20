@@ -1,5 +1,4 @@
 #include "m3u8_builder.h"
-#include "hls_muxer.h"
 #include "../common.h"
 
 // macros
@@ -180,6 +179,7 @@ vod_status_t
 m3u8_builder_build_iframe_playlist(
 	request_context_t* request_context,
 	m3u8_config_t* conf,
+	hls_muxer_conf_t* muxer_conf,
 	vod_str_t* base_url,
 	bool_t include_file_index,
 	segmenter_conf_t* segmenter_conf,
@@ -195,7 +195,7 @@ m3u8_builder_build_iframe_playlist(
 	uint32_t segment_count;
 
 	// initialize the muxer
-	rc = hls_muxer_init(&muxer_state, request_context, 0, mpeg_metadata, NULL, NULL, NULL, &simulation_supported);
+	rc = hls_muxer_init(&muxer_state, request_context, muxer_conf, 0, mpeg_metadata, NULL, NULL, NULL, &simulation_supported);
 	if (rc != VOD_OK)
 	{
 		return rc;

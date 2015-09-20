@@ -31,6 +31,16 @@ enum {
 // constants
 static const u_char aud_nal_packet[] = { 0x00, 0x00, 0x00, 0x01, 0x09, 0xf0 };	// f = all pic types + stop bit
 static const u_char nal_marker[] = { 0x00, 0x00, 0x00, 0x01 };
+static const u_char zero_padding[] = {
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+};
 
 vod_status_t 
 mp4_to_annexb_init(
@@ -77,6 +87,13 @@ mp4_to_annexb_start_frame(void* context, output_frame_t* frame)
 	mp4_to_annexb_state_t* state = (mp4_to_annexb_state_t*)context;
 	vod_status_t rc;
 
+	frame->size += sizeof(aud_nal_packet);
+	frame->header_size += sizeof(aud_nal_packet);
+	if (frame->key)
+	{
+		frame->size += state->sps_pps_size;
+	}
+
 	rc = state->next_filter->start_frame(state->next_filter_context, frame);
 	if (rc != VOD_OK)
 	{
@@ -89,11 +106,7 @@ mp4_to_annexb_start_frame(void* context, output_frame_t* frame)
 	state->length_bytes_left = state->nal_packet_size_length;
 	state->packet_size_left = 0;
 	state->key_frame = frame->key;
-	state->frame_size_left = frame->original_size;		// not adding the aud packet since we're just about to write it
-	if (frame->key)
-	{
-		state->frame_size_left += state->sps_pps_size;
-	}
+	state->frame_size_left = frame->size - sizeof(aud_nal_packet);		// removing the aud packet since we're just about to write it
 
 	// write access unit delimiter packet
 	return state->next_filter->write(state->next_filter_context, aud_nal_packet, sizeof(aud_nal_packet));
@@ -202,9 +215,11 @@ mp4_to_annexb_write(void* context, const u_char* buffer, uint32_t size)
 }
 
 static vod_status_t 
-mp4_to_annexb_flush_frame(void* context, int32_t margin_size)
+mp4_to_annexb_flush_frame(void* context, bool_t last_stream_frame)
 {
 	mp4_to_annexb_state_t* state = (mp4_to_annexb_state_t*)context;
+	vod_status_t rc;
+	int32_t cur_size;
 
 	if (state->nal_packet_size_length == 4)
 	{
@@ -215,29 +230,63 @@ mp4_to_annexb_flush_frame(void* context, int32_t margin_size)
 			return VOD_UNEXPECTED;
 		}
 
-		margin_size += state->frame_size_left;
+		while (state->frame_size_left > 0)
+		{
+			cur_size = vod_min(state->frame_size_left, (int32_t)sizeof(zero_padding));
+			state->frame_size_left -= cur_size;
+
+			rc = state->next_filter->write(state->next_filter_context, zero_padding, cur_size);
+			if (rc != VOD_OK)
+			{
+				return rc;
+			}
+		}
 	}
 
-	return state->next_filter->flush_frame(state->next_filter_context, margin_size);
+	return state->next_filter->flush_frame(state->next_filter_context, last_stream_frame);
 }
 
-static void 
-mp4_to_annexb_simulated_write(void* context, output_frame_t* frame)
+
+static void
+mp4_to_annexb_simulated_start_frame(void* context, output_frame_t* frame)
+{
+	mp4_to_annexb_state_t* state = (mp4_to_annexb_state_t*)context;
+	uint32_t size;
+
+	frame->header_size += sizeof(aud_nal_packet);
+
+	state->next_filter->simulated_start_frame(state->next_filter_context, frame);
+
+	size = sizeof(aud_nal_packet);
+	if (frame->key)
+	{
+		size += state->sps_pps_size;
+	}
+	state->next_filter->simulated_write(state->next_filter_context, size);
+}
+
+static void
+mp4_to_annexb_simulated_write(void* context, uint32_t size)
 {
 	mp4_to_annexb_state_t* state = (mp4_to_annexb_state_t*)context;
 
-	frame->original_size += sizeof(aud_nal_packet);
-	if (frame->key)
-	{
-		frame->original_size += state->sps_pps_size;
-	}
-
-	state->next_filter->simulated_write(state->next_filter_context, frame);
+	state->next_filter->simulated_write(state->next_filter_context, size);
 }
+
+static void
+mp4_to_annexb_simulated_flush_frame(void* context, bool_t last_stream_frame)
+{
+	mp4_to_annexb_state_t* state = (mp4_to_annexb_state_t*)context;
+
+	state->next_filter->simulated_flush_frame(state->next_filter_context, last_stream_frame);
+}
+
 
 const media_filter_t mp4_to_annexb = {
 	mp4_to_annexb_start_frame,
 	mp4_to_annexb_write,
 	mp4_to_annexb_flush_frame,
+	mp4_to_annexb_simulated_start_frame,
 	mp4_to_annexb_simulated_write,
+	mp4_to_annexb_simulated_flush_frame,
 };

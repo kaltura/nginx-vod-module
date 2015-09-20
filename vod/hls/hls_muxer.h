@@ -19,8 +19,12 @@ typedef void(*hls_get_iframe_positions_callback_t)(
 	uint32_t frame_size);
 
 typedef struct {
+	bool_t interleave_frames;
+	bool_t align_frames;
+} hls_muxer_conf_t;
+
+typedef struct {
 	int media_type;
-	uint32_t stream_index;
 	uint32_t timescale;
 	uint32_t frames_file_index;
 	
@@ -33,23 +37,25 @@ typedef struct {
 	uint64_t first_frame_time_offset;
 	uint64_t next_frame_time_offset;
 	uint64_t next_frame_dts;
-	uint64_t segment_limit;		// used only for iframes
 	int32_t clip_from_frame_offset;
-	
+
+	// iframes simulation only
+	uint64_t segment_limit;
+	bool_t is_first_segment_frame;
+
 	// frame offsets
 	uint64_t* first_frame_offset;
 	uint64_t* cur_frame_offset;
-	
-	// output frame
-	output_frame_t output_frame;
-	unsigned cc;
-	
+		
 	// top filter
 	const media_filter_t* top_filter;
 	void* top_filter_context;
 	
 	// buffer
 	buffer_filter_t* buffer_state;
+
+	// mpegts
+	mpegts_encoder_state_t mpegts_encoder_state;
 } hls_muxer_stream_state_t;
 
 typedef struct {
@@ -62,10 +68,11 @@ typedef struct {
 
 	// child states
 	read_cache_state_t* read_cache_state;
-	mpegts_encoder_state_t mpegts_encoder_state;
+	write_buffer_queue_t queue;
 	
 	// cur frame state
 	input_frame_t* cur_frame;
+	bool_t last_stream_frame;
 	uint64_t cur_frame_offset;
 	const media_filter_t* cur_writer;
 	void* cur_writer_context;
@@ -78,6 +85,7 @@ typedef struct {
 vod_status_t hls_muxer_init(
 	hls_muxer_state_t* state,
 	request_context_t* request_context,
+	hls_muxer_conf_t* conf,
 	uint32_t segment_index,
 	mpeg_metadata_t* mpeg_metadata,
 	read_cache_state_t* read_cache_state,

@@ -8,10 +8,11 @@ write_buffer_queue_init(write_buffer_queue_t* queue, request_context_t* request_
 	initialize_list_head(&queue->buffers);
 	queue->cur_write_buffer = NULL;
 	queue->request_context = request_context;
+	queue->cur_offset = 0;
 }
 
 u_char*
-write_buffer_queue_get_buffer(write_buffer_queue_t* queue, uint32_t size)
+write_buffer_queue_get_buffer(write_buffer_queue_t* queue, uint32_t size, void* writer_context)
 {
 	buffer_header_t* write_buffer = queue->cur_write_buffer;
 	u_char* result;
@@ -21,6 +22,8 @@ write_buffer_queue_get_buffer(write_buffer_queue_t* queue, uint32_t size)
 	{
 		result = write_buffer->cur_pos;
 		write_buffer->cur_pos += size;
+		queue->cur_offset += size;
+		queue->last_writer_context = writer_context;
 		return result;
 	}
 
@@ -69,13 +72,17 @@ write_buffer_queue_get_buffer(write_buffer_queue_t* queue, uint32_t size)
 		write_buffer->end_pos = write_buffer->start_pos + BUFFER_SIZE;
 	}
 
+	write_buffer->end_offset = queue->cur_offset + BUFFER_SIZE;
+
 	result = write_buffer->cur_pos;
 	write_buffer->cur_pos += size;
+	queue->cur_offset += size;
+	queue->last_writer_context = writer_context;
 	return result;
 }
 
 vod_status_t
-write_buffer_queue_send(write_buffer_queue_t* queue, u_char* ptr)
+write_buffer_queue_send(write_buffer_queue_t* queue, off_t max_offset)
 {
 	buffer_header_t* cur_buffer;
 	bool_t reuse_buffer;
@@ -84,12 +91,12 @@ write_buffer_queue_send(write_buffer_queue_t* queue, u_char* ptr)
 	while (!is_list_empty(&queue->buffers))
 	{
 		cur_buffer = (buffer_header_t*)queue->buffers.next;
-		if (ptr >= cur_buffer->start_pos && ptr < cur_buffer->end_pos)
+		if (cur_buffer->cur_pos <= cur_buffer->start_pos)
 		{
 			break;
 		}
 
-		if (cur_buffer->cur_pos <= cur_buffer->start_pos)
+		if (cur_buffer->end_offset > max_offset)
 		{
 			break;
 		}
@@ -149,4 +156,3 @@ write_buffer_queue_flush(write_buffer_queue_t* queue)
 
 	return VOD_OK;
 }
-

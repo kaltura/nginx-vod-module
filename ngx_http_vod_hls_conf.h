@@ -3,6 +3,7 @@
 
 // includes
 #include "vod/hls/m3u8_builder.h"
+#include "vod/hls/hls_muxer.h"
 
 // typedefs
 typedef struct
@@ -12,6 +13,7 @@ typedef struct
 	ngx_flag_t absolute_iframe_urls;
 	ngx_str_t master_file_name_prefix;
 	ngx_str_t iframes_file_name_prefix;
+	hls_muxer_conf_t muxer_config;
 
 	// derived fields
 	m3u8_config_t m3u8_config;
