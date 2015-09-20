@@ -965,21 +965,6 @@ mpegts_encoder_start_sub_frame(void* context, output_frame_t* frame)
 	return VOD_OK;
 }
 
-bool_t 
-mpegts_encoder_is_new_packet(void* context, off_t* marker)
-{
-	mpegts_encoder_state_t* state = (mpegts_encoder_state_t*)context;
-
-	if (state->last_queue_offset != *marker ||
-		state->cur_pos >= state->cur_packet_end)
-	{
-		*marker = state->last_queue_offset;
-		return TRUE;
-	}
-
-	return FALSE;
-}
-
 
 void 
 mpegts_encoder_simulated_start_segment(write_buffer_queue_t* queue)
