@@ -394,7 +394,7 @@ mp4_parser_parse_stts_atom(atom_info_t* atom_info, frames_parse_context_t* conte
 
 	sample_duration = parse_be32(cur_entry->duration) * context->parse_params.speed_denom;
 	sample_count = parse_be32(cur_entry->count);
-	next_accum_duration = accum_duration + sample_duration * sample_count;
+	next_accum_duration = accum_duration + (uint64_t)sample_duration * sample_count;
 
 	if (context->parse_params.clip_from > 0)
 	{
@@ -425,12 +425,12 @@ mp4_parser_parse_stts_atom(atom_info_t* atom_info, frames_parse_context_t* conte
 
 			sample_duration = parse_be32(cur_entry->duration) * context->parse_params.speed_denom;
 			sample_count = parse_be32(cur_entry->count);
-			next_accum_duration = accum_duration + sample_duration * sample_count;
+			next_accum_duration = accum_duration + (uint64_t)sample_duration * sample_count;
 		}
 
 		// calculate the clip from duration
 		skip_count = vod_div_ceil(clip_from - accum_duration, sample_duration);
-		clip_from_accum_duration = accum_duration + skip_count * sample_duration;
+		clip_from_accum_duration = accum_duration + (uint64_t)skip_count * sample_duration;
 
 		context->clip_from_frame_offset = clip_from_accum_duration - clip_from;
 	}
@@ -467,7 +467,7 @@ mp4_parser_parse_stts_atom(atom_info_t* atom_info, frames_parse_context_t* conte
 
 		sample_duration = parse_be32(cur_entry->duration) * context->parse_params.speed_denom;
 		sample_count = parse_be32(cur_entry->count);
-		next_accum_duration = accum_duration + sample_duration * sample_count;
+		next_accum_duration = accum_duration + (uint64_t)sample_duration * sample_count;
 	}
 
 	// skip to the start time within the current entry
@@ -476,7 +476,7 @@ mp4_parser_parse_stts_atom(atom_info_t* atom_info, frames_parse_context_t* conte
 		skip_count = vod_div_ceil(start_time - accum_duration, sample_duration);
 		sample_count -= skip_count;
 		frame_index += skip_count;
-		accum_duration += skip_count * sample_duration;
+		accum_duration += (uint64_t)skip_count * sample_duration;
 	}
 
 	if (context->stss_entries != 0)
@@ -515,14 +515,14 @@ mp4_parser_parse_stts_atom(atom_info_t* atom_info, frames_parse_context_t* conte
 
 			sample_duration = parse_be32(cur_entry->duration) * context->parse_params.speed_denom;
 			sample_count = parse_be32(cur_entry->count);
-			next_accum_duration = accum_duration + sample_duration * sample_count;
+			next_accum_duration = accum_duration + (uint64_t)sample_duration * sample_count;
 		}
 
 		// skip to the key frame within the current entry
 		skip_count = key_frame_index - frame_index;
 		sample_count -= skip_count;
 		frame_index = key_frame_index;
-		accum_duration += skip_count * sample_duration;
+		accum_duration += (uint64_t)skip_count * sample_duration;
 	}
 
 	// store the first frame info
@@ -614,7 +614,7 @@ mp4_parser_parse_stts_atom(atom_info_t* atom_info, frames_parse_context_t* conte
 
 			sample_count -= cur_count;
 			frame_index += cur_count;
-			accum_duration += cur_count * sample_duration;
+			accum_duration += (uint64_t)cur_count * sample_duration;
 
 			for (cur_frame_limit = cur_frame + cur_count; cur_frame < cur_frame_limit; cur_frame++)
 			{
@@ -681,7 +681,7 @@ mp4_parser_parse_stts_atom(atom_info_t* atom_info, frames_parse_context_t* conte
 			}
 
 			frame_index += sample_count;
-			accum_duration += sample_count * sample_duration;
+			accum_duration += (uint64_t)sample_count * sample_duration;
 			
 			for (cur_frame_limit = cur_frame + sample_count; cur_frame < cur_frame_limit; cur_frame++)
 			{
@@ -1194,7 +1194,7 @@ mp4_parser_parse_stsz_atom(atom_info_t* atom_info, frames_parse_context_t* conte
 		{
 			cur_frame->size = uniform_size;
 		}
-		context->total_frames_size += uniform_size * context->frame_count;
+		context->total_frames_size += (uint64_t)uniform_size * context->frame_count;
 		return VOD_OK;
 	}
 	
