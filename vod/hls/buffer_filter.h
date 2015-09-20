@@ -8,7 +8,7 @@
 
 // typedefs
 typedef struct {
-	uint64_t pts;
+	output_frame_t frame;
 	u_char* end_pos;
 } buffered_frame_info_t;
 
@@ -39,8 +39,6 @@ typedef struct {
 	u_char* last_flush_pos;
 
 	buffered_frames_queue_t buffered_frames;
-	uint64_t last_frame_pts;
-	off_t last_frame_queue_offset;
 
 	// simulation mode
 	uint32_t used_size;

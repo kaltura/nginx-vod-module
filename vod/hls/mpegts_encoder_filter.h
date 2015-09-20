@@ -47,6 +47,8 @@ typedef struct {
 	uint32_t packet_bytes_left;
 	uint32_t header_size;
 
+	uint64_t last_frame_pts;
+
 	// simulation only
 	uint32_t temp_packet_size;
 	off_t cur_frame_start_pos;
@@ -88,7 +90,7 @@ vod_status_t mpegts_encoder_init(
 	bool_t interleave_frames,
 	bool_t align_frames);
 
-bool_t mpegts_encoder_is_new_packet(void* context, off_t* marker);
+vod_status_t mpegts_encoder_start_sub_frame(void* context, output_frame_t* frame);
 
 void mpegts_encoder_simulated_start_segment(write_buffer_queue_t* queue);
 

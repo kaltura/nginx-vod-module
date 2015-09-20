@@ -16,6 +16,8 @@
 #define SIZEOF_PES_OPTIONAL_HEADER (3)
 #define SIZEOF_PES_PTS (5)
 
+#define NO_TIMESTAMP ((uint64_t)-1)
+
 static const u_char pat_packet[] = {
 
 	/* TS */
@@ -505,6 +507,7 @@ mpegts_encoder_init_packet(mpegts_encoder_state_t* state, bool_t write_direct)
 		state->cur_packet_start = state->temp_packet;
 	}
 
+	state->last_frame_pts = NO_TIMESTAMP;
 	state->cur_packet_end = state->cur_packet_start + MPEGTS_PACKET_SIZE;
 	state->cur_pos = mpegts_write_packet_header(state->cur_packet_start, state->stream_info.pid, state->cc);
 	state->cc++;
@@ -626,6 +629,11 @@ mpegts_encoder_start_frame(void* context, output_frame_t* frame)
 		return VOD_OK;
 	}
 
+	if (state->last_frame_pts != NO_TIMESTAMP)
+	{
+		frame->pts = state->last_frame_pts;
+	}
+
 	if (state->cur_pos + pes_header_size < state->cur_packet_end)
 	{
 		// current packet has enough room to push the pes without getting full
@@ -705,7 +713,6 @@ mpegts_encoder_start_frame(void* context, output_frame_t* frame)
 
 		state->packet_bytes_left = MPEGTS_PACKET_USABLE_SIZE;
 	}
-
 
 	if (pes_packet_start != NULL)
 	{
@@ -923,6 +930,36 @@ mpegts_encoder_flush_frame(void* context, bool_t last_stream_frame)
 		}
 
 		state->cur_pos = state->cur_packet_end;
+	}
+
+	return VOD_OK;
+}
+
+vod_status_t
+mpegts_encoder_start_sub_frame(void* context, output_frame_t* frame)
+{
+	mpegts_encoder_state_t* state = (mpegts_encoder_state_t*)context;
+	vod_status_t rc;
+	bool_t write_direct;
+
+	if (state->cur_pos >= state->cur_packet_end)
+	{
+		write_direct = frame->size >= MPEGTS_PACKET_USABLE_SIZE;
+
+		rc = mpegts_encoder_init_packet(state, write_direct);
+		if (rc != VOD_OK)
+		{
+			return rc;
+		}
+
+		state->last_frame_pts = frame->pts;
+
+		return VOD_OK;
+	}
+
+	if (state->last_frame_pts == NO_TIMESTAMP)
+	{
+		state->last_frame_pts = frame->pts;
 	}
 
 	return VOD_OK;
