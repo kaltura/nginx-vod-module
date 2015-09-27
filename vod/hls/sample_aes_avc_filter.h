@@ -1,8 +1,10 @@
 #ifndef __SAMPLE_AES_AVC_FILTER_H__
 #define __SAMPLE_AES_AVC_FILTER_H__
 
+// includes
 #include "media_filter.h"
 
+// functions
 vod_status_t sample_aes_avc_filter_init(
 	void** context,
 	request_context_t* request_context,

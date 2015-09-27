@@ -47,6 +47,10 @@ hls_muxer_init(
 		write_callback = (write_callback_t)aes_cbc_encrypt_write;
 		write_context = state->encrypted_write_context;
 	}
+	else
+	{
+		state->encrypted_write_context = NULL;
+	}
 
 	// init the write queue
 	write_buffer_queue_init(&state->queue, request_context);

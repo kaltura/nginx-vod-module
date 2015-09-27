@@ -43,8 +43,13 @@ ngx_http_vod_hls_init_encryption_params(
 	ngx_http_vod_submodule_context_t* submodule_context,
 	u_char* iv)
 {
-	ngx_http_vod_hls_init_encryption_iv(iv, submodule_context->request_params.segment_index);
 	encryption_params->type = submodule_context->conf->hls.encryption_method;
+	if (encryption_params->type == HLS_ENC_NONE)
+	{
+		return;
+	}
+
+	ngx_http_vod_hls_init_encryption_iv(iv, submodule_context->request_params.segment_index);
 	encryption_params->key = submodule_context->request_params.suburis->encryption_key;
 	encryption_params->iv = iv;
 }

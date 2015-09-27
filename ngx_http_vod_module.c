@@ -14,7 +14,6 @@
 #include "ngx_http_vod_conf.h"
 #include "ngx_file_reader.h"
 #include "ngx_buffer_cache.h"
-#include "ngx_http_vod_hls.h"
 #include "vod/mp4/mp4_parser.h"
 #include "vod/mp4/mp4_clipper.h"
 #include "vod/read_cache.h"

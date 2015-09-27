@@ -1,8 +1,10 @@
 #ifndef __HLS_ENCRYPTION_H__
 #define __HLS_ENCRYPTION_H__
 
+// includes
 #include "../common.h"
 
+// typedefs
 typedef enum {
 	HLS_ENC_NONE,
 	HLS_ENC_AES_128,
