@@ -1,7 +1,9 @@
 #include "mpegts_encoder_filter.h"
 #include "bit_fields.h"
-#include "../mp4/mp4_parser.h"		// for MEDIA_TYPE_XXX
+#include "../codec_config.h"
 #include "../common.h"
+
+#define member_size(type, member) sizeof(((type *)0)->member)
 
 #define PCR_PID (0x100)
 #define FIRST_VIDEO_SID (0xE0)
@@ -17,6 +19,23 @@
 #define SIZEOF_PES_PTS (5)
 
 #define NO_TIMESTAMP ((uint64_t)-1)
+
+#define FF_PROFILE_AAC_HE   (4)
+#define FF_PROFILE_AAC_HE_V2 (28)
+
+// sample aes structs
+typedef struct {
+	u_char descriptor_tag[1];
+	u_char descriptor_length[1];
+	u_char format_identifier[4];
+} registration_descriptor_t;
+
+typedef struct {
+	u_char audio_type[4];
+	u_char priming[2];
+	u_char version[1];
+	u_char setup_data_length[1];
+} audio_setup_information_t;
 
 static const u_char pat_packet[] = {
 
@@ -42,12 +61,22 @@ static const u_char pmt_header_template[] = {
 	0x44, 0x33, 0x20, 0x00, 0x1f, 0x00, 0x01,
 };
 
-static const u_char pmt_entry_template_h264[] = {
+static const u_char pmt_entry_template_avc[] = {
 	0x1b, 0xe0, 0x00, 0xf0, 0x00,
 };
 
 static const u_char pmt_entry_template_aac[] = {
 	0x0f, 0xe0, 0x00, 0xf0, 0x00,
+};
+
+static const u_char pmt_entry_template_sample_aes_avc[] = {
+	0xdb, 0xe0, 0x00, 0xf0, 0x06,
+	0x0f, 0x04, 0x7a, 0x61, 0x76, 0x63		// private_data_indicator_descriptor('zavc')
+};
+
+static const u_char pmt_entry_template_sample_aes_aac[] = {
+	0xcf, 0xe1, 0x01, 0xf0, 0x00,
+	0x0f, 0x04, 0x61, 0x61, 0x63, 0x64		// private_data_indicator_descriptor('aacd')
 };
 
 static const u_char pmt_entry_template_id3[] = {
@@ -308,6 +337,7 @@ mpegts_copy_and_stuff(u_char* dest_packet, u_char* src_packet, u_char* src_pos, 
 vod_status_t 
 mpegts_encoder_init_streams(
 	request_context_t* request_context, 
+	hls_encryption_params_t* encryption_params,
 	write_buffer_queue_t* queue, 
 	mpegts_encoder_init_streams_state_t* stream_state, 
 	uint32_t segment_index)
@@ -315,6 +345,7 @@ mpegts_encoder_init_streams(
 	u_char* cur_packet;
 
 	stream_state->request_context = request_context;
+	stream_state->encryption_params = encryption_params;
 	stream_state->cur_pid = PCR_PID;
 	stream_state->cur_video_sid = FIRST_VIDEO_SID;
 	stream_state->cur_audio_sid = FIRST_AUDIO_SID;
@@ -358,14 +389,71 @@ mpegts_encoder_init_streams(
 }
 
 static vod_status_t 
+mpegts_encoder_write_sample_aes_aac_pmt_entry(
+	request_context_t* request_context,
+	u_char* start,
+	int entry_size,
+	mpeg_stream_metadata_t* stream_metadata)
+{
+	mp4a_config_t codec_config;
+	vod_status_t rc;
+	u_char* p;
+
+	p = vod_copy(start, pmt_entry_template_sample_aes_aac, sizeof(pmt_entry_template_sample_aes_aac));
+	pmt_entry_set_es_info_length(start, entry_size - sizeof_pmt_entry);
+
+	// registration_descriptor
+	*p++ = 0x05;		// descriptor tag
+	*p++ =				// descriptor length
+		member_size(registration_descriptor_t, format_identifier) +
+		sizeof(audio_setup_information_t)+
+		stream_metadata->media_info.extra_data_size;
+	*p++ = 'a';		*p++ = 'p';		*p++ = 'a';		*p++ = 'd';			// apad
+
+	// audio_setup_information
+	rc = codec_config_mp4a_config_parse(
+		request_context, 
+		stream_metadata->media_info.extra_data, 
+		stream_metadata->media_info.extra_data_size, 
+		&codec_config);
+	if (rc != VOD_OK)
+	{
+		return rc;
+	}
+
+	switch (codec_config.object_type - 1)
+	{
+	case FF_PROFILE_AAC_HE:
+		*p++ = 'z';		*p++ = 'a';		*p++ = 'c';		*p++ = 'h';			// zach
+		break;
+
+	case FF_PROFILE_AAC_HE_V2:
+		*p++ = 'z';		*p++ = 'a';		*p++ = 'c';		*p++ = 'p';			// zacp
+		break;
+
+	default:
+		*p++ = 'z';		*p++ = 'a';		*p++ = 'a';		*p++ = 'c';			// zaac
+		break;
+	}
+
+	*p++ = 0;	*p++ = 0;		// priming
+	*p++ = 1;					// version
+	*p++ = stream_metadata->media_info.extra_data_size;
+	vod_memcpy(p, stream_metadata->media_info.extra_data, stream_metadata->media_info.extra_data_size);
+
+	return VOD_OK;
+}
+
+static vod_status_t 
 mpegts_encoder_add_stream(
 	mpegts_encoder_init_streams_state_t* stream_state, 
-	int media_type, 
+	mpeg_stream_metadata_t* stream_metadata,
 	unsigned* pid, 
 	unsigned* sid)
 {
 	const u_char* pmt_entry;
 	int pmt_entry_size;
+	vod_status_t rc;
 
 	*pid = stream_state->cur_pid++;
 
@@ -374,23 +462,43 @@ mpegts_encoder_add_stream(
 		return VOD_OK;
 	}
 
-	switch (media_type)
+	switch (stream_metadata->media_info.media_type)
 	{
 	case MEDIA_TYPE_VIDEO:
 		*sid = stream_state->cur_video_sid++;
-		pmt_entry = pmt_entry_template_h264;
-		pmt_entry_size = sizeof(pmt_entry_template_h264);
+		if (stream_state->encryption_params->type == HLS_ENC_SAMPLE_AES)
+		{
+			pmt_entry = pmt_entry_template_sample_aes_avc;
+			pmt_entry_size = sizeof(pmt_entry_template_sample_aes_avc);
+		}
+		else
+		{
+			pmt_entry = pmt_entry_template_avc;
+			pmt_entry_size = sizeof(pmt_entry_template_avc);
+		}
 		break;
 
 	case MEDIA_TYPE_AUDIO:
 		*sid = stream_state->cur_audio_sid++;
-		pmt_entry = pmt_entry_template_aac;
-		pmt_entry_size = sizeof(pmt_entry_template_aac);
+		if (stream_state->encryption_params->type == HLS_ENC_SAMPLE_AES)
+		{
+			pmt_entry = pmt_entry_template_sample_aes_aac;
+			pmt_entry_size = sizeof(pmt_entry_template_sample_aes_aac) + 
+				sizeof(registration_descriptor_t) + 
+				sizeof(audio_setup_information_t) + 
+				stream_metadata->media_info.extra_data_size;
+
+		}
+		else
+		{
+			pmt_entry = pmt_entry_template_aac;
+			pmt_entry_size = sizeof(pmt_entry_template_aac);
+		}
 		break;
 
 	default:
 		vod_log_error(VOD_LOG_ERR, stream_state->request_context->log, 0,
-			"mpegts_encoder_add_stream: invalid media type %d", media_type);
+			"mpegts_encoder_add_stream: invalid media type %d", stream_metadata->media_info.media_type);
 		return VOD_UNEXPECTED;
 	}
 
@@ -402,7 +510,22 @@ mpegts_encoder_add_stream(
 		return VOD_BAD_DATA;
 	}
 
-	vod_memcpy(stream_state->pmt_packet_pos, pmt_entry, pmt_entry_size);
+	if (pmt_entry == pmt_entry_template_sample_aes_aac)
+	{
+		rc = mpegts_encoder_write_sample_aes_aac_pmt_entry(
+			stream_state->request_context,
+			stream_state->pmt_packet_pos,
+			pmt_entry_size,
+			stream_metadata);
+		if (rc != VOD_OK)
+		{
+			return rc;
+		}
+	}
+	else
+	{
+		vod_memcpy(stream_state->pmt_packet_pos, pmt_entry, pmt_entry_size);
+	}
 	pmt_entry_set_elementary_pid(stream_state->pmt_packet_pos, *pid);
 	stream_state->pmt_packet_pos += pmt_entry_size;
 	return VOD_OK;
@@ -446,7 +569,7 @@ vod_status_t
 mpegts_encoder_init(
 	mpegts_encoder_state_t* state,
 	mpegts_encoder_init_streams_state_t* stream_state,
-	int media_type,
+	mpeg_stream_metadata_t* stream_metadata,
 	request_context_t* request_context,
 	write_buffer_queue_t* queue,
 	bool_t interleave_frames,
@@ -459,11 +582,11 @@ mpegts_encoder_init(
 	state->queue = queue;
 	state->interleave_frames = interleave_frames;
 	state->align_frames = align_frames;
-	state->stream_info.media_type = media_type;
+	state->stream_info.media_type = stream_metadata->media_info.media_type;
 
 	rc = mpegts_encoder_add_stream(
 		stream_state,
-		media_type,
+		stream_metadata,
 		&state->stream_info.pid,
 		&state->stream_info.sid);
 	if (rc != VOD_OK)

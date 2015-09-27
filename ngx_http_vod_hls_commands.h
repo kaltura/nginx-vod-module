@@ -1,5 +1,12 @@
 #define BASE_OFFSET offsetof(ngx_http_vod_loc_conf_t, hls)
 
+	{ ngx_string("vod_hls_encryption_method"),
+	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1,
+	ngx_conf_set_enum_slot,
+	NGX_HTTP_LOC_CONF_OFFSET,
+	BASE_OFFSET + offsetof(ngx_http_vod_hls_loc_conf_t, encryption_method),
+	hls_encryption_methods },
+
 	{ ngx_string("vod_hls_absolute_master_urls"),
 	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1,
 	ngx_conf_set_flag_slot,

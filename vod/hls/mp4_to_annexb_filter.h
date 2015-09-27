@@ -2,6 +2,7 @@
 #define __MP4_TO_ANNEXB_FILTER_H__
 
 // includes
+#include "hls_encryption.h"
 #include "media_filter.h"
 
 // typedefs
@@ -10,6 +11,10 @@ typedef struct {
 	request_context_t* request_context;
 	const media_filter_t* next_filter;
 	void* next_filter_context;
+
+	// fixed
+	media_filter_write_t body_write;
+	void* body_write_context;
 
 	// data parsed from extra data
 	uint32_t nal_packet_size_length;
@@ -24,6 +29,8 @@ typedef struct {
 	uint32_t length_bytes_left;
 	uint32_t packet_size_left;
 	int32_t frame_size_left;
+
+	void* sample_aes_context;
 } mp4_to_annexb_state_t;
 
 // globals
@@ -33,6 +40,7 @@ extern const media_filter_t mp4_to_annexb;
 vod_status_t mp4_to_annexb_init(
 	mp4_to_annexb_state_t* state, 
 	request_context_t* request_context,
+	hls_encryption_params_t* encryption_params,
 	const media_filter_t* next_filter,
 	void* next_filter_context,
 	const u_char* extra_data, 

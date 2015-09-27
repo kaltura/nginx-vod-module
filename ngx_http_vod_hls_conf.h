@@ -14,9 +14,13 @@ typedef struct
 	ngx_str_t master_file_name_prefix;
 	ngx_str_t iframes_file_name_prefix;
 	hls_muxer_conf_t muxer_config;
+	vod_uint_t encryption_method;
 
 	// derived fields
 	m3u8_config_t m3u8_config;
 } ngx_http_vod_hls_loc_conf_t;
+
+// globals
+extern ngx_conf_enum_t  hls_encryption_methods[];
 
 #endif // _NGX_HTTP_VOD_HLS_CONF_H_INCLUDED_

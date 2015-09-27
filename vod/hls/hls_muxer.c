@@ -12,6 +12,7 @@ hls_muxer_init(
 	hls_muxer_state_t* state, 
 	request_context_t* request_context,
 	hls_muxer_conf_t* conf,
+	hls_encryption_params_t* encryption_params,
 	uint32_t segment_index,
 	mpeg_metadata_t* mpeg_metadata, 
 	read_cache_state_t* read_cache_state, 
@@ -33,13 +34,32 @@ hls_muxer_init(
 	state->cur_frame = NULL;
 	state->video_duration = 0;
 
+	if (encryption_params->type == HLS_ENC_AES_128)
+	{
+		rc = aes_cbc_encrypt_init(
+			&state->encrypted_write_context,
+			request_context,
+			write_callback,
+			write_context,
+			encryption_params->key,
+			encryption_params->iv);
+
+		write_callback = (write_callback_t)aes_cbc_encrypt_write;
+		write_context = state->encrypted_write_context;
+	}
+
 	// init the write queue
 	write_buffer_queue_init(&state->queue, request_context);
 	state->queue.write_callback = write_callback;
 	state->queue.write_context = write_context;
 
 	// init the packetizer streams and get the packet ids / stream ids
-	rc = mpegts_encoder_init_streams(request_context, &state->queue, &init_streams_state, segment_index);
+	rc = mpegts_encoder_init_streams(
+		request_context, 
+		encryption_params, 
+		&state->queue, 
+		&init_streams_state, 
+		segment_index);
 	if (rc != VOD_OK)
 	{
 		return rc;
@@ -75,7 +95,7 @@ hls_muxer_init(
 		rc = mpegts_encoder_init(
 			&cur_stream->mpegts_encoder_state, 
 			&init_streams_state,
-			cur_stream->media_type,
+			cur_stream_metadata,
 			request_context, 
 			&state->queue, 
 			conf->interleave_frames,
@@ -105,6 +125,7 @@ hls_muxer_init(
 			rc = mp4_to_annexb_init(
 				cur_stream->top_filter_context,
 				request_context,
+				encryption_params,
 				&mpegts_encoder,
 				&cur_stream->mpegts_encoder_state,
 				cur_stream_metadata->media_info.extra_data,
@@ -179,6 +200,7 @@ hls_muxer_init(
 			rc = adts_encoder_init(
 				cur_stream->top_filter_context, 
 				request_context, 
+				encryption_params,
 				next_filter, 
 				next_filter_context, 
 				cur_stream_metadata->media_info.extra_data,
@@ -390,11 +412,23 @@ hls_muxer_process(hls_muxer_state_t* state)
 		return rc;
 	}
 
+	if (state->encrypted_write_context != NULL)
+	{
+		rc = aes_cbc_encrypt_flush(state->encrypted_write_context);
+		if (rc != VOD_OK)
+		{
+			return rc;
+		}
+	}
+
 	return VOD_OK;
 }
 
 static void 
-hls_muxer_simulation_flush_delayed_streams(hls_muxer_state_t* state, hls_muxer_stream_state_t* selected_stream, uint64_t frame_dts)
+hls_muxer_simulation_flush_delayed_streams(
+	hls_muxer_state_t* state, 
+	hls_muxer_stream_state_t* selected_stream, 
+	uint64_t frame_dts)
 {
 	hls_muxer_stream_state_t* cur_stream;
 	uint64_t buffer_dts;
@@ -683,6 +717,7 @@ hls_muxer_simulate_get_segment_size(hls_muxer_state_t* state)
 	hls_muxer_stream_state_t* selected_stream;
 	input_frame_t* cur_frame;
 	uint64_t cur_frame_dts;
+	off_t result;
 #if (VOD_DEBUG)
 	off_t cur_frame_start;
 #endif
@@ -727,7 +762,13 @@ hls_muxer_simulate_get_segment_size(hls_muxer_state_t* state)
 #endif
 	}
 
-	return state->queue.cur_offset;
+	result = state->queue.cur_offset;
+	if (state->encrypted_write_context != NULL)
+	{
+		result = aes_round_to_block(result);
+	}
+
+	return result;
 }
 
 void 
