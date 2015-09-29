@@ -1672,7 +1672,7 @@ mp4_parser_process_moov_atom_callback(void* ctx, atom_info_t* atom_info)
 {
 	process_moov_context_t* context = (process_moov_context_t*)ctx;
 	save_relevant_atoms_context_t save_atoms_context;
-	codec_config_get_nal_units_t get_nal_units;
+	codec_config_get_nal_units_t get_nal_units = NULL;
 	metadata_parse_context_t metadata_parse_context;
 	mpeg_stream_base_metadata_t* result_stream;
 	mpeg_base_metadata_t* result = context->result;
