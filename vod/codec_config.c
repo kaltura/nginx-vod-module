@@ -3,20 +3,19 @@
 
 #define AOT_ESCAPE (31)
 
-// TODO: implement get_nal_units for hevc
-
 vod_status_t 
 codec_config_avcc_get_nal_units(
 	request_context_t* request_context,
 	const u_char* extra_data,
 	uint32_t extra_data_size,
 	bool_t size_only,
+	uint32_t* nal_packet_size_length,
 	u_char** result,
 	uint32_t* result_size)
 {
 	const u_char* extra_data_end = extra_data + extra_data_size;
 	const u_char* cur_pos;
-	u_char* sps_pps_pos;
+	u_char* p;
 	size_t actual_size;
 	uint16_t unit_size;
 	int unit_count;
@@ -29,7 +28,9 @@ codec_config_avcc_get_nal_units(
 		return VOD_BAD_DATA;
 	}
 
-	// calculate total size of SPS & PPS
+	*nal_packet_size_length = (((avcc_config_t*)extra_data)->nula_length_size & 0x3) + 1;
+
+	// calculate total size and validate
 	*result_size = 0;
 	cur_pos = extra_data + sizeof(avcc_config_t);
 	for (i = 0; i < 2; i++)		// once for SPS, once for PPS
@@ -50,8 +51,7 @@ codec_config_avcc_get_nal_units(
 				return VOD_BAD_DATA;
 			}
 
-			unit_size = parse_be16(cur_pos);
-			cur_pos += sizeof(uint16_t);
+			read_be16(cur_pos, unit_size);
 			if (cur_pos + unit_size > extra_data_end)
 			{
 				vod_log_error(VOD_LOG_ERR, request_context->log, 0,
@@ -71,14 +71,14 @@ codec_config_avcc_get_nal_units(
 	}
 
 	// allocate buffer
-	*result = vod_alloc(request_context->pool, *result_size);
-	if (*result == NULL)
+	p = vod_alloc(request_context->pool, *result_size);
+	if (p == NULL)
 	{
 		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
 			"codec_config_avcc_get_nal_units: vod_alloc failed");
 		return VOD_ALLOC_FAILED;
 	}
-	sps_pps_pos = *result;
+	*result = p;
 
 	// copy data
 	cur_pos = extra_data + sizeof(avcc_config_t);
@@ -89,20 +89,20 @@ codec_config_avcc_get_nal_units(
 			unit_size = parse_be16(cur_pos);
 			cur_pos += sizeof(uint16_t);
 
-			*((uint32_t*)sps_pps_pos) = 0x01000000;
-			sps_pps_pos += sizeof(uint32_t);
+			*((uint32_t*)p) = 0x01000000;
+			p += sizeof(uint32_t);
 
-			vod_memcpy(sps_pps_pos, cur_pos, unit_size);
+			vod_memcpy(p, cur_pos, unit_size);
 			cur_pos += unit_size;
-			sps_pps_pos += unit_size;
+			p += unit_size;
 		}
 	}
 
-	actual_size = sps_pps_pos - *result;
+	actual_size = p - *result;
 	if (actual_size != *result_size)
 	{
 		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-			"codec_config_avcc_get_nal_units: actual sps/pps size %uz is different than calculated size %uD",
+			"codec_config_avcc_get_nal_units: actual extra data size %uz is different than calculated size %uD",
 			actual_size, *result_size);
 		return VOD_UNEXPECTED;
 	}
@@ -113,7 +113,12 @@ codec_config_avcc_get_nal_units(
 
 // Note: taken from gf_odf_hevc_cfg_read_bs in GPAC code
 static vod_status_t 
-codec_config_hevc_config_parse(request_context_t* request_context, const u_char* buffer, int size, hevc_config_t* cfg)
+codec_config_hevc_config_parse(
+	request_context_t* request_context, 
+	const u_char* buffer, 
+	int size, 
+	hevc_config_t* cfg, 
+	const u_char** end_pos)
 {
 	bit_reader_state_t reader;
 
@@ -167,6 +172,139 @@ codec_config_hevc_config_parse(request_context_t* request_context, const u_char*
 		return VOD_BAD_DATA;
 	}
 
+	if (end_pos != NULL)
+	{
+		*end_pos = reader.stream.cur_pos + (reader.cur_bit >= 0 ? 1 : 0);
+	}
+
+	return VOD_OK;
+}
+
+vod_status_t
+codec_config_hevc_get_nal_units(
+	request_context_t* request_context,
+	const u_char* extra_data,
+	uint32_t extra_data_size,
+	bool_t size_only,
+	uint32_t* nal_packet_size_length,
+	u_char** result,
+	uint32_t* result_size)
+{
+	hevc_config_t cfg;
+	vod_status_t rc;
+	const u_char* start_pos;
+	const u_char* cur_pos;
+	const u_char* end_pos;
+	size_t actual_size;
+	uint16_t unit_size;
+	uint16_t count;
+	uint8_t type_count;
+	u_char* p;
+
+	rc = codec_config_hevc_config_parse(request_context, extra_data, extra_data_size, &cfg, &start_pos);
+	if (rc != VOD_OK)
+	{
+		return rc;
+	}
+
+	*nal_packet_size_length = cfg.nal_unit_size;
+
+	end_pos = extra_data + extra_data_size;
+
+	// calculate total size and validate
+	*result_size = 0;
+	cur_pos = start_pos;
+	if (cur_pos >= end_pos)
+	{
+		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+			"codec_config_hevc_get_nal_units: extra data overflow while reading type count");
+		return VOD_BAD_DATA;
+	}
+
+	for (type_count = *cur_pos++; type_count > 0; type_count--)
+	{
+		if (cur_pos + 3 > end_pos)
+		{
+			vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+				"codec_config_hevc_get_nal_units: extra data overflow while reading type header");
+			return VOD_BAD_DATA;
+		}
+
+		cur_pos++;
+		read_be16(cur_pos, count);
+
+		for (; count > 0; count--)
+		{
+			if (cur_pos + sizeof(uint16_t) > end_pos)
+			{
+				vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+					"codec_config_hevc_get_nal_units: extra data overflow while reading unit size");
+				return VOD_BAD_DATA;
+			}
+
+			read_be16(cur_pos, unit_size);
+
+			cur_pos += unit_size;
+
+			if (cur_pos > end_pos)
+			{
+				vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+					"codec_config_hevc_get_nal_units: extra data overflow while reading unit data");
+				return VOD_BAD_DATA;
+			}
+
+			*result_size += sizeof(uint32_t) + unit_size;
+		}
+	}
+
+	if (size_only)
+	{
+		*result = NULL;
+		return VOD_OK;
+	}
+
+	// allocate buffer
+	p = vod_alloc(request_context->pool, *result_size);
+	if (p == NULL)
+	{
+		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
+			"codec_config_hevc_get_nal_units: vod_alloc failed");
+		return VOD_ALLOC_FAILED;
+	}
+	*result = p;
+
+	// copy data
+	cur_pos = start_pos;
+	for (type_count = *cur_pos++; type_count > 0; type_count--)
+	{
+		cur_pos++;		// unit type
+		read_be16(cur_pos, count);
+
+		for (; count > 0; count--)
+		{
+			read_be16(cur_pos, unit_size);
+
+			*((uint32_t*)p) = 0x01000000;
+			p += sizeof(uint32_t);
+
+			vod_memcpy(p, cur_pos, unit_size);
+			p += unit_size;
+
+			cur_pos += unit_size;
+		}
+	}
+
+	// verify size
+	actual_size = p - *result;
+	if (actual_size != *result_size)
+	{
+		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+			"codec_config_hevc_get_nal_units: actual extra data size %uz is different than calculated size %uD",
+			actual_size, *result_size);
+		return VOD_UNEXPECTED;
+	}
+
+	vod_log_buffer(VOD_LOG_DEBUG_LEVEL, request_context->log, 0, "codec_config_hevc_get_nal_units: parsed extra data ", *result, *result_size);
 	return VOD_OK;
 }
 
@@ -221,7 +359,7 @@ codec_config_get_hevc_codec_name(request_context_t* request_context, media_info_
 	char profile_space[2] = { 0, 0 };
 	int shift;
 
-	rc = codec_config_hevc_config_parse(request_context, media_info->extra_data, media_info->extra_data_size, &cfg);
+	rc = codec_config_hevc_config_parse(request_context, media_info->extra_data, media_info->extra_data_size, &cfg, NULL);
 	if (rc != VOD_OK)
 	{
 		return rc;

@@ -132,9 +132,7 @@ hls_muxer_init(
 				encryption_params,
 				&mpegts_encoder,
 				&cur_stream->mpegts_encoder_state,
-				cur_stream_metadata->media_info.extra_data,
-				cur_stream_metadata->media_info.extra_data_size,
-				cur_stream_metadata->media_info.u.video.nal_packet_size_length);
+				&cur_stream_metadata->media_info);
 			if (rc != VOD_OK)
 			{
 				return rc;

@@ -127,7 +127,7 @@ sample_aes_avc_start_nal_unit(void* context, int unit_type, uint32_t unit_size)
 {
 	sample_aes_avc_filter_state_t* state = (sample_aes_avc_filter_state_t*)context;
 
-	if ((unit_type != NAL_SLICE && unit_type != NAL_IDR_SLICE) || unit_size <= MAX_UNENCRYPTED_UNIT_SIZE)
+	if ((unit_type != AVC_NAL_SLICE && unit_type != AVC_NAL_IDR_SLICE) || unit_size <= MAX_UNENCRYPTED_UNIT_SIZE)
 	{
 		state->encrypt = FALSE;
 		return VOD_OK;
