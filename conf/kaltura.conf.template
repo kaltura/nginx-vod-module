@@ -120,7 +120,7 @@ http {
 			vod_segment_duration 4000;
 			vod_bootstrap_segment_durations 3500;
 			vod_align_segments_to_key_frames on;
-			vod_dash_include_segment_timeline off;
+			vod_dash_manifest_format segmenttemplate;
 			
 			add_header Last-Modified "Sun, 19 Nov 2000 08:52:00 GMT";
 			add_header Access-Control-Allow-Headers "origin,range,accept-encoding,referer";
