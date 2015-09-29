@@ -60,18 +60,31 @@ mp4_encrypt_increment_be64(u_char* counter)
 	}
 }
 
-static void
+static vod_status_t
 mp4_encrypt_encrypt(mp4_encrypt_state_t* state, u_char* buffer, uint32_t size)
 {
 	u_char* encrypted_counter_pos;
 	u_char* cur_end_pos;
 	u_char* buffer_end = buffer + size;
+	int out_size;
 
 	while (buffer < buffer_end)
 	{
 		if (state->block_offset == 0)
 		{
-			AES_encrypt(state->counter, state->encrypted_counter, &state->encryption_key);
+			if (1 != EVP_EncryptUpdate(
+				&state->cipher, 
+				state->encrypted_counter, 
+				&out_size, 
+				state->counter, 
+				sizeof(state->counter)) || 
+				out_size != sizeof(state->encrypted_counter))
+			{
+				vod_log_error(VOD_LOG_ERR, state->request_context->log, 0,
+					"mp4_encrypt_encrypt: EVP_EncryptUpdate failed");
+				return VOD_UNEXPECTED;
+			}
+
 			mp4_encrypt_increment_be64(state->counter + 8);
 		}
 
@@ -89,6 +102,14 @@ mp4_encrypt_encrypt(mp4_encrypt_state_t* state, u_char* buffer, uint32_t size)
 			encrypted_counter_pos++;
 		}
 	}
+
+	return VOD_OK;
+}
+
+static void
+mp4_encrypt_cleanup(mp4_encrypt_state_t* state)
+{
+	EVP_CIPHER_CTX_cleanup(&state->cipher);
 }
 
 static vod_status_t
@@ -101,6 +122,7 @@ mp4_encrypt_init_state(
 	const u_char* iv)
 {
 	mp4_encrypt_info_t* drm_info = (mp4_encrypt_info_t*)stream_metadata->file_info.drm_info;
+	vod_pool_cleanup_t *cln;
 	uint64_t iv_int;
 	u_char* p;
 
@@ -109,11 +131,25 @@ mp4_encrypt_init_state(
 	state->stream_metadata = stream_metadata;
 	state->segment_index = segment_index;
 	state->segment_writer = *segment_writer;
-	if (AES_set_encrypt_key(drm_info->key, MP4_ENCRYPT_KEY_SIZE * 8, &state->encryption_key) != 0)
+
+	cln = vod_pool_cleanup_add(request_context->pool, 0);
+	if (cln == NULL)
+	{
+		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
+			"mp4_encrypt_init_state: vod_pool_cleanup_add failed");
+		return VOD_ALLOC_FAILED;
+	}
+
+	cln->handler = (vod_pool_cleanup_pt)mp4_encrypt_cleanup;
+	cln->data = state;
+
+	EVP_CIPHER_CTX_init(&state->cipher);
+
+	if (1 != EVP_EncryptInit_ex(&state->cipher, EVP_aes_128_ecb(), NULL, drm_info->key, NULL))
 	{
 		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-			"mp4_encrypt_init_state: AES_set_encrypt_key failed");
-		return VOD_UNEXPECTED;
+			"mp4_encrypt_init_state: EVP_EncryptInit_ex failed");
+		return VOD_ALLOC_FAILED;
 	}
 
 	// increment the iv by the index of the first frame
@@ -366,7 +402,11 @@ mp4_encrypt_video_write_buffer(void* context, u_char* buffer, uint32_t size, boo
 		case STATE_PACKET_DATA:
 			write_size = vod_min(state->packet_size_left, (uint32_t)(buffer_end - cur_pos));
 
-			mp4_encrypt_encrypt(&state->base, cur_pos, write_size);
+			rc = mp4_encrypt_encrypt(&state->base, cur_pos, write_size);
+			if (rc != VOD_OK)
+			{
+				return rc;
+			}
 
 			cur_pos += write_size;
 			state->packet_size_left -= write_size;
@@ -566,7 +606,11 @@ mp4_encrypt_audio_write_buffer(void* context, u_char* buffer, uint32_t size, boo
 
 		write_size = vod_min(state->frame_size_left, (uint32_t)(buffer_end - cur_pos));
 
-		mp4_encrypt_encrypt(state, cur_pos, write_size);
+		rc = mp4_encrypt_encrypt(state, cur_pos, write_size);
+		if (rc != VOD_OK)
+		{
+			return rc;
+		}
 
 		cur_pos += write_size;
 		state->frame_size_left -= write_size;

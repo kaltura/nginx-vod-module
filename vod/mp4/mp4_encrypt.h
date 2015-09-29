@@ -2,12 +2,16 @@
 #define __MP4_ENCRYPT_H__
 
 // includes
-#include <openssl/aes.h>
+#include <openssl/evp.h>
 #include "../dynamic_buffer.h"
 #include "../common.h"
 #include "mp4_parser.h"
 
 // encryption constants
+#ifndef AES_BLOCK_SIZE
+#define AES_BLOCK_SIZE (16)
+#endif // AES_BLOCK_SIZE
+
 #define MP4_ENCRYPT_IV_SIZE (8)
 #define MP4_ENCRYPT_COUNTER_SIZE (AES_BLOCK_SIZE)
 
@@ -56,7 +60,7 @@ typedef struct {
 	u_char counter[MP4_ENCRYPT_COUNTER_SIZE];
 	u_char encrypted_counter[MP4_ENCRYPT_COUNTER_SIZE];
 	int block_offset;
-	AES_KEY encryption_key;
+	EVP_CIPHER_CTX cipher;
 
 	// frame state
 	input_frame_t* cur_frame;
