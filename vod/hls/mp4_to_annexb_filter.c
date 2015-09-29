@@ -1,24 +1,7 @@
 #include "mp4_to_annexb_filter.h"
+#include "sample_aes_avc_filter.h"
 #include "../read_stream.h"
-
-// h264 NAL unit types
-enum {
-    NAL_SLICE           = 1,
-    NAL_DPA             = 2,
-    NAL_DPB             = 3,
-    NAL_DPC             = 4,
-    NAL_IDR_SLICE       = 5,
-    NAL_SEI             = 6,
-    NAL_SPS             = 7,
-    NAL_PPS             = 8,
-    NAL_AUD             = 9,
-    NAL_END_SEQUENCE    = 10,
-    NAL_END_STREAM      = 11,
-    NAL_FILLER_DATA     = 12,
-    NAL_SPS_EXT         = 13,
-    NAL_AUXILIARY_SLICE = 19,
-    NAL_FF_IGNORE       = 0xff0f001,
-};
+#include "../avc_defs.h"
 
 // states
 enum {
@@ -46,17 +29,45 @@ vod_status_t
 mp4_to_annexb_init(
 	mp4_to_annexb_state_t* state, 
 	request_context_t* request_context,
+	hls_encryption_params_t* encryption_params,
 	const media_filter_t* next_filter,
 	void* next_filter_context,
 	const u_char* extra_data, 
 	uint32_t extra_data_size,
 	uint32_t nal_packet_size_length)
 {
+	vod_status_t rc;
+
 	if (nal_packet_size_length < 1 || nal_packet_size_length > 4)
 	{
-		vod_log_error(VOD_LOG_ERR, state->request_context->log, 0,
+		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
 			"mp4_to_annexb_init: invalid nal packet size length %uD", nal_packet_size_length);
 		return VOD_BAD_DATA;
+	}
+
+	if (encryption_params->type == HLS_ENC_SAMPLE_AES)
+	{
+		rc = sample_aes_avc_filter_init(
+			&state->sample_aes_context, 
+			request_context, 
+			next_filter->write, 
+			next_filter_context, 
+			encryption_params->key,
+			encryption_params->iv);
+		if (rc != VOD_OK)
+		{
+			return rc;
+		}
+
+		state->body_write = sample_aes_avc_filter_write_nal_body;
+		state->body_write_context = state->sample_aes_context;
+	}
+	else
+	{
+		state->sample_aes_context = NULL;
+
+		state->body_write = next_filter->write;
+		state->body_write_context = next_filter_context;
 	}
 
 	state->request_context = request_context;
@@ -78,7 +89,19 @@ mp4_to_annexb_simulation_supported(mp4_to_annexb_state_t* state)
 		When the packet size field length is less than 4, the output size may be greater than input size by
 		the number of NAL packets. Since we don't know this number in advance we have no way to bound the
 		output size. Luckily, ffmpeg always uses 4 byte size fields - see ff_isom_write_avcc */
-	return state->nal_packet_size_length == 4;
+	if (state->nal_packet_size_length != 4)
+	{
+		return FALSE;
+	}
+
+	/* In sample AES every encrypted NAL unit has to go through emulation prevention, so it is not 
+		possible to know the exact size of the unit in advance */
+	if (state->sample_aes_context != NULL)
+	{
+		return FALSE;
+	}
+
+	return TRUE;
 }
 
 static vod_status_t 
@@ -144,6 +167,15 @@ mp4_to_annexb_write(void* context, const u_char* buffer, uint32_t size)
 				state->cur_state = STATE_SKIP_PACKET;
 				break;
 			}
+
+			if (state->sample_aes_context != NULL)
+			{
+				rc = sample_aes_avc_start_nal_unit(state->sample_aes_context, unit_type, state->packet_size_left);
+				if (rc != VOD_OK)
+				{
+					return rc;
+				}
+			}
 			
 			switch (unit_type)
 			{
@@ -193,7 +225,7 @@ mp4_to_annexb_write(void* context, const u_char* buffer, uint32_t size)
 			if (state->cur_state == STATE_COPY_PACKET)
 			{
 				state->frame_size_left -= write_size;
-				rc = state->next_filter->write(state->next_filter_context, buffer, write_size);
+				rc = state->body_write(state->body_write_context, buffer, write_size);
 				if (rc != VOD_OK)
 				{
 					return rc;

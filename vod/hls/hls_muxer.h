@@ -6,6 +6,7 @@
 #include "adts_encoder_filter.h"
 #include "mpegts_encoder_filter.h"
 #include "buffer_filter.h"
+#include "aes_cbc_encrypt.h"
 #include "../mp4/mp4_parser.h"
 #include "../read_cache.h"
 #include "../segmenter.h"
@@ -69,6 +70,7 @@ typedef struct {
 	// child states
 	read_cache_state_t* read_cache_state;
 	write_buffer_queue_t queue;
+	aes_cbc_encrypt_context_t* encrypted_write_context;
 	
 	// cur frame state
 	input_frame_t* cur_frame;
@@ -86,6 +88,7 @@ vod_status_t hls_muxer_init(
 	hls_muxer_state_t* state,
 	request_context_t* request_context,
 	hls_muxer_conf_t* conf,
+	hls_encryption_params_t* encryption_params,
 	uint32_t segment_index,
 	mpeg_metadata_t* mpeg_metadata,
 	read_cache_state_t* read_cache_state,

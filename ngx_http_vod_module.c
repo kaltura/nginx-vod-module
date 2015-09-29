@@ -14,8 +14,6 @@
 #include "ngx_http_vod_conf.h"
 #include "ngx_file_reader.h"
 #include "ngx_buffer_cache.h"
-#include "ngx_http_vod_hls.h"
-#include "vod/aes_encrypt.h"
 #include "vod/mp4/mp4_parser.h"
 #include "vod/mp4/mp4_clipper.h"
 #include "vod/read_cache.h"
@@ -109,7 +107,6 @@ struct ngx_http_vod_ctx_s {
 	mpeg_stream_metadata_t* cur_stream;
 	ngx_chain_t out;
 	ngx_http_vod_write_segment_context_t write_segment_buffer_context;
-	aes_encrypt_context_t* encrypted_write_context;
 };
 
 // forward declarations
@@ -350,50 +347,6 @@ ngx_http_vod_finalize_request(ngx_http_vod_ctx_t *ctx, ngx_int_t rc)
 	ngx_perf_counter_end(ctx->perf_counters, ctx->total_perf_counter_context, PC_TOTAL);
 
 	ngx_http_finalize_request(ctx->submodule_context.r, rc);
-}
-
-////// Encryption support
-
-static vod_status_t
-ngx_http_vod_init_aes_encryption(ngx_http_vod_ctx_t *ctx, write_callback_t write_callback, void* callback_context)
-{
-	ngx_pool_cleanup_t *cln;
-	vod_status_t rc;
-
-	ctx->encrypted_write_context = ngx_palloc(ctx->submodule_context.r->pool, sizeof(*ctx->encrypted_write_context));
-	if (ctx->encrypted_write_context == NULL)
-	{
-		ngx_log_debug0(NGX_LOG_DEBUG_HTTP, ctx->submodule_context.request_context.log, 0,
-			"ngx_http_vod_init_aes_encryption: ngx_palloc failed");
-		return VOD_ALLOC_FAILED;
-	}
-
-	cln = ngx_pool_cleanup_add(ctx->submodule_context.r->pool, 0);
-	if (cln == NULL) 
-	{
-		ngx_log_debug0(NGX_LOG_DEBUG_HTTP, ctx->submodule_context.request_context.log, 0,
-			"ngx_http_vod_init_aes_encryption: ngx_pool_cleanup_add failed");
-		return VOD_ALLOC_FAILED;
-	}
-
-	cln->handler = (ngx_pool_cleanup_pt)aes_encrypt_cleanup;
-	cln->data = ctx->encrypted_write_context;
-
-	rc = aes_encrypt_init(
-		ctx->encrypted_write_context, 
-		&ctx->submodule_context.request_context, 
-		write_callback, 
-		callback_context, 
-		ctx->submodule_context.cur_suburi->encryption_key,
-		ctx->submodule_context.request_params.segment_index);
-	if (rc != VOD_OK)
-	{
-		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, ctx->submodule_context.request_context.log, 0,
-			"ngx_http_vod_init_aes_encryption: aes_encrypt_init failed %i", rc);
-		return rc;
-	}
-
-	return VOD_OK;
 }
 
 ////// DRM
@@ -1363,7 +1316,6 @@ ngx_http_vod_write_segment_buffer(void* ctx, u_char* buffer, uint32_t size, bool
 static ngx_int_t 
 ngx_http_vod_init_frame_processing(ngx_http_vod_ctx_t *ctx)
 {
-	ngx_http_vod_loc_conf_t* conf = ctx->submodule_context.conf;
 	ngx_http_request_t* r = ctx->submodule_context.r;
 	segment_writer_t segment_writer;
 	ngx_str_t output_buffer = ngx_null_string;
@@ -1379,26 +1331,9 @@ ngx_http_vod_init_frame_processing(ngx_http_vod_ctx_t *ctx)
 	ctx->write_segment_buffer_context.chain_end = &ctx->out;
 	ctx->write_segment_buffer_context.total_size = 0;
 
-	if (conf->secret_key != NULL && conf->submodule.name == hls.name)
-	{
-		rc = ngx_http_vod_init_aes_encryption(ctx, ngx_http_vod_write_segment_buffer, &ctx->write_segment_buffer_context);
-		if (rc != VOD_OK)
-		{
-			ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
-				"ngx_http_vod_init_frame_processing: ngx_http_vod_init_aes_encryption failed %i", rc);
-			return ngx_http_vod_status_to_ngx_error(rc);
-		}
-
-		segment_writer.write_tail = (write_callback_t)aes_encrypt_write;
-		segment_writer.write_head = NULL;			// cannot be supported with CBC encryption
-		segment_writer.context = ctx->encrypted_write_context;
-	}
-	else
-	{
-		segment_writer.write_tail = ngx_http_vod_write_segment_buffer;
-		segment_writer.write_head = ngx_http_vod_write_segment_header_buffer;
-		segment_writer.context = &ctx->write_segment_buffer_context;
-	}
+	segment_writer.write_tail = ngx_http_vod_write_segment_buffer;
+	segment_writer.write_head = ngx_http_vod_write_segment_header_buffer;
+	segment_writer.context = &ctx->write_segment_buffer_context;
 
 	// initialize the protocol specific frame processor
 	ngx_perf_counter_start(ctx->perf_counter_context);
@@ -1429,12 +1364,6 @@ ngx_http_vod_init_frame_processing(ngx_http_vod_ctx_t *ctx)
 	if (ctx->content_length == 0)
 	{
 		return NGX_OK;
-	}
-
-	// calculate the response size
-	if (conf->secret_key != NULL && conf->submodule.name == hls.name)
-	{
-		ctx->content_length = aes_round_to_block(ctx->content_length);
 	}
 
 	// send the response header
@@ -1532,18 +1461,6 @@ ngx_http_vod_finalize_segment_response(ngx_http_vod_ctx_t *ctx)
 {
 	ngx_http_request_t *r = ctx->submodule_context.r;
 	ngx_int_t rc;
-
-	// flush the encryption buffer
-	if (ctx->encrypted_write_context != NULL)
-	{
-		rc = aes_encrypt_flush(ctx->encrypted_write_context);
-		if (rc != VOD_OK)
-		{
-			ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
-				"ngx_http_vod_finalize_segment_response: aes_encrypt_flush failed %i", rc);
-			return ngx_http_vod_status_to_ngx_error(rc);
-		}
-	}
 
 	// if we already sent the headers and all the buffers, just signal completion and return
 	if (r->header_sent)

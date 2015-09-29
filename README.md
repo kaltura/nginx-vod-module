@@ -37,7 +37,7 @@ without the overhead of short segments for the whole duration of the video
 
 * HLS: Generation of I-frames playlist (EXT-X-I-FRAMES-ONLY)
 
-* HLS: AES-128 encryption support
+* HLS: support for AES-128 / SAMPLE-AES encryption
 
 ### Limitations
 
@@ -46,8 +46,6 @@ without the overhead of short segments for the whole duration of the video
 * Track selection and playback rate change are not supported in progressive download
 
 * I-frames playlist generation is not supported when encryption is enabled
-
-* SAMPLE-AES encryption is not supported
 
 * Tested on Linux only
 
@@ -702,6 +700,13 @@ Turning this parameter off reduces the packaging overhead, however the default i
 
 ### Configuration directives - HLS
 
+#### vod_hls_encryption_method
+* **syntax**: `vod_hls_encryption_method method`
+* **default**: `none`
+* **context**: `http`, `server`, `location`
+
+Sets the encryption method of HLS segments, allowed values are: none (default), aes-128, sample-aes.
+
 #### vod_hls_absolute_master_urls
 * **syntax**: `vod_hls_absolute_master_urls on/off`
 * **default**: `on`
@@ -859,6 +864,7 @@ Note: Configuration directives that can accept variables are explicitly marked a
 				vod_mode mapped;
 				vod_moov_cache moov_cache 512m;
 				vod_secret_key "mukkaukk$vod_filepath";
+				vod_hls_encryption_method aes-128;
 				vod_child_request_path /__child_request__/;
 				vod_upstream kalapi;
 				vod_upstream_host_header www.kaltura.com;
@@ -893,6 +899,7 @@ Note: Configuration directives that can accept variables are explicitly marked a
 				vod_mode remote;
 				vod_moov_cache moov_cache 512m;
 				vod_secret_key "mukkaukk$vod_suburi";
+				vod_hls_encryption_method aes-128;
 				vod_child_request_path /__child_request__/;
 				vod_upstream kalapi;
 				vod_upstream_host_header www.kaltura.com;

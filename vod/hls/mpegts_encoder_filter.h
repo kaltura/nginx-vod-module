@@ -2,8 +2,10 @@
 #define __MPEGTS_ENCODER_FILTER_H__
 
 // includes
-#include "media_filter.h"
+#include "hls_encryption.h"
+#include "../mp4/mp4_parser.h"
 #include "../write_buffer_queue.h"
+#include "media_filter.h"
 
 // constants
 #define MPEGTS_PACKET_SIZE (188)
@@ -60,6 +62,7 @@ typedef struct {
 typedef struct {
 	request_context_t* request_context;
 
+	hls_encryption_params_t* encryption_params;
 	u_char* pmt_packet_start;
 	u_char* pmt_packet_end;
 	u_char* pmt_packet_pos;
@@ -74,6 +77,7 @@ extern const media_filter_t mpegts_encoder;
 // functions
 vod_status_t mpegts_encoder_init_streams(
 	request_context_t* request_context,
+	hls_encryption_params_t* encryption_params,
 	write_buffer_queue_t* queue,
 	mpegts_encoder_init_streams_state_t* stream_state,
 	uint32_t segment_index);
@@ -84,7 +88,7 @@ void mpegts_encoder_finalize_streams(
 vod_status_t mpegts_encoder_init(
 	mpegts_encoder_state_t* state,
 	mpegts_encoder_init_streams_state_t* stream_state,
-	int media_type,
+	mpeg_stream_metadata_t* stream_metadata,
 	request_context_t* request_context,
 	write_buffer_queue_t* queue,
 	bool_t interleave_frames,

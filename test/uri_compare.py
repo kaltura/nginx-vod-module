@@ -28,9 +28,6 @@ IGNORE_HEADER_VALUES = set([
 
 
 class TestThread(stress_base.TestThreadBase):
-	def __init__(self, index, increment, stopFile):
-		stress_base.TestThreadBase.__init__(self, index, increment, stopFile)
-
 	def getG2OHeaders(self, url):
 		if not 'G2O_KEY' in globals():
 			return {}
@@ -133,7 +130,8 @@ class TestThread(stress_base.TestThreadBase):
 			body1 = re.sub('nginx/\d+\.\d+\.\d+', 'nginx/0.0.0', body1)
 			body2 = re.sub('nginx/\d+\.\d+\.\d+', 'nginx/0.0.0', body2)
 		
-		if url1.split('?')[0].rsplit('.', 1)[-1] in set(['m3u8', 'mpd']):
+		if (headers1.has_key('content-type') and 
+			headers1['content-type'][0] in set(['application/vnd.apple.mpegurl', 'application/dash+xml'])):
 			body1 = body1.replace(urlBase1, urlBase2)
 			body1 = body1.replace('-a1-v1', '-v1-a1')
 			body2 = body2.replace('-a1-v1', '-v1-a1')

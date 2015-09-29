@@ -277,7 +277,7 @@ TEST_CASES = [
         ('', 'clipTo/10000/a.mp4', 404, 'too small to hold 100000000 entries'),
     ]),
     ('STTS_INITIAL_ALLOC_BIG', lambda: applyPatch(
-        getAtomDataPos('moov.trak.mdia.minf.stbl.stts') + 4, struct.pack('>LLL', 1, 100, 1, 404),
+        getAtomDataPos('moov.trak.mdia.minf.stbl.stts') + 4, struct.pack('>LLL', 1, 10000000, 1),
         getTimeScaleOffset(), struct.pack('>L', 100000)), [
         ('/hls', 'seg-1.ts', 404, 'initial alloc size 1000001 exceeds the max frame count'),
     ]),

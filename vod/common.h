@@ -50,6 +50,32 @@
 
 #include "vod_array.h"
 
+#define VOD_LOG_STDERR            1
+#define VOD_LOG_EMERG             2
+#define VOD_LOG_ALERT             3
+#define VOD_LOG_CRIT              4
+#define VOD_LOG_ERR               5
+#define VOD_LOG_WARN              6
+#define VOD_LOG_NOTICE            7
+#define VOD_LOG_INFO              8
+
+#define VOD_LOG_DEBUG_LEVEL (0x100)
+
+#define vod_log_debug0(level, log, err, fmt)
+#define vod_log_debug1(level, log, err, fmt, arg1)
+#define vod_log_debug2(level, log, err, fmt, arg1, arg2)
+#define vod_log_debug3(level, log, err, fmt, arg1, arg2, arg3)
+#define vod_log_debug4(level, log, err, fmt, arg1, arg2, arg3, arg4)
+
+typedef int bool_t;
+typedef int vod_status_t;
+typedef unsigned int vod_uint_t;
+typedef void vod_pool_t;
+typedef void vod_log_t;
+
+void vod_log_error(vod_uint_t level, vod_log_t *log, int err,
+ const char *fmt, ...);
+
 #else	// VOD_STAND_ALONE
 
 // includes
@@ -83,6 +109,7 @@
 #define vod_memalign(pool, size, alignment) ngx_pmemalign(pool, size, alignment)
 #define vod_alloc(pool, size) ngx_palloc(pool, size)
 #define vod_free(pool, ptr) ngx_pfree(pool, ptr)
+#define vod_pool_cleanup_add(pool, size) ngx_pool_cleanup_add(pool, size)
 
 // string functions
 #define vod_sprintf ngx_sprintf
@@ -98,6 +125,8 @@
 // types
 #define vod_array_t ngx_array_t
 #define vod_pool_t ngx_pool_t
+#define vod_pool_cleanup_t ngx_pool_cleanup_t
+#define vod_pool_cleanup_pt ngx_pool_cleanup_pt
 #define vod_log_t ngx_log_t
 #define vod_str_t ngx_str_t
 #define vod_buf_t ngx_buf_t
@@ -140,6 +169,10 @@
 #else
 #define VOD_DEBUG (0)
 #endif
+
+typedef intptr_t bool_t;
+typedef ngx_int_t vod_status_t;
+typedef ngx_uint_t vod_uint_t;
 
 #endif	// VOD_STAND_ALONE
 
@@ -184,10 +217,6 @@ enum {
 	VOD_BAD_REQUEST,
 	VOD_ERROR_LAST,
 };
-
-typedef intptr_t bool_t;
-typedef ngx_int_t vod_status_t;
-typedef ngx_uint_t vod_uint_t;
 
 struct media_info_s;
 typedef struct media_info_s media_info_t;
