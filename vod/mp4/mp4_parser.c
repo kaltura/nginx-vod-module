@@ -1672,15 +1672,15 @@ mp4_parser_process_moov_atom_callback(void* ctx, atom_info_t* atom_info)
 {
 	process_moov_context_t* context = (process_moov_context_t*)ctx;
 	save_relevant_atoms_context_t save_atoms_context;
-	trak_atom_infos_t trak_atom_infos;
+	codec_config_get_nal_units_t get_nal_units = NULL;
 	metadata_parse_context_t metadata_parse_context;
 	mpeg_stream_base_metadata_t* result_stream;
 	mpeg_base_metadata_t* result = context->result;
+	trak_atom_infos_t trak_atom_infos;
 	uint32_t duration_millis;
 	uint32_t track_index;
-	bool_t format_supported = FALSE;
+	bool_t format_supported;
 	vod_status_t rc;
-	bool_t is_avc = FALSE;
 	u_char* new_extra_data;
 	u_char* atom_data;
 	int parse_type;
@@ -1741,6 +1741,7 @@ mp4_parser_process_moov_atom_callback(void* ctx, atom_info_t* atom_info)
 	}
 
 	// make sure the codec is supported
+	format_supported = FALSE;
 	switch (metadata_parse_context.media_info.media_type)
 	{
 	case MEDIA_TYPE_VIDEO:
@@ -1749,9 +1750,13 @@ mp4_parser_process_moov_atom_callback(void* ctx, atom_info_t* atom_info)
 		case FORMAT_AVC1:
 		case FORMAT_h264:
 		case FORMAT_H264:
-			is_avc = TRUE;
+			get_nal_units = codec_config_avcc_get_nal_units;
+			format_supported = TRUE;
+			break;
+
 		case FORMAT_HEV1:
 		case FORMAT_HVC1:
+			get_nal_units = codec_config_hevc_get_nal_units;
 			format_supported = TRUE;
 			break;
 		}
@@ -1867,24 +1872,25 @@ mp4_parser_process_moov_atom_callback(void* ctx, atom_info_t* atom_info)
 	{
 		// TODO: add HEVC support
 
-		if (is_avc && (parse_type & PARSE_FLAG_EXTRA_DATA_PARSE) != 0)
+		if ((parse_type & PARSE_FLAG_EXTRA_DATA_PARSE) != 0 && 
+			metadata_parse_context.media_info.media_type == MEDIA_TYPE_VIDEO)
 		{
 			// extract the nal units
-			rc = codec_config_avcc_get_nal_units(
+			rc = get_nal_units(
 				context->request_context,
 				metadata_parse_context.media_info.extra_data,
 				metadata_parse_context.media_info.extra_data_size,
 				(parse_type & PARSE_FLAG_EXTRA_DATA) == 0,
+				&metadata_parse_context.media_info.u.video.nal_packet_size_length,
 				&new_extra_data,
 				&metadata_parse_context.media_info.extra_data_size);
 			if (rc != VOD_OK)
 			{
 				vod_log_debug1(VOD_LOG_DEBUG_LEVEL, context->request_context->log, 0,
-					"mp4_parser_process_moov_atom_callback: codec_config_avcc_get_nal_units failed %i", rc);
+					"mp4_parser_process_moov_atom_callback: get_nal_units failed %i", rc);
 				return rc;
 			}
 
-			metadata_parse_context.media_info.u.video.nal_packet_size_length = (((avcc_config_t*)metadata_parse_context.media_info.extra_data)->nula_length_size & 0x3) + 1;
 			metadata_parse_context.media_info.extra_data = new_extra_data;
 		}
 		else if ((parse_type & PARSE_FLAG_EXTRA_DATA) != 0)

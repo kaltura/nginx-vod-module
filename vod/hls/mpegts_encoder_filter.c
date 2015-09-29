@@ -61,6 +61,11 @@ static const u_char pmt_header_template[] = {
 	0x44, 0x33, 0x20, 0x00, 0x1f, 0x00, 0x01,
 };
 
+static const u_char pmt_entry_template_hevc[] = {
+	0x06, 0xe1, 0x2d, 0xf0, 0x06,
+	0x05, 0x04, 0x48, 0x45, 0x56, 0x43		// registration_descriptor('HEVC')
+};
+
 static const u_char pmt_entry_template_avc[] = {
 	0x1b, 0xe0, 0x00, 0xf0, 0x00,
 };
@@ -473,8 +478,19 @@ mpegts_encoder_add_stream(
 		}
 		else
 		{
-			pmt_entry = pmt_entry_template_avc;
-			pmt_entry_size = sizeof(pmt_entry_template_avc);
+			switch (stream_metadata->media_info.format)
+			{
+			case FORMAT_HEV1:
+			case FORMAT_HVC1:
+				pmt_entry = pmt_entry_template_hevc;
+				pmt_entry_size = sizeof(pmt_entry_template_hevc);
+				break;
+
+			default:
+				pmt_entry = pmt_entry_template_avc;
+				pmt_entry_size = sizeof(pmt_entry_template_avc);
+				break;
+			}
 		}
 		break;
 
@@ -561,7 +577,7 @@ mpegts_encoder_finalize_streams(mpegts_encoder_init_streams_state_t* stream_stat
 	*p++ = (u_char)(crc);
 
 	// set the padding
-	memset(p, 0xFF, stream_state->pmt_packet_end - p);
+	vod_memset(p, 0xFF, stream_state->pmt_packet_end - p);
 }
 
 // stateful functions

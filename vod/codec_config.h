@@ -6,6 +6,16 @@
 #include "common.h"
 
 // typedefs
+
+typedef vod_status_t (*codec_config_get_nal_units_t)(
+	request_context_t* request_context,
+	const u_char* extra_data,
+	uint32_t extra_data_size,
+	bool_t size_only,
+	uint32_t* nal_packet_size_length,
+	u_char** result,
+	uint32_t* result_size);
+
 typedef struct
 {
 	u_char version;
@@ -60,11 +70,22 @@ typedef struct {
 
 // functions
 vod_status_t
+codec_config_hevc_get_nal_units(
+	request_context_t* request_context,
+	const u_char* extra_data,
+	uint32_t extra_data_size,
+	bool_t size_only,
+	uint32_t* nal_packet_size_length,
+	u_char** result,
+	uint32_t* result_size);
+
+vod_status_t
 codec_config_avcc_get_nal_units(
 	request_context_t* request_context,
 	const u_char* extra_data,
 	uint32_t extra_data_size,
 	bool_t size_only,
+	uint32_t* nal_packet_size_length,
 	u_char** result,
 	uint32_t* result_size);
 

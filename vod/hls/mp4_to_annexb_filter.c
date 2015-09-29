@@ -12,7 +12,8 @@ enum {
 };
 
 // constants
-static const u_char aud_nal_packet[] = { 0x00, 0x00, 0x00, 0x01, 0x09, 0xf0 };	// f = all pic types + stop bit
+static const u_char avc_aud_nal_packet[] = { 0x00, 0x00, 0x00, 0x01, 0x09, 0xf0 };	// f = all pic types + stop bit
+static const u_char hevc_aud_nal_packet[] = { 0x00, 0x00, 0x00, 0x01, 0x46, 0xf0 };	// f = all pic types + stop bit
 static const u_char nal_marker[] = { 0x00, 0x00, 0x00, 0x01 };
 static const u_char zero_padding[] = {
 	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
@@ -32,17 +33,41 @@ mp4_to_annexb_init(
 	hls_encryption_params_t* encryption_params,
 	const media_filter_t* next_filter,
 	void* next_filter_context,
-	const u_char* extra_data, 
-	uint32_t extra_data_size,
-	uint32_t nal_packet_size_length)
+	media_info_t* media_info)
 {
 	vod_status_t rc;
 
-	if (nal_packet_size_length < 1 || nal_packet_size_length > 4)
+	state->nal_packet_size_length = media_info->u.video.nal_packet_size_length;
+	if (state->nal_packet_size_length < 1 || state->nal_packet_size_length > 4)
 	{
 		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-			"mp4_to_annexb_init: invalid nal packet size length %uD", nal_packet_size_length);
+			"mp4_to_annexb_init: invalid nal packet size length %uD", state->nal_packet_size_length);
 		return VOD_BAD_DATA;
+	}
+
+	switch (media_info->format)
+	{
+	case FORMAT_HEV1:
+	case FORMAT_HVC1:
+		if (encryption_params->type == HLS_ENC_SAMPLE_AES)
+		{
+			vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+				"mp4_to_annexb_init: hevc with sample-aes is not supported");
+			return VOD_BAD_REQUEST;
+		}
+
+		state->unit_type_mask = (0x3F << 1);
+		state->aud_unit_type = (HEVC_NAL_AUD << 1);
+		state->aud_nal_packet = hevc_aud_nal_packet;
+		state->aud_nal_packet_size = sizeof(hevc_aud_nal_packet);
+		break;
+
+	default:		// AVC
+		state->unit_type_mask = 0x1F;
+		state->aud_unit_type = AVC_NAL_AUD;
+		state->aud_nal_packet = avc_aud_nal_packet;
+		state->aud_nal_packet_size = sizeof(avc_aud_nal_packet);
+		break;
 	}
 
 	if (encryption_params->type == HLS_ENC_SAMPLE_AES)
@@ -71,12 +96,10 @@ mp4_to_annexb_init(
 	}
 
 	state->request_context = request_context;
-	state->first_idr = TRUE;
 	state->next_filter = next_filter;
 	state->next_filter_context = next_filter_context;
-	state->sps_pps = extra_data;
-	state->sps_pps_size = extra_data_size;
-	state->nal_packet_size_length = nal_packet_size_length;
+	state->extra_data = media_info->extra_data;
+	state->extra_data_size = media_info->extra_data_size;
 
 	return VOD_OK;
 }
@@ -110,11 +133,13 @@ mp4_to_annexb_start_frame(void* context, output_frame_t* frame)
 	mp4_to_annexb_state_t* state = (mp4_to_annexb_state_t*)context;
 	vod_status_t rc;
 
-	frame->size += sizeof(aud_nal_packet);
-	frame->header_size += sizeof(aud_nal_packet);
+	state->frame_size_left = frame->size;		// not counting the AUD or extra data since they are written here
+
+	frame->size += state->aud_nal_packet_size;
+	frame->header_size += state->aud_nal_packet_size;
 	if (frame->key)
 	{
-		frame->size += state->sps_pps_size;
+		frame->size += state->extra_data_size;
 	}
 
 	rc = state->next_filter->start_frame(state->next_filter_context, frame);
@@ -128,11 +153,24 @@ mp4_to_annexb_start_frame(void* context, output_frame_t* frame)
 	state->cur_state = STATE_PACKET_SIZE;
 	state->length_bytes_left = state->nal_packet_size_length;
 	state->packet_size_left = 0;
-	state->key_frame = frame->key;
-	state->frame_size_left = frame->size - sizeof(aud_nal_packet);		// removing the aud packet since we're just about to write it
 
 	// write access unit delimiter packet
-	return state->next_filter->write(state->next_filter_context, aud_nal_packet, sizeof(aud_nal_packet));
+	rc = state->next_filter->write(state->next_filter_context, state->aud_nal_packet, state->aud_nal_packet_size);
+	if (rc != VOD_OK)
+	{
+		return rc;
+	}
+
+	if (frame->key)
+	{
+		rc = state->next_filter->write(state->next_filter_context, state->extra_data, state->extra_data_size);
+		if (rc != VOD_OK)
+		{
+			return rc;
+		}
+	}
+
+	return VOD_OK;
 }
 
 static vod_status_t 
@@ -161,8 +199,8 @@ mp4_to_annexb_write(void* context, const u_char* buffer, uint32_t size)
 			// fall through
 			
 		case STATE_NAL_TYPE:
-			unit_type = *buffer & 0x1f;
-			if (unit_type == NAL_AUD)
+			unit_type = *buffer & state->unit_type_mask;
+			if (unit_type == state->aud_unit_type)
 			{
 				state->cur_state = STATE_SKIP_PACKET;
 				break;
@@ -176,29 +214,7 @@ mp4_to_annexb_write(void* context, const u_char* buffer, uint32_t size)
 					return rc;
 				}
 			}
-			
-			switch (unit_type)
-			{
-			case NAL_SLICE:
-				state->first_idr = TRUE;
-				break;
-
-			case NAL_IDR_SLICE:
-			case NAL_SPS:
-			case NAL_PPS:
-				if (state->key_frame && state->first_idr)
-				{
-					state->frame_size_left -= state->sps_pps_size;
-					rc = state->next_filter->write(state->next_filter_context, state->sps_pps, state->sps_pps_size);
-					if (rc != VOD_OK)
-					{
-						return rc;
-					}
-					state->first_idr = FALSE;
-				}
-				break;
-			}
-			
+						
 			if (state->first_frame_packet)
 			{
 				state->first_frame_packet = FALSE;
@@ -285,14 +301,14 @@ mp4_to_annexb_simulated_start_frame(void* context, output_frame_t* frame)
 	mp4_to_annexb_state_t* state = (mp4_to_annexb_state_t*)context;
 	uint32_t size;
 
-	frame->header_size += sizeof(aud_nal_packet);
+	frame->header_size += state->aud_nal_packet_size;
 
 	state->next_filter->simulated_start_frame(state->next_filter_context, frame);
 
-	size = sizeof(aud_nal_packet);
+	size = state->aud_nal_packet_size;
 	if (frame->key)
 	{
-		size += state->sps_pps_size;
+		size += state->extra_data_size;
 	}
 	state->next_filter->simulated_write(state->next_filter_context, size);
 }
