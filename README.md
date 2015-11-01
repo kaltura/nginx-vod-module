@@ -95,7 +95,7 @@ baseurl = http://installrepo.kaltura.org/releases/latest/RPMS/$basearch/
 #### Debian/Ubuntu deb package
 ```
 # wget -O - http://installrepo.kaltura.org/repo/apt/debian/kaltura-deb.gpg.key|apt-key add -
-# echo "deb http://installrepo.kaltura.org/repo/apt/debian jupiter main" > /etc/apt/sources.list.d/kaltura.list
+# echo "deb [arch=amd64] http://installrepo.kaltura.org/repo/apt/debian kajam main" > /etc/apt/sources.list.d/kaltura.list
 # apt-get install kaltura-nginx
 ```
 *Ubuntu NOTE: You must also make sure the multiverse repo is enabled in /etc/apt/sources.list*
