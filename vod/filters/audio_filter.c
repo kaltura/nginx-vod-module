@@ -460,7 +460,7 @@ audio_filter_walk_filters_prepare_init(
 	media_clip_t** sources_end;
 	media_clip_t** sources_cur;
 	media_clip_t* clip = *clip_ptr;
-	media_clip_t* last_source;
+	media_clip_t* last_source = NULL;
 	vod_status_t rc;
 	uint32_t cur_frame_count;
 	uint32_t source_count;
