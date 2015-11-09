@@ -510,7 +510,7 @@ dash_packager_write_mpd_period(
 	uint32_t max_height = 0;
 	uint32_t max_framerate_duration = 0;
 	uint32_t max_framerate_timescale = 0;
-	uint32_t segment_count;
+	uint32_t segment_count = 0;
 
 	representation_id.data = representation_id_buffer;
 

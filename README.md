@@ -654,20 +654,20 @@ Configures the size and shared memory object name of the path mapping cache (map
 
 #### vod_path_response_prefix
 * **syntax**: `vod_path_response_prefix prefix`
-* **default**: `<?xml version="1.0" encoding="utf-8"?><xml><result>`
+* **default**: `{"sequences":[{"clips":[{"type":"source","path":"`
 * **context**: `http`, `server`, `location`
 
 Sets the prefix that is expected in URI mapping responses (mapped mode only).
 
 #### vod_path_response_postfix
 * **syntax**: `vod_path_response_postfix postfix`
-* **default**: `</result></xml>`
+* **default**: `"}]}]}`
 * **context**: `http`, `server`, `location`
 
 Sets the postfix that is expected in URI mapping responses (mapped mode only).
 
-#### vod_max_path_length
-* **syntax**: `vod_max_path_length length`
+#### vod_max_mapping_response_size
+* **syntax**: `vod_max_mapping_response_size length`
 * **default**: `1K`
 * **context**: `http`, `server`, `location`
 
