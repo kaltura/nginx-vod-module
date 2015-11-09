@@ -172,6 +172,7 @@ The response has to be in JSON format, this section contains are a few simple ex
 of the supported objects and fields.
 
 But first, a couple of definitions:
+
 1. `Source Clip` - a set of audio and/or video frames (tracks) extracted from a single media file
 2. `Filter` - a manipulation that can be applied on audio/video frames. The following filters are supported: 
   * rate (speed) change - applies to both audio and video
