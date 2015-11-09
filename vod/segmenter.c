@@ -519,7 +519,7 @@ segmenter_get_segment_durations_estimate_internal(
 	uint32_t* cur_duration;
 	uint32_t bootstrap_segment_limit;
 	uint32_t segment_index = 0;
-	uint32_t clip_segment_limit;
+	uint32_t clip_segment_limit = 0;
 	uint32_t clip_offset;
 	uint32_t segment_duration;
 	bool_t discontinuity;
