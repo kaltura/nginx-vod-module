@@ -62,9 +62,9 @@ typedef struct {
 ////// mpd functions
 
 static u_char* 
-edash_packager_write_content_protection(void* context, u_char* p, mpeg_stream_metadata_t* stream)
+edash_packager_write_content_protection(void* context, u_char* p, media_track_t* track)
 {
-	mp4_encrypt_info_t* drm_info = (mp4_encrypt_info_t*)stream->file_info.drm_info;
+	mp4_encrypt_info_t* drm_info = (mp4_encrypt_info_t*)track->file_info.drm_info;
 	mp4_encrypt_system_info_t* cur_info;
 
 	p = vod_copy(p, VOD_EDASH_MANIFEST_CONTENT_PROTECTION_CENC, sizeof(VOD_EDASH_MANIFEST_CONTENT_PROTECTION_CENC) - 1);
@@ -83,24 +83,27 @@ edash_packager_build_mpd(
 	dash_manifest_config_t* conf,
 	vod_str_t* base_url,
 	segmenter_conf_t* segmenter_conf,
-	mpeg_metadata_t* mpeg_metadata,
+	media_set_t* media_set,
 	vod_str_t* result)
 {
-	mpeg_stream_metadata_t* cur_stream;
+	media_sequence_t* cur_sequence;
 	mp4_encrypt_info_t* drm_info;
 	size_t representation_tags_size;
+	size_t cur_drm_tags_size;
 	vod_status_t rc;
 
 	representation_tags_size = 0;
-	for (cur_stream = mpeg_metadata->first_stream; cur_stream < mpeg_metadata->last_stream; cur_stream++)
-	{
-		drm_info = (mp4_encrypt_info_t*)cur_stream->file_info.drm_info;
 
-		representation_tags_size += sizeof(VOD_EDASH_MANIFEST_CONTENT_PROTECTION_CENC) - 1;
-		representation_tags_size +=
+	for (cur_sequence = media_set->sequences; cur_sequence < media_set->sequences_end; cur_sequence++)
+	{
+		drm_info = (mp4_encrypt_info_t*)cur_sequence->drm_info;
+
+		cur_drm_tags_size = 
+			sizeof(VOD_EDASH_MANIFEST_CONTENT_PROTECTION_CENC) - 1 + 
 			(sizeof(VOD_EDASH_MANIFEST_CONTENT_PROTECTION_PREFIX) - 1 +
 				VOD_GUID_LENGTH +
 			sizeof(VOD_EDASH_MANIFEST_CONTENT_PROTECTION_SUFFIX) - 1) * drm_info->pssh_array.count;
+		representation_tags_size += cur_drm_tags_size * cur_sequence->total_track_count;
 	}
 
 	rc = dash_packager_build_mpd(
@@ -108,7 +111,7 @@ edash_packager_build_mpd(
 		conf,
 		base_url,
 		segmenter_conf,
-		mpeg_metadata,
+		media_set,
 		representation_tags_size,
 		edash_packager_write_content_protection,
 		NULL,
@@ -245,22 +248,23 @@ edash_packager_write_pssh(void* context, u_char* p)
 vod_status_t
 edash_packager_build_init_mp4(
 	request_context_t* request_context,
-	mpeg_metadata_t* mpeg_metadata,
+	media_set_t* media_set,
 	bool_t has_clear_lead,
 	bool_t size_only,
 	vod_str_t* result)
 {
-	mp4_encrypt_info_t* drm_info = (mp4_encrypt_info_t*)mpeg_metadata->first_stream->file_info.drm_info;
+	media_track_t* first_track = media_set->sequences[0].filtered_clips[0].first_track;
+	mp4_encrypt_info_t* drm_info = (mp4_encrypt_info_t*)media_set->sequences[0].drm_info;
+	stsd_writer_context_t stsd_writer_context;
 	atom_writer_t pssh_atom_writer;
 	atom_writer_t stsd_atom_writer;
-	stsd_writer_context_t stsd_writer_context;
 	mp4_encrypt_system_info_t* cur_info;
 	vod_status_t rc;
 
 	rc = edash_packager_init_stsd_writer_context(
 		request_context,
-		mpeg_metadata->first_stream->media_info.media_type,
-		&mpeg_metadata->first_stream->raw_atoms[RTA_STSD], 
+		first_track->media_info.media_type,
+		&first_track->raw_atoms[RTA_STSD],
 		has_clear_lead,
 		drm_info->key_id,
 		&stsd_writer_context);
@@ -287,7 +291,7 @@ edash_packager_build_init_mp4(
 
 	rc = dash_packager_build_init_mp4(
 		request_context,
-		mpeg_metadata,
+		media_set,
 		size_only,
 		&pssh_atom_writer,
 		&stsd_atom_writer,
@@ -317,6 +321,7 @@ edash_packager_video_write_auxiliary_data(void* context, u_char* p)
 static vod_status_t
 edash_packager_video_write_fragment_header(mp4_encrypt_video_state_t* state)
 {
+	dash_fragment_header_extensions_t header_extensions;
 	atom_writer_t auxiliary_data_writer;
 	vod_str_t fragment_header;
 	vod_status_t rc;
@@ -328,16 +333,18 @@ edash_packager_video_write_fragment_header(mp4_encrypt_video_state_t* state)
 	auxiliary_data_writer.write = edash_packager_video_write_auxiliary_data;
 	auxiliary_data_writer.context = state;
 
+	header_extensions.extra_traf_atoms_size = state->base.saiz_atom_size + state->base.saio_atom_size;
+	header_extensions.write_extra_traf_atoms_callback = (write_extra_traf_atoms_callback_t)mp4_encrypt_video_write_saiz_saio;
+	header_extensions.write_extra_traf_atoms_context = state;
+	header_extensions.mdat_prefix_writer = &auxiliary_data_writer;
+
 	// build the fragment header
 	rc = dash_packager_build_fragment_header(
 		state->base.request_context,
-		state->base.stream_metadata,
+		state->base.media_set,
 		state->base.segment_index,
 		0,
-		state->base.saiz_atom_size + state->base.saio_atom_size,
-		(write_extra_traf_atoms_callback_t)mp4_encrypt_video_write_saiz_saio,
-		state,
-		&auxiliary_data_writer,
+		&header_extensions,
 		FALSE,
 		&fragment_header,
 		&total_fragment_size);
@@ -372,22 +379,25 @@ edash_packager_audio_build_fragment_header(
 	vod_str_t* fragment_header,
 	size_t* total_fragment_size)
 {
+	dash_fragment_header_extensions_t header_extensions;
 	atom_writer_t auxiliary_data_writer;
 	vod_status_t rc;
 
-	auxiliary_data_writer.atom_size = MP4_ENCRYPT_IV_SIZE * state->stream_metadata->frame_count;
+	auxiliary_data_writer.atom_size = MP4_ENCRYPT_IV_SIZE * state->sequence->total_frame_count;
 	auxiliary_data_writer.write = (atom_writer_func_t)mp4_encrypt_audio_write_auxiliary_data;
 	auxiliary_data_writer.context = state;
 
+	header_extensions.extra_traf_atoms_size = state->saiz_atom_size + state->saio_atom_size;
+	header_extensions.write_extra_traf_atoms_callback = (write_extra_traf_atoms_callback_t)mp4_encrypt_audio_write_saiz_saio;
+	header_extensions.write_extra_traf_atoms_context = state;
+	header_extensions.mdat_prefix_writer = &auxiliary_data_writer;
+
 	rc = dash_packager_build_fragment_header(
 		state->request_context,
-		state->stream_metadata,
+		state->media_set,
 		state->segment_index,
 		0,
-		state->saiz_atom_size + state->saio_atom_size,
-		(write_extra_traf_atoms_callback_t)mp4_encrypt_audio_write_saiz_saio,
-		state,
-		&auxiliary_data_writer,
+		&header_extensions,
 		size_only,
 		fragment_header,
 		total_fragment_size);
@@ -407,7 +417,7 @@ vod_status_t
 edash_packager_get_fragment_writer(
 	segment_writer_t* result,
 	request_context_t* request_context,
-	mpeg_stream_metadata_t* stream_metadata,
+	media_set_t* media_set,
 	uint32_t segment_index,
 	segment_writer_t* segment_writer,
 	const u_char* iv,
@@ -415,15 +425,16 @@ edash_packager_get_fragment_writer(
 	vod_str_t* fragment_header,
 	size_t* total_fragment_size)
 {
+	uint32_t media_type = media_set->sequences[0].media_type;
 	vod_status_t rc;
 
-	switch (stream_metadata->media_info.media_type)
+	switch (media_type)
 	{
 	case MEDIA_TYPE_VIDEO:
 		return mp4_encrypt_video_get_fragment_writer(
 			result, 
 			request_context, 
-			stream_metadata, 
+			media_set, 
 			segment_index, 
 			edash_packager_video_write_fragment_header,
 			segment_writer, 
@@ -433,7 +444,7 @@ edash_packager_get_fragment_writer(
 		rc = mp4_encrypt_audio_get_fragment_writer(
 			result, 
 			request_context, 
-			stream_metadata, 
+			media_set,
 			segment_index, 
 			segment_writer, 
 			iv);
@@ -456,6 +467,6 @@ edash_packager_get_fragment_writer(
 	}
 
 	vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-		"edash_packager_get_fragment_writer: invalid media type %uD", stream_metadata->media_info.media_type);
+		"edash_packager_get_fragment_writer: invalid media type %uD", media_type);
 	return VOD_UNEXPECTED;
 }

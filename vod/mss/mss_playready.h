@@ -2,20 +2,22 @@
 #define __MSS_PLAYREADY_H__
 
 // includes
+#include "mss_packager.h"
 #include "../mp4/mp4_parser.h"
 #include "../segmenter.h"
 
 // functions
 vod_status_t mss_playready_build_manifest(
 	request_context_t* request_context,
+	mss_manifest_config_t* conf,
 	segmenter_conf_t* segmenter_conf,
-	mpeg_metadata_t* mpeg_metadata,
+	media_set_t* media_set,
 	vod_str_t* result);
 
 vod_status_t mss_playready_get_fragment_writer(
 	segment_writer_t* result,
 	request_context_t* request_context,
-	mpeg_stream_metadata_t* stream_metadata,
+	media_set_t* media_set,
 	uint32_t segment_index,
 	segment_writer_t* segment_writer,
 	const u_char* iv,

@@ -226,7 +226,7 @@ def getHttpResponse(body = '', status = '200 OK', length = None, headers = {}):
     return 'HTTP/1.1 %s\r\nContent-Length: %s\r\n%s\r\n%s' % (status, length, headersStr, body)
 
 def getPathMappingResponse(path):
-    return getHttpResponse('<?xml version="1.0" encoding="utf-8"?><xml><result>%s</result></xml>' % path)
+    return getHttpResponse('{"sequences":[{"clips":[{"type":"source","path":"%s"}]}]}' % path)
 
 def getUniqueUrl(baseUrl, filePath = ''):
     return '%s/rand/%s%s' % (baseUrl, random.randint(0, 0x100000), filePath)
@@ -988,7 +988,7 @@ class MappedTestSuite(ModeTestSuite):
     def testUnexpectedPathResponse(self):
         TcpServer(API_SERVER_PORT, lambda s: socketSendAndShutdown(s, getHttpResponse('abcde')))
         assertRequestFails(self.getUrl(HLS_PREFIX, HLS_PLAYLIST_FILE), 503)
-        self.logTracker.assertContains('unexpected path mapping response abcde')
+        self.logTracker.assertContains('failed to parse json')
 
     def testEmptyPathResponse(self):
         TcpServer(API_SERVER_PORT, lambda s: socketSendAndShutdown(s, getPathMappingResponse('')))

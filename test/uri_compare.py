@@ -86,8 +86,10 @@ class TestThread(stress_base.TestThreadBase):
 			return False
 		return True
 
-	def getURL(self, url):
-		request = urllib2.Request(url, headers=self.getG2OHeaders(url))
+	def getURL(self, hostHeader, url):
+		headers = self.getG2OHeaders(url)
+		headers['Host'] = hostHeader
+		request = urllib2.Request(url, headers=headers)
 		try:
 			f = urllib2.urlopen(request)
 			return f.getcode(), self.parseHttpHeaders(f.info().headers), f.read()
@@ -104,6 +106,8 @@ class TestThread(stress_base.TestThreadBase):
 			return 0, {}, ''
 		
 	def runTest(self, uri):
+		hostHeader, uri = uri.split(' ')
+	
 		urlBase1 = random.choice(URL1_BASE)
 		urlBase2 = random.choice(URL2_BASE)
 		url1 = urlBase1 + uri
@@ -112,11 +116,16 @@ class TestThread(stress_base.TestThreadBase):
 		self.writeOutput('Info: testing %s %s' % (url1, url2))
 
 		# avoid billing real partners
-		url1 = re.sub('/p/\d+/sp/\d+/', '/p/%s/sp/%s00/' % (TEST_PARTNER_ID, TEST_PARTNER_ID), url1)
-		url2 = re.sub('/p/\d+/sp/\d+/', '/p/%s/sp/%s00/' % (TEST_PARTNER_ID, TEST_PARTNER_ID), url2)
+		useRealPartner = False
+		for curPrefix in USE_REAL_PARTNER_PREFIXES:
+			if uri.startswith(curPrefix):
+				useRealPartner = True
+		if not useRealPartner:
+			url1 = re.sub('/p/\d+/sp/\d+/', '/p/%s/sp/%s00/' % (TEST_PARTNER_ID, TEST_PARTNER_ID), url1)
+			url2 = re.sub('/p/\d+/sp/\d+/', '/p/%s/sp/%s00/' % (TEST_PARTNER_ID, TEST_PARTNER_ID), url2)
 
-		code1, headers1, body1 = self.getURL(url1)
-		code2, headers2, body2 = self.getURL(url2)
+		code1, headers1, body1 = self.getURL(hostHeader, url1)
+		code2, headers2, body2 = self.getURL(hostHeader, url2)
 		if code1 != code2:
 			self.writeOutput('Error: got different status codes %s vs %s' % (code1, code2))
 			return False
@@ -145,6 +154,8 @@ class TestThread(stress_base.TestThreadBase):
 			
 		if body1 != body2:
 			self.writeOutput('Error: comparison failed - url1=%s, url2=%s' % (url1, url2))
+			self.writeOutput(body1)
+			self.writeOutput(body2)
 			return False
 			
 		return True

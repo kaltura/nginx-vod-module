@@ -61,7 +61,12 @@ typedef struct {
 	u_char    modification_time[4];
 	u_char    timescale[4];
 	u_char    duration[4];
-	// Note: additional fields not listed
+	u_char    rate[4];
+	u_char    volume[2];
+	u_char    reserved[2 + 4 * 2];
+	u_char    matrix[4 * 9];
+	u_char    pre_defined[4 * 6];
+	u_char    next_track_id[4];
 } mvhd_atom_t;
 
 typedef struct {
@@ -71,7 +76,12 @@ typedef struct {
 	u_char    modification_time[8];
 	u_char    timescale[4];
 	u_char    duration[8];
-	// Note: additional fields not listed
+	u_char    rate[4];
+	u_char    volume[2];
+	u_char    reserved[2 + 4 * 2];
+	u_char    matrix[4 * 9];
+	u_char    pre_defined[4 * 6];
+	u_char    next_track_id[4];
 } mvhd64_atom_t;
 
 typedef struct {

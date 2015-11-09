@@ -8,7 +8,7 @@
 	"<manifest\n"										\
 	"  xmlns=\"http://ns.adobe.com/f4m/1.0\">\n"		\
 	"  <id>%V</id>\n"									\
-	"  <duration>%uD.%uD</duration>\n"					\
+	"  <duration>%uD.%03uD</duration>\n"				\
 	"  <streamType>recorded</streamType>\n"
 
 #define HDS_BOOTSTRAP_HEADER							\
@@ -186,18 +186,17 @@ hds_packager_build_manifest(
 	hds_manifest_config_t* conf,
 	vod_str_t* manifest_id,
 	segmenter_conf_t* segmenter_conf,
-	bool_t include_file_index,
-	mpeg_metadata_t* mpeg_metadata,
+	media_set_t* media_set,
 	vod_str_t* result)
 {
-	WALK_STREAMS_BY_FILES_VARS(cur_file_streams);
-	mpeg_stream_metadata_t* stream;
+	media_track_t** cur_sequence_tracks;
+	media_sequence_t* cur_sequence;
+	media_track_t* track;
 	segment_durations_t* segment_durations;
 	uint32_t bitrate;
 	uint32_t index;
 	uint32_t abst_atom_size;
 	uint32_t max_abst_atom_size = 0;
-	uint32_t total_stream_count = mpeg_metadata->stream_count[MEDIA_TYPE_VIDEO] + mpeg_metadata->stream_count[MEDIA_TYPE_AUDIO];
 	size_t result_size;
 	vod_status_t rc;
 	u_char* temp_buffer;
@@ -205,7 +204,7 @@ hds_packager_build_manifest(
 
 	segment_durations = vod_alloc(
 		request_context->pool, 
-		total_stream_count * sizeof(*segment_durations));
+		media_set->sequence_count * sizeof(*segment_durations));
 	if (segment_durations == NULL)
 	{
 		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
@@ -219,13 +218,16 @@ hds_packager_build_manifest(
 		sizeof(HDS_MANIFEST_FOOTER);
 
 	index = 0;
-	WALK_STREAMS_BY_FILES_START(cur_file_streams, mpeg_metadata)
+	for (cur_sequence = media_set->sequences; cur_sequence < media_set->sequences_end; cur_sequence++)
+	{
+		cur_sequence_tracks = cur_sequence->filtered_clips[0].longest_track;
 
 		rc = segmenter_conf->get_segment_durations(
 			request_context,
 			segmenter_conf,
-			cur_file_streams,
-			MEDIA_TYPE_COUNT,
+			media_set,
+			cur_sequence,
+			MEDIA_TYPE_NONE,
 			&segment_durations[index]);
 		if (rc != VOD_OK)
 		{
@@ -251,8 +253,7 @@ hds_packager_build_manifest(
 			sizeof(HDS_MEDIA_FOOTER) - 1;
 
 		index++;
-
-	WALK_STREAMS_BY_FILES_END(cur_file_streams, mpeg_metadata)
+	}
 
 	// allocate the buffers
 	result->data = vod_alloc(request_context->pool, result_size);
@@ -274,12 +275,14 @@ hds_packager_build_manifest(
 	// print the manifest header
 	p = vod_sprintf(result->data, HDS_MANIFEST_HEADER,
 		manifest_id,
-		(uint32_t)(mpeg_metadata->duration_millis / 1000),
-		(uint32_t)(mpeg_metadata->duration_millis % 1000));
+		(uint32_t)(media_set->total_duration / 1000),
+		(uint32_t)(media_set->total_duration % 1000));
 
 	// bootstrap tags
 	index = 0;
-	WALK_STREAMS_BY_FILES_START(cur_file_streams, mpeg_metadata)
+	for (cur_sequence = media_set->sequences; cur_sequence < media_set->sequences_end; cur_sequence++)
+	{
+		cur_sequence_tracks = cur_sequence->filtered_clips[0].longest_track;
 
 		p = vod_sprintf(p, HDS_BOOTSTRAP_HEADER, index);
 
@@ -288,59 +291,60 @@ hds_packager_build_manifest(
 		p = vod_copy(p, HDS_BOOTSTRAP_FOOTER, sizeof(HDS_BOOTSTRAP_FOOTER) - 1);
 
 		index++;
-		
-	WALK_STREAMS_BY_FILES_END(cur_file_streams, mpeg_metadata)
+
+	}
 
 	// media tags
 	index = 0;
-	WALK_STREAMS_BY_FILES_START(cur_file_streams, mpeg_metadata)
+	for (cur_sequence = media_set->sequences; cur_sequence < media_set->sequences_end; cur_sequence++)
+	{
+		cur_sequence_tracks = cur_sequence->filtered_clips[0].longest_track;
 
-		if (cur_file_streams[MEDIA_TYPE_VIDEO] != NULL)
+		if (cur_sequence_tracks[MEDIA_TYPE_VIDEO] != NULL)
 		{
-			stream = cur_file_streams[MEDIA_TYPE_VIDEO];
-			bitrate = stream->media_info.bitrate;
-			if (cur_file_streams[MEDIA_TYPE_AUDIO] != NULL)
+			track = cur_sequence_tracks[MEDIA_TYPE_VIDEO];
+			bitrate = track->media_info.bitrate;
+			if (cur_sequence_tracks[MEDIA_TYPE_AUDIO] != NULL)
 			{
-				bitrate += cur_file_streams[MEDIA_TYPE_AUDIO]->media_info.bitrate;
+				bitrate += cur_sequence_tracks[MEDIA_TYPE_AUDIO]->media_info.bitrate;
 			}
 
 			p = vod_sprintf(p, HDS_MEDIA_HEADER_PREFIX_VIDEO,
 				bitrate / 1000,
-				(uint32_t)stream->media_info.u.video.width,
-				(uint32_t)stream->media_info.u.video.height);
+				(uint32_t)track->media_info.u.video.width,
+				(uint32_t)track->media_info.u.video.height);
 		}
 		else
 		{
-			stream = cur_file_streams[MEDIA_TYPE_AUDIO];
+			track = cur_sequence_tracks[MEDIA_TYPE_AUDIO];
 			p = vod_sprintf(p, HDS_MEDIA_HEADER_PREFIX_AUDIO,
-				stream->media_info.bitrate / 1000);
+				track->media_info.bitrate / 1000);
 		}
 
 		// url
 		p = vod_copy(p, conf->fragment_file_name_prefix.data, conf->fragment_file_name_prefix.len);
-		if (include_file_index)
+		if (media_set->has_multi_sequences)
 		{
-			p = vod_sprintf(p, "-f%uD", stream->file_info.file_index + 1);
+			p = vod_sprintf(p, "-f%uD", cur_sequence->index + 1);
 		}
 
-		if (cur_file_streams[MEDIA_TYPE_VIDEO] != NULL)
+		if (cur_sequence_tracks[MEDIA_TYPE_VIDEO] != NULL)
 		{
-			p = vod_sprintf(p, "-v%uD", cur_file_streams[MEDIA_TYPE_VIDEO]->track_index + 1);
+			p = vod_sprintf(p, "-v%uD", cur_sequence_tracks[MEDIA_TYPE_VIDEO]->index + 1);
 		}
 
-		if (cur_file_streams[MEDIA_TYPE_AUDIO] != NULL)
+		if (cur_sequence_tracks[MEDIA_TYPE_AUDIO] != NULL)
 		{
-			p = vod_sprintf(p, "-a%uD", cur_file_streams[MEDIA_TYPE_AUDIO]->track_index + 1);
+			p = vod_sprintf(p, "-a%uD", cur_sequence_tracks[MEDIA_TYPE_AUDIO]->index + 1);
 		}
 		*p++ = '-';
 
 		p = vod_sprintf(p, HDS_MEDIA_HEADER_SUFFIX, index++);
-		
-		p = hds_amf0_write_base64_metadata(p, temp_buffer, cur_file_streams);
+
+		p = hds_amf0_write_base64_metadata(p, temp_buffer, cur_sequence_tracks);
 
 		p = vod_copy(p, HDS_MEDIA_FOOTER, sizeof(HDS_MEDIA_FOOTER) - 1);
-
-	WALK_STREAMS_BY_FILES_END(cur_file_streams, mpeg_metadata)
+	}
 
 	// manifest footer
 	p = vod_copy(p, HDS_MANIFEST_FOOTER, sizeof(HDS_MANIFEST_FOOTER) - 1);
@@ -359,4 +363,3 @@ hds_packager_build_manifest(
 
 	return VOD_OK;
 }
-

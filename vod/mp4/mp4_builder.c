@@ -26,54 +26,66 @@ mp4_builder_get_trun_atom_size(uint32_t media_type, uint32_t frame_count)
 }
 
 static u_char* 
-mp4_builder_write_video_trun_atom(u_char* p, input_frame_t* frames, uint32_t frame_count, uint32_t first_frame_offset)
+mp4_builder_write_video_trun_atom(u_char* p, media_sequence_t* sequence, uint32_t first_frame_offset)
 {
+	media_clip_filtered_t* cur_clip;
 	input_frame_t* cur_frame;
-	input_frame_t* last_frame = frames + frame_count;
+	input_frame_t* last_frame;
 	size_t atom_size;
 
-	atom_size = ATOM_HEADER_SIZE + sizeof(trun_atom_t) + frame_count * 4 * sizeof(uint32_t);
+	atom_size = ATOM_HEADER_SIZE + sizeof(trun_atom_t) + sequence->total_frame_count * 4 * sizeof(uint32_t);
 
 	write_atom_header(p, atom_size, 't', 'r', 'u', 'n');
 	write_dword(p, 0xF01);								// flags = data offset, duration, size, key, delay
-	write_dword(p, frame_count);
+	write_dword(p, sequence->total_frame_count);
 	write_dword(p, first_frame_offset);	// first frame offset relative to moof start offset
 
-	for (cur_frame = frames; cur_frame < last_frame; cur_frame++)
+	for (cur_clip = sequence->filtered_clips; cur_clip < sequence->filtered_clips_end; cur_clip++)
 	{
-		write_dword(p, cur_frame->duration);
-		write_dword(p, cur_frame->size);
-		if (cur_frame->key_frame)
+		cur_frame = cur_clip->first_track->first_frame;
+		last_frame = cur_clip->first_track->last_frame;
+		for (; cur_frame < last_frame; cur_frame++)
 		{
-			write_dword(p, 0x00000000);
+			write_dword(p, cur_frame->duration);
+			write_dword(p, cur_frame->size);
+			if (cur_frame->key_frame)
+			{
+				write_dword(p, 0x00000000);
+			}
+			else
+			{
+				write_dword(p, 0x00010000);
+			}
+			write_dword(p, cur_frame->pts_delay);
 		}
-		else
-		{
-			write_dword(p, 0x00010000);
-		}
-		write_dword(p, cur_frame->pts_delay);
 	}
 	return p;
 }
 
 static u_char* 
-mp4_builder_write_audio_trun_atom(u_char* p, input_frame_t* frames, uint32_t frame_count, uint32_t first_frame_offset)
+mp4_builder_write_audio_trun_atom(u_char* p, media_sequence_t* sequence, uint32_t first_frame_offset)
 {
+	media_clip_filtered_t* cur_clip;
 	input_frame_t* cur_frame;
-	input_frame_t* last_frame = frames + frame_count;
-	size_t atom_size;	
+	input_frame_t* last_frame;
+	size_t atom_size;
 
-	atom_size = ATOM_HEADER_SIZE + sizeof(trun_atom_t) + frame_count * 2 * sizeof(uint32_t);
+	atom_size = ATOM_HEADER_SIZE + sizeof(trun_atom_t) + sequence->total_frame_count * 2 * sizeof(uint32_t);
 
 	write_atom_header(p, atom_size, 't', 'r', 'u', 'n');
 	write_dword(p, 0x301);								// flags = data offset, duration, size
-	write_dword(p, frame_count);
+	write_dword(p, sequence->total_frame_count);
 	write_dword(p, first_frame_offset);	// first frame offset relative to moof start offset
 
-	for (cur_frame = frames; cur_frame < last_frame; cur_frame++)
+	for (cur_clip = sequence->filtered_clips; cur_clip < sequence->filtered_clips_end; cur_clip++)
 	{
-		write_dword(p, cur_frame->duration);
-		write_dword(p, cur_frame->size);
+		cur_frame = cur_clip->first_track->first_frame;
+		last_frame = cur_clip->first_track->last_frame;
+		for (; cur_frame < last_frame; cur_frame++)
+		{
+			write_dword(p, cur_frame->duration);
+			write_dword(p, cur_frame->size);
+		}
 	}
 	return p;
 }
@@ -81,28 +93,35 @@ mp4_builder_write_audio_trun_atom(u_char* p, input_frame_t* frames, uint32_t fra
 u_char*
 mp4_builder_write_trun_atom(
 	u_char* p, 
-	uint32_t media_type, 
-	input_frame_t* frames, 
-	uint32_t frame_count, 
+	media_sequence_t* sequence,
 	uint32_t first_frame_offset)
 {
-	switch (media_type)
+	switch (sequence->media_type)
 	{
 	case MEDIA_TYPE_VIDEO:
-		p = mp4_builder_write_video_trun_atom(p, frames, frame_count, first_frame_offset);
+		p = mp4_builder_write_video_trun_atom(p, sequence, first_frame_offset);
 		break;
 
 	case MEDIA_TYPE_AUDIO:
-		p = mp4_builder_write_audio_trun_atom(p, frames, frame_count, first_frame_offset);
+		p = mp4_builder_write_audio_trun_atom(p, sequence, first_frame_offset);
 		break;
 	}
 	return p;
 }
 
+static void
+mp4_builder_init_track(fragment_writer_state_t* state, media_track_t* track)
+{
+	state->frames_source = track->frames_source;
+	state->cur_frame = track->first_frame;
+	state->last_frame = track->last_frame;
+	state->cur_frame_offset = track->frame_offsets;
+}
+
 vod_status_t 
 mp4_builder_frame_writer_init(
 	request_context_t* request_context,
-	mpeg_stream_metadata_t* stream_metadata,
+	media_sequence_t* sequence,
 	read_cache_state_t* read_cache_state,
 	write_callback_t write_callback,
 	void* write_context, 
@@ -121,14 +140,13 @@ mp4_builder_frame_writer_init(
 	state->request_context = request_context;
 	state->write_callback = write_callback;
 	state->write_context = write_context;
-	state->frames_file_index = stream_metadata->frames_file_index;
-
 	state->read_cache_state = read_cache_state;
-	state->cur_frame = stream_metadata->frames;
-	state->last_frame = stream_metadata->frames + stream_metadata->frame_count;
-	state->cur_frame_offset = stream_metadata->frame_offsets;
 	state->cur_frame_pos = 0;
 	state->first_time = TRUE;
+	state->sequence = sequence;
+	state->cur_clip = sequence->filtered_clips;
+
+	mp4_builder_init_track(state, state->cur_clip->first_track);
 
 	*result = state;
 	return VOD_OK;
@@ -149,23 +167,29 @@ mp4_builder_frame_writer_process(fragment_writer_state_t* state)
 
 	for (;;)
 	{
-		if (state->cur_frame >= state->last_frame)
+		while (state->cur_frame >= state->last_frame)
 		{
-			if (write_buffer != NULL)
+			state->cur_clip++;
+			if (state->cur_clip >= state->sequence->filtered_clips_end)
 			{
-				// flush the write buffer
-				rc = state->write_callback(state->write_context, write_buffer, write_buffer_size, &cur_reuse_buffer);
-				if (rc != VOD_OK)
+				if (write_buffer != NULL)
 				{
-					return rc;
+					// flush the write buffer
+					rc = state->write_callback(state->write_context, write_buffer, write_buffer_size, &cur_reuse_buffer);
+					if (rc != VOD_OK)
+					{
+						return rc;
+					}
 				}
+				return VOD_OK;
 			}
-			return VOD_OK;
+
+			mp4_builder_init_track(state, state->cur_clip->first_track);
 		}
 
 		// read some data from the frame
 		offset = *state->cur_frame_offset + state->cur_frame_pos;
-		if (!read_cache_get_from_cache(state->read_cache_state, state->cur_frame->size - state->cur_frame_pos, 0, state->frames_file_index, offset, &read_buffer, &read_size))
+		if (!read_cache_get_from_cache(state->read_cache_state, state->cur_frame->size - state->cur_frame_pos, 0, state->frames_source, offset, &read_buffer, &read_size))
 		{
 			if (write_buffer != NULL)
 			{

@@ -32,43 +32,9 @@ mp4_to_annexb_init(
 	request_context_t* request_context,
 	hls_encryption_params_t* encryption_params,
 	const media_filter_t* next_filter,
-	void* next_filter_context,
-	media_info_t* media_info)
+	void* next_filter_context)
 {
 	vod_status_t rc;
-
-	state->nal_packet_size_length = media_info->u.video.nal_packet_size_length;
-	if (state->nal_packet_size_length < 1 || state->nal_packet_size_length > 4)
-	{
-		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-			"mp4_to_annexb_init: invalid nal packet size length %uD", state->nal_packet_size_length);
-		return VOD_BAD_DATA;
-	}
-
-	switch (media_info->format)
-	{
-	case FORMAT_HEV1:
-	case FORMAT_HVC1:
-		if (encryption_params->type == HLS_ENC_SAMPLE_AES)
-		{
-			vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-				"mp4_to_annexb_init: hevc with sample-aes is not supported");
-			return VOD_BAD_REQUEST;
-		}
-
-		state->unit_type_mask = (0x3F << 1);
-		state->aud_unit_type = (HEVC_NAL_AUD << 1);
-		state->aud_nal_packet = hevc_aud_nal_packet;
-		state->aud_nal_packet_size = sizeof(hevc_aud_nal_packet);
-		break;
-
-	default:		// AVC
-		state->unit_type_mask = 0x1F;
-		state->aud_unit_type = AVC_NAL_AUD;
-		state->aud_nal_packet = avc_aud_nal_packet;
-		state->aud_nal_packet_size = sizeof(avc_aud_nal_packet);
-		break;
-	}
 
 	if (encryption_params->type == HLS_ENC_SAMPLE_AES)
 	{
@@ -98,6 +64,48 @@ mp4_to_annexb_init(
 	state->request_context = request_context;
 	state->next_filter = next_filter;
 	state->next_filter_context = next_filter_context;
+
+	return VOD_OK;
+}
+
+vod_status_t
+mp4_to_annexb_set_media_info(
+	mp4_to_annexb_state_t* state, 
+	media_info_t* media_info)
+{
+	state->nal_packet_size_length = media_info->u.video.nal_packet_size_length;
+	if (state->nal_packet_size_length < 1 || state->nal_packet_size_length > 4)
+	{
+		vod_log_error(VOD_LOG_ERR, state->request_context->log, 0,
+			"mp4_to_annexb_set_media_info: invalid nal packet size length %uD", state->nal_packet_size_length);
+		return VOD_BAD_DATA;
+	}
+
+	switch (media_info->format)
+	{
+	case FORMAT_HEV1:
+	case FORMAT_HVC1:
+		if (state->sample_aes_context != NULL)
+		{
+			vod_log_error(VOD_LOG_ERR, state->request_context->log, 0,
+				"mp4_to_annexb_set_media_info: hevc with sample-aes is not supported");
+			return VOD_BAD_REQUEST;
+		}
+
+		state->unit_type_mask = (0x3F << 1);
+		state->aud_unit_type = (HEVC_NAL_AUD << 1);
+		state->aud_nal_packet = hevc_aud_nal_packet;
+		state->aud_nal_packet_size = sizeof(hevc_aud_nal_packet);
+		break;
+
+	default:		// AVC
+		state->unit_type_mask = 0x1F;
+		state->aud_unit_type = AVC_NAL_AUD;
+		state->aud_nal_packet = avc_aud_nal_packet;
+		state->aud_nal_packet_size = sizeof(avc_aud_nal_packet);
+		break;
+	}
+
 	state->extra_data = media_info->extra_data;
 	state->extra_data_size = media_info->extra_data_size;
 
@@ -105,21 +113,14 @@ mp4_to_annexb_init(
 }
 
 bool_t 
-mp4_to_annexb_simulation_supported(mp4_to_annexb_state_t* state)
+mp4_to_annexb_simulation_supported(media_info_t* media_info)
 {
 	/* When the packet size field length is 4 we can bound the output size - since every 4-byte length
 		field is transformed to a \0\0\0\x01 or \0\0\x01 NAL marker, the output size is <= the input size.
 		When the packet size field length is less than 4, the output size may be greater than input size by
 		the number of NAL packets. Since we don't know this number in advance we have no way to bound the
 		output size. Luckily, ffmpeg always uses 4 byte size fields - see ff_isom_write_avcc */
-	if (state->nal_packet_size_length != 4)
-	{
-		return FALSE;
-	}
-
-	/* In sample AES every encrypted NAL unit has to go through emulation prevention, so it is not 
-		possible to know the exact size of the unit in advance */
-	if (state->sample_aes_context != NULL)
+	if (media_info->u.video.nal_packet_size_length != 4)
 	{
 		return FALSE;
 	}

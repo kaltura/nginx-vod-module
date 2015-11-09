@@ -6,6 +6,8 @@
 #include "ngx_http_vod_status.h"
 #include "ngx_perf_counters.h"
 #include "ngx_buffer_cache.h"
+#include "ngx_http_vod_udrm.h"
+#include "vod/media_set_parser.h"
 #include "vod/common.h"
 
 static ngx_str_t  ngx_http_vod_last_modified_default_types[] = {
@@ -41,6 +43,30 @@ ngx_http_vod_add_variables(ngx_conf_t *cf)
 	return NGX_OK;
 }
 
+static ngx_int_t
+ngx_http_vod_init_parsers(ngx_conf_t *cf)
+{
+	vod_status_t rc;
+	
+	rc = media_set_parser_init(cf->pool, cf->temp_pool);
+	if (rc != VOD_OK)
+	{
+		ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
+			"failed to initialize media set parsers %i", rc);
+		return NGX_ERROR;
+	}
+
+	rc = ngx_http_vod_udrm_init_parser(cf);
+	if (rc != NGX_OK)
+	{
+		ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
+			"failed to initialize udrm parser %i", rc);
+		return NGX_ERROR;
+	}
+
+	return NGX_OK;
+}
+
 static void *
 ngx_http_vod_create_loc_conf(ngx_conf_t *cf)
 {
@@ -65,11 +91,10 @@ ngx_http_vod_create_loc_conf(ngx_conf_t *cf)
 	conf->segmenter.align_to_key_frames = NGX_CONF_UNSET;
 	conf->segmenter.get_segment_count = NGX_CONF_UNSET_PTR;
 	conf->segmenter.get_segment_durations = NGX_CONF_UNSET_PTR;
-	conf->duplicate_bitrate_threshold = NGX_CONF_UNSET_UINT;
 	conf->initial_read_size = NGX_CONF_UNSET_SIZE;
 	conf->max_moov_size = NGX_CONF_UNSET_SIZE;
 	conf->cache_buffer_size = NGX_CONF_UNSET_SIZE;
-	conf->max_path_length = NGX_CONF_UNSET_SIZE;
+	conf->max_mapping_response_size = NGX_CONF_UNSET_SIZE;
 
 	conf->last_modified_time = NGX_CONF_UNSET;
 
@@ -94,8 +119,8 @@ ngx_http_vod_create_loc_conf(ngx_conf_t *cf)
 static char *
 ngx_http_vod_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child)
 {
-    ngx_http_vod_loc_conf_t *prev = parent;
-    ngx_http_vod_loc_conf_t *conf = child;
+	ngx_http_vod_loc_conf_t *prev = parent;
+	ngx_http_vod_loc_conf_t *conf = child;
 	const ngx_http_vod_submodule_t** cur_module;
 	ngx_int_t rc;
 	size_t proxy_header_len;
@@ -104,7 +129,7 @@ ngx_http_vod_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child)
 
 	// base params
 	ngx_conf_merge_str_value(conf->child_request_location, prev->child_request_location, "");
-	if (conf->submodule.parse_uri_file_name == NGX_CONF_UNSET_PTR) 
+	if (conf->submodule.parse_uri_file_name == NGX_CONF_UNSET_PTR)
 	{
 		if (prev->submodule.parse_uri_file_name != NGX_CONF_UNSET_PTR)
 		{
@@ -125,11 +150,10 @@ ngx_http_vod_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child)
 	ngx_conf_merge_ptr_value(conf->segmenter.get_segment_count, prev->segmenter.get_segment_count, segmenter_get_segment_count_last_short);
 	ngx_conf_merge_ptr_value(conf->segmenter.get_segment_durations, prev->segmenter.get_segment_durations, segmenter_get_segment_durations_estimate);
 
-	if (conf->secret_key == NULL) 
+	if (conf->secret_key == NULL)
 	{
 		conf->secret_key = prev->secret_key;
 	}
-	ngx_conf_merge_uint_value(conf->duplicate_bitrate_threshold, prev->duplicate_bitrate_threshold, 4096);
 	ngx_conf_merge_str_value(conf->https_header_name, prev->https_header_name, "");
 	ngx_conf_merge_str_value(conf->segments_base_url, prev->segments_base_url, "");
 	conf->segments_base_url_has_scheme =
@@ -137,7 +161,7 @@ ngx_http_vod_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child)
 		ngx_strncasecmp(conf->segments_base_url.data, (u_char *) "https://", 8) == 0);
 
 
-	if (conf->moov_cache_zone == NULL) 
+	if (conf->moov_cache_zone == NULL)
 	{
 		conf->moov_cache_zone = prev->moov_cache_zone;
 	}
@@ -146,7 +170,7 @@ ngx_http_vod_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child)
 	{
 		conf->response_cache_zone = prev->response_cache_zone;
 	}
-	
+
 	ngx_conf_merge_size_value(conf->initial_read_size, prev->initial_read_size, 4096);
 	ngx_conf_merge_size_value(conf->max_moov_size, prev->max_moov_size, 128 * 1024 * 1024);
 	ngx_conf_merge_size_value(conf->cache_buffer_size, prev->cache_buffer_size, 256 * 1024);
@@ -159,8 +183,8 @@ ngx_http_vod_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child)
 		return err;
 	}
 	ngx_conf_merge_str_value(conf->upstream_host_header, prev->upstream_host_header, "");
-	
-	if (conf->upstream_extra_args == NULL) 
+
+	if (conf->upstream_extra_args == NULL)
 	{
 		conf->upstream_extra_args = prev->upstream_extra_args;
 	}
@@ -169,9 +193,10 @@ ngx_http_vod_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child)
 	{
 		conf->path_mapping_cache_zone = prev->path_mapping_cache_zone;
 	}
-	ngx_conf_merge_str_value(conf->path_response_prefix, prev->path_response_prefix, "<?xml version=\"1.0\" encoding=\"utf-8\"?><xml><result>");
-	ngx_conf_merge_str_value(conf->path_response_postfix, prev->path_response_postfix, "</result></xml>");
-	ngx_conf_merge_size_value(conf->max_path_length, prev->max_path_length, 1024);
+
+	ngx_conf_merge_str_value(conf->path_response_prefix, prev->path_response_prefix, "{\"sequences\":[{\"clips\":[{\"type\":\"source\",\"path\":\"");
+	ngx_conf_merge_str_value(conf->path_response_postfix, prev->path_response_postfix, "\"}]}]}");
+	ngx_conf_merge_size_value(conf->max_mapping_response_size, prev->max_mapping_response_size, 1024);
 
 	err = ngx_merge_upstream_conf(cf, &conf->fallback_upstream, &prev->fallback_upstream);
 	if (err != NGX_CONF_OK)
@@ -185,10 +210,10 @@ ngx_http_vod_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child)
 
 	ngx_conf_merge_value(conf->last_modified_time, prev->last_modified_time, -1);
 	if (ngx_http_merge_types(
-		cf, 
-		&conf->last_modified_types_keys, 
+		cf,
+		&conf->last_modified_types_keys,
 		&conf->last_modified_types,
-		&prev->last_modified_types_keys, 
+		&prev->last_modified_types_keys,
 		&prev->last_modified_types,
 		ngx_http_vod_last_modified_default_types) != NGX_OK)
 	{
@@ -209,7 +234,7 @@ ngx_http_vod_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child)
 	{
 		conf->drm_info_cache_zone = prev->drm_info_cache_zone;
 	}
-	if (conf->drm_request_uri == NULL) 
+	if (conf->drm_request_uri == NULL)
 	{
 		conf->drm_request_uri = prev->drm_request_uri;
 	}
@@ -261,7 +286,7 @@ ngx_http_vod_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child)
 			return NGX_CONF_ERROR;
 		}
 	}
-	
+
 	if (conf->request_handler == ngx_http_vod_remote_request_handler)
 	{
 		if (conf->fallback_upstream.upstream != NULL)
@@ -275,7 +300,7 @@ ngx_http_vod_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child)
 	if (conf->segmenter.segment_duration <= 0)
 	{
 		ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
-			"\"segment_duration\" must be positive");
+			"\"vod_segment_duration\" must be positive");
 		return NGX_CONF_ERROR;
 	}
 
@@ -287,39 +312,49 @@ ngx_http_vod_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child)
 		return NGX_CONF_ERROR;
 	}
 
-	if (conf->drm_enabled && conf->drm_upstream.upstream == NULL)
+	if (conf->drm_enabled)
 	{
-		ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
-			"\"drm_upstream\" must be configured when drm is enabled");
-		return NGX_CONF_ERROR;
+		if (conf->drm_upstream.upstream == NULL)
+		{
+			ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
+				"\"vod_drm_upstream\" must be configured when drm is enabled");
+			return NGX_CONF_ERROR;
+		}
+
+		if (conf->child_request_location.len == 0)
+		{
+			ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
+				"\"vod_child_request_path\" is mandatory for drm");
+			return NGX_CONF_ERROR;
+		}
 	}
 
 	// validate the lengths of uri parameters
 	if (conf->clip_to_param_name.len > MAX_URI_PARAM_NAME_LEN)
 	{
 		ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
-			"\"clip_to_param_name\" should not be more than %d characters", MAX_URI_PARAM_NAME_LEN);
+			"\"vod_clip_to_param_name\" should not be more than %d characters", MAX_URI_PARAM_NAME_LEN);
 		return NGX_CONF_ERROR;
 	}
 
 	if (conf->clip_from_param_name.len > MAX_URI_PARAM_NAME_LEN)
 	{
 		ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
-			"\"clip_from_param_name\" should not be more than %d characters", MAX_URI_PARAM_NAME_LEN);
+			"\"vod_clip_from_param_name\" should not be more than %d characters", MAX_URI_PARAM_NAME_LEN);
 		return NGX_CONF_ERROR;
 	}
 
 	if (conf->tracks_param_name.len > MAX_URI_PARAM_NAME_LEN)
 	{
 		ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
-			"\"tracks_param_name\" should not be more than %d characters", MAX_URI_PARAM_NAME_LEN);
+			"\"vod_tracks_param_name\" should not be more than %d characters", MAX_URI_PARAM_NAME_LEN);
 		return NGX_CONF_ERROR;
 	}
 
 	if (conf->speed_param_name.len > MAX_URI_PARAM_NAME_LEN)
 	{
 		ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
-			"\"speed_param_name\" should not be more than %d characters", MAX_URI_PARAM_NAME_LEN);
+			"\"vod_speed_param_name\" should not be more than %d characters", MAX_URI_PARAM_NAME_LEN);
 		return NGX_CONF_ERROR;
 	}
 	
@@ -760,13 +795,6 @@ ngx_command_t ngx_http_vod_commands[] = {
 	offsetof(ngx_http_vod_loc_conf_t, secret_key),
 	NULL },
 
-	{ ngx_string("vod_duplicate_bitrate_threshold"),
-	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1,
-	ngx_conf_set_num_slot,
-	NGX_HTTP_LOC_CONF_OFFSET,
-	offsetof(ngx_http_vod_loc_conf_t, duplicate_bitrate_threshold),
-	NULL },
-
 	{ ngx_string("vod_https_header_name"),
 	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1,
 	ngx_conf_set_str_slot,
@@ -870,11 +898,11 @@ ngx_command_t ngx_http_vod_commands[] = {
 	offsetof(ngx_http_vod_loc_conf_t, path_response_postfix),
 	NULL },
 
-	{ ngx_string("vod_max_path_length"),
+	{ ngx_string("vod_max_mapping_response_size"),
 	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1,
 	ngx_conf_set_size_slot,
 	NGX_HTTP_LOC_CONF_OFFSET,
-	offsetof(ngx_http_vod_loc_conf_t, max_path_length),
+	offsetof(ngx_http_vod_loc_conf_t, max_mapping_response_size),
 	NULL },
 
 	// fallback upstream - only for local/mapped modes
@@ -1002,7 +1030,7 @@ ngx_command_t ngx_http_vod_commands[] = {
 
 ngx_http_module_t  ngx_http_vod_module_ctx = {
 	ngx_http_vod_add_variables,         /* preconfiguration */
-	NULL,                               /* postconfiguration */
+	ngx_http_vod_init_parsers,          /* postconfiguration */
 
 	NULL,                               /* create main configuration */
 	NULL,                               /* init main configuration */

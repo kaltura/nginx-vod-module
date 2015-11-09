@@ -1,5 +1,4 @@
 #include "mss_playready.h"
-#include "mss_packager.h"
 #include "../mp4/mp4_encrypt.h"
 
 // manifest constants
@@ -45,10 +44,10 @@ static const uint8_t piff_uuid[] = {
 };
 
 static u_char*
-mss_playready_write_protection_tag(void* context, u_char* p, mpeg_metadata_t* mpeg_metadata)
+mss_playready_write_protection_tag(void* context, u_char* p, media_set_t* media_set)
 {
-	// Note: taking only the first stream, in mss all renditions must have the same key
-	mp4_encrypt_info_t* drm_info = (mp4_encrypt_info_t*)mpeg_metadata->first_stream->file_info.drm_info;
+	// Note: taking only the first sequence, in mss all renditions must have the same key
+	mp4_encrypt_info_t* drm_info = (mp4_encrypt_info_t*)media_set->sequences[0].drm_info;
 	mp4_encrypt_system_info_t* cur_info;
 	vod_str_t base64;
 
@@ -70,12 +69,13 @@ mss_playready_write_protection_tag(void* context, u_char* p, mpeg_metadata_t* mp
 vod_status_t
 mss_playready_build_manifest(
 	request_context_t* request_context,
+	mss_manifest_config_t* conf,
 	segmenter_conf_t* segmenter_conf,
-	mpeg_metadata_t* mpeg_metadata,
+	media_set_t* media_set,
 	vod_str_t* result)
 {
-	// Note: taking only the first stream, in mss all renditions must have the same key
-	mp4_encrypt_info_t* drm_info = (mp4_encrypt_info_t*)mpeg_metadata->first_stream->file_info.drm_info;
+	// Note: taking only the first sequence, in mss all renditions must have the same key
+	mp4_encrypt_info_t* drm_info = (mp4_encrypt_info_t*)media_set->sequences[0].drm_info;
 	mp4_encrypt_system_info_t* cur_info;
 	size_t extra_tags_size;
 
@@ -92,8 +92,9 @@ mss_playready_build_manifest(
 
 	return mss_packager_build_manifest(
 		request_context,
+		conf,
 		segmenter_conf,
-		mpeg_metadata,
+		media_set,
 		extra_tags_size,
 		mss_playready_write_protection_tag,
 		NULL,
@@ -101,12 +102,12 @@ mss_playready_build_manifest(
 }
 
 static u_char*
-mss_playready_audio_write_uuid_piff_atom(u_char* p, mp4_encrypt_state_t* state, mpeg_stream_metadata_t* stream_metadata, size_t atom_size)
+mss_playready_audio_write_uuid_piff_atom(u_char* p, mp4_encrypt_state_t* state, media_sequence_t* sequence, size_t atom_size)
 {
 	write_atom_header(p, atom_size, 'u', 'u', 'i', 'd');
 	p = vod_copy(p, piff_uuid, sizeof(piff_uuid));
 	write_dword(p, 0);
-	write_dword(p, stream_metadata->frame_count);
+	write_dword(p, sequence->total_frame_count);
 	p = mp4_encrypt_audio_write_auxiliary_data(state, p);
 
 	return p;
@@ -124,18 +125,18 @@ mss_playready_audio_write_extra_traf_atoms(void* ctx, u_char* p, size_t mdat_ato
 		context->state->saiz_atom_size +
 		context->state->saio_atom_size);
 
-	p = mss_playready_audio_write_uuid_piff_atom(p, context->state, context->state->stream_metadata, context->uuid_piff_atom_size);
+	p = mss_playready_audio_write_uuid_piff_atom(p, context->state, context->state->sequence, context->uuid_piff_atom_size);
 	p = mp4_encrypt_audio_write_saiz_saio(context->state, p, auxiliary_data_start);
 	return p;
 }
 
 static u_char*
-mss_playready_video_write_uuid_piff_atom(u_char* p, mp4_encrypt_video_state_t* state, mpeg_stream_metadata_t* stream_metadata, size_t atom_size)
+mss_playready_video_write_uuid_piff_atom(u_char* p, mp4_encrypt_video_state_t* state, media_sequence_t* sequence, size_t atom_size)
 {
 	write_atom_header(p, atom_size, 'u', 'u', 'i', 'd');
 	p = vod_copy(p, piff_uuid, sizeof(piff_uuid));
 	write_dword(p, 2);
-	write_dword(p, stream_metadata->frame_count);
+	write_dword(p, sequence->total_frame_count);
 	p = vod_copy(p, state->auxiliary_data.start, state->auxiliary_data.pos - state->auxiliary_data.start);
 
 	return p;
@@ -153,7 +154,7 @@ mss_playready_video_write_extra_traf_atoms(void* ctx, u_char* p, size_t mdat_ato
 		context->state->base.saiz_atom_size +
 		context->state->base.saio_atom_size);
 
-	p = mss_playready_video_write_uuid_piff_atom(p, context->state, context->state->base.stream_metadata, context->uuid_piff_atom_size);
+	p = mss_playready_video_write_uuid_piff_atom(p, context->state, context->state->base.sequence, context->uuid_piff_atom_size);
 	p = mp4_encrypt_video_write_saiz_saio(context->state, p, auxiliary_data_start);
 	return p;
 }
@@ -173,7 +174,7 @@ mss_playready_audio_build_fragment_header(
 
 	rc = mss_packager_build_fragment_header(
 		state->request_context,
-		state->stream_metadata,
+		state->sequence,
 		state->segment_index,
 		writer_context.uuid_piff_atom_size + state->saiz_atom_size + state->saio_atom_size,
 		mss_playready_audio_write_extra_traf_atoms,
@@ -205,7 +206,7 @@ mss_playready_video_write_fragment_header(mp4_encrypt_video_state_t* state)
 
 	rc = mss_packager_build_fragment_header(
 		state->base.request_context,
-		state->base.stream_metadata,
+		state->base.sequence,
 		state->base.segment_index,
 		writer_context.uuid_piff_atom_size + state->base.saiz_atom_size + state->base.saio_atom_size,
 		mss_playready_video_write_extra_traf_atoms,
@@ -239,7 +240,7 @@ vod_status_t
 mss_playready_get_fragment_writer(
 	segment_writer_t* result,
 	request_context_t* request_context,
-	mpeg_stream_metadata_t* stream_metadata,
+	media_set_t* media_set,
 	uint32_t segment_index,
 	segment_writer_t* segment_writer,
 	const u_char* iv,
@@ -247,15 +248,16 @@ mss_playready_get_fragment_writer(
 	vod_str_t* fragment_header,
 	size_t* total_fragment_size)
 {
+	uint32_t media_type = media_set->sequences[0].media_type;
 	vod_status_t rc;
 
-	switch (stream_metadata->media_info.media_type)
+	switch (media_type)
 	{
 	case MEDIA_TYPE_VIDEO:
 		return mp4_encrypt_video_get_fragment_writer(
 			result,
 			request_context,
-			stream_metadata,
+			media_set,
 			segment_index,
 			mss_playready_video_write_fragment_header,
 			segment_writer,
@@ -265,7 +267,7 @@ mss_playready_get_fragment_writer(
 		rc = mp4_encrypt_audio_get_fragment_writer(
 			result,
 			request_context,
-			stream_metadata,
+			media_set,
 			segment_index,
 			segment_writer,
 			iv);
@@ -288,6 +290,6 @@ mss_playready_get_fragment_writer(
 	}
 
 	vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-		"mss_playready_get_fragment_writer: invalid media type %uD", stream_metadata->media_info.media_type);
+		"mss_playready_get_fragment_writer: invalid media type %uD", media_type);
 	return VOD_UNEXPECTED;
 }

@@ -2,6 +2,8 @@
 #include "mp4_builder.h"
 #include "../read_stream.h"
 
+#define MAX_FRAME_RATE (60)
+
 // fragment writer state
 enum {
 	STATE_PACKET_SIZE,
@@ -112,23 +114,35 @@ mp4_encrypt_cleanup(mp4_encrypt_state_t* state)
 	EVP_CIPHER_CTX_cleanup(&state->cipher);
 }
 
+static void
+mp4_encrypt_init_track(mp4_encrypt_state_t* state, media_track_t* track)
+{
+	// frame state
+	state->cur_frame = track->first_frame;
+	state->last_frame = track->last_frame;
+	state->frame_count = track->frame_count;
+	state->frame_size_left = 0;
+}
+
 static vod_status_t
 mp4_encrypt_init_state(
 	mp4_encrypt_state_t* state,
 	request_context_t* request_context,
-	mpeg_stream_metadata_t* stream_metadata,
+	media_set_t* media_set,
 	uint32_t segment_index,
 	segment_writer_t* segment_writer,
 	const u_char* iv)
 {
-	mp4_encrypt_info_t* drm_info = (mp4_encrypt_info_t*)stream_metadata->file_info.drm_info;
+	media_sequence_t* sequence = &media_set->sequences[0];
+	mp4_encrypt_info_t* drm_info = (mp4_encrypt_info_t*)sequence->drm_info;
 	vod_pool_cleanup_t *cln;
 	uint64_t iv_int;
 	u_char* p;
 
 	// fixed fields
 	state->request_context = request_context;
-	state->stream_metadata = stream_metadata;
+	state->media_set = media_set;
+	state->sequence = sequence;
 	state->segment_index = segment_index;
 	state->segment_writer = *segment_writer;
 
@@ -154,15 +168,15 @@ mp4_encrypt_init_state(
 
 	// increment the iv by the index of the first frame
 	iv_int = parse_be64(iv);
-	iv_int += stream_metadata->first_frame_index;
+	iv_int += sequence->filtered_clips[0].first_track->first_frame_index;
+	// Note: we don't know how many frames were in previous clips (were not parsed), assuming there won't be more than 60 fps
+	iv_int += (sequence->filtered_clips[0].first_track->clip_sequence_offset * MAX_FRAME_RATE) / sequence->filtered_clips[0].first_track->media_info.timescale;
 	p = state->iv;
 	write_qword(p, iv_int);
 
-	// frame state
-	state->cur_frame = stream_metadata->frames;
-	state->last_frame = stream_metadata->frames + stream_metadata->frame_count;
-	state->frame_count = stream_metadata->frame_count;
-	state->frame_size_left = 0;
+	// init the first clip
+	state->cur_clip = sequence->filtered_clips;
+	mp4_encrypt_init_track(state, state->cur_clip->first_track);
 
 	// saiz / saio
 	state->saiz_atom_size = ATOM_HEADER_SIZE + sizeof(saiz_atom_t);
@@ -171,17 +185,38 @@ mp4_encrypt_init_state(
 	return VOD_OK;
 }
 
-static vod_status_t
-mp4_encrypt_start_frame(mp4_encrypt_state_t* state)
+static bool_t
+mp4_encrypt_move_to_next_frame(mp4_encrypt_state_t* state, bool_t* init_track)
 {
-	// get the frame size
-	if (state->cur_frame >= state->last_frame)
+	*init_track = FALSE;
+	while (state->cur_frame >= state->last_frame)
+	{
+		state->cur_clip++;
+		if (state->cur_clip >= state->sequence->filtered_clips_end)
+		{
+			return FALSE;
+		}
+
+		mp4_encrypt_init_track(state, state->cur_clip->first_track);
+
+		*init_track = TRUE;
+	}
+
+	return TRUE;
+}
+
+static vod_status_t
+mp4_encrypt_start_frame(mp4_encrypt_state_t* state, bool_t* init_track)
+{
+	// make sure we have a frame
+	if (!mp4_encrypt_move_to_next_frame(state, init_track))
 	{
 		vod_log_error(VOD_LOG_ERR, state->request_context->log, 0,
-			"mp4_encrypt_start_frame: no more frames");
+		"mp4_encrypt_start_frame: no more frames");
 		return VOD_BAD_DATA;
 	}
 
+	// get the frame size
 	state->frame_size_left = state->cur_frame->size;
 	state->cur_frame++;
 
@@ -199,9 +234,29 @@ mp4_encrypt_start_frame(mp4_encrypt_state_t* state)
 ////// video fragment functions
 
 static vod_status_t
+mp4_encrypt_video_init_track(mp4_encrypt_video_state_t* state, media_track_t* track)
+{
+	state->nal_packet_size_length = track->media_info.u.video.nal_packet_size_length;
+
+	if (state->nal_packet_size_length < 1 || state->nal_packet_size_length > 4)
+	{
+		vod_log_error(VOD_LOG_ERR, state->base.request_context->log, 0,
+			"mp4_encrypt_video_init_track: invalid nal packet size length %uD", state->nal_packet_size_length);
+		return VOD_BAD_DATA;
+	}
+
+	state->cur_state = STATE_PACKET_SIZE;
+	state->length_bytes_left = state->nal_packet_size_length;
+	state->packet_size_left = 0;
+
+	return VOD_OK;
+}
+
+static vod_status_t
 mp4_encrypt_video_start_frame(mp4_encrypt_video_state_t* state)
 {
 	vod_status_t rc;
+	bool_t init_track;
 
 	// add an auxiliary data entry
 	rc = vod_dynamic_buf_reserve(&state->auxiliary_data, sizeof(cenc_sample_auxiliary_data_t));
@@ -217,12 +272,21 @@ mp4_encrypt_video_start_frame(mp4_encrypt_video_state_t* state)
 	state->subsample_count = 0;
 
 	// call the base start frame
-	rc = mp4_encrypt_start_frame(&state->base);
+	rc = mp4_encrypt_start_frame(&state->base, &init_track);
 	if (rc != VOD_OK)
 	{
 		vod_log_debug1(VOD_LOG_DEBUG_LEVEL, state->base.request_context->log, 0,
 			"mp4_encrypt_video_start_frame: mp4_encrypt_start_frame failed %i", rc);
 		return rc;
+	}
+
+	if (init_track)
+	{
+		rc = mp4_encrypt_video_init_track(state, state->base.cur_clip->first_track);
+		if (rc != VOD_OK)
+		{
+			return rc;
+		}
 	}
 
 	return VOD_OK;
@@ -456,15 +520,17 @@ vod_status_t
 mp4_encrypt_video_get_fragment_writer(
 	segment_writer_t* result,
 	request_context_t* request_context,
-	mpeg_stream_metadata_t* stream_metadata,
+	media_set_t* media_set,
 	uint32_t segment_index,
 	mp4_encrypt_video_write_fragment_header_t write_fragment_header,
 	segment_writer_t* segment_writer,
 	const u_char* iv)
 {
+	media_sequence_t* sequence = &media_set->sequences[0];
 	mp4_encrypt_video_state_t* state;
 	vod_status_t rc;
 	uint32_t initial_size;
+	bool_t ignore;
 
 	// allocate the state
 	state = vod_alloc(request_context->pool, sizeof(*state));
@@ -475,7 +541,7 @@ mp4_encrypt_video_get_fragment_writer(
 		return VOD_ALLOC_FAILED;
 	}
 
-	rc = mp4_encrypt_init_state(&state->base, request_context, stream_metadata, segment_index, segment_writer, iv);
+	rc = mp4_encrypt_init_state(&state->base, request_context, media_set, segment_index, segment_writer, iv);
 	if (rc != VOD_OK)
 	{
 		vod_log_debug1(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
@@ -485,18 +551,10 @@ mp4_encrypt_video_get_fragment_writer(
 
 	// fixed members
 	state->write_fragment_header = write_fragment_header;
-	state->nal_packet_size_length = stream_metadata->media_info.u.video.nal_packet_size_length;
-
-	if (state->nal_packet_size_length < 1 || state->nal_packet_size_length > 4)
-	{
-		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-			"mp4_encrypt_video_get_fragment_writer: invalid nal packet size length %uD", state->nal_packet_size_length);
-		return VOD_BAD_DATA;
-	}
 
 	// for progressive AVC a frame usually contains a single nalu, except the first frame which may contain codec copyright info
 	initial_size = 
-		(sizeof(cenc_sample_auxiliary_data_t) + sizeof(cenc_sample_auxiliary_data_subsample_t)) * stream_metadata->frame_count + 
+		(sizeof(cenc_sample_auxiliary_data_t) + sizeof(cenc_sample_auxiliary_data_subsample_t)) * sequence->total_frame_count + 
 		sizeof(cenc_sample_auxiliary_data_subsample_t);
 	rc = vod_dynamic_buf_init(&state->auxiliary_data, request_context, initial_size);
 	if (rc != VOD_OK)
@@ -506,7 +564,7 @@ mp4_encrypt_video_get_fragment_writer(
 		return rc;
 	}
 
-	state->auxiliary_sample_sizes = vod_alloc(request_context->pool, stream_metadata->frame_count);
+	state->auxiliary_sample_sizes = vod_alloc(request_context->pool, sequence->total_frame_count);
 	if (state->auxiliary_sample_sizes == NULL)
 	{
 		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
@@ -515,11 +573,7 @@ mp4_encrypt_video_get_fragment_writer(
 	}
 	state->auxiliary_sample_sizes_pos = state->auxiliary_sample_sizes;
 
-	state->cur_state = STATE_PACKET_SIZE;
-	state->length_bytes_left = state->nal_packet_size_length;
-	state->packet_size_left = 0;
-
-	if (state->base.cur_frame >= state->base.last_frame)
+	if (!mp4_encrypt_move_to_next_frame(&state->base, &ignore))
 	{
 		// an empty segment - write won't be called so we need to write the header here
 		mp4_encrypt_video_prepare_saiz_saio(state);
@@ -531,6 +585,15 @@ mp4_encrypt_video_get_fragment_writer(
 				"mp4_encrypt_video_get_fragment_writer: write_fragment_header failed %i", rc);
 			return rc;
 		}
+
+		return VOD_OK;
+	}
+
+	// init writing for the first track
+	rc = mp4_encrypt_video_init_track(state, state->base.cur_clip->first_track);
+	if (rc != VOD_OK)
+	{
+		return rc;
 	}
 
 	result->write_tail = mp4_encrypt_video_write_buffer;
@@ -543,7 +606,7 @@ mp4_encrypt_video_get_fragment_writer(
 size_t 
 mp4_encrypt_audio_get_auxiliary_data_size(mp4_encrypt_state_t* state)
 {
-	return MP4_ENCRYPT_IV_SIZE * state->stream_metadata->frame_count;
+	return MP4_ENCRYPT_IV_SIZE * state->sequence->total_frame_count;
 }
 
 u_char*
@@ -591,13 +654,14 @@ mp4_encrypt_audio_write_buffer(void* context, u_char* buffer, uint32_t size, boo
 	u_char* buffer_end = buffer + size;
 	u_char* cur_pos = buffer;
 	uint32_t write_size;
+	bool_t ignore;
 	vod_status_t rc;
 
 	while (cur_pos < buffer_end)
 	{
 		while (state->frame_size_left <= 0)
 		{
-			rc = mp4_encrypt_start_frame(state);
+			rc = mp4_encrypt_start_frame(state, &ignore);
 			if (rc != VOD_OK)
 			{
 				return rc;
@@ -623,7 +687,7 @@ vod_status_t
 mp4_encrypt_audio_get_fragment_writer(
 	segment_writer_t* result,
 	request_context_t* request_context,
-	mpeg_stream_metadata_t* stream_metadata,
+	media_set_t* media_set,
 	uint32_t segment_index,
 	segment_writer_t* segment_writer,
 	const u_char* iv)
@@ -640,7 +704,7 @@ mp4_encrypt_audio_get_fragment_writer(
 		return VOD_ALLOC_FAILED;
 	}
 
-	rc = mp4_encrypt_init_state(state, request_context, stream_metadata, segment_index, segment_writer, iv);
+	rc = mp4_encrypt_init_state(state, request_context, media_set, segment_index, segment_writer, iv);
 	if (rc != VOD_OK)
 	{
 		vod_log_debug1(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,

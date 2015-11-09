@@ -411,11 +411,10 @@ mp4_parser_validate_stco_data(
 void
 mp4_parser_stts_iterator_init(
 	stts_iterator_state_t* iterator, 
-	mpeg_parse_params_t* parse_params,
+	media_parse_params_t* parse_params,
 	stts_entry_t* first_entry, 
 	uint32_t entries)
 {
-	iterator->speed_denom = parse_params->speed_denom;
 	iterator->cur_entry = first_entry;
 	iterator->last_entry = first_entry + entries;
 	iterator->sample_count = parse_be32(first_entry->count);
@@ -433,7 +432,6 @@ mp4_parser_stts_iterator(
 	uint32_t sample_duration;
 	uint32_t sample_count;
 	uint32_t skip_count;
-	uint32_t speed_denom;
 	uint32_t frame_count = 0;
 	uint64_t next_accum_duration;
 	uint64_t accum_duration;
@@ -442,8 +440,7 @@ mp4_parser_stts_iterator(
 	last_entry = iterator->last_entry;
 	accum_duration = iterator->accum_duration;
 	sample_count = iterator->sample_count;
-	speed_denom = iterator->speed_denom;
-	sample_duration = parse_be32(cur_entry->duration) * speed_denom;
+	sample_duration = parse_be32(cur_entry->duration);
 	next_accum_duration = accum_duration + sample_duration * sample_count;
 
 	for (;;)
@@ -469,7 +466,7 @@ mp4_parser_stts_iterator(
 			return FALSE;
 		}
 
-		sample_duration = parse_be32(cur_entry->duration) * speed_denom;
+		sample_duration = parse_be32(cur_entry->duration);
 		sample_count = parse_be32(cur_entry->count);
 		next_accum_duration = accum_duration + sample_duration * sample_count;
 	}

@@ -16,15 +16,14 @@
 		ngx_http_vod_##x##_get_file_path_components,			\
 		ngx_http_vod_##x##_parse_uri_file_name,					\
 		ngx_http_vod_##x##_parse_drm_info,						\
-	}
+}
 
 #define ngx_http_vod_submodule_size_only(submodule_context)		\
 	((submodule_context)->r->header_only || (submodule_context)->r->method == NGX_HTTP_HEAD)
 
 // request flags
-#define REQUEST_FLAG_SINGLE_FILE (0x1)
-#define REQUEST_FLAG_SINGLE_STREAM (0x2)
-#define REQUEST_FLAG_SINGLE_STREAM_PER_MEDIA_TYPE (0x4)
+#define REQUEST_FLAG_SINGLE_TRACK (0x1)
+#define REQUEST_FLAG_SINGLE_TRACK_PER_MEDIA_TYPE (0x2)
 
 // request classes
 enum {
@@ -50,19 +49,19 @@ typedef char* (*ngx_http_vod_merge_loc_conf_t)(
 
 typedef struct {
 	request_context_t request_context;
-	ngx_http_vod_request_params_t request_params;
-	mpeg_metadata_t mpeg_metadata;
+	media_set_t media_set;
+	request_params_t request_params;
+	const struct ngx_http_vod_request_s* request;
 	ngx_http_request_t* r;
 	struct ngx_http_vod_loc_conf_s* conf;
-	ngx_http_vod_suburi_params_t* cur_suburi;
+	media_sequence_t* cur_sequence;
+	media_clip_source_t** cur_source;
 } ngx_http_vod_submodule_context_t;
 
 // submodule request
 struct ngx_http_vod_request_s {
 	int flags;
 	int parse_type;
-	stream_comparator_t stream_comparator;
-	int stream_comparator_conf_offset;
 	int request_class;
 	
 	ngx_int_t (*handle_metadata_request)(
@@ -106,12 +105,14 @@ typedef struct {
 		struct ngx_http_vod_loc_conf_s *conf,
 		u_char* start_pos,
 		u_char* end_pos,
-		ngx_http_vod_request_params_t* request_params);
+		request_params_t* request_params,
+		const ngx_http_vod_request_t** request);
 
 	ngx_int_t (*parse_drm_info)(
 		ngx_http_vod_submodule_context_t* submodule_context,
 		ngx_str_t* drm_info,
 		void** output);
+
 } ngx_http_vod_submodule_t;
 
 // globals

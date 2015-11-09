@@ -24,7 +24,7 @@ typedef struct {
 // functions
 vod_status_t mp4_clipper_parse_moov(
 	request_context_t* request_context,
-	mpeg_parse_params_t* parse_params,
+	media_parse_params_t* parse_params,
 	bool_t copy_data,
 	u_char* buffer,
 	size_t size,

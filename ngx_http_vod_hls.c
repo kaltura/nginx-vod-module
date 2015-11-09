@@ -50,7 +50,7 @@ ngx_http_vod_hls_init_encryption_params(
 	}
 
 	ngx_http_vod_hls_init_encryption_iv(iv, submodule_context->request_params.segment_index);
-	encryption_params->key = submodule_context->request_params.suburis->encryption_key;
+	encryption_params->key = submodule_context->media_set.sequences[0].encryption_key;
 	encryption_params->iv = iv;
 }
 
@@ -72,8 +72,7 @@ ngx_http_vod_hls_handle_master_playlist(
 		&submodule_context->request_context,
 		&submodule_context->conf->hls.m3u8_config,
 		&base_url,
-		submodule_context->request_params.uses_multi_uri,
-		&submodule_context->mpeg_metadata,
+		&submodule_context->media_set,
 		response);
 	if (rc != VOD_OK)
 	{
@@ -84,7 +83,7 @@ ngx_http_vod_hls_handle_master_playlist(
 
 	content_type->data = m3u8_content_type;
 	content_type->len = sizeof(m3u8_content_type) - 1;
-
+	
 	return NGX_OK;
 }
 
@@ -120,10 +119,10 @@ ngx_http_vod_hls_handle_index_playlist(
 		&submodule_context->conf->hls.m3u8_config,
 		&base_url,
 		&segments_base_url,
-		submodule_context->request_params.uses_multi_uri,
+		&submodule_context->request_params,
 		&encryption_params,
 		&submodule_context->conf->segmenter,
-		&submodule_context->mpeg_metadata,
+		&submodule_context->media_set,
 		response);
 	if (rc != VOD_OK)
 	{
@@ -134,7 +133,7 @@ ngx_http_vod_hls_handle_index_playlist(
 
 	content_type->data = m3u8_content_type;
 	content_type->len = sizeof(m3u8_content_type) - 1;
-
+	
 	return NGX_OK;
 }
 
@@ -144,7 +143,6 @@ ngx_http_vod_hls_handle_iframe_playlist(
 	ngx_str_t* response,
 	ngx_str_t* content_type)
 {
-	mpeg_stream_metadata_t* cur_stream;
 	ngx_str_t base_url = ngx_null_string;
 	vod_status_t rc;
 	
@@ -155,17 +153,11 @@ ngx_http_vod_hls_handle_iframe_playlist(
 		return NGX_HTTP_BAD_REQUEST;
 	}
 
-	for (cur_stream = submodule_context->mpeg_metadata.first_stream;
-		cur_stream < submodule_context->mpeg_metadata.last_stream;
-		cur_stream++)
+	if (submodule_context->media_set.audio_filtering_needed)
 	{
-		if (cur_stream->media_info.media_type == MEDIA_TYPE_AUDIO &&
-			cur_stream->media_info.speed_nom != cur_stream->media_info.speed_denom)
-		{
-			ngx_log_error(NGX_LOG_ERR, submodule_context->request_context.log, 0,
-				"ngx_http_vod_hls_handle_iframe_playlist: iframes playlist not supported with audio speed change");
-			return NGX_HTTP_BAD_REQUEST;
-		}
+		ngx_log_error(NGX_LOG_ERR, submodule_context->request_context.log, 0,
+			"ngx_http_vod_hls_handle_iframe_playlist: iframes playlist not supported with audio filtering");
+		return NGX_HTTP_BAD_REQUEST;
 	}
 
 	if (submodule_context->conf->hls.absolute_iframe_urls)
@@ -178,9 +170,9 @@ ngx_http_vod_hls_handle_iframe_playlist(
 		&submodule_context->conf->hls.m3u8_config,
 		&submodule_context->conf->hls.muxer_config,
 		&base_url,
-		submodule_context->request_params.uses_multi_uri,
+		&submodule_context->request_params,
 		&submodule_context->conf->segmenter,
-		&submodule_context->mpeg_metadata,
+		&submodule_context->media_set,
 		response);
 	if (rc != VOD_OK)
 	{
@@ -191,7 +183,7 @@ ngx_http_vod_hls_handle_iframe_playlist(
 
 	content_type->data = m3u8_content_type;
 	content_type->len = sizeof(m3u8_content_type) - 1;
-
+	
 	return NGX_OK;
 }
 
@@ -211,7 +203,7 @@ ngx_http_vod_hls_handle_encryption_key(
 		return NGX_HTTP_INTERNAL_SERVER_ERROR;
 	}
 
-	ngx_memcpy(encryption_key, submodule_context->request_params.suburis->encryption_key, BUFFER_CACHE_KEY_SIZE);
+	ngx_memcpy(encryption_key, submodule_context->media_set.sequences[0].encryption_key, BUFFER_CACHE_KEY_SIZE);
 
 	response->data = encryption_key;
 	response->len = BUFFER_CACHE_KEY_SIZE;
@@ -255,7 +247,7 @@ ngx_http_vod_hls_init_frame_processor(
 		&submodule_context->conf->hls.muxer_config,
 		&encryption_params,
 		submodule_context->request_params.segment_index,
-		&submodule_context->mpeg_metadata,
+		&submodule_context->media_set,
 		read_cache_state,
 		segment_writer->write_tail,
 		segment_writer->context,
@@ -269,7 +261,11 @@ ngx_http_vod_hls_init_frame_processor(
 
 	if (simulation_supported)
 	{
-		*response_size = hls_muxer_simulate_get_segment_size(state);
+		rc = hls_muxer_simulate_get_segment_size(state, response_size);
+		if (rc != VOD_OK)
+		{
+			return ngx_http_vod_status_to_ngx_error(rc);
+		}
 		hls_muxer_simulation_reset(state);
 	}
 
@@ -285,48 +281,38 @@ ngx_http_vod_hls_init_frame_processor(
 static const ngx_http_vod_request_t hls_master_request = {
 	0,
 	PARSE_FLAG_TOTAL_SIZE_ESTIMATE | PARSE_FLAG_CODEC_NAME,
-	NULL,
-	0,
 	REQUEST_CLASS_OTHER,
 	ngx_http_vod_hls_handle_master_playlist,
 	NULL,
 };
 
 static const ngx_http_vod_request_t hls_index_request = {
-	REQUEST_FLAG_SINGLE_STREAM_PER_MEDIA_TYPE,
+	REQUEST_FLAG_SINGLE_TRACK_PER_MEDIA_TYPE,
 	PARSE_BASIC_METADATA_ONLY,
-	NULL,
-	0,
 	REQUEST_CLASS_MANIFEST,
 	ngx_http_vod_hls_handle_index_playlist,
 	NULL,
 };
 
 static const ngx_http_vod_request_t hls_iframes_request = {
-	REQUEST_FLAG_SINGLE_STREAM_PER_MEDIA_TYPE,
+	REQUEST_FLAG_SINGLE_TRACK_PER_MEDIA_TYPE,
 	PARSE_FLAG_FRAMES_ALL_EXCEPT_OFFSETS | PARSE_FLAG_PARSED_EXTRA_DATA_SIZE,
-	NULL,
-	0,
 	REQUEST_CLASS_OTHER,
 	ngx_http_vod_hls_handle_iframe_playlist,
 	NULL,
 };
 
 static const ngx_http_vod_request_t hls_enc_key_request = {
-	REQUEST_FLAG_SINGLE_STREAM_PER_MEDIA_TYPE,
+	REQUEST_FLAG_SINGLE_TRACK_PER_MEDIA_TYPE,
 	PARSE_BASIC_METADATA_ONLY,
-	NULL,
-	0,
 	REQUEST_CLASS_OTHER,
 	ngx_http_vod_hls_handle_encryption_key,
 	NULL,
 };
 
 static const ngx_http_vod_request_t hls_segment_request = {
-	REQUEST_FLAG_SINGLE_STREAM_PER_MEDIA_TYPE,
+	REQUEST_FLAG_SINGLE_TRACK_PER_MEDIA_TYPE,
 	PARSE_FLAG_FRAMES_ALL | PARSE_FLAG_PARSED_EXTRA_DATA,
-	NULL,
-	0,
 	REQUEST_CLASS_SEGMENT,
 	NULL,
 	ngx_http_vod_hls_init_frame_processor,
@@ -395,7 +381,8 @@ ngx_http_vod_hls_parse_uri_file_name(
 	ngx_http_vod_loc_conf_t *conf,
 	u_char* start_pos,
 	u_char* end_pos,
-	ngx_http_vod_request_params_t* request_params)
+	request_params_t* request_params,
+	const ngx_http_vod_request_t** request)
 {
 	bool_t expect_segment_index;
 	ngx_int_t rc;
@@ -405,7 +392,7 @@ ngx_http_vod_hls_parse_uri_file_name(
 	{
 		start_pos += conf->hls.m3u8_config.segment_file_name_prefix.len;
 		end_pos -= (sizeof(ts_file_ext) - 1);
-		request_params->request = &hls_segment_request;
+		*request = &hls_segment_request;
 		expect_segment_index = TRUE;
 	}
 	// manifest
@@ -416,17 +403,17 @@ ngx_http_vod_hls_parse_uri_file_name(
 		// make sure the file name begins with 'index' or 'iframes'
 		if (ngx_http_vod_starts_with(start_pos, end_pos, &conf->hls.m3u8_config.index_file_name_prefix))
 		{
-			request_params->request = &hls_index_request;
+			*request = &hls_index_request;
 			start_pos += conf->hls.m3u8_config.index_file_name_prefix.len;
 		}
 		else if (ngx_http_vod_starts_with(start_pos, end_pos, &conf->hls.iframes_file_name_prefix))
 		{
-			request_params->request = &hls_iframes_request;
+			*request = &hls_iframes_request;
 			start_pos += conf->hls.iframes_file_name_prefix.len;
 		}
 		else if (ngx_http_vod_starts_with(start_pos, end_pos, &conf->hls.master_file_name_prefix))
 		{
-			request_params->request = &hls_master_request;
+			*request = &hls_master_request;
 			start_pos += conf->hls.master_file_name_prefix.len;
 		}
 		else
@@ -443,7 +430,7 @@ ngx_http_vod_hls_parse_uri_file_name(
 	{
 		start_pos += conf->hls.m3u8_config.encryption_key_file_name.len;
 		end_pos -= (sizeof(key_file_ext) - 1);
-		request_params->request = &hls_enc_key_request;
+		*request = &hls_enc_key_request;
 		expect_segment_index = FALSE;
 	}
 	else

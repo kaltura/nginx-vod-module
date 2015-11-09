@@ -5,12 +5,14 @@
 
 * On-the-fly repackaging of MP4 files to DASH, HDS, HLS, MSS
 
-* Adaptive bitrate support
-
 * Working modes:
   1. Local - serve locally accessible files (local disk/NFS mounted)
   2. Remote - serve files accessible via HTTP using range requests
   3. Mapped - perform an HTTP request to map the input URI to a locally accessible file
+
+* Adaptive bitrate support
+
+* Playlist support (playing several different media files one after the other) - mapped mode only
 
 * Fallback support for file not found in local/mapped modes (useful in multi-datacenter environments)
   
@@ -93,7 +95,7 @@ baseurl = http://installrepo.kaltura.org/releases/latest/RPMS/$basearch/
 #### Debian/Ubuntu deb package
 ```
 # wget -O - http://installrepo.kaltura.org/repo/apt/debian/kaltura-deb.gpg.key|apt-key add -
-# echo "deb http://installrepo.kaltura.org/repo/apt/debian jupiter main" > /etc/apt/sources.list.d/kaltura.list
+# echo "deb [arch=amd64] http://installrepo.kaltura.org/repo/apt/debian kajam main" > /etc/apt/sources.list.d/kaltura.list
 # apt-get update
 # apt-get install kaltura-nginx
 ```
@@ -161,6 +163,204 @@ Where:
 	For example, manifest-a1.f4m will return an F4M containing only the first audio stream.
 	The default is to include the first audio and first video tracks of each file.
 	The tracks selected on the file name are AND-ed with the tracks selected with the /tracks/ path parameter.
+
+### Mapping response format
+
+When configured to run in mapped mode, nginx-vod-module issues an HTTP request to a configured upstream server 
+in order to receive the layout of media streams it should generate.
+The response has to be in JSON format, this section contains are a few simple examples followed by a reference 
+of the supported objects and fields.
+
+But first, a couple of definitions:
+1. `Source Clip` - a set of audio and/or video frames (tracks) extracted from a single media file
+2. `Filter` - a manipulation that can be applied on audio/video frames. The following filters are supported: 
+  * rate (speed) change - applies to both audio and video
+  * audio volume change
+  * mix - can be used to merge several audio tracks together, or to merge the audio of source A with the video of source B
+2. `Clip` - the result of applying zero or more filters on a set of source clips
+3. `Sequence` - a set of clips that should be played one after the other. 
+4. `Set` - several sequences that play together as an adaptive set, each sequence must have the same number of clips.
+
+#### Simple mapping
+
+The JSON below maps the request URI to a single MP4 file:
+```
+{
+	"sequences" : [
+		{
+			"clips": [
+				{
+					"type": "source",
+					"path": "/path/to/video.mp4"
+				}
+			]
+		}
+	]
+}
+```
+
+When using multi URLs, this is the only allowed JSON pattern. In other words, it is not
+possible to combine more complex JSONs using multi URL.
+
+#### Adaptive set
+
+As an alternative to using multi URL, an adaptive set can be defined via JSON:
+```
+{
+	"sequences" : [
+		{
+			"clips": [
+				{
+					"type": "source",
+					"path": "/path/to/bitrate1.mp4"
+				}
+			]
+		},
+		{
+			"clips": [
+				{
+					"type": "source",
+					"path": "/path/to/bitrate2.mp4"
+				}
+			]
+		}
+	]
+}
+```
+
+#### Playlist
+
+The JSON below will play 35 seconds of video1 followed by 22 seconds of video2:
+```
+{
+	"durations" : [ 35000, 22000 ],
+	"sequences" : [
+		{
+			"clips": [
+				{
+					"type": "source",
+					"path": "/path/to/video1.mp4"
+				},
+				{
+					"type": "source",
+					"path": "/path/to/video2.mp4"
+				}
+			]
+		}
+	]
+}
+```
+
+#### Filters
+
+The JSON below takes video1, plays it at x1.5 and mixes the audio of the result with the audio of video2,
+after reducing it to 50% volume:
+```
+{
+	"sequences" : [
+		{
+			"clips": [
+				{
+					"type": "mixFilter",
+					"sources": [
+						{
+							"type": "rateFilter",
+							"rate": 1.5,
+							"source": {
+								"type": "source",
+								"path": "/path/to/video1.mp4"
+							}
+						},
+						{
+							"type": "gainFilter",
+							"gain": 0.5,
+							"source": {
+								"type": "source",
+								"path": "/path/to/video2.mp4",
+								"tracks": "a1"
+							}
+						}
+					]
+				}
+			]
+		}
+	]
+}
+```
+
+### Mapping reference
+
+#### Set (top level object in the mapping JSON)
+
+Mandatory fields:
+* `sequences` - array of Sequence objects. 
+	The mapping has to contain at least one sequence and up to 32 sequences.
+	
+Optional fields:
+* `durations` - an array of integers representing clip durations in milliseconds.
+	This field is mandatory if the mapping contains more than a single clip per sequence.
+	If specified, this array must contain at least one element and up to 128 elements.
+* `discontinuity` - boolean, indicates whether the different clips in each sequence have
+	different media parameters. This field has different manifestations according to the 
+	delivery protocol - a value of true will generate `#EXT-X-DISCONTINUITY` in HLS, 
+	and a multi period MPD in DASH. The default value is true, set to false only if the media
+	files were transcoded with exactly the same parameters (in AVC for example, 
+	the clips should have exactly the same SPS/PPS).
+* `consistentSequenceMediaInfo` - boolean, currently affects only DASH. When set to true (default)
+	the MPD will report the same media parameters in each period element. Setting to false
+	can have severe performance implications for long sequences (nginx-vod-module has 
+	to read the media info of all clips included in the mapping in order to generate the MPD)
+	
+#### Sequence
+
+Mandatory fields:
+* `clips` - array of Clip objects (mandatory). The number of elements must match the number
+	the durations array specified on the set. If the durations array is not specified,
+	the clips array must contain a single element.
+	
+#### Clip (abstract)
+
+Mandatory fields:
+* `type` - a string that defines the type of the clip. Allowed values are:
+	* source
+	* rateFilter
+	* mixFilter
+	* gainFilter
+	
+#### Source clip
+
+Mandatory fields:
+* `type` - a string with the value `source`
+* `path` - a string containing the path of the MP4 file
+
+Optional fields:
+* `tracks` - a string that specifies the tracks that should be used, the default is "v1-a1",
+	which means the first video track and the first audio track
+* `clipFrom` - an integer that specifies an offset in milliseconds, from the beginning of the 
+	media file, from which to start loading frames
+	
+#### Rate filter clip
+
+Mandatory fields:
+* `type` - a string with the value `rateFilter`
+* `rate` - a float that specified the acceleration factor, e.g. a value of 2 means double speed.
+	Allowed values are in the range 0.5 - 2 with up to two decimal points
+* `source` - a clip object on which to perform the rate filtering
+
+#### Gain filter clip
+
+Mandatory fields:
+* `type` - a string with the value `gainFilter`
+* `gain` - a float that specified the amplification factor, e.g. a value of 2 means twice as loud.
+	The gain must be positive with up to two decimal points
+* `source` - a clip object on which to perform the gain filtering
+
+#### Mix filter clip
+
+Mandatory fields:
+* `type` - a string with the value `mixFilter`
+* `sources` - an array of Clip objects to mix. This array must contain at least one clip and
+	up to 32 clips.
 
 ### DRM
 

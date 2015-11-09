@@ -4,22 +4,21 @@
 // includes
 #include "common.h"
 
-// constants
-#define CACHED_BUFFERS (2)
-
 // typedefs
 typedef struct {
 	u_char* buffer;
-	uint32_t buffer_size;
-	uint32_t file_index;
+	uint32_t buffer_size;		// size of data read
+	void* source;				// opaque context that indicates from where the buffer should be read
 	uint64_t start_offset;
 	uint64_t end_offset;
 } cache_buffer_t;
 
 typedef struct {
 	request_context_t* request_context;
-	cache_buffer_t buffers[CACHED_BUFFERS];
+	cache_buffer_t* buffers;
+	cache_buffer_t* buffers_end;
 	cache_buffer_t* target_buffer;
+	size_t buffer_count;
 	size_t buffer_size;
 	size_t alignment;
 } read_cache_state_t;
@@ -31,11 +30,15 @@ void read_cache_init(
 	size_t buffer_size, 
 	size_t alignment);
 	
+vod_status_t read_cache_allocate_buffer_slots(
+	read_cache_state_t* state,
+	size_t buffer_count);
+
 bool_t read_cache_get_from_cache(
 	read_cache_state_t* state, 
 	uint32_t frame_size_left, 
 	int cache_slot_id, 
-	uint32_t file_index, 
+	void* source,
 	uint64_t offset, 
 	u_char** buffer, 
 	uint32_t* size);
@@ -45,8 +48,8 @@ void read_cache_disable_buffer_reuse(
 
 vod_status_t read_cache_get_read_buffer(
 	read_cache_state_t* state, 
-	uint32_t* file_index,
-	uint64_t* out_offset, 
+	void** source,
+	uint64_t* out_offset,
 	u_char** buffer, 
 	uint32_t* size);
 	
