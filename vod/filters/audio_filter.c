@@ -766,7 +766,7 @@ audio_filter_alloc_state(
 	rc = audio_filter_init_sink(
 		request_context,
 		state->filter_graph,
-		state->output,
+		output_track,
 		filter_name,
 		&state->sink,
 		&inputs);

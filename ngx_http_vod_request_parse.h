@@ -53,7 +53,8 @@ bool_t ngx_http_vod_split_uri_file_name(
 
 ngx_int_t ngx_http_vod_parse_uri_path(
 	ngx_http_request_t* r,
-	struct ngx_http_vod_loc_conf_s* conf,
+	ngx_str_t* multi_uri_suffix,
+	ngx_hash_t* params_hash,
 	ngx_str_t* uri,
 	request_params_t* request_params,
 	media_set_t* media_set);

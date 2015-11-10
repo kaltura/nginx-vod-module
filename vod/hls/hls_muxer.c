@@ -114,6 +114,7 @@ hls_muxer_init(
 	state->clips_start = media_set->sequences[0].filtered_clips;
 	state->clips_end = media_set->sequences[0].filtered_clips_end;
 	state->cur_clip = media_set->sequences[0].filtered_clips + 1;
+	state->use_discontinuity = media_set->use_discontinuity;
 
 	if (encryption_params->type == HLS_ENC_AES_128)
 	{
@@ -361,6 +362,11 @@ hls_muxer_choose_stream(hls_muxer_state_t* state, hls_muxer_stream_state_t** res
 		if (rc != VOD_OK)
 		{
 			return rc;
+		}
+
+		if (state->use_discontinuity)
+		{
+			break;
 		}
 	}
 

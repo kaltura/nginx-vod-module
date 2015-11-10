@@ -199,6 +199,13 @@ mss_packager_build_manifest(
 	size_t result_size;
 	u_char* p;
 
+	if (media_set->use_discontinuity)
+	{
+		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+			"mss_packager_build_manifest: discontinuity is not supported in MSS");
+		return VOD_BAD_MAPPING;
+	}
+
 	// calculate the result size
 	result_size = 
 		sizeof(MSS_MANIFEST_HEADER) - 1 + VOD_INT64_LEN + 

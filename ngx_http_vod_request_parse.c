@@ -10,6 +10,7 @@ typedef ngx_int_t(*ngx_http_vod_param_parser_t)(ngx_str_t* value, void* output, 
 
 typedef struct {
 	int name_conf_offset;
+	char* name;
 	ngx_http_vod_param_parser_t parser;
 	int target_offset;
 } ngx_http_vod_uri_param_def_t;
@@ -361,41 +362,99 @@ ngx_http_vod_parse_tracks_param(ngx_str_t* value, void* output, int offset)
 }
 
 static ngx_http_vod_uri_param_def_t uri_param_defs[] = {
-	{ offsetof(ngx_http_vod_loc_conf_t, clip_to_param_name), ngx_http_vod_parse_uint32_param, offsetof(media_clip_source_t, clip_to) },
-	{ offsetof(ngx_http_vod_loc_conf_t, clip_from_param_name), ngx_http_vod_parse_uint32_param, offsetof(media_clip_source_t, clip_from) },
-	{ offsetof(ngx_http_vod_loc_conf_t, tracks_param_name), ngx_http_vod_parse_tracks_param, offsetof(media_clip_source_t, tracks_mask) },
-	{ offsetof(ngx_http_vod_loc_conf_t, speed_param_name), NULL, 0 },
+	{ offsetof(ngx_http_vod_loc_conf_t, clip_to_param_name), "clip to", ngx_http_vod_parse_uint32_param, offsetof(media_clip_source_t, clip_to) },
+	{ offsetof(ngx_http_vod_loc_conf_t, clip_from_param_name), "clip from", ngx_http_vod_parse_uint32_param, offsetof(media_clip_source_t, clip_from) },
+	{ offsetof(ngx_http_vod_loc_conf_t, tracks_param_name), "tracks", ngx_http_vod_parse_tracks_param, offsetof(media_clip_source_t, tracks_mask) },
+	{ offsetof(ngx_http_vod_loc_conf_t, speed_param_name), "speed", NULL, 0 },
+	{ -1, NULL, NULL, 0}
 };
+
+static ngx_http_vod_uri_param_def_t pd_uri_param_defs[] = {
+	{ offsetof(ngx_http_vod_loc_conf_t, clip_to_param_name), "clip to", ngx_http_vod_parse_uint32_param, offsetof(media_clip_source_t, clip_to) },
+	{ offsetof(ngx_http_vod_loc_conf_t, clip_from_param_name), "clip from", ngx_http_vod_parse_uint32_param, offsetof(media_clip_source_t, clip_from) },
+	{ -1, NULL, NULL, 0 }
+};
+
+static ngx_int_t
+ngx_http_vod_init_hash(
+	ngx_conf_t *cf, 
+	ngx_http_vod_uri_param_def_t* elements,
+	ngx_http_vod_loc_conf_t* conf, 
+	char* hash_name, 
+	ngx_hash_t* output)
+{
+	ngx_http_vod_uri_param_def_t *element;
+	ngx_array_t elements_arr;
+	ngx_hash_key_t *hash_key;
+	ngx_hash_init_t hash;
+	ngx_str_t* cur_key;
+
+	if (ngx_array_init(&elements_arr, cf->temp_pool, 32, sizeof(ngx_hash_key_t)) != NGX_OK)
+	{
+		return NGX_ERROR;
+	}
+
+	for (element = elements; element->name_conf_offset >= 0; element++)
+	{
+		cur_key = (ngx_str_t*)((u_char*)conf + element->name_conf_offset);
+		if (cur_key->len == 0)
+		{
+			break;
+		}
+
+		hash_key = ngx_array_push(&elements_arr);
+		if (hash_key == NULL)
+		{
+			return NGX_ERROR;
+		}
+
+		hash_key->key = *cur_key;
+		hash_key->key_hash = ngx_hash_key_lc(cur_key->data, cur_key->len);
+		hash_key->value = element;
+	}
+
+	hash.hash = output;
+	hash.key = ngx_hash_key_lc;
+	hash.max_size = 512;
+	hash.bucket_size = ngx_align(64, ngx_cacheline_size);
+	hash.name = hash_name;
+	hash.pool = cf->pool;
+	hash.temp_pool = NULL;
+
+	if (ngx_hash_init(&hash, elements_arr.elts, elements_arr.nelts) != NGX_OK)
+	{
+		return NGX_ERROR;
+	}
+
+	return NGX_OK;
+}
 
 ngx_int_t
 ngx_http_vod_init_uri_params_hash(ngx_conf_t *cf, ngx_http_vod_loc_conf_t* conf)
 {
-	ngx_hash_key_t hash_keys[sizeof(uri_param_defs) / sizeof(uri_param_defs[0])];
-	ngx_hash_init_t hash;
-	ngx_str_t* param_name;
 	ngx_int_t rc;
-	unsigned i;
 
-	for (i = 0; i < sizeof(hash_keys) / sizeof(hash_keys[0]); i++)
-	{
-		param_name = (ngx_str_t*)((u_char*)conf + uri_param_defs[i].name_conf_offset);
-		hash_keys[i].key = *param_name;
-		hash_keys[i].key_hash = ngx_hash_key_lc(param_name->data, param_name->len);
-		hash_keys[i].value = &uri_param_defs[i];
-	}
-
-	hash.hash = &conf->uri_params_hash;
-	hash.key = ngx_hash_key;
-	hash.max_size = 512;
-	hash.bucket_size = ngx_align(64, ngx_cacheline_size);
-	hash.name = "uri_params_hash";
-	hash.pool = cf->pool;
-	hash.temp_pool = NULL;
-
-	rc = ngx_hash_init(&hash, hash_keys, sizeof(hash_keys) / sizeof(hash_keys[0]));
+	rc = ngx_http_vod_init_hash(
+		cf,
+		uri_param_defs,
+		conf,
+		"uri_params_hash",
+		&conf->uri_params_hash);
 	if (rc != NGX_OK)
 	{
-		ngx_conf_log_error(NGX_LOG_EMERG, cf, 0, "ngx_hash_init failed %i", rc);
+		ngx_conf_log_error(NGX_LOG_EMERG, cf, 0, "failed to initialize uri params hash");
+		return rc;
+	}
+
+	rc = ngx_http_vod_init_hash(
+		cf,
+		pd_uri_param_defs,
+		conf,
+		"pd_uri_params_hash",
+		&conf->pd_uri_params_hash);
+	if (rc != NGX_OK)
+	{
+		ngx_conf_log_error(NGX_LOG_EMERG, cf, 0, "failed to initialize progressive download uri params hash");
 		return rc;
 	}
 
@@ -405,7 +464,7 @@ ngx_http_vod_init_uri_params_hash(ngx_conf_t *cf, ngx_http_vod_loc_conf_t* conf)
 static ngx_int_t
 ngx_http_vod_extract_uri_params(
 	ngx_http_request_t* r,
-	ngx_http_vod_loc_conf_t* conf,
+	ngx_hash_t* params_hash,
 	ngx_str_t* uri,
 	media_sequence_t* sequence,
 	uint32_t* clip_id,
@@ -476,7 +535,7 @@ ngx_http_vod_extract_uri_params(
 
 		if (param_def == NULL)
 		{
-			param_def = ngx_hash_find(&conf->uri_params_hash, cur_key_hash, param_name, param_name_pos - param_name);
+			param_def = ngx_hash_find(params_hash, cur_key_hash, param_name, param_name_pos - param_name);
 			if (param_def != NULL)
 			{
 				p = ngx_copy(p, copy_start, last_slash - copy_start);
@@ -516,8 +575,7 @@ ngx_http_vod_extract_uri_params(
 					if (rc != NGX_OK)
 					{
 						ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
-							"ngx_http_vod_extract_uri_params: %V parser failed %i",
-							(ngx_str_t*)((u_char*)conf + param_def->name_conf_offset), rc);
+							"ngx_http_vod_extract_uri_params: %s parser failed %i", param_def->name, rc);
 						return rc;
 					}
 				}
@@ -550,7 +608,8 @@ ngx_http_vod_extract_uri_params(
 ngx_int_t
 ngx_http_vod_parse_uri_path(
 	ngx_http_request_t* r,
-	ngx_http_vod_loc_conf_t* conf,
+	ngx_str_t* multi_uri_suffix,
+	ngx_hash_t* params_hash,
 	ngx_str_t* uri,
 	request_params_t* request_params,
 	media_set_t* media_set)
@@ -570,7 +629,7 @@ ngx_http_vod_parse_uri_path(
 	uint32_t i;
 	int uri_count;
 
-	rc = ngx_http_vod_parse_multi_uri(r, uri, &conf->multi_uri_suffix, &multi_uri);
+	rc = ngx_http_vod_parse_multi_uri(r, uri, multi_uri_suffix, &multi_uri);
 	if (rc != NGX_OK)
 	{
 		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
@@ -634,7 +693,7 @@ ngx_http_vod_parse_uri_path(
 			return rc;
 		}
 
-		rc = ngx_http_vod_extract_uri_params(r, conf, &cur_uri, cur_sequence, &clip_id, cur_source, &cur_clip);
+		rc = ngx_http_vod_extract_uri_params(r, params_hash, &cur_uri, cur_sequence, &clip_id, cur_source, &cur_clip);
 		if (rc != NGX_OK)
 		{
 			ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,

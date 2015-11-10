@@ -599,6 +599,7 @@ media_set_parse_json(
 	request_params_t* request_params,
 	segmenter_conf_t* segmenter,
 	vod_str_t* uri,
+	bool_t parse_all_clips,
 	media_set_t* result)
 {
 	media_set_parse_context_t context;
@@ -747,8 +748,9 @@ media_set_parse_json(
 			else
 			{
 				// clip index not specified on the request
-				if (params[MEDIA_SET_PARAM_CONSISTENT_SEQUENCE_MEDIA_INFO] != NULL &&
-					!params[MEDIA_SET_PARAM_CONSISTENT_SEQUENCE_MEDIA_INFO]->v.boolean)
+				if (parse_all_clips ||
+					(params[MEDIA_SET_PARAM_CONSISTENT_SEQUENCE_MEDIA_INFO] != NULL &&
+					!params[MEDIA_SET_PARAM_CONSISTENT_SEQUENCE_MEDIA_INFO]->v.boolean))
 				{
 					// parse all clips
 					context.clip_ranges.clip_count = result->total_clip_count;
@@ -786,6 +788,13 @@ media_set_parse_json(
 		context.clip_ranges.min_clip_index = 0;
 		context.clip_ranges.max_clip_index = 0;
 		context.clip_ranges.initial_sequence_offset = 0;
+	}
+
+	if (context.clip_ranges.clip_count > MAX_CLIPS_PER_REQUEST)
+	{
+		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+			"media_set_parse_json: clip count %uD exceeds the limit per request", context.clip_ranges.clip_count);
+		return VOD_BAD_REQUEST;
 	}
 
 	result->clip_count = context.clip_ranges.clip_count;

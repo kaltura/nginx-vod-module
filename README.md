@@ -168,9 +168,9 @@ Where:
 
 When configured to run in mapped mode, nginx-vod-module issues an HTTP request to a configured upstream server 
 in order to receive the layout of media streams it should generate.
-The response has to be in JSON format, this section contains are a few simple examples followed by a reference 
-of the supported objects and fields.
+The response has to be in JSON format. 
 
+This section contains a few simple examples followed by a reference of the supported objects and fields. 
 But first, a couple of definitions:
 
 1. `Source Clip` - a set of audio and/or video frames (tracks) extracted from a single media file

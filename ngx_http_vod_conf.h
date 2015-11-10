@@ -65,6 +65,7 @@ struct ngx_http_vod_loc_conf_s {
 	// derived fields
 	ngx_str_t proxy_header;
 	ngx_hash_t uri_params_hash;
+	ngx_hash_t pd_uri_params_hash;
 
 	// submodules
 	ngx_http_vod_dash_loc_conf_t dash;

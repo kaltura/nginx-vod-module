@@ -78,6 +78,7 @@ typedef struct {
 	media_clip_filtered_t* clips_start;
 	media_clip_filtered_t* clips_end;
 	media_clip_filtered_t* cur_clip;
+	bool_t use_discontinuity;
 
 	// cur frame state
 	input_frame_t* cur_frame;

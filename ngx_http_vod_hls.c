@@ -296,7 +296,7 @@ static const ngx_http_vod_request_t hls_index_request = {
 
 static const ngx_http_vod_request_t hls_iframes_request = {
 	REQUEST_FLAG_SINGLE_TRACK_PER_MEDIA_TYPE,
-	PARSE_FLAG_FRAMES_ALL_EXCEPT_OFFSETS | PARSE_FLAG_PARSED_EXTRA_DATA_SIZE,
+	PARSE_FLAG_FRAMES_ALL_EXCEPT_OFFSETS | PARSE_FLAG_PARSED_EXTRA_DATA_SIZE | PARSE_FLAG_ALL_CLIPS,
 	REQUEST_CLASS_OTHER,
 	ngx_http_vod_hls_handle_iframe_playlist,
 	NULL,

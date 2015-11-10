@@ -14,6 +14,7 @@
 #define MEDIA_CLIP_KEY_SIZE (16)
 
 #define MAX_CLIPS (128)
+#define MAX_CLIPS_PER_REQUEST (16)
 #define MAX_SEQUENCES (32)
 #define MAX_SOURCES (32)
 

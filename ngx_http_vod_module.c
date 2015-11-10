@@ -107,7 +107,6 @@ struct ngx_http_vod_ctx_s {
 	void* frame_processor_state;
 	ngx_chain_t out;
 	ngx_http_vod_write_segment_context_t write_segment_buffer_context;
-	void* filter_state;
 };
 
 // forward declarations
@@ -1799,7 +1798,7 @@ ngx_http_vod_run_state_machine(ngx_http_vod_ctx_t *ctx)
 				&ctx->submodule_context.request_context,
 				&ctx->read_cache_state,
 				&ctx->submodule_context.media_set, 
-				&ctx->filter_state);
+				&ctx->frame_processor_state);
 			if (rc != VOD_OK)
 			{
 				ngx_log_debug1(NGX_LOG_DEBUG_HTTP, ctx->submodule_context.request_context.log, 0,
@@ -1807,7 +1806,6 @@ ngx_http_vod_run_state_machine(ngx_http_vod_ctx_t *ctx)
 				return ngx_http_vod_status_to_ngx_error(rc);
 			}
 
-			ctx->frame_processor_state = &ctx->filter_state;
 			ctx->frame_processor = filter_run_state_machine;
 		}
 
@@ -2420,9 +2418,11 @@ ngx_http_vod_apply_mapping(ngx_http_vod_ctx_t *ctx, ngx_str_t* mapping)
 {
 	ngx_http_vod_loc_conf_t* conf = ctx->submodule_context.conf;
 	media_clip_source_t *cur_source = *ctx->submodule_context.cur_source;
+	media_clip_source_t* mapped_source;
 	media_set_t mapped_media_set;
 	ngx_str_t path;
 	ngx_int_t rc;
+	bool_t parse_all_clips;
 
 	// optimization for the case of simple mapping response
 	if (mapping->len >= conf->path_response_prefix.len + conf->path_response_postfix.len &&
@@ -2469,12 +2469,15 @@ ngx_http_vod_apply_mapping(ngx_http_vod_ctx_t *ctx, ngx_str_t* mapping)
 
 	// TODO: in case the new media set may replace the existing one, propagate clip from, clip to, rate
 
+	parse_all_clips = ctx->submodule_context.request != NULL ? (ctx->submodule_context.request->parse_type & PARSE_FLAG_ALL_CLIPS) : 0;
+
 	rc = media_set_parse_json(
 		&ctx->submodule_context.request_context,
 		mapping->data,
 		&ctx->submodule_context.request_params,
 		&ctx->submodule_context.conf->segmenter,
 		&cur_source->uri,
+		parse_all_clips,
 		&mapped_media_set);
 
 	if (rc == VOD_NOT_FOUND)
@@ -2499,11 +2502,28 @@ ngx_http_vod_apply_mapping(ngx_http_vod_ctx_t *ctx, ngx_str_t* mapping)
 		mapped_media_set.durations == NULL &&
 		mapped_media_set.sequences[0].clips[0]->type == MEDIA_CLIP_SOURCE)
 	{
-		// mapping result is a simple file path, set the uri of the current source
-		cur_source->sequence->mapped_uri = mapped_media_set.sources[0]->mapped_uri;
-		cur_source->mapped_uri = mapped_media_set.sources[0]->mapped_uri;
+		mapped_source = (media_clip_source_t*)*mapped_media_set.sequences[0].clips;
+
+		if (mapped_source->clip_from == 0 &&
+			mapped_source->clip_to == UINT_MAX &&
+			mapped_source->tracks_mask[MEDIA_TYPE_AUDIO] == 0xffffffff &&
+			mapped_source->tracks_mask[MEDIA_TYPE_VIDEO] == 0xffffffff)
+		{
+			// mapping result is a simple file path, set the uri of the current source
+			cur_source->sequence->mapped_uri = mapped_source->mapped_uri;
+			cur_source->mapped_uri = mapped_source->mapped_uri;
+			return NGX_OK;
+		}
 	}
-	else if (ctx->submodule_context.media_set.sequence_count == 1 &&
+
+	if (ctx->submodule_context.request == NULL)
+	{
+		ngx_log_error(NGX_LOG_ERR, ctx->submodule_context.request_context.log, 0,
+			"ngx_http_vod_apply_mapping: unsupported - non-trivial mapping in progressive download");
+		return NGX_HTTP_BAD_REQUEST;
+	}
+
+	if (ctx->submodule_context.media_set.sequence_count == 1 &&
 		ctx->submodule_context.media_set.sequences[0].clips[0]->type == MEDIA_CLIP_SOURCE)
 	{
 		// media set was a single source, replace it with the mapping result
@@ -2511,16 +2531,14 @@ ngx_http_vod_apply_mapping(ngx_http_vod_ctx_t *ctx, ngx_str_t* mapping)
 
 		// cur_source is pointing to the old media set, move it to the end of the new one
 		ctx->submodule_context.cur_source = mapped_media_set.sources_end;
-	}
-	else
-	{
-		ngx_log_error(NGX_LOG_ERR, ctx->submodule_context.request_context.log, 0,
-			"ngx_http_vod_apply_mapping: unsupported - multi uri request %V did not return a simple json",
-			&cur_source->stripped_uri);
-		return NGX_HTTP_BAD_REQUEST;
+
+		return NGX_OK;
 	}
 
-	return NGX_OK;
+	ngx_log_error(NGX_LOG_ERR, ctx->submodule_context.request_context.log, 0,
+		"ngx_http_vod_apply_mapping: unsupported - multi uri/filtered request %V did not return a simple json",
+		&cur_source->stripped_uri);
+	return NGX_HTTP_BAD_REQUEST;
 }
 
 static ngx_int_t
@@ -2930,7 +2948,13 @@ ngx_http_vod_parse_uri(
 		return rc;
 	}
 
-	rc = ngx_http_vod_parse_uri_path(r, conf, &uri_path, request_params, media_set);
+	rc = ngx_http_vod_parse_uri_path(
+		r, 
+		&conf->multi_uri_suffix, 
+		&conf->uri_params_hash, 
+		&uri_path, 
+		request_params, 
+		media_set);
 	if (rc != NGX_OK)
 	{
 		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
@@ -3009,7 +3033,6 @@ ngx_http_vod_handler(ngx_http_request_t *r)
 	// parse the uri
 	ngx_memzero(&request_params, sizeof(request_params));
 	ngx_memzero(&media_set, sizeof(media_set));
-	request = NULL;
 	if (conf->submodule.parse_uri_file_name != NULL)
 	{
 		rc = ngx_http_vod_parse_uri(r, conf, &request_params, &media_set, &request);
@@ -3022,11 +3045,18 @@ ngx_http_vod_handler(ngx_http_request_t *r)
 	}
 	else
 	{
+		request = NULL;
 		request_params.sequences_mask = 1;
 		request_params.tracks_mask[MEDIA_TYPE_VIDEO] = 0xffffffff;
 		request_params.tracks_mask[MEDIA_TYPE_AUDIO] = 0xffffffff;
 
-		rc = ngx_http_vod_parse_uri_path(r, conf, &r->uri, &request_params, &media_set);
+		rc = ngx_http_vod_parse_uri_path(
+			r, 
+			&conf->multi_uri_suffix, 
+			&conf->pd_uri_params_hash, 
+			&r->uri, 
+			&request_params, 
+			&media_set);
 		if (rc != NGX_OK)
 		{
 			ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,

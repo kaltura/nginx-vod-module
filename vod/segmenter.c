@@ -827,6 +827,18 @@ segmenter_get_segment_durations_accurate(
 		return VOD_UNEXPECTED;
 	}
 
+	if (main_track->media_info.media_type == MEDIA_TYPE_AUDIO && media_set->audio_filtering_needed)
+	{
+		// the main track is audio and the filters were not applied to it, fall back to estimate
+		return segmenter_get_segment_durations_estimate(
+			request_context,
+			conf,
+			media_set,
+			sequence,
+			media_type,
+			result);
+	}
+
 	// get the segment count
 	result->segment_count = conf->get_segment_count(conf, result->duration_millis);
 	if (result->segment_count == INVALID_SEGMENT_COUNT)
