@@ -23,6 +23,17 @@
 #define MAX_TRACK_COUNT (1024)
 #define MAX_DURATION_SEC (1000000)
 
+static uint16_t channel_config_to_channel_count[] = {
+	0, // defined in AOT Specific Config
+	1, // front - center
+	2, // front - left, front - right
+	3, // front - center, front - left, front - right
+	4, // front - center, front - left, front - right, back - center
+	5, // front - center, front - left, front - right, back - left, back - right
+	6, // front - center, front - left, front - right, back - left, back - right, LFE - channel
+	8, // front - center, front - left, front - right, side - left, side - right, back - left, back - right, LFE - channel
+};
+
 // trak atom parsing
 typedef struct {
 	atom_info_t stco;
@@ -53,10 +64,13 @@ typedef struct {
 } metadata_parse_context_t;
 
 typedef struct {
-	// input
+	// input - consistent across tracks
 	request_context_t* request_context;
 	media_info_t* media_info;
 	media_parse_params_t parse_params;
+	uint64_t clip_from;
+
+	// input - reset between tracks
 	const uint32_t* stss_start_pos;			// initialized only when aligning keyframes
 	uint32_t stss_entries;					// initialized only when aligning keyframes
 
@@ -436,13 +450,9 @@ mp4_parser_parse_stts_atom(atom_info_t* atom_info, frames_parse_context_t* conte
 
 		context->clip_from_frame_offset = clip_from_accum_duration - clip_from;
 	}
-	else
-	{
-		clip_from = 0;
-	}
 
 	// skip to the sample containing the start time
-	start_time = ((range->start * timescale) / range->timescale) + clip_from;
+	start_time = ((range->start + context->clip_from) * timescale) / range->timescale;
 
 	for (;;)
 	{
@@ -550,7 +560,7 @@ mp4_parser_parse_stts_atom(atom_info_t* atom_info, frames_parse_context_t* conte
 	}
 	else
 	{
-		end_time = ((range->end * timescale) / range->timescale) + clip_from;
+		end_time = ((range->end + context->clip_from) * timescale) / range->timescale;
 
 		if (entries == 1)
 		{
@@ -717,6 +727,7 @@ mp4_parser_parse_stts_atom(atom_info_t* atom_info, frames_parse_context_t* conte
 		{
 			range->end = ULLONG_MAX;
 		}
+		context->clip_from = clip_from_accum_duration;
 	}
 
 	context->total_frames_duration = accum_duration - context->first_frame_time_offset;
@@ -1398,6 +1409,8 @@ mp4_parser_parse_es_descriptor(simple_read_stream_t* stream)							// ff_mp4_par
 static vod_status_t 
 mp4_parser_read_config_descriptor(metadata_parse_context_t* context, simple_read_stream_t* stream)		// ff_mp4_read_dec_config_descr
 {
+	mp4a_config_t* codec_config;
+	vod_status_t rc;
 	unsigned len;
 	int tag;
 
@@ -1416,6 +1429,21 @@ mp4_parser_read_config_descriptor(metadata_parse_context_t* context, simple_read
 		}
 		context->media_info.extra_data_size = len;
 		context->media_info.extra_data = stream->cur_pos;
+
+		codec_config = &context->media_info.u.audio.codec_config;
+		rc = codec_config_mp4a_config_parse(
+			context->request_context, 
+			context->media_info.extra_data, 
+			context->media_info.extra_data_size, 
+			codec_config);
+		if (rc != VOD_OK)
+		{
+			return rc;
+		}
+
+		vod_log_debug3(VOD_LOG_DEBUG_LEVEL, context->request_context->log, 0,
+			"mp4_parser_read_config_descriptor: codec config: object_type=%d sample_rate_index=%d channel_config=%d",
+			codec_config->object_type, codec_config->sample_rate_index, codec_config->channel_config);
 	}
 	
 	return VOD_OK;
@@ -1672,6 +1700,7 @@ mp4_parser_process_moov_atom_callback(void* ctx, atom_info_t* atom_info)
 	u_char* new_extra_data;
 	u_char* atom_data;
 	int parse_type;
+	uint8_t channel_config;
 
 	switch (atom_info->name)
 	{
@@ -1820,9 +1849,24 @@ mp4_parser_process_moov_atom_callback(void* ctx, atom_info_t* atom_info)
 		metadata_parse_context.media_info.duration = metadata_parse_context.media_info.full_duration;
 	}
 
-	// get the codec name
+	// get the parse type
 	parse_type = context->parse_params.parse_type;
 
+	if (metadata_parse_context.media_info.media_type == MEDIA_TYPE_AUDIO)
+	{
+		// always save the audio extra data to support audio filtering
+		parse_type |= PARSE_FLAG_EXTRA_DATA;
+
+		// derive the channel count from the codec config when possible
+		//	the channel count in the stsd atom is occasionally wrong
+		channel_config = metadata_parse_context.media_info.u.audio.codec_config.channel_config;
+		if (channel_config > 0 && channel_config < vod_array_entries(channel_config_to_channel_count))
+		{
+			metadata_parse_context.media_info.u.audio.channels = channel_config_to_channel_count[channel_config];
+		}
+	}
+
+	// get the codec name
 	if ((parse_type & PARSE_FLAG_CODEC_NAME) != 0)
 	{
 		metadata_parse_context.media_info.codec_name.data = vod_alloc(context->request_context->pool, MAX_CODEC_NAME_SIZE);
@@ -1853,12 +1897,6 @@ mp4_parser_process_moov_atom_callback(void* ctx, atom_info_t* atom_info)
 	}
 
 	// parse / copy the extra data
-	if (metadata_parse_context.media_info.media_type == MEDIA_TYPE_AUDIO)
-	{
-		// always parse the audio extra data to support audio filtering
-		parse_type |= PARSE_FLAG_EXTRA_DATA;
-	}
-
 	if ((parse_type & (PARSE_FLAG_EXTRA_DATA | PARSE_FLAG_EXTRA_DATA_SIZE)) != 0)
 	{
 		if ((parse_type & PARSE_FLAG_EXTRA_DATA_PARSE) != 0 && 
@@ -2122,15 +2160,20 @@ mp4_parser_parse_frames(
 		qsort(first_track, base->tracks.nelts, sizeof(*first_track), mp4_parser_compare_tracks);
 	}
 
+	// initialize the context
+	context.request_context = request_context;
+	context.parse_params = *parse_params;
+	context.clip_from = rescale_time(parse_params->clip_from, 1000, parse_params->range->timescale);
+
 	for (cur_track = first_track; cur_track < last_track; cur_track++)
 	{
 		media_type = cur_track->media_info.media_type;
 
-		// parse the rest of the trak atoms
-		vod_memzero(&context, sizeof(context));
-		context.request_context = request_context;
+		// update the media info on the context
 		context.media_info = &cur_track->media_info;
-		context.parse_params = *parse_params;
+
+		// reset the output part of the context
+		vod_memzero(&context.stss_start_pos, sizeof(context) - offsetof(frames_parse_context_t, stss_start_pos));
 
 		if (cur_track == first_track &&
 			media_type == MEDIA_TYPE_VIDEO &&

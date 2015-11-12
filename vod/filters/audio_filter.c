@@ -8,7 +8,6 @@
 #include <libavfilter/buffersink.h>
 #include <libavutil/opt.h>
 #include "rate_filter.h"
-#include "../codec_config.h"
 
 // constants
 #define ENCODER_INPUT_SAMPLE_FORMAT (AV_SAMPLE_FMT_S16)
@@ -193,20 +192,8 @@ audio_filter_init_source(
 	char filter_args[sizeof(BUFFERSRC_ARGS_FORMAT) + 4 * VOD_INT64_LEN + MAX_SAMPLE_FORMAT_NAME_LEN];
 	AVCodecContext* decoder;
 	AVFilterInOut* output_link;
-	mp4a_config_t codec_config;
-	vod_status_t rc;
+	uint8_t channel_config;
 	int avrc;
-
-	// parse the codec config
-	rc = codec_config_mp4a_config_parse(
-		request_context,
-		media_info->extra_data,
-		media_info->extra_data_size,
-		&codec_config);
-	if (rc != VOD_OK)
-	{
-		return rc;
-	}
 
 	// init the decoder	
 	decoder = avcodec_alloc_context3(decoder_codec);
@@ -229,9 +216,10 @@ audio_filter_init_source(
 	decoder->channels = media_info->u.audio.channels;
 	decoder->bits_per_coded_sample = media_info->u.audio.bits_per_sample;
 	decoder->sample_rate = media_info->u.audio.sample_rate;
-	if (codec_config.channel_config < vod_array_entries(aac_channel_layout))
+	channel_config = media_info->u.audio.codec_config.channel_config;
+	if (channel_config < vod_array_entries(aac_channel_layout))
 	{
-		decoder->channel_layout = aac_channel_layout[codec_config.channel_config];
+		decoder->channel_layout = aac_channel_layout[channel_config];
 	}
 	else
 	{
@@ -304,30 +292,19 @@ audio_filter_init_sink(
 	AVCodecContext* encoder;
 	AVFilterInOut* input_link;
 	enum AVSampleFormat out_sample_fmts[2];
-	mp4a_config_t codec_config;
 	int64_t out_channel_layouts[2];
 	uint64_t channel_layout;
-	vod_status_t rc;
+	uint8_t channel_config;
 	int out_sample_rates[2];
 	int avrc;
 
 	// Note: matching the output to some reference track, may need to change in the future
 	//		if filters such as 'join' will be added
 
-	// parse the codec config
-	rc = codec_config_mp4a_config_parse(
-		request_context,
-		reference_track->media_info.extra_data,
-		reference_track->media_info.extra_data_size,
-		&codec_config);
-	if (rc != VOD_OK)
+	channel_config = reference_track->media_info.u.audio.codec_config.channel_config;
+	if (channel_config < vod_array_entries(aac_channel_layout))
 	{
-		return rc;
-	}
-
-	if (codec_config.channel_config < vod_array_entries(aac_channel_layout))
-	{
-		channel_layout = aac_channel_layout[codec_config.channel_config];
+		channel_layout = aac_channel_layout[channel_config];
 	}
 	else
 	{

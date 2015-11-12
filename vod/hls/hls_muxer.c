@@ -40,10 +40,9 @@ hls_muxer_init_track(
 		break;
 
 	case MEDIA_TYPE_AUDIO:
-		rc = adts_encoder_set_extra_data(
+		rc = adts_encoder_set_media_info(
 			cur_stream->top_filter_context,
-			track->media_info.extra_data,
-			track->media_info.extra_data_size);
+			&track->media_info);
 		if (rc != VOD_OK)
 		{
 			return rc;

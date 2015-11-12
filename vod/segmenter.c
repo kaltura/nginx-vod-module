@@ -555,7 +555,7 @@ segmenter_get_segment_durations_estimate_internal(
 		clip_offset = 0;
 
 		// bootstrap segments
-		bootstrap_segment_limit = vod_min(clip_segment_limit, conf->bootstrap_segments_count);
+		bootstrap_segment_limit = vod_min(clip_segment_limit - 1, conf->bootstrap_segments_count);
 		for (; segment_index < bootstrap_segment_limit; segment_index++)
 		{
 			segment_duration = conf->bootstrap_segments_durations[segment_index];

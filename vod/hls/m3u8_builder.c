@@ -67,6 +67,7 @@ m3u8_builder_format_double(u_char* p, uint32_t n, uint32_t scale)
 static vod_status_t
 m3u8_builder_build_required_tracks_string(
 	request_context_t* request_context, 
+	media_set_t* media_set,
 	uint32_t sequence_index,
 	request_params_t* request_params,
 	vod_str_t* tracks_spec)
@@ -103,29 +104,43 @@ m3u8_builder_build_required_tracks_string(
 		p = vod_sprintf(p, "-f%uD", sequence_index + 1);
 	}
 
-	if (request_params->tracks_mask[MEDIA_TYPE_VIDEO] != 0xffffffff)
+	if (media_set->track_count[MEDIA_TYPE_VIDEO] != 0)
 	{
-		for (i = 0; i < 32; i++)
+		if (request_params->tracks_mask[MEDIA_TYPE_VIDEO] == 0xffffffff)
 		{
-			if ((request_params->tracks_mask[MEDIA_TYPE_VIDEO] & (1 << i)) == 0)
+			p = vod_copy(p, "-v0", sizeof("-v0") - 1);
+		}
+		else
+		{
+			for (i = 0; i < 32; i++)
 			{
-				continue;
-			}
+				if ((request_params->tracks_mask[MEDIA_TYPE_VIDEO] & (1 << i)) == 0)
+				{
+					continue;
+				}
 
-			p = vod_sprintf(p, "-v%uD", i + 1);
+				p = vod_sprintf(p, "-v%uD", i + 1);
+			}
 		}
 	}
 	
-	if (request_params->tracks_mask[MEDIA_TYPE_AUDIO] != 0xffffffff)
+	if (media_set->track_count[MEDIA_TYPE_AUDIO] != 0)
 	{
-		for (i = 0; i < 32; i++)
+		if (request_params->tracks_mask[MEDIA_TYPE_AUDIO] == 0xffffffff)
 		{
-			if ((request_params->tracks_mask[MEDIA_TYPE_AUDIO] & (1 << i)) == 0)
+			p = vod_copy(p, "-a0", sizeof("-a0") - 1);
+		}
+		else
+		{
+			for (i = 0; i < 32; i++)
 			{
-				continue;
-			}
+				if ((request_params->tracks_mask[MEDIA_TYPE_AUDIO] & (1 << i)) == 0)
+				{
+					continue;
+				}
 
-			p = vod_sprintf(p, "-a%uD", i + 1);
+				p = vod_sprintf(p, "-a%uD", i + 1);
+			}
 		}
 	}
 
@@ -241,6 +256,7 @@ m3u8_builder_build_iframe_playlist(
 	// build the required tracks string
 	rc = m3u8_builder_build_required_tracks_string(
 		request_context, 
+		media_set,
 		sequence_index,
 		request_params,
 		&ctx.tracks_spec);
@@ -354,6 +370,7 @@ m3u8_builder_build_index_playlist(
 	// build the required tracks string
 	rc = m3u8_builder_build_required_tracks_string(
 		request_context, 
+		media_set,
 		sequence_index,
 		request_params,
 		&tracks_spec);

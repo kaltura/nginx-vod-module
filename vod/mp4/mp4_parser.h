@@ -3,6 +3,7 @@
 
 // includes
 #include "mp4_parser_base.h"
+#include "../codec_config.h"
 #include "../common.h"
 
 // macros
@@ -82,9 +83,10 @@ typedef struct {
 	uint16_t bits_per_sample;
 	uint16_t packet_size;
 	uint32_t sample_rate;
+	mp4a_config_t codec_config;
 } audio_media_info_t;
 
-typedef struct {
+typedef struct media_info_s {
 	uint32_t media_type;
 	uint32_t format;
 	uint32_t track_id;

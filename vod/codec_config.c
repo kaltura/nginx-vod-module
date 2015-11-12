@@ -1,5 +1,6 @@
-#include "bit_read_stream.h"
 #include "codec_config.h"
+#include "mp4/mp4_parser.h"
+#include "bit_read_stream.h"
 
 #define AOT_ESCAPE (31)
 

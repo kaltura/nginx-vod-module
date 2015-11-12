@@ -1,6 +1,5 @@
 #include "mpegts_encoder_filter.h"
 #include "bit_fields.h"
-#include "../codec_config.h"
 #include "../common.h"
 
 #define member_size(type, member) sizeof(((type *)0)->member)
@@ -400,8 +399,6 @@ mpegts_encoder_write_sample_aes_aac_pmt_entry(
 	int entry_size,
 	media_track_t* track)
 {
-	mp4a_config_t codec_config;
-	vod_status_t rc;
 	u_char* p;
 
 	p = vod_copy(start, pmt_entry_template_sample_aes_aac, sizeof(pmt_entry_template_sample_aes_aac));
@@ -416,17 +413,7 @@ mpegts_encoder_write_sample_aes_aac_pmt_entry(
 	*p++ = 'a';		*p++ = 'p';		*p++ = 'a';		*p++ = 'd';			// apad
 
 	// audio_setup_information
-	rc = codec_config_mp4a_config_parse(
-		request_context, 
-		track->media_info.extra_data, 
-		track->media_info.extra_data_size, 
-		&codec_config);
-	if (rc != VOD_OK)
-	{
-		return rc;
-	}
-
-	switch (codec_config.object_type - 1)
+	switch (track->media_info.u.audio.codec_config.object_type - 1)
 	{
 	case FF_PROFILE_AAC_HE:
 		*p++ = 'z';		*p++ = 'a';		*p++ = 'c';		*p++ = 'h';			// zach

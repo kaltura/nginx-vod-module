@@ -50,39 +50,27 @@ adts_encoder_init(
 }
 
 vod_status_t
-adts_encoder_set_extra_data(
+adts_encoder_set_media_info(
 	adts_encoder_state_t* state,
-	const u_char* extra_data,
-	uint32_t extra_data_size)
+	media_info_t* media_info)
 {
-	mp4a_config_t codec_config;
-	vod_status_t rc;
+	mp4a_config_t* codec_config = &media_info->u.audio.codec_config;
 
 	if (state->request_context->simulation_only)
 	{
 		return VOD_OK;
 	}
 
-	rc = codec_config_mp4a_config_parse(state->request_context, extra_data, extra_data_size, &codec_config);
-	if (rc != VOD_OK)
-	{
-		return rc;
-	}
-
 	// Note: not parsing all the special cases handled in ffmpeg's avpriv_mpeg4audio_get_config
 	// Note: not handling pce_data
-
-	vod_log_debug3(VOD_LOG_DEBUG_LEVEL, state->request_context->log, 0,
-		"adts_encoder_set_extra_data: object_type=%d sample_rate_index=%d channel_config=%d",
-		codec_config.object_type, codec_config.sample_rate_index, codec_config.channel_config);
 
 	vod_memzero(&state->header, sizeof(state->header));
 
 	adts_frame_header_set_syncword(state->header, 0xfff);
 	adts_frame_header_set_protection_absent(state->header, 1);
-	adts_frame_header_set_profile_object_type(state->header, codec_config.object_type - 1);
-	adts_frame_header_set_sample_rate_index(state->header, codec_config.sample_rate_index);
-	adts_frame_header_set_channel_configuration(state->header, codec_config.channel_config);
+	adts_frame_header_set_profile_object_type(state->header, codec_config->object_type - 1);
+	adts_frame_header_set_sample_rate_index(state->header, codec_config->sample_rate_index);
+	adts_frame_header_set_channel_configuration(state->header, codec_config->channel_config);
 	adts_frame_header_set_adts_buffer_fullness(state->header, 0x7ff);
 
 	return VOD_OK;
