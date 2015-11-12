@@ -37,12 +37,12 @@ main(int argc, const char *argv[])
 {
 	read_cache_state_t read_cache_state;
 	hls_muxer_state_t muxer;
-	mpeg_metadata_t mpeg_metadata;
+	media_track_array_t track_array;
 	input_params_t input_params;
 	int output_fd;
 	int input_fd;
 
-	vod_memzero(&mpeg_metadata, sizeof(mpeg_metadata));
+	vod_memzero(&track_array, sizeof(track_array));
 	input_params.start_sec = atoi(argv[2]);
 	input_params.end_sec = atoi(argv[3]);
 
@@ -56,7 +56,7 @@ main(int argc, const char *argv[])
 	{
 	}
 	
-	if (!parse_mpeg_file(read_file, &input_fd, &mpeg_metadata, &input_params))
+	if (!parse_mpeg_file(read_file, &input_fd, &track_array, &input_params))
 	{
 	}
 
@@ -64,7 +64,7 @@ main(int argc, const char *argv[])
 	{
 	}
 
-	if (!hls_muxer_init(&muxer, &mpeg_metadata, &read_cache_state, write_file, &output_fd))
+	if (!hls_muxer_init(&muxer, &track_array, &read_cache_state, write_file, &output_fd))
 	{
 	}
 	

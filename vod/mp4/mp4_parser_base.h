@@ -20,12 +20,20 @@ typedef vod_status_t(*parse_atoms_callback_t)(void* context, atom_info_t* atom_i
 
 // parse params
 typedef struct {
+	uint64_t start;			// relative to clip_from
+	uint64_t end;			// relative to clip_from
+	uint32_t timescale;
+} media_range_t;
+
+typedef struct {
 	uint32_t* required_tracks_mask;
+	uint64_t sequence_offset;
 	uint32_t clip_from;
 	uint32_t clip_to;
-	uint32_t speed_nom;
-	uint32_t speed_denom;
-} mpeg_parse_params_t;
+	media_range_t* range;
+	uint32_t max_frame_count;
+	int parse_type;
+} media_parse_params_t;
 
 // relevant atoms finder
 typedef struct relevant_atom_s {
@@ -42,7 +50,6 @@ typedef struct {
 
 // iterators
 typedef struct {
-	uint32_t speed_denom;
 	stts_entry_t* last_entry;
 	stts_entry_t* cur_entry;
 	uint32_t sample_count;
@@ -121,7 +128,7 @@ vod_status_t mp4_parser_validate_stco_data(
 // stts
 void mp4_parser_stts_iterator_init(
 	stts_iterator_state_t* iterator, 
-	mpeg_parse_params_t* parse_params,
+	media_parse_params_t* parse_params,
 	stts_entry_t* first_entry, 
 	uint32_t entries);
 

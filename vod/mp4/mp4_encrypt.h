@@ -4,8 +4,7 @@
 // includes
 #include <openssl/evp.h>
 #include "../dynamic_buffer.h"
-#include "../common.h"
-#include "mp4_parser.h"
+#include "../media_set.h"
 
 // encryption constants
 #ifndef AES_BLOCK_SIZE
@@ -52,7 +51,8 @@ typedef struct {
 
 	// fixed
 	request_context_t* request_context;
-	mpeg_stream_metadata_t* stream_metadata;
+	media_set_t* media_set;
+	media_sequence_t* sequence;
 	uint32_t segment_index;
 
 	// encryption state
@@ -63,6 +63,7 @@ typedef struct {
 	EVP_CIPHER_CTX cipher;
 
 	// frame state
+	media_clip_filtered_t* cur_clip;
 	input_frame_t* cur_frame;
 	input_frame_t* last_frame;
 	uint32_t frame_count;
@@ -102,7 +103,7 @@ u_char* mp4_encrypt_write_guid(u_char* p, u_char* guid);
 vod_status_t mp4_encrypt_video_get_fragment_writer(
 	segment_writer_t* result,
 	request_context_t* request_context,
-	mpeg_stream_metadata_t* stream_metadata,
+	media_set_t* media_set,
 	uint32_t segment_index,
 	mp4_encrypt_video_write_fragment_header_t write_fragment_header,
 	segment_writer_t* segment_writer,
@@ -111,7 +112,7 @@ vod_status_t mp4_encrypt_video_get_fragment_writer(
 vod_status_t mp4_encrypt_audio_get_fragment_writer(
 	segment_writer_t* result,
 	request_context_t* request_context,
-	mpeg_stream_metadata_t* stream_metadata,
+	media_set_t* media_set,
 	uint32_t segment_index,
 	segment_writer_t* segment_writer,
 	const u_char* iv);

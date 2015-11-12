@@ -88,7 +88,7 @@ void mpegts_encoder_finalize_streams(
 vod_status_t mpegts_encoder_init(
 	mpegts_encoder_state_t* state,
 	mpegts_encoder_init_streams_state_t* stream_state,
-	mpeg_stream_metadata_t* stream_metadata,
+	media_track_t* track,
 	request_context_t* request_context,
 	write_buffer_queue_t* queue,
 	bool_t interleave_frames,

@@ -26,8 +26,7 @@ vod_status_t m3u8_builder_build_master_playlist(
 	request_context_t* request_context,
 	m3u8_config_t* conf,
 	vod_str_t* base_url,
-	bool_t include_file_index,
-	mpeg_metadata_t* mpeg_metadata,
+	media_set_t* media_set,
 	vod_str_t* result);
 
 vod_status_t m3u8_builder_build_index_playlist(
@@ -35,10 +34,10 @@ vod_status_t m3u8_builder_build_index_playlist(
 	m3u8_config_t* conf,
 	vod_str_t* base_url,
 	vod_str_t* segments_base_url,
-	bool_t include_file_index,
+	request_params_t* request_params,
 	hls_encryption_params_t* encryption_params,
 	segmenter_conf_t* segmenter_conf,
-	mpeg_metadata_t* mpeg_metadata,
+	media_set_t* media_set,
 	vod_str_t* result);
 
 vod_status_t m3u8_builder_build_iframe_playlist(
@@ -46,9 +45,9 @@ vod_status_t m3u8_builder_build_iframe_playlist(
 	m3u8_config_t* conf,
 	hls_muxer_conf_t* muxer_conf,
 	vod_str_t* base_url,
-	bool_t include_file_index,
+	request_params_t* request_params,
 	segmenter_conf_t* segmenter_conf,
-	mpeg_metadata_t* mpeg_metadata,
+	media_set_t* media_set,
 	vod_str_t* result);
 
 void m3u8_builder_init_config(

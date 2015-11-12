@@ -16,20 +16,23 @@
 // Note: in order to be able to process fragment requests efficiently, we need to know the file index and track index
 //		of the fragment. since we only have the bitrate on the URL, we encode this parameters on the bitrate.
 //		since both parameters are limited to 32, this results in a maximum of 1kpbs diviation from the real bitrate.
-#define mss_encode_indexes(bitrate, file_index, track_index) (((bitrate) & ~0x3FF) | (((file_index) & 0x1F) << 5) | ((track_index) & 0x1F))
-#define mss_file_index(bitrate)	(((bitrate) >> 5) & 0x1F)
+#define mss_encode_indexes(bitrate, sequence_index, track_index) (((bitrate) & ~0x3FF) | (((sequence_index) & 0x1F) << 5) | ((track_index) & 0x1F))
+#define mss_sequence_index(bitrate)	(((bitrate) >> 5) & 0x1F)
 #define mss_track_index(bitrate)	((bitrate) & 0x1F)
 
 //typedefs
-typedef u_char* (*mss_write_tags_callback_t)(void* context, u_char* p, mpeg_metadata_t* stream);
+typedef u_char* (*mss_write_tags_callback_t)(void* context, u_char* p, media_set_t* media_set);
+
+typedef struct {
+	vod_uint_t duplicate_bitrate_threshold;
+} mss_manifest_config_t;
 
 // functions
-bool_t mss_packager_compare_streams(void* context, const media_info_t* mi1, const media_info_t* mi2);
-
 vod_status_t mss_packager_build_manifest(
 	request_context_t* request_context,
+	mss_manifest_config_t* conf,
 	segmenter_conf_t* segmenter_conf,
-	mpeg_metadata_t* mpeg_metadata,
+	media_set_t* media_set,
 	size_t extra_tags_size,
 	mss_write_tags_callback_t write_extra_tags,
 	void* extra_tags_writer_context,
@@ -37,7 +40,7 @@ vod_status_t mss_packager_build_manifest(
 
 vod_status_t mss_packager_build_fragment_header(
 	request_context_t* request_context,
-	mpeg_stream_metadata_t* stream_metadata,
+	media_sequence_t* sequence,
 	uint32_t segment_index,
 	size_t extra_traf_atoms_size,
 	write_extra_traf_atoms_callback_t write_extra_traf_atoms_callback,

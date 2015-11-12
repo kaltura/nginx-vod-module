@@ -21,7 +21,6 @@ struct ngx_http_vod_loc_conf_s {
 	ngx_str_t multi_uri_suffix;
 	segmenter_conf_t segmenter;
 	ngx_http_complex_value_t *secret_key;
-	ngx_uint_t duplicate_bitrate_threshold;
 	ngx_str_t https_header_name;
 	ngx_str_t segments_base_url;
 	ngx_flag_t segments_base_url_has_scheme;
@@ -36,7 +35,7 @@ struct ngx_http_vod_loc_conf_s {
 	ngx_shm_zone_t* path_mapping_cache_zone;
 	ngx_str_t path_response_prefix;
 	ngx_str_t path_response_postfix;
-	size_t max_path_length;
+	size_t max_mapping_response_size;
 	ngx_http_upstream_conf_t fallback_upstream;
 	ngx_str_t proxy_header_name;
 	ngx_str_t proxy_header_value;
@@ -66,6 +65,7 @@ struct ngx_http_vod_loc_conf_s {
 	// derived fields
 	ngx_str_t proxy_header;
 	ngx_hash_t uri_params_hash;
+	ngx_hash_t pd_uri_params_hash;
 
 	// submodules
 	ngx_http_vod_dash_loc_conf_t dash;

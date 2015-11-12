@@ -2,7 +2,7 @@
 #define __SEGMENTER_H__
 
 // includes
-#include "mp4/mp4_parser.h"
+#include "media_set.h"
 #include "common.h"
 
 // constants
@@ -16,6 +16,7 @@ typedef struct {
 	uint32_t segment_index;
 	uint32_t repeat_count;
 	uint64_t duration;
+	bool_t discontinuity;
 } segment_duration_item_t;
 
 typedef struct {
@@ -23,16 +24,27 @@ typedef struct {
 	uint32_t item_count;
 	uint32_t segment_count;
 	uint32_t timescale;
-	uint32_t duration_millis;
+	uint32_t discontinuities;
+	uint64_t duration_millis;
 } segment_durations_t;
 
-typedef uint32_t(*segmenter_get_segment_count_t)(segmenter_conf_t* conf, uint32_t duration_millis);
+typedef struct {
+	uint32_t min_clip_index;
+	uint32_t max_clip_index;
+	uint64_t initial_sequence_offset;
+	media_range_t* clip_ranges;
+	uint32_t clip_count;
+	uint32_t clip_first_segment_index;
+} get_clip_ranges_result_t;
+
+typedef uint32_t (*segmenter_get_segment_count_t)(segmenter_conf_t* conf, uint64_t duration_millis);
 
 typedef vod_status_t (*segmenter_get_segment_durations_t)(
 	request_context_t* request_context,
 	segmenter_conf_t* conf,
-	mpeg_stream_metadata_t** streams,
-	uint32_t stream_count,
+	media_set_t* media_set,
+	media_sequence_t* sequence,
+	uint32_t media_type,
 	segment_durations_t* result);
 
 struct segmenter_conf_s {
@@ -54,46 +66,65 @@ struct segmenter_conf_s {
 	uint32_t* bootstrap_segments_end;
 };
 
-typedef struct {
-	segmenter_conf_t* conf;
-	uint32_t segment_index;
-	uint32_t segment_count;
-	uint32_t last_boundary;
-} segmenter_boundary_iterator_context_t;
-
-// functions
+// init
 vod_status_t segmenter_init_config(segmenter_conf_t* conf, vod_pool_t* pool);
 
-uint32_t segmenter_get_segment_count_last_short(segmenter_conf_t* conf, uint32_t duration_millis);
+// get segment count modes
+uint32_t segmenter_get_segment_count_last_short(segmenter_conf_t* conf, uint64_t duration_millis);
 
-uint32_t segmenter_get_segment_count_last_long(segmenter_conf_t* conf, uint32_t duration_millis);
+uint32_t segmenter_get_segment_count_last_long(segmenter_conf_t* conf, uint64_t duration_millis);
 
-uint32_t segmenter_get_segment_count_last_rounded(segmenter_conf_t* conf, uint32_t duration_millis);
+uint32_t segmenter_get_segment_count_last_rounded(segmenter_conf_t* conf, uint64_t duration_millis);
 
-void segmenter_get_start_end_offsets(segmenter_conf_t* conf, uint32_t segment_index, uint64_t* start, uint64_t* end);
-
-uint32_t segmenter_get_segment_index(segmenter_conf_t* conf, uint32_t time_millis);
-
-vod_status_t
-segmenter_get_segment_durations_estimate(
+// get segment durations modes
+vod_status_t segmenter_get_segment_durations_estimate(
 	request_context_t* request_context,
 	segmenter_conf_t* conf,
-	mpeg_stream_metadata_t** streams,
-	uint32_t stream_count,
+	media_set_t* media_set,
+	media_sequence_t* sequence,
+	uint32_t media_type,
 	segment_durations_t* result);
 
-vod_status_t
-segmenter_get_segment_durations_accurate(
+vod_status_t segmenter_get_segment_durations_accurate(
 	request_context_t* request_context,
 	segmenter_conf_t* conf,
-	mpeg_stream_metadata_t** streams,
-	uint32_t stream_count,
+	media_set_t* media_set,
+	media_sequence_t* sequence,
+	uint32_t media_type,
 	segment_durations_t* result);
 
-void segmenter_boundary_iterator_init(segmenter_boundary_iterator_context_t* context, segmenter_conf_t* conf, uint32_t segment_count);
+// get segment index
+uint32_t segmenter_get_segment_index_no_discontinuity(
+	segmenter_conf_t* conf,
+	uint64_t time_millis);
 
-uint32_t segmenter_boundary_iterator_next(segmenter_boundary_iterator_context_t* context);
+vod_status_t segmenter_get_segment_index_discontinuity(
+	request_context_t* request_context,
+	segmenter_conf_t* conf,
+	uint32_t* clip_durations,
+	uint32_t total_clip_count,
+	uint64_t time_millis, 
+	uint32_t* result);
 
-void segmenter_boundary_iterator_skip(segmenter_boundary_iterator_context_t* context, uint32_t count);
+// get start end ranges
+vod_status_t segmenter_get_start_end_ranges_no_discontinuity(
+	request_context_t* request_context,
+	segmenter_conf_t* conf,
+	uint32_t segment_index,
+	uint32_t* clip_durations,
+	uint32_t total_clip_count,
+	uint64_t total_duration,
+	uint64_t last_segment_end,
+	get_clip_ranges_result_t* result);
+
+vod_status_t segmenter_get_start_end_ranges_discontinuity(
+	request_context_t* request_context,
+	segmenter_conf_t* conf,
+	uint32_t clip_index,
+	uint32_t segment_index,
+	uint32_t* clip_durations,
+	uint32_t total_clip_count,
+	uint64_t total_duration,
+	get_clip_ranges_result_t* result);
 
 #endif // __SEGMENTER_H__

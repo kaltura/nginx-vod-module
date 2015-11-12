@@ -18,8 +18,7 @@ vod_status_t hds_packager_build_manifest(
 	hds_manifest_config_t* conf,
 	vod_str_t* manifest_id,
 	segmenter_conf_t* segmenter_conf,
-	bool_t include_file_index,
-	mpeg_metadata_t* mpeg_metadata,
+	media_set_t* media_set,
 	vod_str_t* result);
 
 #endif // __HDS_MANIFEST_H__

@@ -2,10 +2,10 @@
 #define __CODEC_CONFIG_H__
 
 // includes
-#include "mp4/mp4_parser.h"
 #include "common.h"
 
 // typedefs
+struct media_info_s;
 
 typedef vod_status_t (*codec_config_get_nal_units_t)(
 	request_context_t* request_context,
@@ -90,8 +90,8 @@ codec_config_avcc_get_nal_units(
 	uint32_t* result_size);
 
 // get codec name according to http://tools.ietf.org/html/rfc6381
-vod_status_t codec_config_get_video_codec_name(request_context_t* request_context, media_info_t* media_info);
-vod_status_t codec_config_get_audio_codec_name(request_context_t* request_context, media_info_t* media_info);
+vod_status_t codec_config_get_video_codec_name(request_context_t* request_context, struct media_info_s* media_info);
+vod_status_t codec_config_get_audio_codec_name(request_context_t* request_context, struct media_info_s* media_info);
 
 vod_status_t codec_config_mp4a_config_parse(
 	request_context_t* request_context,

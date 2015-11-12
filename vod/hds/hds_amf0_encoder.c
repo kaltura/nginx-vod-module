@@ -102,25 +102,25 @@ hds_amf0_append_array_end(u_char* p)
 }
 
 static void
-hds_get_max_duration(mpeg_stream_metadata_t** streams, uint64_t* duration, uint32_t* timescale)
+hds_get_max_duration(media_track_t** tracks, uint64_t* duration, uint32_t* timescale)
 {
-	if (streams[MEDIA_TYPE_VIDEO] != NULL &&
-		(streams[MEDIA_TYPE_AUDIO] == NULL ||
-		streams[MEDIA_TYPE_VIDEO]->media_info.duration * streams[MEDIA_TYPE_AUDIO]->media_info.timescale >
-		streams[MEDIA_TYPE_AUDIO]->media_info.duration * streams[MEDIA_TYPE_VIDEO]->media_info.timescale))
+	if (tracks[MEDIA_TYPE_VIDEO] != NULL &&
+		(tracks[MEDIA_TYPE_AUDIO] == NULL ||
+		tracks[MEDIA_TYPE_VIDEO]->media_info.duration * tracks[MEDIA_TYPE_AUDIO]->media_info.timescale >
+		tracks[MEDIA_TYPE_AUDIO]->media_info.duration * tracks[MEDIA_TYPE_VIDEO]->media_info.timescale))
 	{
-		*duration = streams[MEDIA_TYPE_VIDEO]->media_info.duration;
-		*timescale = streams[MEDIA_TYPE_VIDEO]->media_info.timescale;
+		*duration = tracks[MEDIA_TYPE_VIDEO]->media_info.duration;
+		*timescale = tracks[MEDIA_TYPE_VIDEO]->media_info.timescale;
 	}
 	else
 	{
-		*duration = streams[MEDIA_TYPE_AUDIO]->media_info.duration;
-		*timescale = streams[MEDIA_TYPE_AUDIO]->media_info.timescale;
+		*duration = tracks[MEDIA_TYPE_AUDIO]->media_info.duration;
+		*timescale = tracks[MEDIA_TYPE_AUDIO]->media_info.timescale;
 	}
 }
 
 static u_char*
-hds_amf0_write_metadata(u_char* p, mpeg_stream_metadata_t** streams)
+hds_amf0_write_metadata(u_char* p, media_track_t** tracks)
 {
 	media_info_t* media_info;
 	uint64_t file_size = 0;
@@ -129,14 +129,14 @@ hds_amf0_write_metadata(u_char* p, mpeg_stream_metadata_t** streams)
 	uint32_t count;
 	uint32_t bitrate = 0;
 
-	hds_get_max_duration(streams, &duration, &timescale);
+	hds_get_max_duration(tracks, &duration, &timescale);
 
 	count = AMF0_COMMON_FIELDS_COUNT;
-	if (streams[MEDIA_TYPE_VIDEO] != NULL)
+	if (tracks[MEDIA_TYPE_VIDEO] != NULL)
 	{
 		count += AMF0_VIDEO_FIELDS_COUNT;
 	}
-	if (streams[MEDIA_TYPE_AUDIO] != NULL)
+	if (tracks[MEDIA_TYPE_AUDIO] != NULL)
 	{
 		count += AMF0_AUDIO_FIELDS_COUNT;
 	}
@@ -144,27 +144,27 @@ hds_amf0_write_metadata(u_char* p, mpeg_stream_metadata_t** streams)
 	p = hds_amf0_append_string(p, &amf0_on_metadata);
 	p = hds_amf0_append_array_header(p, count);
 	p = hds_amf0_append_array_number_value(p, &amf0_duration, (double)duration / (double)timescale);
-	if (streams[MEDIA_TYPE_VIDEO] != NULL)
+	if (tracks[MEDIA_TYPE_VIDEO] != NULL)
 	{
-		media_info = &streams[MEDIA_TYPE_VIDEO]->media_info;
+		media_info = &tracks[MEDIA_TYPE_VIDEO]->media_info;
 		bitrate += media_info->bitrate;
 		p = hds_amf0_append_array_number_value(p, &amf0_width, media_info->u.video.width);
 		p = hds_amf0_append_array_number_value(p, &amf0_height, media_info->u.video.height);
 		p = hds_amf0_append_array_number_value(p, &amf0_videodatarate, (double)media_info->bitrate / 1000.0);
 		p = hds_amf0_append_array_number_value(p, &amf0_framerate, (double)media_info->timescale / (double)media_info->min_frame_duration);
 		p = hds_amf0_append_array_number_value(p, &amf0_videocodecid, CODEC_ID_AVC);
-		file_size += streams[MEDIA_TYPE_VIDEO]->total_frames_size;
+		file_size += tracks[MEDIA_TYPE_VIDEO]->total_frames_size;
 	}
-	if (streams[MEDIA_TYPE_AUDIO] != NULL)
+	if (tracks[MEDIA_TYPE_AUDIO] != NULL)
 	{
-		media_info = &streams[MEDIA_TYPE_AUDIO]->media_info;
+		media_info = &tracks[MEDIA_TYPE_AUDIO]->media_info;
 		bitrate += media_info->bitrate;
 		p = hds_amf0_append_array_number_value(p, &amf0_audiodatarate, (double)media_info->bitrate / 1000.0);
 		p = hds_amf0_append_array_number_value(p, &amf0_audiosamplerate, media_info->u.audio.sample_rate);
 		p = hds_amf0_append_array_number_value(p, &amf0_audiosamplesize, media_info->u.audio.bits_per_sample);
 		p = hds_amf0_append_array_boolean_value(p, &amf0_stereo, media_info->u.audio.channels > 1);
 		p = hds_amf0_append_array_number_value(p, &amf0_audiocodecid, SOUND_FORMAT_AAC);
-		file_size += streams[MEDIA_TYPE_AUDIO]->total_frames_size;
+		file_size += tracks[MEDIA_TYPE_AUDIO]->total_frames_size;
 	}
 	p = hds_amf0_append_array_number_value(p, &amf0_filesize, file_size);
 	p = hds_amf0_append_array_end(p);
@@ -172,13 +172,13 @@ hds_amf0_write_metadata(u_char* p, mpeg_stream_metadata_t** streams)
 }
 
 u_char*
-hds_amf0_write_base64_metadata(u_char* p, u_char* temp_buffer, mpeg_stream_metadata_t** streams)
+hds_amf0_write_base64_metadata(u_char* p, u_char* temp_buffer, media_track_t** tracks)
 {
 	vod_str_t binary;
 	vod_str_t base64;
 
 	binary.data = temp_buffer;
-	binary.len = hds_amf0_write_metadata(temp_buffer, streams) - binary.data;
+	binary.len = hds_amf0_write_metadata(temp_buffer, tracks) - binary.data;
 
 	base64.data = p;
 

@@ -87,11 +87,9 @@ mss_write_manifest_chunks(u_char* p, segment_durations_t* segment_durations)
 	return p;
 }
 
-bool_t 
-mss_packager_compare_streams(void* context, const media_info_t* mi1, const media_info_t* mi2)
+static bool_t 
+mss_packager_compare_tracks(uintptr_t bitrate_threshold, const media_info_t* mi1, const media_info_t* mi2)
 {
-	uintptr_t bitrate_threshold = *(uintptr_t*)context;
-
 	if (mi1->bitrate == 0 ||
 		mi2->bitrate == 0 ||
 		mi1->bitrate + bitrate_threshold <= mi2->bitrate ||
@@ -109,26 +107,104 @@ mss_packager_compare_streams(void* context, const media_info_t* mi1, const media
 	return TRUE;
 }
 
+static void 
+mss_packager_remove_redundant_tracks(
+	vod_uint_t duplicate_bitrate_threshold,
+	media_set_t* media_set)
+{
+	media_track_t* track1;
+	media_track_t* track2;
+	media_track_t* last_track;
+	uint32_t media_type1;
+	uint32_t max_sample_rate = 0;
+	uint32_t clip_index;
+	bool_t remove_track;
+
+	// find the max audio sample rate in the first clip
+	last_track = media_set->filtered_tracks + media_set->total_track_count;
+	for (track1 = media_set->filtered_tracks; track1 < last_track; track1++)
+	{
+		if (track1->media_info.media_type == MEDIA_TYPE_AUDIO &&
+			track1->media_info.u.audio.sample_rate > max_sample_rate)
+		{
+			max_sample_rate = track1->media_info.u.audio.sample_rate;
+		}
+	}
+
+	// remove duplicate tracks and tracks that have different sample rante
+	for (track1 = media_set->filtered_tracks; track1 < last_track; track1++)
+	{
+		media_type1 = track1->media_info.media_type;
+		if (media_type1 == MEDIA_TYPE_AUDIO &&
+			track1->media_info.u.audio.sample_rate != max_sample_rate)
+		{
+			remove_track = TRUE;
+		}
+		else
+		{
+			remove_track = FALSE;
+			for (track2 = media_set->filtered_tracks; track2 < track1; track2++)
+			{
+				if (media_type1 != track2->media_info.media_type)
+				{
+					continue;
+				}
+
+				if (!mss_packager_compare_tracks(
+					duplicate_bitrate_threshold,
+					&track1->media_info,
+					&track2->media_info))
+				{
+					continue;
+				}
+
+				remove_track = TRUE;
+				break;
+			}
+		}
+
+		if (remove_track)
+		{
+			// remove the track from all clips
+			media_set->track_count[media_type1]--;
+
+			for (clip_index = 0; clip_index < media_set->clip_count; clip_index++)
+			{
+				track1[clip_index * media_set->total_track_count].media_info.media_type = MEDIA_TYPE_NONE;
+			}
+		}
+	}
+}
+
 vod_status_t 
 mss_packager_build_manifest(
 	request_context_t* request_context, 
-	segmenter_conf_t* segmenter_conf, 
-	mpeg_metadata_t* mpeg_metadata, 
+	mss_manifest_config_t* conf,
+	segmenter_conf_t* segmenter_conf,
+	media_set_t* media_set,
 	size_t extra_tags_size,
 	mss_write_tags_callback_t write_extra_tags,
 	void* extra_tags_writer_context,
 	vod_str_t* result)
 {
-	mpeg_stream_metadata_t* cur_stream;
+	media_sequence_t* cur_sequence;
+	media_track_t* last_track;
+	media_track_t* cur_track;
 	segment_durations_t segment_durations[MEDIA_TYPE_COUNT];
 	uint64_t duration_100ns;
-	uint32_t max_sample_rate = 0;
 	uint32_t media_type;
 	uint32_t stream_index;
 	uint32_t bitrate;
 	vod_status_t rc;
 	size_t result_size;
 	u_char* p;
+
+	if (media_set->use_discontinuity)
+	{
+		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+			"mss_packager_build_manifest: discontinuity is not supported in MSS");
+		return VOD_BAD_MAPPING;
+	}
 
 	// calculate the result size
 	result_size = 
@@ -137,7 +213,7 @@ mss_packager_build_manifest(
 		sizeof(MSS_MANIFEST_FOOTER);
 	for (media_type = 0; media_type < MEDIA_TYPE_COUNT; media_type++)
 	{
-		if (mpeg_metadata->longest_stream[media_type] == NULL)
+		if (media_set->track_count[media_type] == 0)
 		{
 			continue;
 		}
@@ -145,8 +221,9 @@ mss_packager_build_manifest(
 		rc = segmenter_conf->get_segment_durations(
 			request_context,
 			segmenter_conf,
-			&mpeg_metadata->longest_stream[media_type],
-			1,
+			media_set,
+			NULL,
+			media_type,
 			&segment_durations[media_type]);
 		if (rc != VOD_OK)
 		{
@@ -160,25 +237,24 @@ mss_packager_build_manifest(
 		result_size += segment_durations[media_type].segment_count * (sizeof(MSS_CHUNK_TAG) + VOD_INT32_LEN + VOD_INT64_LEN);
 	}
 
-	for (cur_stream = mpeg_metadata->first_stream; cur_stream < mpeg_metadata->last_stream; cur_stream++)
+	mss_packager_remove_redundant_tracks(conf->duplicate_bitrate_threshold,	media_set);
+
+	cur_track = media_set->filtered_tracks;
+	last_track = cur_track + media_set->total_track_count;
+	for (; cur_track < last_track; cur_track++)
 	{
-		switch (cur_stream->media_info.media_type)
+		switch (cur_track->media_info.media_type)
 		{
 		case MEDIA_TYPE_VIDEO:
-			result_size += 
-				sizeof(MSS_VIDEO_QUALITY_LEVEL_HEADER) - 1 + 4 * VOD_INT32_LEN + cur_stream->media_info.extra_data_size * 2 + 
+			result_size +=
+				sizeof(MSS_VIDEO_QUALITY_LEVEL_HEADER) - 1 + 4 * VOD_INT32_LEN + cur_track->media_info.extra_data_size * 2 +
 				sizeof(MSS_QUALITY_LEVEL_FOOTER) - 1;
 			break;
 
 		case MEDIA_TYPE_AUDIO:
-			result_size += 
-				sizeof(MSS_AUDIO_QUALITY_LEVEL_HEADER) - 1 + 6 * VOD_INT32_LEN + cur_stream->media_info.extra_data_size * 2 +
+			result_size +=
+				sizeof(MSS_AUDIO_QUALITY_LEVEL_HEADER) - 1 + 6 * VOD_INT32_LEN + cur_track->media_info.extra_data_size * 2 +
 				sizeof(MSS_QUALITY_LEVEL_FOOTER) - 1;
-
-			if (cur_stream->media_info.u.audio.sample_rate > max_sample_rate)
-			{
-				max_sample_rate = cur_stream->media_info.u.audio.sample_rate;
-			}
 			break;
 		}
 	}
@@ -192,37 +268,41 @@ mss_packager_build_manifest(
 		return VOD_ALLOC_FAILED;
 	}
 
-	duration_100ns = rescale_time(mpeg_metadata->duration, mpeg_metadata->timescale, MSS_TIMESCALE);
+	duration_100ns = rescale_time(media_set->total_duration, 1000, MSS_TIMESCALE);
 	p = vod_sprintf(result->data, MSS_MANIFEST_HEADER, duration_100ns);
 
-	if (mpeg_metadata->longest_stream[MEDIA_TYPE_VIDEO] != NULL)
+	if (media_set->track_count[MEDIA_TYPE_VIDEO] != 0)
 	{
 		p = vod_sprintf(p, 
 			MSS_STREAM_INDEX_HEADER, 
 			MSS_STREAM_TYPE_VIDEO,
-			mpeg_metadata->stream_count[MEDIA_TYPE_VIDEO],
+			media_set->track_count[MEDIA_TYPE_VIDEO],
 			segment_durations[MEDIA_TYPE_VIDEO].segment_count,
 			MSS_STREAM_TYPE_VIDEO);
 
 		stream_index = 0;
-		for (cur_stream = mpeg_metadata->first_stream; cur_stream < mpeg_metadata->last_stream; cur_stream++)
+		for (cur_sequence = media_set->sequences; cur_sequence < media_set->sequences_end; cur_sequence++)
 		{
-			if (cur_stream->media_info.media_type != MEDIA_TYPE_VIDEO)
+			last_track = cur_sequence->filtered_clips[0].last_track;
+			for (cur_track = cur_sequence->filtered_clips[0].first_track; cur_track < last_track; cur_track++)
 			{
-				continue;
+				if (cur_track->media_info.media_type != MEDIA_TYPE_VIDEO)
+				{
+					continue;
+				}
+
+				bitrate = cur_track->media_info.bitrate;
+				bitrate = mss_encode_indexes(bitrate, cur_sequence->index, cur_track->index);
+				p = vod_sprintf(p, MSS_VIDEO_QUALITY_LEVEL_HEADER,
+					stream_index++,
+					bitrate,
+					(uint32_t)cur_track->media_info.u.video.width,
+					(uint32_t)cur_track->media_info.u.video.height);
+
+				p = mss_append_hex_string(p, cur_track->media_info.extra_data, cur_track->media_info.extra_data_size);
+
+				p = vod_copy(p, MSS_QUALITY_LEVEL_FOOTER, sizeof(MSS_QUALITY_LEVEL_FOOTER) - 1);
 			}
-
-			bitrate = cur_stream->media_info.bitrate;
-			bitrate = mss_encode_indexes(bitrate, cur_stream->file_info.file_index, cur_stream->track_index);
-			p = vod_sprintf(p, MSS_VIDEO_QUALITY_LEVEL_HEADER,
-				stream_index++,
-				bitrate,
-				(uint32_t)cur_stream->media_info.u.video.width,
-				(uint32_t)cur_stream->media_info.u.video.height);
-
-			p = mss_append_hex_string(p, cur_stream->media_info.extra_data, cur_stream->media_info.extra_data_size);
-
-			p = vod_copy(p, MSS_QUALITY_LEVEL_FOOTER, sizeof(MSS_QUALITY_LEVEL_FOOTER) - 1);
 		}
 
 		p = mss_write_manifest_chunks(p, &segment_durations[MEDIA_TYPE_VIDEO]);
@@ -230,36 +310,39 @@ mss_packager_build_manifest(
 		p = vod_copy(p, MSS_STREAM_INDEX_FOOTER, sizeof(MSS_STREAM_INDEX_FOOTER) - 1);
 	}
 
-	if (mpeg_metadata->longest_stream[MEDIA_TYPE_AUDIO] != NULL)
+	if (media_set->track_count[MEDIA_TYPE_AUDIO] != 0)
 	{
 		p = vod_sprintf(p, MSS_STREAM_INDEX_HEADER, 
 			MSS_STREAM_TYPE_AUDIO,
-			mpeg_metadata->stream_count[MEDIA_TYPE_AUDIO],
+			media_set->track_count[MEDIA_TYPE_AUDIO],
 			segment_durations[MEDIA_TYPE_AUDIO].segment_count,
 			MSS_STREAM_TYPE_AUDIO);
 
 		stream_index = 0;
-		for (cur_stream = mpeg_metadata->first_stream; cur_stream < mpeg_metadata->last_stream; cur_stream++)
+		for (cur_sequence = media_set->sequences; cur_sequence < media_set->sequences_end; cur_sequence++)
 		{
-			if (cur_stream->media_info.media_type != MEDIA_TYPE_AUDIO || 
-				cur_stream->media_info.u.audio.sample_rate != max_sample_rate)			// must not output different sample rates in MSS
+			last_track = cur_sequence->filtered_clips[0].last_track;
+			for (cur_track = cur_sequence->filtered_clips[0].first_track; cur_track < last_track; cur_track++)
 			{
-				continue;
+				if (cur_track->media_info.media_type != MEDIA_TYPE_AUDIO)
+				{
+					continue;
+				}
+
+				bitrate = cur_track->media_info.bitrate;
+				bitrate = mss_encode_indexes(bitrate, cur_sequence->index, cur_track->index);
+				p = vod_sprintf(p, MSS_AUDIO_QUALITY_LEVEL_HEADER,
+					stream_index++,
+					bitrate,
+					cur_track->media_info.u.audio.sample_rate,
+					(uint32_t)cur_track->media_info.u.audio.channels,
+					(uint32_t)cur_track->media_info.u.audio.bits_per_sample,
+					(uint32_t)cur_track->media_info.u.audio.packet_size);
+
+				p = mss_append_hex_string(p, cur_track->media_info.extra_data, cur_track->media_info.extra_data_size);
+
+				p = vod_copy(p, MSS_QUALITY_LEVEL_FOOTER, sizeof(MSS_QUALITY_LEVEL_FOOTER) - 1);
 			}
-
-			bitrate = cur_stream->media_info.bitrate;
-			bitrate = mss_encode_indexes(bitrate, cur_stream->file_info.file_index, cur_stream->track_index);
-			p = vod_sprintf(p, MSS_AUDIO_QUALITY_LEVEL_HEADER,
-				stream_index++,
-				bitrate,
-				cur_stream->media_info.u.audio.sample_rate,
-				(uint32_t)cur_stream->media_info.u.audio.channels,
-				(uint32_t)cur_stream->media_info.u.audio.bits_per_sample,
-				(uint32_t)cur_stream->media_info.u.audio.packet_size);
-
-			p = mss_append_hex_string(p, cur_stream->media_info.extra_data, cur_stream->media_info.extra_data_size);
-
-			p = vod_copy(p, MSS_QUALITY_LEVEL_FOOTER, sizeof(MSS_QUALITY_LEVEL_FOOTER) - 1);
 		}
 
 		p = mss_write_manifest_chunks(p, &segment_durations[MEDIA_TYPE_AUDIO]);
@@ -269,7 +352,7 @@ mss_packager_build_manifest(
 
 	if (write_extra_tags != NULL)
 	{
-		p = write_extra_tags(extra_tags_writer_context, p, mpeg_metadata);
+		p = write_extra_tags(extra_tags_writer_context, p, media_set);
 	}
 
 	p = vod_copy(p, MSS_MANIFEST_FOOTER, sizeof(MSS_MANIFEST_FOOTER) - 1);
@@ -300,11 +383,25 @@ mss_write_tfhd_atom(u_char* p, uint32_t track_id, uint32_t flags)
 }
 
 static u_char*
-mss_write_uuid_tfxd_atom(u_char* p, mpeg_stream_metadata_t* stream_metadata)
+mss_write_uuid_tfxd_atom(u_char* p, media_sequence_t* sequence)
 {
+	media_clip_filtered_t* cur_clip;
+	media_track_t* track;
 	size_t atom_size = ATOM_HEADER_SIZE + sizeof(uuid_tfxd_atom_t);
-	uint64_t timestamp = rescale_time(stream_metadata->first_frame_time_offset, stream_metadata->media_info.timescale, MSS_TIMESCALE);
-	uint64_t duration = rescale_time(stream_metadata->total_frames_duration, stream_metadata->media_info.timescale, MSS_TIMESCALE);
+	uint64_t timestamp;
+	uint64_t duration;
+
+	cur_clip = sequence->filtered_clips;
+	track = cur_clip->first_track;
+	timestamp = rescale_time(track->first_frame_time_offset + track->clip_sequence_offset, track->media_info.timescale, MSS_TIMESCALE);
+	duration = rescale_time(track->total_frames_duration, track->media_info.timescale, MSS_TIMESCALE);
+	cur_clip++;
+
+	for (; cur_clip < sequence->filtered_clips_end; cur_clip++)
+	{
+		track = cur_clip->first_track;
+		duration += rescale_time(track->total_frames_duration, track->media_info.timescale, MSS_TIMESCALE);
+	}
 
 	write_atom_header(p, atom_size, 'u', 'u', 'i', 'd');
 	p = vod_copy(p, tfxd_uuid, sizeof(tfxd_uuid));
@@ -317,7 +414,7 @@ mss_write_uuid_tfxd_atom(u_char* p, mpeg_stream_metadata_t* stream_metadata)
 vod_status_t
 mss_packager_build_fragment_header(
 	request_context_t* request_context,
-	mpeg_stream_metadata_t* stream_metadata,
+	media_sequence_t* sequence,
 	uint32_t segment_index,
 	size_t extra_traf_atoms_size,
 	write_extra_traf_atoms_callback_t write_extra_traf_atoms_callback,
@@ -326,8 +423,12 @@ mss_packager_build_fragment_header(
 	vod_str_t* result,
 	size_t* total_fragment_size)
 {
+	media_clip_filtered_t* cur_clip;
 	input_frame_t* last_frame;
 	input_frame_t* cur_frame;
+	media_track_t* first_track = sequence->filtered_clips[0].first_track;
+	media_track_t* track;
+	uint32_t media_type = sequence->media_type;
 	size_t mdat_atom_size;
 	size_t trun_atom_size;
 	size_t moof_atom_size;
@@ -336,8 +437,8 @@ mss_packager_build_fragment_header(
 	u_char* p;
 
 	// calculate sizes
-	mdat_atom_size = ATOM_HEADER_SIZE + stream_metadata->total_frames_size;
-	trun_atom_size = mp4_builder_get_trun_atom_size(stream_metadata->media_info.media_type, stream_metadata->frame_count);
+	mdat_atom_size = ATOM_HEADER_SIZE + sequence->total_frame_size;
+	trun_atom_size = mp4_builder_get_trun_atom_size(media_type, sequence->total_frame_count);
 
 	traf_atom_size =
 		ATOM_HEADER_SIZE +
@@ -355,7 +456,7 @@ mss_packager_build_fragment_header(
 		moof_atom_size +
 		ATOM_HEADER_SIZE;		// mdat
 
-	*total_fragment_size = result_size + stream_metadata->total_frames_size;
+	*total_fragment_size = result_size + sequence->total_frame_size;
 
 	// head request optimization
 	if (size_only)
@@ -383,33 +484,36 @@ mss_packager_build_fragment_header(
 	write_atom_header(p, traf_atom_size, 't', 'r', 'a', 'f');
 
 	// moof.traf.tfhd
-	switch (stream_metadata->media_info.media_type)
+	switch (media_type)
 	{
 	case MEDIA_TYPE_VIDEO:
-		p = mss_write_tfhd_atom(p, stream_metadata->media_info.track_id, 0x01010000);
+		p = mss_write_tfhd_atom(p, first_track->media_info.track_id, 0x01010000);
 		break;
 
 	case MEDIA_TYPE_AUDIO:
-		p = mss_write_tfhd_atom(p, stream_metadata->media_info.track_id, 0x02000000);
+		p = mss_write_tfhd_atom(p, first_track->media_info.track_id, 0x02000000);
 		break;
 	}
 
 	// moof.traf.trun
-	last_frame = stream_metadata->frames + stream_metadata->frame_count;
-	for (cur_frame = stream_metadata->frames; cur_frame < last_frame; cur_frame++)
+	for (cur_clip = sequence->filtered_clips; cur_clip < sequence->filtered_clips_end; cur_clip++)
 	{
-		cur_frame->duration = rescale_time(cur_frame->duration, stream_metadata->media_info.timescale, MSS_TIMESCALE);
-		cur_frame->pts_delay = rescale_time(cur_frame->pts_delay, stream_metadata->media_info.timescale, MSS_TIMESCALE);
+		track = cur_clip->first_track;
+		cur_frame = track->first_frame;
+		last_frame = track->last_frame;
+		for (; cur_frame < last_frame; cur_frame++)
+		{
+			cur_frame->duration = rescale_time(cur_frame->duration, track->media_info.timescale, MSS_TIMESCALE);
+			cur_frame->pts_delay = rescale_time(cur_frame->pts_delay, track->media_info.timescale, MSS_TIMESCALE);
+		}
 	}
 
 	p = mp4_builder_write_trun_atom(
 		p,
-		stream_metadata->media_info.media_type,
-		stream_metadata->frames,
-		stream_metadata->frame_count,
+		sequence,
 		moof_atom_size + ATOM_HEADER_SIZE);
 
-	p = mss_write_uuid_tfxd_atom(p, stream_metadata);
+	p = mss_write_uuid_tfxd_atom(p, sequence);
 
 	// moof.traf.xxx
 	if (write_extra_traf_atoms_callback != NULL)

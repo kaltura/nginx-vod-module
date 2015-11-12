@@ -3,7 +3,7 @@
 
 // includes
 #include "../read_cache.h"
-#include "mp4_parser.h"
+#include "../media_set.h"
 
 // macros
 #define write_word(p, w)			\
@@ -60,9 +60,11 @@ typedef struct {
 	request_context_t* request_context;
 	write_callback_t write_callback;
 	void* write_context;
-	uint32_t frames_file_index;
-
 	read_cache_state_t* read_cache_state;
+
+	media_sequence_t* sequence;
+	media_clip_filtered_t* cur_clip;
+	media_clip_source_t* frames_source;
 	input_frame_t* cur_frame;
 	input_frame_t* last_frame;
 	uint64_t* cur_frame_offset;
@@ -77,14 +79,12 @@ size_t mp4_builder_get_trun_atom_size(uint32_t media_type, uint32_t frame_count)
 
 u_char* mp4_builder_write_trun_atom(
 	u_char* p, 
-	uint32_t media_type, 
-	input_frame_t* frames, 
-	uint32_t frame_count, 
+	media_sequence_t* sequence, 
 	uint32_t first_frame_offset);
 
 vod_status_t mp4_builder_frame_writer_init(
 	request_context_t* request_context,
-	mpeg_stream_metadata_t* stream_metadata,
+	media_sequence_t* sequence,
 	read_cache_state_t* read_cache_state,
 	write_callback_t write_callback,
 	void* write_context,

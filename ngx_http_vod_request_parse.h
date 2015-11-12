@@ -5,6 +5,7 @@
 #include <ngx_http.h>
 #include "ngx_buffer_cache.h"
 #include "vod/mp4/mp4_parser.h"
+#include "vod/media_set.h"
 
 // constants
 #define MAX_SUB_URIS (32)
@@ -43,35 +44,6 @@ typedef struct {
 	ngx_str_t string;
 } ngx_http_vod_match_definition_t;
 
-// Note: suburi = a single virtual uri in a multi-uri request (e.g. /hls/videos/file_,500,900,1200,.mp4.urlset has 3 suburis)
-typedef struct {
-	ngx_str_t uri;
-	ngx_str_t stripped_uri;
-	ngx_str_t mapped_uri;
-	uint32_t clip_to;
-	uint32_t clip_from;
-	uint32_t speed_nom;
-	uint32_t speed_denom;
-	uint32_t file_index;
-	uint32_t required_tracks[MEDIA_TYPE_COUNT];
-
-	u_char uri_key[BUFFER_CACHE_KEY_SIZE];
-	u_char file_key[BUFFER_CACHE_KEY_SIZE];
-	u_char encryption_key[BUFFER_CACHE_KEY_SIZE];
-	void* drm_info;
-} ngx_http_vod_suburi_params_t;
-
-typedef struct ngx_http_vod_request_params_s {
-	const struct ngx_http_vod_request_s* request;
-	ngx_http_vod_suburi_params_t* suburis;
-	ngx_http_vod_suburi_params_t* suburis_end;
-	uint32_t suburi_count;
-	ngx_flag_t uses_multi_uri;
-	uint32_t segment_index;
-	uint32_t required_files;
-	uint32_t required_tracks[MEDIA_TYPE_COUNT];
-} ngx_http_vod_request_params_t;
-
 // functions
 bool_t ngx_http_vod_split_uri_file_name(
 	ngx_str_t* uri,
@@ -81,9 +53,11 @@ bool_t ngx_http_vod_split_uri_file_name(
 
 ngx_int_t ngx_http_vod_parse_uri_path(
 	ngx_http_request_t* r,
-	struct ngx_http_vod_loc_conf_s* conf,
+	ngx_str_t* multi_uri_suffix,
+	ngx_hash_t* params_hash,
 	ngx_str_t* uri,
-	ngx_http_vod_request_params_t* request_params);
+	request_params_t* request_params,
+	media_set_t* media_set);
 
 ngx_int_t ngx_http_vod_init_uri_params_hash(
 	ngx_conf_t *cf, 
@@ -106,6 +80,6 @@ ngx_int_t ngx_http_vod_parse_uri_file_name(
 	u_char* start_pos,
 	u_char* end_pos,
 	bool_t expect_segment_index,
-	ngx_http_vod_request_params_t* result);
+	request_params_t* result);
 
 #endif // _NGX_HTTP_VOD_REQUEST_PARSE_H_INCLUDED_

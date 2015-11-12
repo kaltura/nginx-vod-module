@@ -24,8 +24,7 @@ ngx_http_vod_hds_handle_manifest(
 		&submodule_context->conf->hds.manifest_config,
 		&submodule_context->r->uri,
 		&submodule_context->conf->segmenter,
-		submodule_context->request_params.uses_multi_uri,
-		&submodule_context->mpeg_metadata,
+		&submodule_context->media_set,
 		response);
 	if (rc != VOD_OK)
 	{
@@ -58,7 +57,7 @@ ngx_http_vod_hds_init_frame_processor(
 		&submodule_context->request_context,
 		&submodule_context->conf->hds.fragment_config,
 		submodule_context->request_params.segment_index,
-		&submodule_context->mpeg_metadata,
+		submodule_context->media_set.sequences,
 		read_cache_state,
 		segment_writer->write_tail,
 		segment_writer->context,
@@ -86,18 +85,14 @@ ngx_http_vod_hds_init_frame_processor(
 static const ngx_http_vod_request_t hds_manifest_request = {
 	0,
 	PARSE_FLAG_DURATION_LIMITS_AND_TOTAL_SIZE,
-	NULL,
-	0,
 	REQUEST_CLASS_MANIFEST,
 	ngx_http_vod_hds_handle_manifest,
 	NULL,
 };
 
 static const ngx_http_vod_request_t hds_fragment_request = {
-	REQUEST_FLAG_SINGLE_STREAM_PER_MEDIA_TYPE,
+	REQUEST_FLAG_SINGLE_TRACK_PER_MEDIA_TYPE,
 	PARSE_FLAG_FRAMES_ALL | PARSE_FLAG_EXTRA_DATA,
-	NULL,
-	0,
 	REQUEST_CLASS_SEGMENT,
 	NULL,
 	ngx_http_vod_hds_init_frame_processor,
@@ -137,7 +132,8 @@ ngx_http_vod_hds_parse_uri_file_name(
 	ngx_http_vod_loc_conf_t *conf,
 	u_char* start_pos,
 	u_char* end_pos,
-	ngx_http_vod_request_params_t* request_params)
+	request_params_t* request_params,
+	const ngx_http_vod_request_t** request)
 {
 	ngx_int_t rc;
 
@@ -168,14 +164,14 @@ ngx_http_vod_hds_parse_uri_file_name(
 			return NGX_HTTP_BAD_REQUEST;
 		}
 
-		request_params->request = &hds_fragment_request;
+		*request = &hds_fragment_request;
 	}
 	// manifest request
 	else if (ngx_http_vod_match_prefix_postfix(start_pos, end_pos, &conf->hds.manifest_file_name_prefix, manifest_file_ext))
 	{
 		start_pos += conf->hds.manifest_file_name_prefix.len;
 		end_pos -= (sizeof(manifest_file_ext) - 1);
-		request_params->request = &hds_manifest_request;
+		*request = &hds_manifest_request;
 	}
 	else
 	{

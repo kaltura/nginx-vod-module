@@ -1,10 +1,6 @@
 #ifndef __COMMON_H__
 #define __COMMON_H__
 
-// includes
-#include <inttypes.h>
-#include <sys/types.h>
-
 // constants
 #ifndef TRUE
 #define TRUE (1)
@@ -14,7 +10,7 @@
 #define FALSE (0)
 #endif // FALSE
 
-#define INVALID_FILE_INDEX ((uint32_t)-1)
+#define VOD_GUID_SIZE (16)
 
 // macros
 #define vod_div_ceil(x, y) (((x) + (y) - 1) / (y))
@@ -23,6 +19,8 @@
 #ifdef VOD_STAND_ALONE
 
 // includes
+#include <inttypes.h>
+#include <sys/types.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -80,14 +78,18 @@ void vod_log_error(vod_uint_t level, vod_log_t *log, int err,
 
 // includes
 #include <ngx_core.h>
+#include <inttypes.h>
 
 #define VOD_INT64_LEN NGX_INT64_LEN
 #define VOD_INT32_LEN NGX_INT32_LEN
+#define VOD_MAX_SIZE_T_VALUE NGX_MAX_SIZE_T_VALUE
+#define VOD_MAX_OFF_T_VALUE NGX_MAX_OFF_T_VALUE
 
 #define VOD_HAVE_LIB_AV_CODEC NGX_HAVE_LIB_AV_CODEC 
 #define VOD_HAVE_LIB_AV_FILTER NGX_HAVE_LIB_AV_FILTER
 
 // macros
+#define vod_container_of(ptr, type, member) (type *)((char *)(ptr) - offsetof(type, member))
 #define vod_min(x, y) ngx_min(x, y)
 #define vod_max(x, y) ngx_max(x, y)
 
@@ -110,11 +112,14 @@ void vod_log_error(vod_uint_t level, vod_log_t *log, int err,
 #define vod_alloc(pool, size) ngx_palloc(pool, size)
 #define vod_free(pool, ptr) ngx_pfree(pool, ptr)
 #define vod_pool_cleanup_add(pool, size) ngx_pool_cleanup_add(pool, size)
+#define vod_align(d, a) ngx_align(d, a)
 
 // string functions
 #define vod_sprintf ngx_sprintf
 #define vod_snprintf ngx_snprintf
+#define vod_strncmp(s1, s2, n) ngx_strncmp(s1, s2, n)
 #define vod_atoi(str, len) ngx_atoi(str, len)
+#define vod_atofp(str, len, point) ngx_atofp(str, len, point)
 
 // array functions
 #define vod_array_init(array, pool, n, size) ngx_array_init(array, pool, n, size)
@@ -122,7 +127,17 @@ void vod_log_error(vod_uint_t level, vod_log_t *log, int err,
 #define vod_array_push_n(array, count) ngx_array_push_n(array, count)
 #define vod_array_destroy(a) ngx_array_destroy(array)
 
+// hash functions
+#define vod_hash(key, c) ngx_hash(key, c)
+#define vod_hash_key_lc ngx_hash_key_lc
+#define vod_cacheline_size ngx_cacheline_size
+#define vod_hash_init(hinit, names, nelts) ngx_hash_init(hinit, names, nelts)
+#define vod_hash_find(hash, key, name, len) ngx_hash_find(hash, key, name, len)
+
 // types
+#define vod_hash_t ngx_hash_t
+#define vod_hash_key_t ngx_hash_key_t
+#define vod_hash_init_t ngx_hash_init_t
 #define vod_array_t ngx_array_t
 #define vod_pool_t ngx_pool_t
 #define vod_pool_cleanup_t ngx_pool_cleanup_t
@@ -131,9 +146,13 @@ void vod_log_error(vod_uint_t level, vod_log_t *log, int err,
 #define vod_str_t ngx_str_t
 #define vod_buf_t ngx_buf_t
 #define vod_chain_t ngx_chain_t
+
 #define vod_string(str) ngx_string(str)
+#define vod_null_string ngx_null_string
 #define vod_encode_base64(base64, binary) ngx_encode_base64(base64, binary)
+#define vod_decode_base64(binary, base64) ngx_decode_base64(binary, base64)
 #define vod_base64_encoded_length(len) ngx_base64_encoded_length(len)
+#define vod_base64_decoded_length(len) ngx_base64_decoded_length(len)
 
 #define VOD_LOG_STDERR            NGX_LOG_STDERR 
 #define VOD_LOG_EMERG             NGX_LOG_EMERG  
@@ -172,6 +191,7 @@ void vod_log_error(vod_uint_t level, vod_log_t *log, int err,
 
 typedef intptr_t bool_t;
 typedef ngx_int_t vod_status_t;
+typedef ngx_int_t vod_int_t;
 typedef ngx_uint_t vod_uint_t;
 
 #endif	// VOD_STAND_ALONE
@@ -215,12 +235,10 @@ enum {
 	VOD_ALLOC_FAILED,
 	VOD_UNEXPECTED,
 	VOD_BAD_REQUEST,
+	VOD_BAD_MAPPING,
+	VOD_NOT_FOUND,
 	VOD_ERROR_LAST,
 };
-
-struct media_info_s;
-typedef struct media_info_s media_info_t;
-typedef bool_t(*stream_comparator_t)(void* context, const media_info_t* mi1, const media_info_t* mi2);
 
 typedef vod_status_t(*write_callback_t)(void* context, u_char* buffer, uint32_t size, bool_t* reuse_buffer);
 
@@ -233,17 +251,19 @@ typedef struct {
 typedef struct {
 	vod_pool_t* pool;
 	vod_log_t *log;
-	int parse_type;
-	stream_comparator_t stream_comparator;
-	void* stream_comparator_context;
-	uint64_t start;
-	uint64_t end;
-	uint32_t timescale;
-	uint32_t max_frame_count;
 	bool_t simulation_only;
 } request_context_t;
 
+enum {
+	MEDIA_TYPE_VIDEO,
+	MEDIA_TYPE_AUDIO,
+	MEDIA_TYPE_COUNT,
+	MEDIA_TYPE_NONE,
+};
+
 // functions
 int vod_get_int_print_len(uint64_t n);
+
+uint32_t vod_get_number_of_set_bits(uint32_t i);
 
 #endif // __COMMON_H__

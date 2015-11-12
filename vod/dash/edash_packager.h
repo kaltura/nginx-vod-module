@@ -10,12 +10,12 @@ vod_status_t edash_packager_build_mpd(
 	dash_manifest_config_t* conf,
 	vod_str_t* base_url,
 	segmenter_conf_t* segmenter_conf,
-	mpeg_metadata_t* mpeg_metadata,
+	media_set_t* media_set,
 	vod_str_t* result);
 
 vod_status_t edash_packager_build_init_mp4(
 	request_context_t* request_context,
-	mpeg_metadata_t* mpeg_metadata,
+	media_set_t* media_set,
 	bool_t has_clear_lead,
 	bool_t size_only,
 	vod_str_t* result);
@@ -23,7 +23,7 @@ vod_status_t edash_packager_build_init_mp4(
 vod_status_t edash_packager_get_fragment_writer(
 	segment_writer_t* result,
 	request_context_t* request_context,
-	mpeg_stream_metadata_t* stream_metadata,
+	media_set_t* media_set,
 	uint32_t segment_index,
 	segment_writer_t* segment_writer,
 	const u_char* iv,

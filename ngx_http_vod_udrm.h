@@ -5,10 +5,12 @@
 #include "vod/mp4/mp4_encrypt.h"
 
 // functions
-ngx_int_t
-ngx_http_vod_udrm_parse_response(
+ngx_int_t ngx_http_vod_udrm_parse_response(
 	request_context_t* request_context,
 	ngx_str_t* drm_info, 
 	void** output);
+
+ngx_int_t ngx_http_vod_udrm_init_parser(
+	ngx_conf_t* cf);
 
 #endif // _NGX_HTTP_VOD_UDRM_H_INCLUDED_

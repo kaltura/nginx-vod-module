@@ -1,6 +1,5 @@
 #include "mpegts_encoder_filter.h"
 #include "bit_fields.h"
-#include "../codec_config.h"
 #include "../common.h"
 
 #define member_size(type, member) sizeof(((type *)0)->member)
@@ -393,15 +392,13 @@ mpegts_encoder_init_streams(
 	return VOD_OK;
 }
 
-static vod_status_t 
+static void
 mpegts_encoder_write_sample_aes_aac_pmt_entry(
 	request_context_t* request_context,
 	u_char* start,
 	int entry_size,
-	mpeg_stream_metadata_t* stream_metadata)
+	media_track_t* track)
 {
-	mp4a_config_t codec_config;
-	vod_status_t rc;
 	u_char* p;
 
 	p = vod_copy(start, pmt_entry_template_sample_aes_aac, sizeof(pmt_entry_template_sample_aes_aac));
@@ -412,21 +409,11 @@ mpegts_encoder_write_sample_aes_aac_pmt_entry(
 	*p++ =				// descriptor length
 		member_size(registration_descriptor_t, format_identifier) +
 		sizeof(audio_setup_information_t)+
-		stream_metadata->media_info.extra_data_size;
+		track->media_info.extra_data_size;
 	*p++ = 'a';		*p++ = 'p';		*p++ = 'a';		*p++ = 'd';			// apad
 
 	// audio_setup_information
-	rc = codec_config_mp4a_config_parse(
-		request_context, 
-		stream_metadata->media_info.extra_data, 
-		stream_metadata->media_info.extra_data_size, 
-		&codec_config);
-	if (rc != VOD_OK)
-	{
-		return rc;
-	}
-
-	switch (codec_config.object_type - 1)
+	switch (track->media_info.u.audio.codec_config.object_type - 1)
 	{
 	case FF_PROFILE_AAC_HE:
 		*p++ = 'z';		*p++ = 'a';		*p++ = 'c';		*p++ = 'h';			// zach
@@ -443,22 +430,19 @@ mpegts_encoder_write_sample_aes_aac_pmt_entry(
 
 	*p++ = 0;	*p++ = 0;		// priming
 	*p++ = 1;					// version
-	*p++ = stream_metadata->media_info.extra_data_size;
-	vod_memcpy(p, stream_metadata->media_info.extra_data, stream_metadata->media_info.extra_data_size);
-
-	return VOD_OK;
+	*p++ = track->media_info.extra_data_size;
+	vod_memcpy(p, track->media_info.extra_data, track->media_info.extra_data_size);
 }
 
 static vod_status_t 
 mpegts_encoder_add_stream(
 	mpegts_encoder_init_streams_state_t* stream_state, 
-	mpeg_stream_metadata_t* stream_metadata,
+	media_track_t* track,
 	unsigned* pid, 
 	unsigned* sid)
 {
 	const u_char* pmt_entry;
 	int pmt_entry_size;
-	vod_status_t rc;
 
 	*pid = stream_state->cur_pid++;
 
@@ -467,7 +451,7 @@ mpegts_encoder_add_stream(
 		return VOD_OK;
 	}
 
-	switch (stream_metadata->media_info.media_type)
+	switch (track->media_info.media_type)
 	{
 	case MEDIA_TYPE_VIDEO:
 		*sid = stream_state->cur_video_sid++;
@@ -478,7 +462,7 @@ mpegts_encoder_add_stream(
 		}
 		else
 		{
-			switch (stream_metadata->media_info.format)
+			switch (track->media_info.format)
 			{
 			case FORMAT_HEV1:
 			case FORMAT_HVC1:
@@ -502,7 +486,7 @@ mpegts_encoder_add_stream(
 			pmt_entry_size = sizeof(pmt_entry_template_sample_aes_aac) + 
 				sizeof(registration_descriptor_t) + 
 				sizeof(audio_setup_information_t) + 
-				stream_metadata->media_info.extra_data_size;
+				track->media_info.extra_data_size;
 
 		}
 		else
@@ -514,7 +498,7 @@ mpegts_encoder_add_stream(
 
 	default:
 		vod_log_error(VOD_LOG_ERR, stream_state->request_context->log, 0,
-			"mpegts_encoder_add_stream: invalid media type %d", stream_metadata->media_info.media_type);
+			"mpegts_encoder_add_stream: invalid media type %d", track->media_info.media_type);
 		return VOD_UNEXPECTED;
 	}
 
@@ -528,15 +512,11 @@ mpegts_encoder_add_stream(
 
 	if (pmt_entry == pmt_entry_template_sample_aes_aac)
 	{
-		rc = mpegts_encoder_write_sample_aes_aac_pmt_entry(
+		mpegts_encoder_write_sample_aes_aac_pmt_entry(
 			stream_state->request_context,
 			stream_state->pmt_packet_pos,
 			pmt_entry_size,
-			stream_metadata);
-		if (rc != VOD_OK)
-		{
-			return rc;
-		}
+			track);
 	}
 	else
 	{
@@ -585,7 +565,7 @@ vod_status_t
 mpegts_encoder_init(
 	mpegts_encoder_state_t* state,
 	mpegts_encoder_init_streams_state_t* stream_state,
-	mpeg_stream_metadata_t* stream_metadata,
+	media_track_t* track,
 	request_context_t* request_context,
 	write_buffer_queue_t* queue,
 	bool_t interleave_frames,
@@ -598,11 +578,11 @@ mpegts_encoder_init(
 	state->queue = queue;
 	state->interleave_frames = interleave_frames;
 	state->align_frames = align_frames;
-	state->stream_info.media_type = stream_metadata->media_info.media_type;
+	state->stream_info.media_type = track->media_info.media_type;
 
 	rc = mpegts_encoder_add_stream(
 		stream_state,
-		stream_metadata,
+		track,
 		&state->stream_info.pid,
 		&state->stream_info.sid);
 	if (rc != VOD_OK)
@@ -713,7 +693,7 @@ mpegts_encoder_stuff_cur_packet(mpegts_encoder_state_t* state)
 	}
 
 	state->cur_pos = state->cur_packet_end;
-	state->send_queue_offset = NGX_MAX_OFF_T_VALUE;
+	state->send_queue_offset = VOD_MAX_OFF_T_VALUE;
 
 	return VOD_OK;
 }

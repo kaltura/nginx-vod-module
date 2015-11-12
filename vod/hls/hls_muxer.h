@@ -27,7 +27,7 @@ typedef struct {
 typedef struct {
 	int media_type;
 	uint32_t timescale;
-	uint32_t frames_file_index;
+	media_clip_source_t* frames_source;
 	
 	// input frames
 	input_frame_t* first_frame;
@@ -43,6 +43,8 @@ typedef struct {
 	// iframes simulation only
 	uint64_t segment_limit;
 	bool_t is_first_segment_frame;
+	uint32_t prev_key_frame;
+	uint64_t prev_frame_pts;
 
 	// frame offsets
 	uint64_t* first_frame_offset;
@@ -72,6 +74,12 @@ typedef struct {
 	write_buffer_queue_t queue;
 	aes_cbc_encrypt_context_t* encrypted_write_context;
 	
+	// cur sequence state
+	media_clip_filtered_t* clips_start;
+	media_clip_filtered_t* clips_end;
+	media_clip_filtered_t* cur_clip;
+	bool_t use_discontinuity;
+
 	// cur frame state
 	input_frame_t* cur_frame;
 	bool_t last_stream_frame;
@@ -80,7 +88,7 @@ typedef struct {
 	void* cur_writer_context;
 	uint32_t cur_frame_pos;
 	int cache_slot_id;
-	uint32_t cur_file_index;
+	media_clip_source_t* cur_source;
 } hls_muxer_state_t;
 
 // functions
@@ -90,7 +98,7 @@ vod_status_t hls_muxer_init(
 	hls_muxer_conf_t* conf,
 	hls_encryption_params_t* encryption_params,
 	uint32_t segment_index,
-	mpeg_metadata_t* mpeg_metadata,
+	media_set_t* media_set,
 	read_cache_state_t* read_cache_state,
 	write_callback_t write_callback,
 	void* write_context,
@@ -100,12 +108,12 @@ vod_status_t hls_muxer_process(hls_muxer_state_t* state);
 
 vod_status_t hls_muxer_simulate_get_iframes(
 	hls_muxer_state_t* state,
-	segmenter_conf_t* segmenter_conf,
-	mpeg_metadata_t* mpeg_metadata,
+	segment_durations_t* segment_durations,
+	media_set_t* media_set,
 	hls_get_iframe_positions_callback_t callback,
 	void* context);
 
-uint32_t hls_muxer_simulate_get_segment_size(hls_muxer_state_t* state);
+vod_status_t hls_muxer_simulate_get_segment_size(hls_muxer_state_t* state, size_t* result);
 
 void hls_muxer_simulation_reset(hls_muxer_state_t* state);
 

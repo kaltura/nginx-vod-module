@@ -45,9 +45,12 @@ vod_status_t mp4_to_annexb_init(
 	request_context_t* request_context,
 	hls_encryption_params_t* encryption_params,
 	const media_filter_t* next_filter,
-	void* next_filter_context,
+	void* next_filter_context);
+
+vod_status_t mp4_to_annexb_set_media_info(
+	mp4_to_annexb_state_t* state,
 	media_info_t* media_info);
 
-bool_t mp4_to_annexb_simulation_supported(mp4_to_annexb_state_t* state);
+bool_t mp4_to_annexb_simulation_supported(media_info_t* media_info);
 
 #endif // __MP4_TO_ANNEXB_FILTER_H__

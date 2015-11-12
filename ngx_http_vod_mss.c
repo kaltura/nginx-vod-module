@@ -40,16 +40,18 @@ ngx_http_vod_mss_handle_manifest(
 	{
 		rc = mss_playready_build_manifest(
 			&submodule_context->request_context,
+			&submodule_context->conf->mss.manifest_conf,
 			&submodule_context->conf->segmenter,
-			&submodule_context->mpeg_metadata,
+			&submodule_context->media_set,
 			response);
 	}
 	else
 	{
 		rc = mss_packager_build_manifest(
 			&submodule_context->request_context,
+			&submodule_context->conf->mss.manifest_conf,
 			&submodule_context->conf->segmenter,
-			&submodule_context->mpeg_metadata,
+			&submodule_context->media_set,
 			0,
 			NULL,
 			NULL,
@@ -90,10 +92,10 @@ ngx_http_vod_mss_init_frame_processor(
 		rc = mss_playready_get_fragment_writer(
 			&drm_writer,
 			&submodule_context->request_context,
-			submodule_context->mpeg_metadata.first_stream,
+			&submodule_context->media_set,
 			submodule_context->request_params.segment_index,
 			segment_writer,
-			submodule_context->request_params.suburis->encryption_key,		// iv
+			submodule_context->media_set.sequences[0].encryption_key,		// iv
 			size_only,
 			output_buffer,
 			response_size);
@@ -110,7 +112,7 @@ ngx_http_vod_mss_init_frame_processor(
 	{
 		rc = mss_packager_build_fragment_header(
 			&submodule_context->request_context,
-			submodule_context->mpeg_metadata.first_stream,
+			submodule_context->media_set.sequences,
 			submodule_context->request_params.segment_index,
 			0,
 			NULL,
@@ -130,7 +132,7 @@ ngx_http_vod_mss_init_frame_processor(
 	{
 		rc = mp4_builder_frame_writer_init(
 			&submodule_context->request_context,
-			submodule_context->mpeg_metadata.first_stream,
+			submodule_context->media_set.sequences,
 			read_cache_state,
 			segment_writer->write_tail,
 			segment_writer->context,
@@ -147,7 +149,7 @@ ngx_http_vod_mss_init_frame_processor(
 	}
 
 	// set the 'Content-type' header
-	if (submodule_context->mpeg_metadata.stream_count[MEDIA_TYPE_VIDEO])
+	if (submodule_context->media_set.track_count[MEDIA_TYPE_VIDEO])
 	{
 		content_type->len = sizeof(mp4_video_content_type) - 1;
 		content_type->data = mp4_video_content_type;
@@ -164,28 +166,22 @@ ngx_http_vod_mss_init_frame_processor(
 static const ngx_http_vod_request_t mss_manifest_request = {
 	0,
 	PARSE_FLAG_TOTAL_SIZE_ESTIMATE | PARSE_FLAG_PARSED_EXTRA_DATA,
-	mss_packager_compare_streams,
-	offsetof(ngx_http_vod_loc_conf_t, duplicate_bitrate_threshold),
 	REQUEST_CLASS_MANIFEST,
 	ngx_http_vod_mss_handle_manifest,
 	NULL,
 };
 
 static const ngx_http_vod_request_t mss_fragment_request = {
-	REQUEST_FLAG_SINGLE_STREAM,
+	REQUEST_FLAG_SINGLE_TRACK,
 	PARSE_FLAG_FRAMES_ALL,
-	NULL,
-	0,
 	REQUEST_CLASS_SEGMENT,
 	NULL,
 	ngx_http_vod_mss_init_frame_processor,
 };
 
 static const ngx_http_vod_request_t mss_playready_fragment_request = {
-	REQUEST_FLAG_SINGLE_STREAM,
+	REQUEST_FLAG_SINGLE_TRACK,
 	PARSE_FLAG_FRAMES_ALL | PARSE_FLAG_PARSED_EXTRA_DATA,
-	NULL,
-	0,
 	REQUEST_CLASS_SEGMENT,
 	NULL,
 	ngx_http_vod_mss_init_frame_processor,
@@ -196,6 +192,7 @@ ngx_http_vod_mss_create_loc_conf(
 	ngx_conf_t *cf,
 	ngx_http_vod_mss_loc_conf_t *conf)
 {
+	conf->manifest_conf.duplicate_bitrate_threshold = NGX_CONF_UNSET_UINT;
 }
 
 static char *
@@ -206,6 +203,7 @@ ngx_http_vod_mss_merge_loc_conf(
 	ngx_http_vod_mss_loc_conf_t *prev)
 {
 	ngx_conf_merge_str_value(conf->manifest_file_name_prefix, prev->manifest_file_name_prefix, "manifest");
+	ngx_conf_merge_uint_value(conf->manifest_conf.duplicate_bitrate_threshold, prev->manifest_conf.duplicate_bitrate_threshold, 4096);
 	return NGX_CONF_OK;
 }
 
@@ -231,7 +229,8 @@ ngx_http_vod_mss_parse_uri_file_name(
 	ngx_http_vod_loc_conf_t *conf,
 	u_char* start_pos,
 	u_char* end_pos,
-	ngx_http_vod_request_params_t* request_params)
+	request_params_t* request_params,
+	const ngx_http_vod_request_t** request)
 {
 	fragment_params_t fragment_params;
 	ngx_int_t rc;
@@ -253,15 +252,15 @@ ngx_http_vod_mss_parse_uri_file_name(
 			return NGX_HTTP_BAD_REQUEST;
 		}
 
-		request_params->required_files = (1 << mss_file_index(fragment_params.bitrate));
+		request_params->sequences_mask = (1 << mss_sequence_index(fragment_params.bitrate));
 
 		if (ngx_memcmp(fragment_params.media_type.data, MSS_STREAM_TYPE_VIDEO, sizeof(MSS_STREAM_TYPE_VIDEO) - 1) == 0)
 		{
-			request_params->required_tracks[MEDIA_TYPE_VIDEO] = (1 << mss_track_index(fragment_params.bitrate));
+			request_params->tracks_mask[MEDIA_TYPE_VIDEO] = (1 << mss_track_index(fragment_params.bitrate));
 		}
 		else if (ngx_memcmp(fragment_params.media_type.data, MSS_STREAM_TYPE_AUDIO, sizeof(MSS_STREAM_TYPE_AUDIO) - 1) == 0)
 		{
-			request_params->required_tracks[MEDIA_TYPE_AUDIO] = (1 << mss_track_index(fragment_params.bitrate));
+			request_params->tracks_mask[MEDIA_TYPE_AUDIO] = (1 << mss_track_index(fragment_params.bitrate));
 		}
 		else
 		{
@@ -270,9 +269,14 @@ ngx_http_vod_mss_parse_uri_file_name(
 			return NGX_HTTP_BAD_REQUEST;
 		}
 
-		request_params->segment_index = segmenter_get_segment_index(&conf->segmenter, fragment_params.time / 10000);
+		request_params->segment_time = fragment_params.time / 10000;
 
-		request_params->request = conf->drm_enabled ? &mss_playready_fragment_request : &mss_fragment_request;
+		// Note: assuming no discontinuity, if this changes the segment index will be recalculated
+		request_params->segment_index = segmenter_get_segment_index_no_discontinuity(
+			&conf->segmenter, 
+			request_params->segment_time);
+
+		*request = conf->drm_enabled ? &mss_playready_fragment_request : &mss_fragment_request;
 
 		return NGX_OK;
 	}
@@ -285,7 +289,7 @@ ngx_http_vod_mss_parse_uri_file_name(
 		return NGX_HTTP_BAD_REQUEST;
 	}
 
-	request_params->request = &mss_manifest_request;
+	*request = &mss_manifest_request;
 	start_pos += conf->mss.manifest_file_name_prefix.len;
 
 	rc = ngx_http_vod_parse_uri_file_name(r, start_pos, end_pos, FALSE, request_params);

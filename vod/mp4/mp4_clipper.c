@@ -201,7 +201,7 @@ typedef struct {
 
 typedef struct {
 	request_context_t* request_context;
-	mpeg_parse_params_t parse_params;
+	media_parse_params_t parse_params;
 	uint32_t mvhd_timescale;
 	mp4_clipper_parse_result_t result;
 } process_moov_context_t;
@@ -209,7 +209,7 @@ typedef struct {
 typedef struct {
 	// input
 	request_context_t* request_context;
-	mpeg_parse_params_t parse_params;
+	media_parse_params_t parse_params;
 	bool_t copy_data;
 
 	size_t alloc_size;
@@ -286,7 +286,7 @@ mp4_clipper_write_tail(void* ctx, int index, void* buffer, uint32_t size)
 static vod_status_t
 mp4_clipper_clip_duration(
 	request_context_t* request_context, 
-	mpeg_parse_params_t* parse_params, 
+	media_parse_params_t* parse_params, 
 	uint64_t* duration, 
 	uint32_t timescale)
 {
@@ -351,13 +351,13 @@ mp4_clipper_mvhd_clip_data(
 			return VOD_BAD_DATA;
 		}
 
-		*timescale = parse_be32(atom64->timescale) * context->parse_params.speed_nom;
-		duration = parse_be64(atom64->duration) * context->parse_params.speed_denom;
+		*timescale = parse_be32(atom64->timescale);
+		duration = parse_be64(atom64->duration);
 	}
 	else
 	{
-		*timescale = parse_be32(atom->timescale) * context->parse_params.speed_nom;
-		duration = parse_be32(atom->duration) * context->parse_params.speed_denom;
+		*timescale = parse_be32(atom->timescale);
+		duration = parse_be32(atom->duration);
 	}
 
 	rc = mp4_clipper_clip_duration(context->request_context, &context->parse_params, &duration, *timescale);
@@ -421,11 +421,11 @@ mp4_clipper_tkhd_clip_data(
 			return VOD_BAD_DATA;
 		}
 
-		duration = parse_be64(atom64->duration) * context->parse_params.speed_denom;
+		duration = parse_be64(atom64->duration);
 	}
 	else
 	{
-		duration = parse_be32(atom->duration) * context->parse_params.speed_denom;
+		duration = parse_be32(atom->duration);
 	}
 
 	rc = mp4_clipper_clip_duration(context->request_context, &context->parse_params, &duration, context->mvhd_timescale);
@@ -487,13 +487,13 @@ mp4_clipper_mdhd_clip_data(
 			return VOD_BAD_DATA;
 		}
 
-		*timescale = parse_be32(atom64->timescale) * context->parse_params.speed_nom;
-		duration = parse_be64(atom64->duration) * context->parse_params.speed_denom;
+		*timescale = parse_be32(atom64->timescale);
+		duration = parse_be64(atom64->duration);
 	}
 	else
 	{
-		*timescale = parse_be32(atom->timescale) * context->parse_params.speed_nom;
-		duration = parse_be32(atom->duration) * context->parse_params.speed_denom;
+		*timescale = parse_be32(atom->timescale);
+		duration = parse_be32(atom->duration);
 	}
 
 	rc = mp4_clipper_clip_duration(context->request_context, &context->parse_params, &duration, *timescale);
@@ -1647,7 +1647,7 @@ mp4_clipper_trak_write_atom(u_char* p, void* write_context, parsed_trak_t* parse
 vod_status_t 
 mp4_clipper_parse_moov(
 	request_context_t* request_context,
-	mpeg_parse_params_t* parse_params,
+	media_parse_params_t* parse_params,
 	bool_t copy_data,
 	u_char* buffer,
 	size_t size,

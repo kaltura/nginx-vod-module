@@ -5,11 +5,13 @@
 #include "hls_encryption.h"
 #include "bit_fields.h"
 #include "media_filter.h"
+#include "../mp4/mp4_parser.h"
 #include "../common.h"
 
 // typedefs
 typedef struct {
 	// input
+	request_context_t* request_context;
 	const media_filter_t* next_filter;
 	void* next_filter_context;
 
@@ -31,8 +33,10 @@ vod_status_t adts_encoder_init(
 	request_context_t* request_context,
 	hls_encryption_params_t* encryption_params,
 	const media_filter_t* next_filter,
-	void* next_filter_context,
-	const u_char* extra_data, 
-	uint32_t extra_data_size);
+	void* next_filter_context);
+
+vod_status_t adts_encoder_set_media_info(
+	adts_encoder_state_t* state,
+	media_info_t* media_info);
 
 #endif // __ADTS_ENCODER_FILTER_H__

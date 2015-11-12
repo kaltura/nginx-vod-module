@@ -1082,7 +1082,7 @@ ngx_merge_upstream_conf(
 	}
 
 	hash.max_size = 512;
-	hash.bucket_size = 64;
+	hash.bucket_size = ngx_align(64, ngx_cacheline_size);
 	hash.name = "child_request_headers_hash";
 
 	if (ngx_http_upstream_hide_headers_hash(cf, conf_upstream,
