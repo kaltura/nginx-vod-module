@@ -392,7 +392,7 @@ mpegts_encoder_init_streams(
 	return VOD_OK;
 }
 
-static vod_status_t 
+static void
 mpegts_encoder_write_sample_aes_aac_pmt_entry(
 	request_context_t* request_context,
 	u_char* start,
@@ -432,8 +432,6 @@ mpegts_encoder_write_sample_aes_aac_pmt_entry(
 	*p++ = 1;					// version
 	*p++ = track->media_info.extra_data_size;
 	vod_memcpy(p, track->media_info.extra_data, track->media_info.extra_data_size);
-
-	return VOD_OK;
 }
 
 static vod_status_t 
@@ -445,7 +443,6 @@ mpegts_encoder_add_stream(
 {
 	const u_char* pmt_entry;
 	int pmt_entry_size;
-	vod_status_t rc;
 
 	*pid = stream_state->cur_pid++;
 
@@ -515,15 +512,11 @@ mpegts_encoder_add_stream(
 
 	if (pmt_entry == pmt_entry_template_sample_aes_aac)
 	{
-		rc = mpegts_encoder_write_sample_aes_aac_pmt_entry(
+		mpegts_encoder_write_sample_aes_aac_pmt_entry(
 			stream_state->request_context,
 			stream_state->pmt_packet_pos,
 			pmt_entry_size,
 			track);
-		if (rc != VOD_OK)
-		{
-			return rc;
-		}
 	}
 	else
 	{
