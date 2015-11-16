@@ -1513,10 +1513,6 @@ dash_packager_build_fragment_header(
 	dash_packager_init_sidx_params(media_set, sequence, &sidx_params);
 
 	mdat_atom_size = ATOM_HEADER_SIZE + sequence->total_frame_size;
-	if (extensions->mdat_prefix_writer != NULL)
-	{
-		mdat_atom_size += extensions->mdat_prefix_writer->atom_size;
-	}
 	trun_atom_size = mp4_builder_get_trun_atom_size(first_track->media_info.media_type, sequence->total_frame_count);
 
 	tfhd_atom_size = ATOM_HEADER_SIZE + sizeof(tfhd_atom_t);
@@ -1599,10 +1595,6 @@ dash_packager_build_fragment_header(
 
 	// moof.traf.trun
 	first_frame_offset = moof_atom_size + ATOM_HEADER_SIZE;
-	if (extensions->mdat_prefix_writer != NULL)
-	{
-		first_frame_offset += extensions->mdat_prefix_writer->atom_size;
-	}
 
 	p = mp4_builder_write_trun_atom(
 		p, 
@@ -1612,17 +1604,11 @@ dash_packager_build_fragment_header(
 	// moof.traf.xxx
 	if (extensions->write_extra_traf_atoms_callback != NULL)
 	{
-		p = extensions->write_extra_traf_atoms_callback(extensions->write_extra_traf_atoms_context, p, moof_atom_size + ATOM_HEADER_SIZE);
+		p = extensions->write_extra_traf_atoms_callback(extensions->write_extra_traf_atoms_context, p, moof_atom_size);
 	}
 
 	// mdat
 	write_atom_header(p, mdat_atom_size, 'm', 'd', 'a', 't');
-
-	// mdat prefix
-	if (extensions->mdat_prefix_writer != NULL)
-	{
-		p = extensions->mdat_prefix_writer->write(extensions->mdat_prefix_writer->context, p);
-	}
 
 	result->len = p - result->data;
 
