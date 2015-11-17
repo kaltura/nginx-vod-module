@@ -59,6 +59,13 @@ typedef struct {
 	size_t stsd_atom_size;
 } stsd_writer_context_t;
 
+// fragment types
+typedef struct {
+	u_char version[1];
+	u_char flags[3];
+	u_char entry_count[4];
+} senc_atom_t;
+
 ////// mpd functions
 
 static u_char* 
@@ -309,11 +316,20 @@ edash_packager_build_init_mp4(
 ////// video fragment functions
 
 static u_char*
-edash_packager_video_write_auxiliary_data(void* context, u_char* p)
+edash_packager_video_write_encryption_atoms(void* context, u_char* p, size_t mdat_atom_start)
 {
 	mp4_encrypt_video_state_t* state = (mp4_encrypt_video_state_t*)context;
+	size_t senc_data_size = state->auxiliary_data.pos - state->auxiliary_data.start;
+	size_t senc_atom_size = ATOM_HEADER_SIZE + sizeof(senc_atom_t) + senc_data_size;
 
-	p = vod_copy(p, state->auxiliary_data.start, state->auxiliary_data.pos - state->auxiliary_data.start);
+	// saiz / saio
+	p = mp4_encrypt_video_write_saiz_saio(state, p, mdat_atom_start - senc_data_size);
+
+	// senc
+	write_atom_header(p, senc_atom_size, 's', 'e', 'n', 'c');
+	write_dword(p, 0x2);		// flags
+	write_dword(p, state->base.sequence->total_frame_count);
+	p = vod_copy(p, state->auxiliary_data.start, senc_data_size);
 
 	return p;
 }
@@ -322,21 +338,18 @@ static vod_status_t
 edash_packager_video_write_fragment_header(mp4_encrypt_video_state_t* state)
 {
 	dash_fragment_header_extensions_t header_extensions;
-	atom_writer_t auxiliary_data_writer;
 	vod_str_t fragment_header;
 	vod_status_t rc;
 	size_t total_fragment_size;
 	bool_t reuse_buffer;
 
-	// get the auxiliary data writer
-	auxiliary_data_writer.atom_size = state->auxiliary_data.pos - state->auxiliary_data.start;
-	auxiliary_data_writer.write = edash_packager_video_write_auxiliary_data;
-	auxiliary_data_writer.context = state;
-
-	header_extensions.extra_traf_atoms_size = state->base.saiz_atom_size + state->base.saio_atom_size;
-	header_extensions.write_extra_traf_atoms_callback = (write_extra_traf_atoms_callback_t)mp4_encrypt_video_write_saiz_saio;
+	// get the header extensions
+	header_extensions.extra_traf_atoms_size = 
+		state->base.saiz_atom_size + 
+		state->base.saio_atom_size + 
+		ATOM_HEADER_SIZE + sizeof(senc_atom_t) + state->auxiliary_data.pos - state->auxiliary_data.start;
+	header_extensions.write_extra_traf_atoms_callback = (write_extra_traf_atoms_callback_t)edash_packager_video_write_encryption_atoms;
 	header_extensions.write_extra_traf_atoms_context = state;
-	header_extensions.mdat_prefix_writer = &auxiliary_data_writer;
 
 	// build the fragment header
 	rc = dash_packager_build_fragment_header(
@@ -372,6 +385,25 @@ edash_packager_video_write_fragment_header(mp4_encrypt_video_state_t* state)
 
 ////// audio fragment functions
 
+static u_char*
+edash_packager_audio_write_encryption_atoms(void* context, u_char* p, size_t mdat_atom_start)
+{
+	mp4_encrypt_state_t* state = (mp4_encrypt_state_t*)context;
+	size_t senc_data_size = MP4_ENCRYPT_IV_SIZE * state->sequence->total_frame_count;
+	size_t senc_atom_size = ATOM_HEADER_SIZE + sizeof(senc_atom_t) + senc_data_size;
+
+	// saiz / saio
+	p = mp4_encrypt_audio_write_saiz_saio(state, p, mdat_atom_start - senc_data_size);
+
+	// senc
+	write_atom_header(p, senc_atom_size, 's', 'e', 'n', 'c');
+	write_dword(p, 0x0);		// flags
+	write_dword(p, state->sequence->total_frame_count);
+	p = mp4_encrypt_audio_write_auxiliary_data(state, p);
+
+	return p;
+}
+
 static vod_status_t
 edash_packager_audio_build_fragment_header(
 	mp4_encrypt_state_t* state,
@@ -380,18 +412,17 @@ edash_packager_audio_build_fragment_header(
 	size_t* total_fragment_size)
 {
 	dash_fragment_header_extensions_t header_extensions;
-	atom_writer_t auxiliary_data_writer;
 	vod_status_t rc;
 
-	auxiliary_data_writer.atom_size = MP4_ENCRYPT_IV_SIZE * state->sequence->total_frame_count;
-	auxiliary_data_writer.write = (atom_writer_func_t)mp4_encrypt_audio_write_auxiliary_data;
-	auxiliary_data_writer.context = state;
-
-	header_extensions.extra_traf_atoms_size = state->saiz_atom_size + state->saio_atom_size;
-	header_extensions.write_extra_traf_atoms_callback = (write_extra_traf_atoms_callback_t)mp4_encrypt_audio_write_saiz_saio;
+	// get the header extensions
+	header_extensions.extra_traf_atoms_size =
+		state->saiz_atom_size + 
+		state->saio_atom_size + 
+		ATOM_HEADER_SIZE + sizeof(senc_atom_t) + MP4_ENCRYPT_IV_SIZE * state->sequence->total_frame_count;
+	header_extensions.write_extra_traf_atoms_callback = (write_extra_traf_atoms_callback_t)edash_packager_audio_write_encryption_atoms;
 	header_extensions.write_extra_traf_atoms_context = state;
-	header_extensions.mdat_prefix_writer = &auxiliary_data_writer;
 
+	// build the fragment header
 	rc = dash_packager_build_fragment_header(
 		state->request_context,
 		state->media_set,

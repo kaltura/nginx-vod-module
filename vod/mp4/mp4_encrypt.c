@@ -120,7 +120,6 @@ mp4_encrypt_init_track(mp4_encrypt_state_t* state, media_track_t* track)
 	// frame state
 	state->cur_frame = track->first_frame;
 	state->last_frame = track->last_frame;
-	state->frame_count = track->frame_count;
 	state->frame_size_left = 0;
 }
 
@@ -612,7 +611,7 @@ mp4_encrypt_audio_get_auxiliary_data_size(mp4_encrypt_state_t* state)
 u_char*
 mp4_encrypt_audio_write_auxiliary_data(mp4_encrypt_state_t* state, u_char* p)
 {
-	u_char* end_pos = p + sizeof(state->iv) * state->frame_count;
+	u_char* end_pos = p + sizeof(state->iv) * state->sequence->total_frame_count;
 	u_char iv[MP4_ENCRYPT_IV_SIZE];
 
 	vod_memcpy(iv, state->iv, sizeof(iv));
@@ -636,7 +635,7 @@ mp4_encrypt_audio_write_saiz_saio(mp4_encrypt_state_t* state, u_char* p, size_t 
 	write_atom_header(p, saiz_atom_size, 's', 'a', 'i', 'z');
 	write_dword(p, 0);			// version, flags
 	*p++ = MP4_ENCRYPT_IV_SIZE;				// default auxiliary sample size
-	write_dword(p, state->frame_count);
+	write_dword(p, state->sequence->total_frame_count);
 
 	// moof.traf.saio
 	write_atom_header(p, saio_atom_size, 's', 'a', 'i', 'o');

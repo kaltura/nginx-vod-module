@@ -66,7 +66,6 @@ typedef struct {
 	media_clip_filtered_t* cur_clip;
 	input_frame_t* cur_frame;
 	input_frame_t* last_frame;
-	uint32_t frame_count;
 	uint32_t frame_size_left;
 
 	// saiz / saio

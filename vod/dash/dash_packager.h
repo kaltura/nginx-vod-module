@@ -36,7 +36,6 @@ typedef struct {
 	size_t extra_traf_atoms_size;
 	write_extra_traf_atoms_callback_t write_extra_traf_atoms_callback;
 	void* write_extra_traf_atoms_context;
-	atom_writer_t* mdat_prefix_writer;
 } dash_fragment_header_extensions_t;
 
 // functions
