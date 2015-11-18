@@ -1358,12 +1358,14 @@ audio_filter_process_init(vod_log_t* log)
 {
 }
 
-vod_status_t 
+vod_status_t
 audio_filter_alloc_state(
 	request_context_t* request_context,
 	read_cache_state_t* read_cache_state,
+	media_sequence_t* sequence,
 	media_clip_t* clip,
 	media_track_t* output_track,
+	size_t* cache_buffer_count,
 	void** result)
 {
 	vod_log_error(VOD_LOG_ERR, request_context->log, 0,
