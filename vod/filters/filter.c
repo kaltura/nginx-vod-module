@@ -324,19 +324,6 @@ filter_init_filtered_clips(
 				}
 			}
 
-			// calculate the max duration, only relevant in case of single clip
-			if (output_clip->longest_track[MEDIA_TYPE_VIDEO] != NULL &&
-				output_clip->longest_track[MEDIA_TYPE_VIDEO]->media_info.duration_millis > max_duration)
-			{
-				max_duration = output_clip->longest_track[MEDIA_TYPE_VIDEO]->media_info.duration_millis;
-			}
-
-			if (output_clip->longest_track[MEDIA_TYPE_AUDIO] != NULL &&
-				output_clip->longest_track[MEDIA_TYPE_AUDIO]->media_info.duration_millis > max_duration)
-			{
-				max_duration = output_clip->longest_track[MEDIA_TYPE_AUDIO]->media_info.duration_millis;
-			}
-
 			if (init_state.audio_reference_track != NULL)
 			{
 				// add the audio filter output track
@@ -357,6 +344,19 @@ filter_init_filtered_clips(
 			}
 
 			output_clip->last_track = init_state.output_track;
+
+			// calculate the max duration, only relevant in case of single clip
+			if (output_clip->longest_track[MEDIA_TYPE_VIDEO] != NULL &&
+				output_clip->longest_track[MEDIA_TYPE_VIDEO]->media_info.duration_millis > max_duration)
+			{
+				max_duration = output_clip->longest_track[MEDIA_TYPE_VIDEO]->media_info.duration_millis;
+			}
+
+			if (output_clip->longest_track[MEDIA_TYPE_AUDIO] != NULL &&
+				output_clip->longest_track[MEDIA_TYPE_AUDIO]->media_info.duration_millis > max_duration)
+			{
+				max_duration = output_clip->longest_track[MEDIA_TYPE_AUDIO]->media_info.duration_millis;
+			}
 		}
 	}
 
