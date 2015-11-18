@@ -472,8 +472,8 @@ ngx_http_vod_extract_uri_params(
 	media_clip_t** result)
 {
 	ngx_http_vod_uri_param_def_t* param_def = NULL;
+	media_clip_rate_filter_t* rate_filter = NULL;
 	request_context_t request_context;
-	media_clip_t* rate_filter = NULL;
 	ngx_uint_t  cur_key_hash = 0;
 	ngx_str_t cur_param;
 	ngx_int_t rc;
@@ -566,8 +566,11 @@ ngx_http_vod_extract_uri_params(
 						return ngx_http_vod_status_to_ngx_error(rc);
 					}
 
-					rate_filter->id = (*clip_id)++;
-					*result = rate_filter;
+					if (rate_filter->rate.nom != rate_filter->rate.denom)
+					{
+						rate_filter->base.id = (*clip_id)++;
+						*result = &rate_filter->base;
+					}
 				}
 				else
 				{
