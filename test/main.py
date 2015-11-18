@@ -750,11 +750,11 @@ class BasicTestSuite(TestSuite):
 
     def testBadClipTo(self):
         assertRequestFails(self.getUrl(HLS_PREFIX, '/clipTo/abcd' + HLS_PLAYLIST_FILE), 400)
-        self.logTracker.assertContains('clipTo parser failed')
+        self.logTracker.assertContains('clip to parser failed')
 
     def testBadClipFrom(self):
         assertRequestFails(self.getUrl(HLS_PREFIX, '/clipFrom/abcd' + HLS_PLAYLIST_FILE), 400)
-        self.logTracker.assertContains('clipFrom parser failed')
+        self.logTracker.assertContains('clip from parser failed')
         
 class UpstreamTestSuite(TestSuite):
     def __init__(self, baseUrl, urlFile, serverPort):

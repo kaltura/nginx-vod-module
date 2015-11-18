@@ -772,6 +772,12 @@ ngx_http_vod_parse_moov_atom(ngx_http_vod_ctx_t *ctx, u_char* moov_buffer, size_
 		return ngx_http_vod_status_to_ngx_error(rc);
 	}
 
+	if (mp4_base_metadata.tracks.nelts == 0)
+	{
+		ngx_memzero(&cur_source->track_array, sizeof(cur_source->track_array));
+		return VOD_OK;
+	}
+
 	if (request->request_class != REQUEST_CLASS_SEGMENT)
 	{
 		request_context->simulation_only = TRUE;
