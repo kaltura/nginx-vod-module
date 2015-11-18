@@ -42,7 +42,7 @@ rate_filter_scale_track_timestamps(
 	track->media_info.timescale *= speed_nom;
 	track->media_info.duration *= speed_denom;
 	track->media_info.full_duration *= speed_denom;
-	track->media_info.duration_millis = ((uint64_t)track->media_info.duration_millis * speed_denom) / speed_nom;
+	track->media_info.duration_millis = rescale_time(track->media_info.duration, track->media_info.timescale, 1000);
 
 	track->first_frame_time_offset *= speed_denom;
 	track->total_frames_duration *= speed_denom;
@@ -55,7 +55,7 @@ rate_filter_scale_track_timestamps(
 		return;		// should not change the frame durations for audio, since they will be filtered by libavcodec
 	}
 
-	track->media_info.bitrate = ((uint64_t)track->media_info.bitrate * speed_nom) / speed_denom;
+	track->media_info.bitrate = (uint32_t)((track->total_frames_size * track->media_info.timescale * 8) / track->media_info.full_duration);
 
 	last_frame = track->last_frame;
 	for (cur_frame = track->first_frame; cur_frame < last_frame; cur_frame++)
