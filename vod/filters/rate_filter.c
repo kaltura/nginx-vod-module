@@ -32,6 +32,13 @@ rate_filter_scale_track_timestamps(
 	input_frame_t* last_frame;
 	input_frame_t* cur_frame;
 
+	// TODO: remove this (added temporarily in order to avoid changing existing responses)
+	if (speed_nom % 10 == 0 && speed_denom % 10 == 0)
+	{
+		speed_nom /= 10;
+		speed_denom /= 10;
+	}
+
 	track->media_info.timescale *= speed_nom;
 	track->media_info.duration *= speed_denom;
 	track->media_info.full_duration *= speed_denom;
