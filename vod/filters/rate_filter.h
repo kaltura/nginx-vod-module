@@ -26,7 +26,7 @@ vod_status_t rate_filter_create_from_string(
 	request_context_t* request_context,
 	vod_str_t* str,
 	media_clip_t* source,
-	media_clip_t** result);
+	media_clip_rate_filter_t** result);
 
 vod_status_t rate_filter_parser_init(
 	vod_pool_t* pool,

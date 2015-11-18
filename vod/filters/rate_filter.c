@@ -207,7 +207,7 @@ rate_filter_create_from_string(
 	request_context_t* request_context, 
 	vod_str_t* str, 
 	media_clip_t* source, 
-	media_clip_t** result)
+	media_clip_rate_filter_t** result)
 {
 	media_clip_rate_filter_t* filter;
 	vod_int_t nom;
@@ -247,7 +247,7 @@ rate_filter_create_from_string(
 
 	source->parent = &filter->base;
 
-	*result = &filter->base;
+	*result = filter;
 
 	return VOD_OK;
 }
