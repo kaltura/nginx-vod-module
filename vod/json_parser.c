@@ -150,7 +150,7 @@ vod_json_parse_number(vod_json_parser_state_t* state, vod_json_value_t* result)
 	if (!isdigit(*state->cur_pos))
 	{
 		vod_snprintf(state->error, state->error_size, "expected digit got 0x%xd%Z", (int)*state->cur_pos);
-		return VOD_BAD_DATA;
+		return VOD_JSON_BAD_DATA;
 	}
 
 	value = 0;
@@ -160,7 +160,7 @@ vod_json_parse_number(vod_json_parser_state_t* state, vod_json_value_t* result)
 		if (value > LLONG_MAX / 10 - 1)
 		{
 			vod_snprintf(state->error, state->error_size, "number value overflow (1)%Z");
-			return VOD_BAD_DATA;
+			return VOD_JSON_BAD_DATA;
 		}
 
 		value = value * 10 + (*state->cur_pos - '0');
@@ -174,7 +174,7 @@ vod_json_parse_number(vod_json_parser_state_t* state, vod_json_value_t* result)
 		if (!isdigit(*state->cur_pos))
 		{
 			vod_snprintf(state->error, state->error_size, "expected digit got 0x%xd%Z", (int)*state->cur_pos);
-			return VOD_BAD_DATA;
+			return VOD_JSON_BAD_DATA;
 		}
 
 		result->type = VOD_JSON_FRAC;
@@ -184,7 +184,7 @@ vod_json_parse_number(vod_json_parser_state_t* state, vod_json_value_t* result)
 			if (value > LLONG_MAX / 10 - 1 || denom > ULLONG_MAX / 10)
 			{
 				vod_snprintf(state->error, state->error_size, "number value overflow (2)%Z");
-				return VOD_BAD_DATA;
+				return VOD_JSON_BAD_DATA;
 			}
 
 			value = value * 10 + (*state->cur_pos - '0');
