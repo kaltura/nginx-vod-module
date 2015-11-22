@@ -869,6 +869,7 @@ audio_filter_update_track(audio_filter_state_t* state)
 	uint32_t old_timescale;
 	vod_status_t rc;
 	u_char* new_extra_data;
+	bool_t has_frames;
 
 	if (state->sink.encoder->time_base.num != 1)
 	{
@@ -881,20 +882,40 @@ audio_filter_update_track(audio_filter_state_t* state)
 	// decrement the old frame count and size
 	state->sequence->total_frame_count -= output->frame_count;
 	state->sequence->total_frame_size -= output->total_frames_size;
+	output->total_frames_size = 0;
+	output->total_frames_duration = 0;
 
 	// update frames
 	output->first_frame = state->frames_array.elts;
 	output->frame_count = state->frames_array.nelts;
 	output->last_frame = output->first_frame + output->frame_count;
 	output->frame_offsets = state->frame_offsets_array.elts;
+
+	// check whether there are any frames with duration
+	has_frames = FALSE;
+	last_frame = output->last_frame;
+	for (cur_frame = output->first_frame; cur_frame < last_frame; cur_frame++)
+	{
+		if (cur_frame->duration != 0)
+		{
+			has_frames = TRUE;
+			break;
+		}
+	}
+
+	if (!has_frames)
+	{
+		output->first_frame = NULL;
+		output->last_frame = NULL;
+		output->frame_count = 0;
+		output->frame_offsets = NULL;
+		return VOD_OK;
+	}
 	
 	// calculate the total frames size and duration
-	output->total_frames_size = 0;
-	output->total_frames_duration = 0;
 	output->media_info.min_frame_duration = 0;
 	output->media_info.max_frame_duration = 0;
 	
-	last_frame = output->last_frame;
 	for (cur_frame = output->first_frame; cur_frame < last_frame; cur_frame++)
 	{
 		output->total_frames_size += cur_frame->size;
@@ -912,13 +933,6 @@ audio_filter_update_track(audio_filter_state_t* state)
 		}
 	}
 	
-	if (output->media_info.min_frame_duration == 0)
-	{
-		vod_log_error(VOD_LOG_ERR, state->request_context->log, 0,
-			"audio_filter_update_track: min frame duration is zero");
-		return VOD_UNEXPECTED;
-	}
-
 	// update media info
 	old_timescale = output->media_info.timescale;
 	output->media_info.timescale = state->sink.encoder->time_base.den;
