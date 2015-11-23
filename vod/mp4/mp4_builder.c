@@ -239,7 +239,7 @@ mp4_builder_frame_writer_process(fragment_writer_state_t* state)
 				continue;
 			}
 
-			// buffers not continguous, flush the write buffer
+			// buffers not contiguous, flush the write buffer
 			rc = state->write_callback(state->write_context, write_buffer, write_buffer_size, &cur_reuse_buffer);
 			if (rc != VOD_OK)
 			{
