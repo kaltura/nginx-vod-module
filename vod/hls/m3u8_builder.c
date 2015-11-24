@@ -517,13 +517,13 @@ m3u8_builder_build_master_playlist(
 	uint32_t sequence_index;
 	uint32_t bitrate;
 	u_char* p;
-	size_t max_video_stream_inf;
-	size_t result_size;
-        //uint32_t        main_media_type;
+	size_t          max_video_stream_inf = 0;
+	size_t          result_size = 0;
+        uint32_t        main_media_type;
         media_track_t*  cur_track;
-int Ind = 0;
-        media_track_t** cur_sequence_tracks = malloc(sizeof(media_track_t*) * MEDIA_TYPE_COUNT);
-if (cur_sequence_tracks == NULL)
+        //media_track_t** cur_sequence_tracks = malloc(sizeof(media_track_t*) * (MEDIA_TYPE_COUNT + 1));
+        media_track_t* cur_sequence_tracks[MEDIA_TYPE_COUNT + 1];
+        if (cur_sequence_tracks == NULL)
 	{
 		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
 			"m3u8_builder_build_master_playlist: malloc failed (2)");
@@ -533,27 +533,24 @@ if (cur_sequence_tracks == NULL)
 
 
 	// calculate the result size
-	max_video_stream_inf = 
-		sizeof(m3u8_stream_inf_video) - 1 + 3 * VOD_INT32_LEN + MAX_CODEC_NAME_SIZE +
-		MAX_CODEC_NAME_SIZE + 1 +
-		sizeof(m3u8_stream_inf_suffix) - 1;
-	result_size = 
-		sizeof(m3u8_header) + 
-		media_set->sequence_count * max_video_stream_inf;		// using only video since it's larger than audio
-result_size += 1000;
+        result_size = sizeof(m3u8_header);
 	for (cur_sequence = media_set->sequences; cur_sequence < media_set->sequences_end; cur_sequence++)
-	{
-             cur_sequence_tracks = cur_sequence->filtered_clips[0].longest_track;
-            // main_media_type = cur_sequence->track_count[MEDIA_TYPE_VIDEO] != 0 ? MEDIA_TYPE_VIDEO : MEDIA_TYPE_AUDIO;
+	{	    
+             main_media_type = cur_sequence->track_count[MEDIA_TYPE_VIDEO] != 0 ? MEDIA_TYPE_VIDEO : MEDIA_TYPE_AUDIO;
              
              cur_sequence_tracks[MEDIA_TYPE_VIDEO] = NULL;
              cur_sequence_tracks[MEDIA_TYPE_AUDIO] = cur_sequence->filtered_clips[0].longest_track[MEDIA_TYPE_AUDIO];
              for (cur_track = cur_sequence->filtered_clips[0].first_track; cur_track < cur_sequence->filtered_clips[0].last_track; cur_track++)
              {			
-                  //if (cur_track->media_info.media_type != main_media_type)
-                  //{
-                    //  continue;
-                  //}
+                  if (cur_track->media_info.media_type != main_media_type)
+                  {
+                      continue;
+                  }
+                  max_video_stream_inf += 
+       		       sizeof(m3u8_stream_inf_video) - 1 + 3 * VOD_INT32_LEN + MAX_CODEC_NAME_SIZE +
+		       MAX_CODEC_NAME_SIZE + 1 +
+   		       sizeof(m3u8_stream_inf_suffix) - 1;
+                  result_size += max_video_stream_inf;                 // using only video since it's larger than audio		
 		  if (base_url->len != 0)
 		  {
 			result_size += base_url->len + 1;
@@ -570,7 +567,6 @@ result_size += 1000;
 		  result_size += sizeof("-f-v-a") - 1 + VOD_INT32_LEN * 3;
 		  result_size += sizeof(m3u8_url_suffix) - 1;
                   result_size += 2;
-Ind++;
              }
 	}
 
@@ -584,25 +580,23 @@ Ind++;
 	}
 
 	// write the header
+
 	p = vod_copy(result->data, m3u8_header, sizeof(m3u8_header) - 1);
-p = vod_sprintf(p, "test seq: %d\n", Ind);
-//return VOD_OK;
 	// write the streams
 	for (cur_sequence = media_set->sequences; cur_sequence < media_set->sequences_end; cur_sequence++)
 	{
-	     cur_sequence_tracks = cur_sequence->filtered_clips[0].longest_track;
-             //main_media_type = cur_sequence->track_count[MEDIA_TYPE_VIDEO] != 0 ? MEDIA_TYPE_VIDEO : MEDIA_TYPE_AUDIO;
+             main_media_type = cur_sequence->track_count[MEDIA_TYPE_VIDEO] != 0 ? MEDIA_TYPE_VIDEO : MEDIA_TYPE_AUDIO;
              
              
-             //cur_sequence_tracks[MEDIA_TYPE_AUDIO] = cur_sequence->filtered_clips[0].longest_track[MEDIA_TYPE_AUDIO];
+             cur_sequence_tracks[MEDIA_TYPE_AUDIO] = cur_sequence->filtered_clips[0].longest_track[MEDIA_TYPE_AUDIO];
              for (cur_track = cur_sequence->filtered_clips[0].first_track; cur_track < cur_sequence->filtered_clips[0].last_track; cur_track++)
              {		
                   cur_sequence_tracks[MEDIA_TYPE_VIDEO] = NULL;
-                  cur_sequence_tracks[MEDIA_TYPE_AUDIO] = NULL;	
-                  /*if (cur_track->media_info.media_type != main_media_type)
+                  //cur_sequence_tracks[MEDIA_TYPE_AUDIO] = NULL;	
+                  if (cur_track->media_info.media_type != main_media_type)
                   {
                       continue;
-                  }*/
+                  }
                   cur_sequence_tracks[cur_track->media_info.media_type] = cur_track;
 		  // write the track information
 		  if (cur_sequence_tracks[MEDIA_TYPE_VIDEO] != NULL)
@@ -631,9 +625,7 @@ p = vod_sprintf(p, "test seq: %d\n", Ind);
 			audio = &cur_track->media_info;
 			p = vod_sprintf(p, m3u8_stream_inf_audio, audio->bitrate, &audio->codec_name);
 		    }
-//p = vod_sprintf(p, "!1!");
 		    p = vod_copy(p, m3u8_stream_inf_suffix, sizeof(m3u8_stream_inf_suffix) - 1);
-//p = vod_sprintf(p, "!2!");
 		    // write the track url
 		    sequence_index = cur_sequence->index;
 		    if (base_url->len != 0)
@@ -682,7 +674,6 @@ p = vod_sprintf(p, "test seq: %d\n", Ind);
 			result->len, result_size);
 		return VOD_UNEXPECTED;
 	}
-	//free(cur_sequence_tracks);
 	return VOD_OK;
 }
 
