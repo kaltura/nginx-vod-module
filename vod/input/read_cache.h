@@ -2,7 +2,7 @@
 #define __READ_CACHE_H__
 
 // includes
-#include "common.h"
+#include "../common.h"
 
 // typedefs
 typedef struct {
@@ -21,6 +21,7 @@ typedef struct {
 	size_t buffer_count;
 	size_t buffer_size;
 	size_t alignment;
+	bool_t reuse_buffers;
 } read_cache_state_t;
 
 // functions
@@ -36,7 +37,6 @@ vod_status_t read_cache_allocate_buffer_slots(
 
 bool_t read_cache_get_from_cache(
 	read_cache_state_t* state, 
-	uint32_t frame_size_left, 
 	int cache_slot_id, 
 	void* source,
 	uint64_t offset, 

@@ -28,6 +28,7 @@ typedef struct {
 static vod_status_t media_set_parse_null_term_string(void* ctx, vod_json_value_t* value, void* dest);
 static vod_status_t media_set_parse_tracks_spec(void* ctx, vod_json_value_t* value, void* dest);
 static vod_status_t media_set_parse_int32(void* ctx, vod_json_value_t* value, void* dest);
+static vod_status_t media_set_parse_encryption_key(void* ctx, vod_json_value_t* value, void* dest);
 static vod_status_t media_set_parse_source(void* ctx, vod_json_value_t* element, void** result);
 static vod_status_t media_set_parse_sequence_clips(void* ctx, vod_json_value_t* value, void* dest);
 
@@ -36,6 +37,7 @@ static json_object_value_def_t media_clip_source_params[] = {
 	{ vod_string("path"), VOD_JSON_STRING, offsetof(media_clip_source_t, mapped_uri), media_set_parse_null_term_string },
 	{ vod_string("tracks"), VOD_JSON_STRING, offsetof(media_clip_source_t, tracks_mask), media_set_parse_tracks_spec },
 	{ vod_string("clipFrom"), VOD_JSON_INT, offsetof(media_clip_source_t, clip_from), media_set_parse_int32 },
+	{ vod_string("encryptionKey"), VOD_JSON_STRING, offsetof(media_clip_source_t, encryption_key), media_set_parse_encryption_key },
 	{ vod_null_string, 0, 0, NULL }
 };
 
@@ -134,6 +136,28 @@ media_set_parse_int32(
 	*(uint32_t*)dest = value->v.num.nom;
 
 	return VOD_OK;
+}
+
+static vod_status_t
+media_set_parse_encryption_key(
+	void* ctx,
+	vod_json_value_t* value,
+	void* dest)
+{
+	media_filter_parse_context_t* context = ctx;
+	u_char* result;
+
+	result = vod_alloc(context->request_context->pool, MP4_AES_CBC_KEY_SIZE);
+	if (result == NULL)
+	{
+		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, context->request_context->log, 0,
+			"media_set_parse_encryption_key: vod_alloc failed");
+		return VOD_ALLOC_FAILED;
+	}
+
+	*(u_char**)dest = result;
+
+	return parse_utils_parse_fixed_base64_string(&value->v.str, result, MP4_AES_CBC_KEY_SIZE);
 }
 
 static vod_status_t 

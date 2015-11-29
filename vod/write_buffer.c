@@ -8,11 +8,13 @@ write_buffer_init(
 	write_buffer_state_t* state,
 	request_context_t* request_context,
 	write_callback_t write_callback,
-	void* write_context)
+	void* write_context, 
+	bool_t reuse_buffers)
 {
 	state->request_context = request_context;
 	state->write_callback = write_callback;
 	state->write_context = write_context;
+	state->reuse_buffers = reuse_buffers;
 	state->start_pos = state->end_pos = state->cur_pos = NULL;
 }
 
@@ -20,11 +22,10 @@ vod_status_t
 write_buffer_flush(write_buffer_state_t* state, bool_t reallocate)
 {
 	vod_status_t rc;
-	bool_t reuse_buffer;
 
 	if (state->cur_pos > state->start_pos)
 	{
-		rc = state->write_callback(state->write_context, state->start_pos, state->cur_pos - state->start_pos, &reuse_buffer);
+		rc = state->write_callback(state->write_context, state->start_pos, state->cur_pos - state->start_pos);
 		if (rc != VOD_OK)
 		{
 			vod_log_debug1(VOD_LOG_DEBUG_LEVEL, state->request_context->log, 0,
@@ -32,7 +33,7 @@ write_buffer_flush(write_buffer_state_t* state, bool_t reallocate)
 			return rc;
 		}
 
-		if (reuse_buffer)
+		if (state->reuse_buffers)
 		{
 			state->cur_pos = state->start_pos;
 			return VOD_OK;
@@ -62,19 +63,20 @@ write_buffer_flush(write_buffer_state_t* state, bool_t reallocate)
 vod_status_t
 write_buffer_get_bytes(
 	write_buffer_state_t* state,
-	size_t size,
+	size_t min_size,
+	size_t* size,
 	u_char** buffer)
 {
 	vod_status_t rc;
 
-	if (size > WRITE_BUFFER_SIZE)
+	if (min_size > WRITE_BUFFER_SIZE)
 	{
 		vod_log_error(VOD_LOG_ERR, state->request_context->log, 0,
-			"write_buffer_get_bytes: invalid size request %uz", size);
+			"write_buffer_get_bytes: invalid size request %uz", min_size);
 		return VOD_UNEXPECTED;
 	}
 
-	if (state->cur_pos + size > state->end_pos)
+	if (state->cur_pos + min_size > state->end_pos)
 	{
 		rc = write_buffer_flush(state, TRUE);
 		if (rc != VOD_OK)
@@ -84,7 +86,15 @@ write_buffer_get_bytes(
 	}
 
 	*buffer = state->cur_pos;
-	state->cur_pos += size;
+	if (size != NULL)
+	{
+		// Note: in this mode, the caller is responsible for incrementing cur_pos
+		*size = state->end_pos - state->cur_pos;
+	}
+	else
+	{
+		state->cur_pos += min_size;
+	}
 	return VOD_OK;
 }
 

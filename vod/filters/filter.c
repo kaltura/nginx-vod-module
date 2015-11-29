@@ -452,7 +452,6 @@ filter_run_state_machine(void* context)
 		// initialize the audio filter
 		rc = audio_filter_alloc_state(
 			state->request_context,
-			state->read_cache_state,
 			state->sequence,
 			state->cur_track->source_clip,
 			state->cur_track,

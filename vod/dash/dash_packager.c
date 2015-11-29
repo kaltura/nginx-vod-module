@@ -1073,12 +1073,12 @@ dash_packager_write_trex_atom(u_char* p, uint32_t track_id)
 	size_t atom_size = ATOM_HEADER_SIZE + sizeof(trex_atom_t);
 
 	write_atom_header(p, atom_size, 't', 'r', 'e', 'x');
-	write_dword(p, 0);			// version + flags
-	write_dword(p, track_id);	// track id
-	write_dword(p, 1);			// default sample description index
-	write_dword(p, 0);			// default sample duration
-	write_dword(p, 0);			// default sample size
-	write_dword(p, 0);			// default sample size
+	write_be32(p, 0);			// version + flags
+	write_be32(p, track_id);	// track id
+	write_be32(p, 1);			// default sample description index
+	write_be32(p, 0);			// default sample duration
+	write_be32(p, 0);			// default sample size
+	write_be32(p, 0);			// default sample size
 	return p;
 }
 
@@ -1086,33 +1086,33 @@ static u_char*
 dash_packager_write_matrix(u_char* p, int16_t a, int16_t b, int16_t c,
 	int16_t d, int16_t tx, int16_t ty)
 {
-	write_dword(p, a << 16);  // 16.16 format
-	write_dword(p, b << 16);  // 16.16 format
-	write_dword(p, 0);        // u in 2.30 format
-	write_dword(p, c << 16);  // 16.16 format
-	write_dword(p, d << 16);  // 16.16 format
-	write_dword(p, 0);        // v in 2.30 format
-	write_dword(p, tx << 16); // 16.16 format
-	write_dword(p, ty << 16); // 16.16 format
-	write_dword(p, 1 << 30);  // w in 2.30 format
+	write_be32(p, a << 16);  // 16.16 format
+	write_be32(p, b << 16);  // 16.16 format
+	write_be32(p, 0);        // u in 2.30 format
+	write_be32(p, c << 16);  // 16.16 format
+	write_be32(p, d << 16);  // 16.16 format
+	write_be32(p, 0);        // v in 2.30 format
+	write_be32(p, tx << 16); // 16.16 format
+	write_be32(p, ty << 16); // 16.16 format
+	write_be32(p, 1 << 30);  // w in 2.30 format
 	return p;
 }
 
 static u_char*
 dash_packager_write_mvhd_constants(u_char* p)
 {
-	write_dword(p, 0x00010000);	// preferred rate, 1.0
-	write_word(p, 0x0100);		// volume, full
-	write_word(p, 0);			// reserved
-	write_dword(p, 0);			// reserved
-	write_dword(p, 0);			// reserved
+	write_be32(p, 0x00010000);	// preferred rate, 1.0
+	write_be16(p, 0x0100);		// volume, full
+	write_be16(p, 0);			// reserved
+	write_be32(p, 0);			// reserved
+	write_be32(p, 0);			// reserved
 	p = dash_packager_write_matrix(p, 1, 0, 0, 1, 0, 0);	// matrix
-	write_dword(p, 0);			// reserved (preview time)
-	write_dword(p, 0);			// reserved (preview duration)
-	write_dword(p, 0);			// reserved (poster time)
-	write_dword(p, 0);			// reserved (selection time)
-	write_dword(p, 0);			// reserved (selection duration)
-	write_dword(p, 0);			// reserved (current time)
+	write_be32(p, 0);			// reserved (preview time)
+	write_be32(p, 0);			// reserved (preview duration)
+	write_be32(p, 0);			// reserved (poster time)
+	write_be32(p, 0);			// reserved (selection time)
+	write_be32(p, 0);			// reserved (selection duration)
+	write_be32(p, 0);			// reserved (current time)
 	return p;
 }
 
@@ -1122,13 +1122,13 @@ dash_packager_write_mvhd_atom(u_char* p, uint32_t timescale, uint32_t duration)
 	size_t atom_size = ATOM_HEADER_SIZE + sizeof(mvhd_atom_t);
 
 	write_atom_header(p, atom_size, 'm', 'v', 'h', 'd');
-	write_dword(p, 0);			// version + flags
-	write_dword(p, 0);			// creation time
-	write_dword(p, 0);			// modification time
-	write_dword(p, timescale);	// timescale
-	write_dword(p, duration);	// duration
+	write_be32(p, 0);			// version + flags
+	write_be32(p, 0);			// creation time
+	write_be32(p, 0);			// modification time
+	write_be32(p, timescale);	// timescale
+	write_be32(p, duration);	// duration
 	p = dash_packager_write_mvhd_constants(p);
-	write_dword(p, 0xffffffff); // next track id
+	write_be32(p, 0xffffffff); // next track id
 	return p;
 }
 
@@ -1138,13 +1138,13 @@ dash_packager_write_mvhd64_atom(u_char* p, uint32_t timescale, uint64_t duration
 	size_t atom_size = ATOM_HEADER_SIZE + sizeof(mvhd64_atom_t);
 
 	write_atom_header(p, atom_size, 'm', 'v', 'h', 'd');
-	write_dword(p, 0x01000000);	// version + flags
-	write_qword(p, 0LL);		// creation time
-	write_qword(p, 0LL);		// modification time
-	write_dword(p, timescale);	// timescale
-	write_qword(p, duration);	// duration
+	write_be32(p, 0x01000000);	// version + flags
+	write_be64(p, 0LL);			// creation time
+	write_be64(p, 0LL);			// modification time
+	write_be32(p, timescale);	// timescale
+	write_be64(p, duration);	// duration
 	p = dash_packager_write_mvhd_constants(p);
-	write_dword(p, 0xffffffff); // next track id
+	write_be32(p, 0xffffffff);	// next track id
 	return p;
 }
 
@@ -1361,15 +1361,15 @@ dash_packager_write_sidx_atom(
 	size_t atom_size = ATOM_HEADER_SIZE + sizeof(sidx_atom_t);
 
 	write_atom_header(p, atom_size, 's', 'i', 'd', 'x');
-	write_dword(p, 0);					// version + flags
-	write_dword(p, 1);					// reference id
-	write_dword(p, sidx_params->timescale);			// timescale
-	write_dword(p, sidx_params->earliest_pres_time);	// earliest presentation time
-	write_dword(p, 0);					// first offset
-	write_dword(p, 1);					// reserved + reference count
-	write_dword(p, reference_size);		// referenced size
-	write_dword(p, sidx_params->total_frames_duration);		// subsegment duration
-	write_dword(p, 0x90000000);			// starts with SAP / SAP type
+	write_be32(p, 0);					// version + flags
+	write_be32(p, 1);					// reference id
+	write_be32(p, sidx_params->timescale);			// timescale
+	write_be32(p, sidx_params->earliest_pres_time);	// earliest presentation time
+	write_be32(p, 0);					// first offset
+	write_be32(p, 1);					// reserved + reference count
+	write_be32(p, reference_size);		// referenced size
+	write_be32(p, sidx_params->total_frames_duration);		// subsegment duration
+	write_be32(p, 0x90000000);			// starts with SAP / SAP type
 	return p;
 }
 
@@ -1382,15 +1382,15 @@ dash_packager_write_sidx64_atom(
 	size_t atom_size = ATOM_HEADER_SIZE + sizeof(sidx64_atom_t);
 
 	write_atom_header(p, atom_size, 's', 'i', 'd', 'x');
-	write_dword(p, 0x01000000);			// version + flags
-	write_dword(p, 1);					// reference id
-	write_dword(p, sidx_params->timescale);			// timescale
-	write_qword(p, sidx_params->earliest_pres_time);	// earliest presentation time
-	write_qword(p, 0LL);					// first offset
-	write_dword(p, 1);					// reserved + reference count
-	write_dword(p, reference_size);		// referenced size
-	write_dword(p, sidx_params->total_frames_duration);		// subsegment duration
-	write_dword(p, 0x90000000);			// starts with SAP / SAP type
+	write_be32(p, 0x01000000);			// version + flags
+	write_be32(p, 1);					// reference id
+	write_be32(p, sidx_params->timescale);			// timescale
+	write_be64(p, sidx_params->earliest_pres_time);	// earliest presentation time
+	write_be64(p, 0LL);					// first offset
+	write_be32(p, 1);					// reserved + reference count
+	write_be32(p, reference_size);		// referenced size
+	write_be32(p, sidx_params->total_frames_duration);		// subsegment duration
+	write_be32(p, 0x90000000);			// starts with SAP / SAP type
 	return p;
 }
 
@@ -1409,11 +1409,11 @@ dash_packager_write_tfhd_atom(u_char* p, uint32_t track_id, uint32_t sample_desc
 	}
 
 	write_atom_header(p, atom_size, 't', 'f', 'h', 'd');
-	write_dword(p, flags);			// flags
-	write_dword(p, track_id);		// track id
+	write_be32(p, flags);			// flags
+	write_be32(p, track_id);		// track id
 	if (sample_description_index > 0)
 	{
-		write_dword(p, sample_description_index);
+		write_be32(p, sample_description_index);
 	}
 	return p;
 }
@@ -1424,8 +1424,8 @@ dash_packager_write_tfdt_atom(u_char* p, uint32_t earliest_pres_time)
 	size_t atom_size = ATOM_HEADER_SIZE + sizeof(tfdt_atom_t);
 
 	write_atom_header(p, atom_size, 't', 'f', 'd', 't');
-	write_dword(p, 0);
-	write_dword(p, earliest_pres_time);
+	write_be32(p, 0);
+	write_be32(p, earliest_pres_time);
 	return p;
 }
 
@@ -1435,8 +1435,8 @@ dash_packager_write_tfdt64_atom(u_char* p, uint64_t earliest_pres_time)
 	size_t atom_size = ATOM_HEADER_SIZE + sizeof(tfdt64_atom_t);
 
 	write_atom_header(p, atom_size, 't', 'f', 'd', 't');
-	write_dword(p, 0x01000000);			// version = 1
-	write_qword(p, earliest_pres_time);
+	write_be32(p, 0x01000000);			// version = 1
+	write_be64(p, earliest_pres_time);
 	return p;
 }
 

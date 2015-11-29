@@ -25,6 +25,10 @@
 #define ATOM_NAME_CTTS (0x73747463)		// composition time to sample
 #define ATOM_NAME_STSS (0x73737473)		// sample table sync samples
 #define ATOM_NAME_STSD (0x64737473)		// sample table sample description
+#define ATOM_NAME_SAIZ (0x7a696173)		// sample auxiliary information sizes
+#define ATOM_NAME_SENC (0x636e6573)		// sample encryption
+#define ATOM_NAME_FRMA (0x616d7266)		// original format
+#define ATOM_NAME_SINF (0x666e6973)		// protection scheme information
 #define ATOM_NAME_AVCC (0x43637661)		// advanced video codec configuration
 #define ATOM_NAME_HVCC (0x43637668)		// high efficiency video codec configuration
 #define ATOM_NAME_ESDS (0x73647365)		// elementary stream description
@@ -282,6 +286,33 @@ typedef struct {
 	u_char max_bitrate[4];
 	u_char avg_bitrate[4];
 } config_descr_t;
+
+typedef struct {
+	u_char version[1];
+	u_char flags[3];
+	u_char default_size[1];
+	u_char entries[4];
+} saiz_atom_t;
+
+typedef struct {
+	u_char version[1];
+	u_char flags[3];
+	u_char info_type[4];
+	u_char info_type_param[4];
+	u_char default_size[1];
+	u_char entries[4];
+} saiz_with_type_atom_t;
+
+typedef struct {
+	u_char version[1];
+	u_char flags[3];
+	u_char entries[4];
+} senc_atom_t;
+
+typedef struct {
+	u_char bytes_of_clear_data[2];
+	u_char bytes_of_encrypted_data[4];
+} cenc_sample_auxiliary_data_subsample_t;
 
 typedef struct {
 	u_char	type[4];

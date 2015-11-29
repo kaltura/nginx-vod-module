@@ -8,7 +8,6 @@
 #include "buffer_filter.h"
 #include "aes_cbc_encrypt.h"
 #include "../mp4/mp4_parser.h"
-#include "../read_cache.h"
 #include "../segmenter.h"
 
 // typedefs
@@ -27,7 +26,8 @@ typedef struct {
 typedef struct {
 	int media_type;
 	uint32_t timescale;
-	media_clip_source_t* frames_source;
+	frames_source_t* frames_source;
+	void* frames_source_context;
 	
 	// input frames
 	input_frame_t* first_frame;
@@ -70,7 +70,6 @@ typedef struct {
 	uint32_t video_duration;
 
 	// child states
-	read_cache_state_t* read_cache_state;
 	write_buffer_queue_t queue;
 	aes_cbc_encrypt_context_t* encrypted_write_context;
 	
@@ -83,12 +82,11 @@ typedef struct {
 	// cur frame state
 	input_frame_t* cur_frame;
 	bool_t last_stream_frame;
-	uint64_t cur_frame_offset;
 	const media_filter_t* cur_writer;
 	void* cur_writer_context;
-	uint32_t cur_frame_pos;
 	int cache_slot_id;
-	media_clip_source_t* cur_source;
+	frames_source_t* frames_source;
+	void* frames_source_context;
 } hls_muxer_state_t;
 
 // functions
@@ -99,7 +97,6 @@ vod_status_t hls_muxer_init(
 	hls_encryption_params_t* encryption_params,
 	uint32_t segment_index,
 	media_set_t* media_set,
-	read_cache_state_t* read_cache_state,
 	write_callback_t write_callback,
 	void* write_context,
 	bool_t* simulation_supported);

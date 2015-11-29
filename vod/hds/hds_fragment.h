@@ -23,7 +23,6 @@ vod_status_t hds_muxer_init_fragment(
 	hds_fragment_config_t* conf,
 	uint32_t segment_index,
 	media_sequence_t* sequence,
-	read_cache_state_t* read_cache_state,
 	write_callback_t write_callback,
 	void* write_context,
 	bool_t size_only,

@@ -2,7 +2,6 @@
 #define __AUDIO_FILTER_H__
 
 // includes
-#include "../read_cache.h"
 #include "../media_set.h"
 
 // typedefs
@@ -18,7 +17,6 @@ void audio_filter_process_init(vod_log_t* log);
 
 vod_status_t audio_filter_alloc_state(
 	request_context_t* request_context,
-	read_cache_state_t* read_cache_state,
 	media_sequence_t* sequence,
 	media_clip_t* clip,
 	media_track_t* output_track,

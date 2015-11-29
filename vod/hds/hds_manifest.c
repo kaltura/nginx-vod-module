@@ -110,13 +110,13 @@ hds_write_abst_atom(
 
 	// abst
 	write_atom_header(p, abst_atom_size, 'a', 'b', 's', 't');
-	write_dword(p, 0);					// version + flags
-	write_dword(p, 1);					// bootstrap info version
+	write_be32(p, 0);					// version + flags
+	write_be32(p, 1);					// bootstrap info version
 	*p++ = 0;							// profile, live, update
-	write_dword(p, HDS_TIMESCALE);		// timescale
-	write_dword(p, 0);					// current media time - high
-	write_dword(p, segment_durations->duration_millis);	// current media time - low
-	write_qword(p, 0LL);				// smpte offset
+	write_be32(p, HDS_TIMESCALE);		// timescale
+	write_be32(p, 0);					// current media time - high
+	write_be32(p, segment_durations->duration_millis);	// current media time - low
+	write_be64(p, 0LL);					// smpte offset
 	*p++ = 0;							// movie identifier
 	*p++ = 0;							// server entries
 	*p++ = 0;							// quality entries
@@ -126,22 +126,22 @@ hds_write_abst_atom(
 
 	// abst.asrt
 	write_atom_header(p, asrt_atom_size, 'a', 's', 'r', 't');
-	write_dword(p, 0);					// version + flags
+	write_be32(p, 0);					// version + flags
 	*p++ = 0;							// quality entries
-	write_dword(p, 1);					// segment run entries
+	write_be32(p, 1);					// segment run entries
 	// entry #1
-	write_dword(p, 1);					// first segment
-	write_dword(p, segment_durations->segment_count);		// fragments per segment
+	write_be32(p, 1);					// first segment
+	write_be32(p, segment_durations->segment_count);		// fragments per segment
 
 	// abst
 	*p++ = 1;							// fragment run table count
 
 	// abst.afrt
 	write_atom_header(p, afrt_atom_size, 'a', 'f', 'r', 't');
-	write_dword(p, 0);					// version + flags
-	write_dword(p, HDS_TIMESCALE);		// timescale
+	write_be32(p, 0);					// version + flags
+	write_be32(p, HDS_TIMESCALE);		// timescale
 	*p++ = 0;							// quality entries
-	write_dword(p, segment_durations->item_count + 1);	// fragment run entries
+	write_be32(p, segment_durations->item_count + 1);	// fragment run entries
 
 	// write the afrt entries
 	for (cur_item = segment_durations->items; cur_item < last_item; cur_item++)
@@ -149,16 +149,16 @@ hds_write_abst_atom(
 		timestamp = rescale_time(start_offset, segment_durations->timescale, HDS_TIMESCALE);
 		duration = rescale_time(cur_item->duration, segment_durations->timescale, HDS_TIMESCALE);
 
-		write_dword(p, cur_item->segment_index + 1);		// first fragment
-		write_qword(p, timestamp);	// first fragment timestamp
-		write_dword(p, duration);			// fragment duration
+		write_be32(p, cur_item->segment_index + 1);		// first fragment
+		write_be64(p, timestamp);		// first fragment timestamp
+		write_be32(p, duration);		// fragment duration
 		start_offset += cur_item->duration * cur_item->repeat_count;
 	}
 
 	// last entry
-	write_dword(p, 0);					// first fragment
-	write_qword(p, 0LL);				// first fragment timestamp
-	write_dword(p, 0);					// fragment duration
+	write_be32(p, 0);					// first fragment
+	write_be64(p, 0LL);					// first fragment timestamp
+	write_be32(p, 0);					// fragment duration
 	*p++ = 0;							// discontinuity indicator (0 = end of presentation)
 
 	return p;

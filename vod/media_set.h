@@ -2,7 +2,9 @@
 #define __MEDIA_SET_H__
 
 // includes
+#include "mp4/mp4_aes_cbc.h"
 #include "mp4/mp4_parser.h"
+#include "media_clip.h"
 #include "json_parser.h"
 
 // constants
@@ -10,8 +12,6 @@
 #define INVALID_SEGMENT_INDEX (UINT_MAX)
 #define INVALID_SEGMENT_TIME (ULLONG_MAX)
 #define INVALID_CLIP_INDEX (UINT_MAX)
-
-#define MEDIA_CLIP_KEY_SIZE (16)
 
 #define MAX_CLIPS (128)
 #define MAX_CLIPS_PER_REQUEST (16)
@@ -24,47 +24,10 @@ struct audio_filter_s;
 struct media_sequence_s;
 typedef struct media_sequence_s media_sequence_t;
 
-typedef enum {
-	MEDIA_CLIP_SOURCE,
-	MEDIA_CLIP_RATE_FILTER,
-	MEDIA_CLIP_MIX_FILTER,
-	MEDIA_CLIP_GAIN_FILTER,
-} media_clip_type_t;
-
 typedef struct {
 	uint32_t nom;
 	uint32_t denom;
 } vod_fraction_t;
-
-typedef struct media_clip_s {
-	media_clip_type_t type;
-	struct audio_filter_s* audio_filter;
-	struct media_clip_s* parent;
-	struct media_clip_s** sources;
-	uint32_t source_count;
-	uint32_t id;
-} media_clip_t;
-
-typedef struct {
-	// input params
-	media_clip_t base;
-	vod_str_t uri;				// original uri
-	uint32_t clip_to;
-	uint32_t clip_from;
-	uint32_t tracks_mask[MEDIA_TYPE_COUNT];
-	uint64_t sequence_offset;
-
-	// derived params
-	vod_str_t stripped_uri;		// without any params like clipTo
-	vod_str_t mapped_uri;		// in case of mapped mode holds the file path
-	u_char file_key[MEDIA_CLIP_KEY_SIZE];
-
-	// runtime members
-	void* reader_context;
-	media_range_t* range;
-	media_track_array_t track_array;
-	media_sequence_t* sequence;
-} media_clip_source_t;
 
 typedef struct {
 	media_track_t* first_track;

@@ -6,8 +6,8 @@ mp4_builder_write_mfhd_atom(u_char* p, uint32_t segment_index)
 	size_t atom_size = ATOM_HEADER_SIZE + sizeof(mfhd_atom_t);
 
 	write_atom_header(p, atom_size, 'm', 'f', 'h', 'd');
-	write_dword(p, 0);
-	write_dword(p, segment_index);
+	write_be32(p, 0);
+	write_be32(p, segment_index);
 	return p;
 }
 
@@ -36,9 +36,9 @@ mp4_builder_write_video_trun_atom(u_char* p, media_sequence_t* sequence, uint32_
 	atom_size = ATOM_HEADER_SIZE + sizeof(trun_atom_t) + sequence->total_frame_count * 4 * sizeof(uint32_t);
 
 	write_atom_header(p, atom_size, 't', 'r', 'u', 'n');
-	write_dword(p, 0xF01);								// flags = data offset, duration, size, key, delay
-	write_dword(p, sequence->total_frame_count);
-	write_dword(p, first_frame_offset);	// first frame offset relative to moof start offset
+	write_be32(p, 0xF01);								// flags = data offset, duration, size, key, delay
+	write_be32(p, sequence->total_frame_count);
+	write_be32(p, first_frame_offset);	// first frame offset relative to moof start offset
 
 	for (cur_clip = sequence->filtered_clips; cur_clip < sequence->filtered_clips_end; cur_clip++)
 	{
@@ -46,17 +46,17 @@ mp4_builder_write_video_trun_atom(u_char* p, media_sequence_t* sequence, uint32_
 		last_frame = cur_clip->first_track->last_frame;
 		for (; cur_frame < last_frame; cur_frame++)
 		{
-			write_dword(p, cur_frame->duration);
-			write_dword(p, cur_frame->size);
+			write_be32(p, cur_frame->duration);
+			write_be32(p, cur_frame->size);
 			if (cur_frame->key_frame)
 			{
-				write_dword(p, 0x00000000);
+				write_be32(p, 0x00000000);
 			}
 			else
 			{
-				write_dword(p, 0x00010000);
+				write_be32(p, 0x00010000);
 			}
-			write_dword(p, cur_frame->pts_delay);
+			write_be32(p, cur_frame->pts_delay);
 		}
 	}
 	return p;
@@ -73,9 +73,9 @@ mp4_builder_write_audio_trun_atom(u_char* p, media_sequence_t* sequence, uint32_
 	atom_size = ATOM_HEADER_SIZE + sizeof(trun_atom_t) + sequence->total_frame_count * 2 * sizeof(uint32_t);
 
 	write_atom_header(p, atom_size, 't', 'r', 'u', 'n');
-	write_dword(p, 0x301);								// flags = data offset, duration, size
-	write_dword(p, sequence->total_frame_count);
-	write_dword(p, first_frame_offset);	// first frame offset relative to moof start offset
+	write_be32(p, 0x301);								// flags = data offset, duration, size
+	write_be32(p, sequence->total_frame_count);
+	write_be32(p, first_frame_offset);	// first frame offset relative to moof start offset
 
 	for (cur_clip = sequence->filtered_clips; cur_clip < sequence->filtered_clips_end; cur_clip++)
 	{
@@ -83,8 +83,8 @@ mp4_builder_write_audio_trun_atom(u_char* p, media_sequence_t* sequence, uint32_
 		last_frame = cur_clip->first_track->last_frame;
 		for (; cur_frame < last_frame; cur_frame++)
 		{
-			write_dword(p, cur_frame->duration);
-			write_dword(p, cur_frame->size);
+			write_be32(p, cur_frame->duration);
+			write_be32(p, cur_frame->size);
 		}
 	}
 	return p;
@@ -113,18 +113,24 @@ static void
 mp4_builder_init_track(fragment_writer_state_t* state, media_track_t* track)
 {
 	state->frames_source = track->frames_source;
+	state->frames_source_context = track->frames_source_context;
 	state->cur_frame = track->first_frame;
 	state->last_frame = track->last_frame;
 	state->cur_frame_offset = track->frame_offsets;
+
+	if (!state->reuse_buffers)
+	{
+		state->frames_source->disable_buffer_reuse(state->frames_source_context);
+	}
 }
 
 vod_status_t 
 mp4_builder_frame_writer_init(
 	request_context_t* request_context,
 	media_sequence_t* sequence,
-	read_cache_state_t* read_cache_state,
 	write_callback_t write_callback,
 	void* write_context, 
+	bool_t reuse_buffers,
 	fragment_writer_state_t** result)
 {
 	fragment_writer_state_t* state;
@@ -140,9 +146,9 @@ mp4_builder_frame_writer_init(
 	state->request_context = request_context;
 	state->write_callback = write_callback;
 	state->write_context = write_context;
-	state->read_cache_state = read_cache_state;
-	state->cur_frame_pos = 0;
+	state->reuse_buffers = reuse_buffers;
 	state->first_time = TRUE;
+	state->frame_started = FALSE;
 	state->sequence = sequence;
 	state->cur_clip = sequence->filtered_clips;
 
@@ -159,48 +165,62 @@ mp4_builder_frame_writer_process(fragment_writer_state_t* state)
 	uint32_t read_size;
 	u_char* write_buffer = NULL;
 	uint32_t write_buffer_size = 0;
-	uint32_t cur_write_size;
-	uint64_t offset;
 	vod_status_t rc;
-	bool_t reuse_buffer = TRUE;
-	bool_t cur_reuse_buffer;
+	bool_t frame_done;
 
 	for (;;)
 	{
 		while (state->cur_frame >= state->last_frame)
 		{
+			if (write_buffer != NULL)
+			{
+				// flush the write buffer
+				rc = state->write_callback(state->write_context, write_buffer, write_buffer_size);
+				if (rc != VOD_OK)
+				{
+					return rc;
+				}
+
+				write_buffer = NULL;
+			}
+
 			state->cur_clip++;
 			if (state->cur_clip >= state->sequence->filtered_clips_end)
 			{
-				if (write_buffer != NULL)
-				{
-					// flush the write buffer
-					rc = state->write_callback(state->write_context, write_buffer, write_buffer_size, &cur_reuse_buffer);
-					if (rc != VOD_OK)
-					{
-						return rc;
-					}
-				}
 				return VOD_OK;
 			}
 
 			mp4_builder_init_track(state, state->cur_clip->first_track);
 		}
 
-		// read some data from the frame
-		offset = *state->cur_frame_offset + state->cur_frame_pos;
-		if (!read_cache_get_from_cache(state->read_cache_state, state->cur_frame->size - state->cur_frame_pos, 0, state->frames_source, offset, &read_buffer, &read_size))
+		if (!state->frame_started)
 		{
+			rc = state->frames_source->start_frame(state->frames_source_context, state->cur_frame, *state->cur_frame_offset);
+			if (rc != VOD_OK)
+			{
+				return rc;
+			}
+
+			state->frame_started = TRUE;
+		}
+
+		// read some data from the frame
+		rc = state->frames_source->read(state->frames_source_context, &read_buffer, &read_size, &frame_done);
+		if (rc != VOD_OK)
+		{
+			if (rc != VOD_AGAIN)
+			{
+				return rc;
+			}
+
 			if (write_buffer != NULL)
 			{
 				// flush the write buffer
-				rc = state->write_callback(state->write_context, write_buffer, write_buffer_size, &cur_reuse_buffer);
+				rc = state->write_callback(state->write_context, write_buffer, write_buffer_size);
 				if (rc != VOD_OK)
 				{
 					return rc;
 				}
-
-				reuse_buffer = reuse_buffer && cur_reuse_buffer;
 			}
 			else if (!state->first_time)
 			{
@@ -209,25 +229,16 @@ mp4_builder_frame_writer_process(fragment_writer_state_t* state)
 				return VOD_BAD_DATA;
 			}
 
-			if (!reuse_buffer)
-			{
-				read_cache_disable_buffer_reuse(state->read_cache_state);
-			}
-
 			state->first_time = FALSE;
 			return VOD_AGAIN;
 		}
 
-		// update the frame position
-		cur_write_size = vod_min(state->cur_frame->size - state->cur_frame_pos, read_size);
-		state->cur_frame_pos += cur_write_size;
-
 		// move to the next frame if done
-		if (state->cur_frame_pos >= state->cur_frame->size)
+		if (frame_done)
 		{
 			state->cur_frame++;
 			state->cur_frame_offset++;
-			state->cur_frame_pos = 0;
+			state->frame_started = FALSE;
 		}
 
 		if (write_buffer != NULL)
@@ -235,22 +246,20 @@ mp4_builder_frame_writer_process(fragment_writer_state_t* state)
 			// if the buffers are contiguous, just increment the size
 			if (write_buffer + write_buffer_size == read_buffer)
 			{
-				write_buffer_size += cur_write_size;
+				write_buffer_size += read_size;
 				continue;
 			}
 
 			// buffers not contiguous, flush the write buffer
-			rc = state->write_callback(state->write_context, write_buffer, write_buffer_size, &cur_reuse_buffer);
+			rc = state->write_callback(state->write_context, write_buffer, write_buffer_size);
 			if (rc != VOD_OK)
 			{
 				return rc;
 			}
-
-			reuse_buffer = reuse_buffer && cur_reuse_buffer;
 		}
 
 		// reset the write buffer
 		write_buffer = read_buffer;
-		write_buffer_size = cur_write_size;
+		write_buffer_size = read_size;
 	}
 }

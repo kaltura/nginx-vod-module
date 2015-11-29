@@ -376,9 +376,9 @@ mss_write_tfhd_atom(u_char* p, uint32_t track_id, uint32_t flags)
 	size_t atom_size = ATOM_HEADER_SIZE + sizeof(tfhd_atom_t);
 
 	write_atom_header(p, atom_size, 't', 'f', 'h', 'd');
-	write_dword(p, 0x20);		// default sample flags
-	write_dword(p, track_id);
-	write_dword(p, flags);
+	write_be32(p, 0x20);		// default sample flags
+	write_be32(p, track_id);
+	write_be32(p, flags);
 	return p;
 }
 
@@ -405,9 +405,9 @@ mss_write_uuid_tfxd_atom(u_char* p, media_sequence_t* sequence)
 
 	write_atom_header(p, atom_size, 'u', 'u', 'i', 'd');
 	p = vod_copy(p, tfxd_uuid, sizeof(tfxd_uuid));
-	write_dword(p, 0x01000000);		// version / flags
-	write_qword(p, timestamp);
-	write_qword(p, duration);
+	write_be32(p, 0x01000000);		// version / flags
+	write_be64(p, timestamp);
+	write_be64(p, duration);
 	return p;
 }
 

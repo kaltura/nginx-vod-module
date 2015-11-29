@@ -9,6 +9,7 @@ read_cache_init(read_cache_state_t* state, request_context_t* request_context, s
 	state->buffer_size = buffer_size;
 	state->alignment = alignment;
 	state->buffer_count = 0;
+	state->reuse_buffers = TRUE;
 }
 
 vod_status_t
@@ -47,7 +48,6 @@ read_cache_allocate_buffer_slots(read_cache_state_t* state, size_t buffer_count)
 bool_t 
 read_cache_get_from_cache(
 	read_cache_state_t* state, 
-	uint32_t frame_size_left, 
 	int cache_slot_id, 
 	void* source, 
 	uint64_t offset, 
@@ -56,13 +56,6 @@ read_cache_get_from_cache(
 {
 	cache_buffer_t* cur_buffer;
 
-	if (source == NULL)
-	{
-		*buffer = (u_char*)(uintptr_t)offset;
-		*size = frame_size_left;
-		return TRUE;
-	}
-	
 	// check whether we already have the requested offset
 	for (cur_buffer = state->buffers; cur_buffer < state->buffers_end; cur_buffer++)
 	{
@@ -87,23 +80,23 @@ read_cache_get_from_cache(
 void
 read_cache_disable_buffer_reuse(read_cache_state_t* state)
 {
-	state->target_buffer->buffer = NULL;
-	state->target_buffer->buffer_size = 0;
-	state->target_buffer->end_offset = state->target_buffer->start_offset;
+	state->reuse_buffers = FALSE;
 }
 
 vod_status_t 
-read_cache_get_read_buffer(read_cache_state_t* state, void** source, uint64_t* out_offset, u_char** buffer, uint32_t* size)
+read_cache_get_read_buffer(
+	read_cache_state_t* state, 
+	void** source, 
+	uint64_t* out_offset, 
+	u_char** buffer, 
+	uint32_t* size)
 {
-	cache_buffer_t* target_buffer;
+	cache_buffer_t* target_buffer = state->target_buffer;
 	cache_buffer_t* cur_buffer;
 	uint32_t read_size;
-
-	// select a buffer
-	target_buffer = state->target_buffer;
 	
-	// make sure the buffer is allocated
-	if (target_buffer->buffer == NULL)
+	// allocate a new buffer if the buffer is not allocated or buffer reuse is disabled
+	if (!state->reuse_buffers || target_buffer->buffer == NULL)
 	{
 		target_buffer->buffer = vod_memalign(state->request_context->pool, state->buffer_size + 1, state->alignment);
 		if (target_buffer->buffer == NULL)
@@ -118,7 +111,9 @@ read_cache_get_read_buffer(read_cache_state_t* state, void** source, uint64_t* o
 	read_size = state->buffer_size;
 	for (cur_buffer = state->buffers; cur_buffer < state->buffers_end; cur_buffer++)
 	{
-		if (cur_buffer != target_buffer && cur_buffer->start_offset > target_buffer->start_offset)
+		if (cur_buffer != target_buffer && 
+			cur_buffer->source == target_buffer->source &&
+			cur_buffer->start_offset > target_buffer->start_offset)
 		{
 			read_size = vod_min(read_size, cur_buffer->start_offset - target_buffer->start_offset);
 		}

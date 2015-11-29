@@ -239,7 +239,6 @@ m3u8_builder_build_iframe_playlist(
 		media_set, 
 		NULL, 
 		NULL, 
-		NULL, 
 		&simulation_supported);
 	if (rc != VOD_OK)
 	{

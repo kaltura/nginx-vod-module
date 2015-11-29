@@ -106,8 +106,8 @@ mss_playready_audio_write_uuid_piff_atom(u_char* p, mp4_encrypt_state_t* state, 
 {
 	write_atom_header(p, atom_size, 'u', 'u', 'i', 'd');
 	p = vod_copy(p, piff_uuid, sizeof(piff_uuid));
-	write_dword(p, 0);
-	write_dword(p, sequence->total_frame_count);
+	write_be32(p, 0);
+	write_be32(p, sequence->total_frame_count);
 	p = mp4_encrypt_audio_write_auxiliary_data(state, p);
 
 	return p;
@@ -135,8 +135,8 @@ mss_playready_video_write_uuid_piff_atom(u_char* p, mp4_encrypt_video_state_t* s
 {
 	write_atom_header(p, atom_size, 'u', 'u', 'i', 'd');
 	p = vod_copy(p, piff_uuid, sizeof(piff_uuid));
-	write_dword(p, 2);
-	write_dword(p, sequence->total_frame_count);
+	write_be32(p, 2);
+	write_be32(p, sequence->total_frame_count);
 	p = vod_copy(p, state->auxiliary_data.start, state->auxiliary_data.pos - state->auxiliary_data.start);
 
 	return p;
@@ -198,7 +198,6 @@ mss_playready_video_write_fragment_header(mp4_encrypt_video_state_t* state)
 	mss_playready_video_extra_traf_atoms_context writer_context;
 	vod_str_t fragment_header;
 	size_t total_fragment_size;
-	bool_t reuse_buffer;
 	vod_status_t rc;
 
 	writer_context.uuid_piff_atom_size = ATOM_HEADER_SIZE + sizeof(uuid_piff_atom_t) + state->auxiliary_data.pos - state->auxiliary_data.start;
@@ -224,8 +223,7 @@ mss_playready_video_write_fragment_header(mp4_encrypt_video_state_t* state)
 	rc = state->base.segment_writer.write_head(
 		state->base.segment_writer.context,
 		fragment_header.data,
-		fragment_header.len,
-		&reuse_buffer);
+		fragment_header.len);
 	if (rc != VOD_OK)
 	{
 		vod_log_debug1(VOD_LOG_DEBUG_LEVEL, state->base.request_context->log, 0,
