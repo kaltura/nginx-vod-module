@@ -2511,6 +2511,7 @@ ngx_http_vod_apply_mapping(ngx_http_vod_ctx_t *ctx, ngx_str_t* mapping)
 			// mapping result is a simple file path, set the uri of the current source
 			cur_source->sequence->mapped_uri = mapped_source->mapped_uri;
 			cur_source->mapped_uri = mapped_source->mapped_uri;
+			cur_source->encryption_key = mapped_source->encryption_key;
 			return NGX_OK;
 		}
 	}

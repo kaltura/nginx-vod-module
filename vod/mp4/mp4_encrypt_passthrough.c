@@ -10,11 +10,9 @@ mp4_encrypt_passthrough_init(mp4_encrypt_passthrough_context_t* context, media_s
 	media_track_t* first_track = sequence->filtered_clips[0].first_track;
 	media_track_t* cur_track;
 
-	context->sequence = sequence;
 	context->default_auxiliary_sample_size = first_track->encryption_info.default_auxiliary_sample_size;
 	context->use_subsamples = first_track->encryption_info.use_subsamples;
 	context->saiz_atom_size = ATOM_HEADER_SIZE + sizeof(saiz_atom_t);
-	context->saio_atom_size = ATOM_HEADER_SIZE + sizeof(saio_atom_t);
 	context->auxiliary_info_size = 0;
 
 	for (cur_clip = sequence->filtered_clips; cur_clip < sequence->filtered_clips_end; cur_clip++)
@@ -23,7 +21,10 @@ mp4_encrypt_passthrough_init(mp4_encrypt_passthrough_context_t* context, media_s
 
 		// can only passthrough if the content is encrypted with the required key
 		if (cur_track->frames_source != &mp4_decrypt_frames_source ||
-			vod_memcmp(mp4_decrypt_get_key(cur_track->frames_source_context), ((mp4_encrypt_info_t*)sequence->drm_info)->key, MP4_ENCRYPT_KEY_SIZE) != 0)
+			vod_memcmp(
+				mp4_decrypt_get_key(cur_track->frames_source_context), 
+				((mp4_encrypt_info_t*)sequence->drm_info)->key, 
+				MP4_ENCRYPT_KEY_SIZE) != 0)
 		{
 			return FALSE;
 		}
@@ -44,6 +45,8 @@ mp4_encrypt_passthrough_init(mp4_encrypt_passthrough_context_t* context, media_s
 		context->auxiliary_info_size += cur_track->encryption_info.auxiliary_info_end - cur_track->encryption_info.auxiliary_info;
 	}
 
+	context->sequence = sequence;
+	context->saio_atom_size = ATOM_HEADER_SIZE + sizeof(saio_atom_t);
 	context->total_size = context->saiz_atom_size + context->saio_atom_size + context->auxiliary_info_size;
 
 	// can use passthrough - remove the decryption frames source

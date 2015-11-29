@@ -1303,6 +1303,13 @@ audio_filter_process(void* context)
 			}
 
 			state->cur_source = source;
+
+			// start the frame
+			rc = source->frames_source->start_frame(source->frames_source_context, source->cur_frame, *source->cur_frame_offset);
+			if (rc != VOD_OK)
+			{
+				return rc;
+			}
 		}
 		else
 		{
@@ -1310,15 +1317,6 @@ audio_filter_process(void* context)
 		}
 
 		// read some data from the frame
-		if (state->cur_frame_pos == 0)
-		{
-			rc = source->frames_source->start_frame(source->frames_source_context, source->cur_frame, *source->cur_frame_offset);
-			if (rc != VOD_OK)
-			{
-				return rc;
-			}
-		}
-
 		rc = source->frames_source->read(
 			source->frames_source_context,
 			&read_buffer,
