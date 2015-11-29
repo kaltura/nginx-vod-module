@@ -1,6 +1,7 @@
 #include "edash_packager.h"
 #include "dash_packager.h"
 #include "../read_stream.h"
+#include "../mp4/mp4_encrypt_passthrough.h"
 #include "../mp4/mp4_builder.h"
 #include "../mp4/mp4_encrypt.h"
 #include "../mp4/mp4_defs.h"
@@ -435,6 +436,36 @@ edash_packager_audio_build_fragment_header(
 
 ////// fragment common functions
 
+static u_char*
+edash_packager_passthrough_write_encryption_atoms(void* ctx, u_char* p, size_t mdat_atom_start)
+{
+	mp4_encrypt_passthrough_context_t* context = ctx;
+	media_clip_filtered_t* cur_clip;
+	media_sequence_t* sequence = context->sequence;
+	media_track_t* cur_track;
+	size_t senc_atom_size;
+	uint32_t flags;
+
+	// saiz / saio
+	p = mp4_encrypt_passthrough_write_saiz_saio(ctx, p, mdat_atom_start - context->auxiliary_info_size);
+
+	// senc
+	senc_atom_size = ATOM_HEADER_SIZE + sizeof(senc_atom_t) + context->auxiliary_info_size;
+	write_atom_header(p, senc_atom_size, 's', 'e', 'n', 'c');
+	flags = context->use_subsamples ? 0x2 : 0x0;
+	write_be32(p, flags);		// flags
+	write_be32(p, sequence->total_frame_count);
+	for (cur_clip = sequence->filtered_clips; cur_clip < sequence->filtered_clips_end; cur_clip++)
+	{
+		cur_track = cur_clip->first_track;
+		p = vod_copy(p, 
+			cur_track->encryption_info.auxiliary_info, 
+			cur_track->encryption_info.auxiliary_info_end - cur_track->encryption_info.auxiliary_info);
+	}
+
+	return p;
+}
+
 vod_status_t
 edash_packager_get_fragment_writer(
 	segment_writer_t* result,
@@ -447,8 +478,40 @@ edash_packager_get_fragment_writer(
 	vod_str_t* fragment_header,
 	size_t* total_fragment_size)
 {
+	dash_fragment_header_extensions_t header_extensions;
+	mp4_encrypt_passthrough_context_t passthrough_context;
 	uint32_t media_type = media_set->sequences[0].media_type;
 	vod_status_t rc;
+
+	if (mp4_encrypt_passthrough_init(&passthrough_context, media_set->sequences))
+	{
+		// get the header extensions
+		header_extensions.extra_traf_atoms_size = passthrough_context.total_size + ATOM_HEADER_SIZE + sizeof(senc_atom_t);
+		header_extensions.write_extra_traf_atoms_callback = edash_packager_passthrough_write_encryption_atoms;
+		header_extensions.write_extra_traf_atoms_context = &passthrough_context;
+
+		// build the fragment header
+		rc = dash_packager_build_fragment_header(
+			request_context,
+			media_set,
+			segment_index,
+			0,
+			&header_extensions,
+			size_only,
+			fragment_header,
+			total_fragment_size);
+		if (rc != VOD_OK)
+		{
+			vod_log_debug1(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
+				"edash_packager_get_fragment_writer: dash_packager_build_fragment_header failed %i", rc);
+			return rc;
+		}
+
+		// use original writer
+		vod_memzero(result, sizeof(*result));
+
+		return VOD_OK;
+	}
 
 	switch (media_type)
 	{

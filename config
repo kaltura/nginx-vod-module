@@ -125,6 +125,7 @@ NGX_ADDON_DEPS="$NGX_ADDON_DEPS                                     \
                 $ngx_addon_dir/vod/mp4/mp4_decrypt.h                \
                 $ngx_addon_dir/vod/mp4/mp4_defs.h                   \
                 $ngx_addon_dir/vod/mp4/mp4_encrypt.h                \
+                $ngx_addon_dir/vod/mp4/mp4_encrypt_passthrough.h    \
                 $ngx_addon_dir/vod/mp4/mp4_parser.h                 \
                 $ngx_addon_dir/vod/mp4/mp4_parser_base.h            \
                 $ngx_addon_dir/vod/mss/mss_packager.h               \
@@ -186,6 +187,7 @@ NGX_ADDON_SRCS="$NGX_ADDON_SRCS                                     \
                 $ngx_addon_dir/vod/mp4/mp4_clipper.c                \
                 $ngx_addon_dir/vod/mp4/mp4_decrypt.c                \
                 $ngx_addon_dir/vod/mp4/mp4_encrypt.c                \
+                $ngx_addon_dir/vod/mp4/mp4_encrypt_passthrough.c    \
                 $ngx_addon_dir/vod/mp4/mp4_parser.c                 \
                 $ngx_addon_dir/vod/mp4/mp4_parser_base.c            \
                 $ngx_addon_dir/vod/mss/mss_packager.c               \

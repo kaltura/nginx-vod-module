@@ -244,7 +244,7 @@ mp4_builder_frame_writer_process(fragment_writer_state_t* state)
 		if (write_buffer != NULL)
 		{
 			// if the buffers are contiguous, just increment the size
-			if (write_buffer + write_buffer_size == read_buffer)
+			if (!state->reuse_buffers && write_buffer + write_buffer_size == read_buffer)
 			{
 				write_buffer_size += read_size;
 				continue;

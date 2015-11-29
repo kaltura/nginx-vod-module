@@ -1,4 +1,5 @@
 #include "mp4_encrypt.h"
+#include "mp4_decrypt.h"
 #include "mp4_builder.h"
 #include "../read_stream.h"
 
@@ -13,13 +14,6 @@ enum {
 };
 
 // fragment types
-typedef struct {
-	u_char version[1];
-	u_char flags[3];
-	u_char entry_count[4];
-	u_char offset[4];
-} saio_atom_t;
-
 typedef struct {
 	u_char iv[MP4_AES_CBC_IV_SIZE];
 	u_char subsample_count[2];
@@ -309,24 +303,16 @@ mp4_encrypt_video_write_buffer(void* context, u_char* buffer, uint32_t size)
 		case STATE_PACKET_SIZE:
 			if (state->base.frame_size_left <= 0)
 			{
-				for (;;)
+				rc = mp4_encrypt_video_start_frame(state);
+				if (rc != VOD_OK)
 				{
-					rc = mp4_encrypt_video_start_frame(state);
-					if (rc != VOD_OK)
-					{
-						return rc;
-					}
+					return rc;
+				}
 
-					if (state->base.frame_size_left > 0)
-					{
-						break;
-					}
-
-					rc = mp4_encrypt_video_end_frame(state);
-					if (rc != VOD_OK)
-					{
-						return rc;
-					}
+				if (state->base.frame_size_left <= 0)
+				{
+					state->cur_state = STATE_PACKET_DATA;
+					break;
 				}
 			}
 

@@ -752,7 +752,7 @@ ngx_http_vod_parse_moov_atom(ngx_http_vod_ctx_t *ctx, u_char* moov_buffer, size_
 	parse_params.clip_from = cur_source->clip_from;
 	parse_params.clip_to = cur_source->clip_to;
 	parse_params.sequence_offset = cur_source->sequence_offset;
-
+	
 	file_info.source = cur_source;
 	file_info.uri = cur_source->uri;
 	file_info.drm_info = cur_source->sequence->drm_info;

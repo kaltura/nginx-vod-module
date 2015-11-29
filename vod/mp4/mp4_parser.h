@@ -136,6 +136,8 @@ typedef struct input_frame_s input_frame_t;
 typedef struct {
 	u_char* auxiliary_info;
 	u_char* auxiliary_info_end;
+	uint8_t default_auxiliary_sample_size;
+	u_char* auxiliary_sample_sizes;		// [frame_count]
 	bool_t use_subsamples;
 } media_encryption_t;
 

@@ -20,7 +20,7 @@ mp4_aes_cbc_init(
 	if (cln == NULL)
 	{
 		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
-			"mp4_aes_cbc_init_state: vod_pool_cleanup_add failed");
+			"mp4_aes_cbc_init: vod_pool_cleanup_add failed");
 		return VOD_ALLOC_FAILED;
 	}
 
@@ -32,7 +32,7 @@ mp4_aes_cbc_init(
 	if (1 != EVP_EncryptInit_ex(&state->cipher, EVP_aes_128_ecb(), NULL, key, NULL))
 	{
 		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-			"mp4_aes_cbc_init_state: EVP_EncryptInit_ex failed");
+			"mp4_aes_cbc_init: EVP_EncryptInit_ex failed");
 		return VOD_ALLOC_FAILED;
 	}
 
@@ -85,7 +85,7 @@ mp4_aes_cbc_process(mp4_aes_cbc_state_t* state, u_char* dest, const u_char* src,
 				out_size != sizeof(state->encrypted_counter))
 			{
 				vod_log_error(VOD_LOG_ERR, state->request_context->log, 0,
-					"mp4_aes_cbc_encrypt: EVP_EncryptUpdate failed");
+					"mp4_aes_cbc_process: EVP_EncryptUpdate failed");
 				return VOD_UNEXPECTED;
 			}
 

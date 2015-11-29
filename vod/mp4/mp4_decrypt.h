@@ -16,4 +16,11 @@ vod_status_t mp4_decrypt_init(
 	media_encryption_t* encryption,
 	void** result);
 
+u_char* mp4_decrypt_get_key(void* context);
+
+void mp4_decrypt_get_original_source(
+	void* ctx,
+	frames_source_t** frames_source,
+	void** frames_source_context);
+
 #endif //__MP4_DECRYPT_H__

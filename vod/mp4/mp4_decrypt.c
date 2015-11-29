@@ -15,6 +15,7 @@ typedef struct {
 	void* frames_source_context;
 	bool_t reuse_buffers;
 	bool_t use_subsamples;
+	u_char key[MP4_AES_CBC_KEY_SIZE];
 
 	// decryption state
 	mp4_aes_cbc_state_t cipher;
@@ -63,6 +64,7 @@ mp4_decrypt_init(
 		return rc;
 	}
 
+	vod_memcpy(state->key, key, sizeof(state->key));
 	state->request_context = request_context;
 	state->frames_source = frames_source;
 	state->frames_source_context = frames_source_context;
@@ -210,7 +212,7 @@ mp4_decrypt_read(void* ctx, u_char** buffer, uint32_t* size, bool_t* frame_done)
 	vod_status_t rc;
 	uint32_t cur_size;
 
-	// make there is some output space
+	// make sure there is some output space
 	if (state->output_pos + MIN_BUFFER_SIZE >= state->output_end)
 	{
 		if (!state->reuse_buffers || state->output_start == NULL)
@@ -266,6 +268,26 @@ mp4_decrypt_disable_buffer_reuse(void* ctx)
 	mp4_decrypt_state_t* state = ctx;
 
 	state->reuse_buffers = FALSE;
+}
+
+u_char* 
+mp4_decrypt_get_key(void* ctx)
+{
+	mp4_decrypt_state_t* state = ctx;
+
+	return state->key;
+}
+
+void 
+mp4_decrypt_get_original_source(
+	void* ctx,
+	frames_source_t** frames_source,
+	void** frames_source_context)
+{
+	mp4_decrypt_state_t* state = ctx;
+
+	*frames_source = state->frames_source;
+	*frames_source_context = state->frames_source_context;
 }
 
 // globals

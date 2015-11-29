@@ -306,6 +306,13 @@ typedef struct {
 typedef struct {
 	u_char version[1];
 	u_char flags[3];
+	u_char entry_count[4];
+	u_char offset[4];
+} saio_atom_t;
+
+typedef struct {
+	u_char version[1];
+	u_char flags[3];
 	u_char entries[4];
 } senc_atom_t;
 

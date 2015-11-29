@@ -1787,6 +1787,8 @@ mp4_parser_parse_saiz_atom(atom_info_t* atom_info, frames_parse_context_t* conte
 		first_entry = (const uint8_t*)(atom + 1);
 	}
 
+	context->encryption_info.default_auxiliary_sample_size = default_size;
+
 	if (default_size != 0)
 	{
 		context->auxiliary_info_start_offset = context->first_frame * default_size;
@@ -1800,6 +1802,16 @@ mp4_parser_parse_saiz_atom(atom_info_t* atom_info, frames_parse_context_t* conte
 			"mp4_parser_parse_saiz_atom: atom too small to hold %uD entries", context->last_frame);
 		return VOD_BAD_DATA;
 	}
+
+	// save the sample sizes (used for passthrough encryption)
+	context->encryption_info.auxiliary_sample_sizes = vod_alloc(context->request_context->pool, context->frame_count);
+	if (context->encryption_info.auxiliary_sample_sizes == NULL)
+	{
+		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, context->request_context->log, 0,
+			"mp4_parser_parse_saiz_atom: vod_alloc failed");
+		return VOD_ALLOC_FAILED;
+	}
+	vod_memcpy(context->encryption_info.auxiliary_sample_sizes, first_entry + context->first_frame, context->frame_count);
 
 	// get the start offset
 	offset = 0;
@@ -2475,6 +2487,7 @@ mp4_parser_parse_frames(
 
 		// copy the result
 		result_track->media_info = cur_track->media_info;
+		result_track->encryption_info = context.encryption_info;
 		result_track->file_info = cur_track->file_info;
 		result_track->index = cur_track->track_index;
 		result_track->first_frame = context.frames;
