@@ -2,7 +2,7 @@
 #define __FILTER_H__
 
 // includes
-#include "../read_cache.h"
+#include "../input/read_cache.h"
 #include "../media_set.h"
 
 // functions

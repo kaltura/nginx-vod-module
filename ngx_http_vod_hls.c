@@ -217,7 +217,6 @@ ngx_http_vod_hls_handle_encryption_key(
 static ngx_int_t
 ngx_http_vod_hls_init_frame_processor(
 	ngx_http_vod_submodule_context_t* submodule_context,
-	read_cache_state_t* read_cache_state,
 	segment_writer_t* segment_writer,
 	ngx_http_vod_frame_processor_t* frame_processor,
 	void** frame_processor_state,
@@ -248,7 +247,6 @@ ngx_http_vod_hls_init_frame_processor(
 		&encryption_params,
 		submodule_context->request_params.segment_index,
 		&submodule_context->media_set,
-		read_cache_state,
 		segment_writer->write_tail,
 		segment_writer->context,
 		&simulation_supported);

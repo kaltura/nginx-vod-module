@@ -110,20 +110,27 @@ NGX_ADDON_DEPS="$NGX_ADDON_DEPS                                     \
                 $ngx_addon_dir/vod/hls/mpegts_encoder_filter.h      \
                 $ngx_addon_dir/vod/hls/sample_aes_aac_filter.h      \
                 $ngx_addon_dir/vod/hls/sample_aes_avc_filter.h      \
+                $ngx_addon_dir/vod/input/frames_source.h            \
+                $ngx_addon_dir/vod/input/frames_source_cache.h      \
+                $ngx_addon_dir/vod/input/frames_source_memory.h     \
+                $ngx_addon_dir/vod/input/read_cache.h               \
                 $ngx_addon_dir/vod/json_parser.h                    \
                 $ngx_addon_dir/vod/list_entry.h                     \
+                $ngx_addon_dir/vod/media_clip.h                     \
                 $ngx_addon_dir/vod/media_set.h                      \
                 $ngx_addon_dir/vod/media_set_parser.h               \
+                $ngx_addon_dir/vod/mp4/mp4_aes_cbc.h                \
                 $ngx_addon_dir/vod/mp4/mp4_builder.h                \
                 $ngx_addon_dir/vod/mp4/mp4_clipper.h                \
+                $ngx_addon_dir/vod/mp4/mp4_decrypt.h                \
                 $ngx_addon_dir/vod/mp4/mp4_defs.h                   \
                 $ngx_addon_dir/vod/mp4/mp4_encrypt.h                \
+                $ngx_addon_dir/vod/mp4/mp4_encrypt_passthrough.h    \
                 $ngx_addon_dir/vod/mp4/mp4_parser.h                 \
                 $ngx_addon_dir/vod/mp4/mp4_parser_base.h            \
                 $ngx_addon_dir/vod/mss/mss_packager.h               \
                 $ngx_addon_dir/vod/mss/mss_playready.h              \
                 $ngx_addon_dir/vod/parse_utils.h                    \
-                $ngx_addon_dir/vod/read_cache.h                     \
                 $ngx_addon_dir/vod/read_stream.h                    \
                 $ngx_addon_dir/vod/segmenter.h                      \
                 $ngx_addon_dir/vod/write_buffer.h                   \
@@ -170,17 +177,22 @@ NGX_ADDON_SRCS="$NGX_ADDON_SRCS                                     \
                 $ngx_addon_dir/vod/hls/mpegts_encoder_filter.c      \
                 $ngx_addon_dir/vod/hls/sample_aes_aac_filter.c      \
                 $ngx_addon_dir/vod/hls/sample_aes_avc_filter.c      \
+                $ngx_addon_dir/vod/input/frames_source_cache.c      \
+                $ngx_addon_dir/vod/input/frames_source_memory.c     \
+                $ngx_addon_dir/vod/input/read_cache.c               \
                 $ngx_addon_dir/vod/json_parser.c                    \
                 $ngx_addon_dir/vod/media_set_parser.c               \
+                $ngx_addon_dir/vod/mp4/mp4_aes_cbc.c                \
                 $ngx_addon_dir/vod/mp4/mp4_builder.c                \
                 $ngx_addon_dir/vod/mp4/mp4_clipper.c                \
+                $ngx_addon_dir/vod/mp4/mp4_decrypt.c                \
                 $ngx_addon_dir/vod/mp4/mp4_encrypt.c                \
+                $ngx_addon_dir/vod/mp4/mp4_encrypt_passthrough.c    \
                 $ngx_addon_dir/vod/mp4/mp4_parser.c                 \
                 $ngx_addon_dir/vod/mp4/mp4_parser_base.c            \
                 $ngx_addon_dir/vod/mss/mss_packager.c               \
                 $ngx_addon_dir/vod/mss/mss_playready.c              \
                 $ngx_addon_dir/vod/parse_utils.c                    \
-                $ngx_addon_dir/vod/read_cache.c                     \
                 $ngx_addon_dir/vod/segmenter.c                      \
                 $ngx_addon_dir/vod/write_buffer.c                   \
                 $ngx_addon_dir/vod/write_buffer_queue.c             \

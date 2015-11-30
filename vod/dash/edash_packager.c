@@ -1,6 +1,7 @@
 #include "edash_packager.h"
 #include "dash_packager.h"
 #include "../read_stream.h"
+#include "../mp4/mp4_encrypt_passthrough.h"
 #include "../mp4/mp4_builder.h"
 #include "../mp4/mp4_encrypt.h"
 #include "../mp4/mp4_defs.h"
@@ -58,13 +59,6 @@ typedef struct {
 	size_t encrypted_stsd_entry_size;
 	size_t stsd_atom_size;
 } stsd_writer_context_t;
-
-// fragment types
-typedef struct {
-	u_char version[1];
-	u_char flags[3];
-	u_char entry_count[4];
-} senc_atom_t;
 
 ////// mpd functions
 
@@ -192,11 +186,11 @@ edash_packager_write_stsd(void* ctx, u_char* p)
 
 	// stsd
 	write_atom_header(p, context->stsd_atom_size, 's', 't', 's', 'd');
-	write_dword(p, 0);		// version + flags
-	write_dword(p, context->has_clear_lead ? 2 : 1);		// entries
+	write_be32(p, 0);								// version + flags
+	write_be32(p, context->has_clear_lead ? 2 : 1);	// entries
 
 	// stsd encrypted entry
-	write_dword(p, context->encrypted_stsd_entry_size);		// size
+	write_be32(p, context->encrypted_stsd_entry_size);		// size
 	write_atom_name(p, 'e', 'n', 'c', format_by_media_type[context->media_type]);	// format
 	p = vod_copy(p, context->original_stsd_entry + 1, context->original_stsd_entry_size - sizeof(stsd_entry_header_t));
 
@@ -205,21 +199,21 @@ edash_packager_write_stsd(void* ctx, u_char* p)
 	
 	// sinf.frma
 	write_atom_header(p, context->frma_atom_size, 'f', 'r', 'm', 'a');
-	write_dword(p, context->original_stsd_entry_format);
+	write_be32(p, context->original_stsd_entry_format);
 
 	// sinf.schm
 	write_atom_header(p, context->schm_atom_size, 's', 'c', 'h', 'm');
-	write_dword(p, 0);							// version + flags
+	write_be32(p, 0);							// version + flags
 	write_atom_name(p, 'c', 'e', 'n', 'c');		// scheme type
-	write_dword(p, 0x10000);					// scheme version
+	write_be32(p, 0x10000);						// scheme version
 
 	// sinf.schi
 	write_atom_header(p, context->schi_atom_size, 's', 'c', 'h', 'i');
 
 	// sinf.schi.tenc
 	write_atom_header(p, context->tenc_atom_size, 't', 'e', 'n', 'c');
-	write_dword(p, 0);							// version + flags
-	write_dword(p, 0x108);						// default is encrypted (1) + iv size (8)
+	write_be32(p, 0);							// version + flags
+	write_be32(p, 0x108);						// default is encrypted (1) + iv size (8)
 	p = vod_copy(p, context->default_kid, MP4_ENCRYPT_KID_SIZE);			// default key id
 
 	// clear entry
@@ -243,9 +237,9 @@ edash_packager_write_pssh(void* context, u_char* p)
 		pssh_atom_size = ATOM_HEADER_SIZE + sizeof(pssh_atom_t) + cur_info->data.len;
 
 		write_atom_header(p, pssh_atom_size, 'p', 's', 's', 'h');
-		write_dword(p, 0);						// version + flags
+		write_be32(p, 0);						// version + flags
 		p = vod_copy(p, cur_info->system_id, MP4_ENCRYPT_SYSTEM_ID_SIZE);	// system id
-		write_dword(p, cur_info->data.len);		// data size
+		write_be32(p, cur_info->data.len);		// data size
 		p = vod_copy(p, cur_info->data.data, cur_info->data.len);
 	}
 
@@ -327,8 +321,8 @@ edash_packager_video_write_encryption_atoms(void* context, u_char* p, size_t mda
 
 	// senc
 	write_atom_header(p, senc_atom_size, 's', 'e', 'n', 'c');
-	write_dword(p, 0x2);		// flags
-	write_dword(p, state->base.sequence->total_frame_count);
+	write_be32(p, 0x2);		// flags
+	write_be32(p, state->base.sequence->total_frame_count);
 	p = vod_copy(p, state->auxiliary_data.start, senc_data_size);
 
 	return p;
@@ -341,7 +335,6 @@ edash_packager_video_write_fragment_header(mp4_encrypt_video_state_t* state)
 	vod_str_t fragment_header;
 	vod_status_t rc;
 	size_t total_fragment_size;
-	bool_t reuse_buffer;
 
 	// get the header extensions
 	header_extensions.extra_traf_atoms_size = 
@@ -371,8 +364,7 @@ edash_packager_video_write_fragment_header(mp4_encrypt_video_state_t* state)
 	rc = state->base.segment_writer.write_head(
 		state->base.segment_writer.context,
 		fragment_header.data, 
-		fragment_header.len, 
-		&reuse_buffer);
+		fragment_header.len);
 	if (rc != VOD_OK)
 	{
 		vod_log_debug1(VOD_LOG_DEBUG_LEVEL, state->base.request_context->log, 0,
@@ -389,7 +381,7 @@ static u_char*
 edash_packager_audio_write_encryption_atoms(void* context, u_char* p, size_t mdat_atom_start)
 {
 	mp4_encrypt_state_t* state = (mp4_encrypt_state_t*)context;
-	size_t senc_data_size = MP4_ENCRYPT_IV_SIZE * state->sequence->total_frame_count;
+	size_t senc_data_size = MP4_AES_CBC_IV_SIZE * state->sequence->total_frame_count;
 	size_t senc_atom_size = ATOM_HEADER_SIZE + sizeof(senc_atom_t) + senc_data_size;
 
 	// saiz / saio
@@ -397,8 +389,8 @@ edash_packager_audio_write_encryption_atoms(void* context, u_char* p, size_t mda
 
 	// senc
 	write_atom_header(p, senc_atom_size, 's', 'e', 'n', 'c');
-	write_dword(p, 0x0);		// flags
-	write_dword(p, state->sequence->total_frame_count);
+	write_be32(p, 0x0);		// flags
+	write_be32(p, state->sequence->total_frame_count);
 	p = mp4_encrypt_audio_write_auxiliary_data(state, p);
 
 	return p;
@@ -418,7 +410,7 @@ edash_packager_audio_build_fragment_header(
 	header_extensions.extra_traf_atoms_size =
 		state->saiz_atom_size + 
 		state->saio_atom_size + 
-		ATOM_HEADER_SIZE + sizeof(senc_atom_t) + MP4_ENCRYPT_IV_SIZE * state->sequence->total_frame_count;
+		ATOM_HEADER_SIZE + sizeof(senc_atom_t) + MP4_AES_CBC_IV_SIZE * state->sequence->total_frame_count;
 	header_extensions.write_extra_traf_atoms_callback = (write_extra_traf_atoms_callback_t)edash_packager_audio_write_encryption_atoms;
 	header_extensions.write_extra_traf_atoms_context = state;
 
@@ -444,6 +436,36 @@ edash_packager_audio_build_fragment_header(
 
 ////// fragment common functions
 
+static u_char*
+edash_packager_passthrough_write_encryption_atoms(void* ctx, u_char* p, size_t mdat_atom_start)
+{
+	mp4_encrypt_passthrough_context_t* context = ctx;
+	media_clip_filtered_t* cur_clip;
+	media_sequence_t* sequence = context->sequence;
+	media_track_t* cur_track;
+	size_t senc_atom_size;
+	uint32_t flags;
+
+	// saiz / saio
+	p = mp4_encrypt_passthrough_write_saiz_saio(ctx, p, mdat_atom_start - context->auxiliary_info_size);
+
+	// senc
+	senc_atom_size = ATOM_HEADER_SIZE + sizeof(senc_atom_t) + context->auxiliary_info_size;
+	write_atom_header(p, senc_atom_size, 's', 'e', 'n', 'c');
+	flags = context->use_subsamples ? 0x2 : 0x0;
+	write_be32(p, flags);		// flags
+	write_be32(p, sequence->total_frame_count);
+	for (cur_clip = sequence->filtered_clips; cur_clip < sequence->filtered_clips_end; cur_clip++)
+	{
+		cur_track = cur_clip->first_track;
+		p = vod_copy(p, 
+			cur_track->encryption_info.auxiliary_info, 
+			cur_track->encryption_info.auxiliary_info_end - cur_track->encryption_info.auxiliary_info);
+	}
+
+	return p;
+}
+
 vod_status_t
 edash_packager_get_fragment_writer(
 	segment_writer_t* result,
@@ -456,8 +478,43 @@ edash_packager_get_fragment_writer(
 	vod_str_t* fragment_header,
 	size_t* total_fragment_size)
 {
+	dash_fragment_header_extensions_t header_extensions;
+	mp4_encrypt_passthrough_context_t passthrough_context;
 	uint32_t media_type = media_set->sequences[0].media_type;
 	vod_status_t rc;
+
+	if (mp4_encrypt_passthrough_init(&passthrough_context, media_set->sequences))
+	{
+		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
+			"edash_packager_get_fragment_writer: using encryption passthrough");
+
+		// get the header extensions
+		header_extensions.extra_traf_atoms_size = passthrough_context.total_size + ATOM_HEADER_SIZE + sizeof(senc_atom_t);
+		header_extensions.write_extra_traf_atoms_callback = edash_packager_passthrough_write_encryption_atoms;
+		header_extensions.write_extra_traf_atoms_context = &passthrough_context;
+
+		// build the fragment header
+		rc = dash_packager_build_fragment_header(
+			request_context,
+			media_set,
+			segment_index,
+			0,
+			&header_extensions,
+			size_only,
+			fragment_header,
+			total_fragment_size);
+		if (rc != VOD_OK)
+		{
+			vod_log_debug1(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
+				"edash_packager_get_fragment_writer: dash_packager_build_fragment_header failed %i", rc);
+			return rc;
+		}
+
+		// use original writer
+		vod_memzero(result, sizeof(*result));
+
+		return VOD_OK;
+	}
 
 	switch (media_type)
 	{

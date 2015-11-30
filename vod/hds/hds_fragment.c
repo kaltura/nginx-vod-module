@@ -86,7 +86,8 @@ typedef struct {
 	int media_type;
 	uint8_t sound_info;
 	uint32_t timescale;
-	media_clip_source_t* frames_source;
+	frames_source_t* frames_source;
+	void* frames_source_context;
 	uint32_t frame_count;
 	uint32_t index;
 
@@ -115,7 +116,6 @@ struct hds_muxer_state_s {
 	hds_muxer_stream_state_t* last_stream;
 	uint32_t codec_config_size;
 
-	read_cache_state_t* read_cache_state;
 	write_buffer_state_t write_buffer_state;
 
 	// cur sequence state
@@ -124,10 +124,9 @@ struct hds_muxer_state_s {
 	media_clip_filtered_t* cur_clip;
 
 	input_frame_t* cur_frame;
-	uint64_t cur_frame_offset;
-	uint32_t cur_frame_pos;
 	int cache_slot_id;
-	media_clip_source_t* cur_source;
+	frames_source_t* frames_source;
+	void* frames_source_context;
 
 	uint32_t frame_header_size;
 };
@@ -240,18 +239,18 @@ static u_char*
 hds_write_afra_atom_header(u_char* p, size_t atom_size, uint32_t video_key_frame_count)
 {
 	write_atom_header(p, atom_size, 'a', 'f', 'r', 'a');
-	write_dword(p, 0);
+	write_be32(p, 0);
 	*p++ = 0xC0;								// LongIDs | LongOffsets
-	write_dword(p, HDS_TIMESCALE);				// timescale
-	write_dword(p, video_key_frame_count);		// entries
+	write_be32(p, HDS_TIMESCALE);				// timescale
+	write_be32(p, video_key_frame_count);		// entries
 	return p;
 }
 
 static u_char*
 hds_write_afra_atom_entry(u_char* p, uint64_t time, uint64_t offset)
 {
-	write_qword(p, time);
-	write_qword(p, offset);
+	write_be64(p, time);
+	write_be64(p, offset);
 	return p;
 }
 
@@ -261,10 +260,10 @@ hds_write_tfhd_atom(u_char* p, uint32_t track_id, uint64_t base_data_offset)
 	size_t atom_size = ATOM_HEADER_SIZE + sizeof(tfhd_atom_t);
 
 	write_atom_header(p, atom_size, 't', 'f', 'h', 'd');
-	write_dword(p, 3);							// flags - base data offset | sample description
-	write_dword(p, track_id);
-	write_qword(p, base_data_offset);
-	write_dword(p, 1);							// sample_desc_index
+	write_be32(p, 3);							// flags - base data offset | sample description
+	write_be32(p, track_id);
+	write_be64(p, base_data_offset);
+	write_be32(p, 1);							// sample_desc_index
 	return p;
 }
 
@@ -276,20 +275,20 @@ hds_write_single_video_frame_trun_atom(u_char* p, input_frame_t* frame, uint32_t
 	atom_size = TRUN_SIZE_SINGLE_VIDEO_FRAME;
 
 	write_atom_header(p, atom_size, 't', 'r', 'u', 'n');
-	write_dword(p, 0xF01);				// flags = data offset, duration, size, key, delay
-	write_dword(p, 1);					// frame count
-	write_dword(p, offset);				// offset from mdat start to frame raw data (excluding the tag)
-	write_dword(p, frame->duration);
-	write_dword(p, frame->size);
+	write_be32(p, 0xF01);				// flags = data offset, duration, size, key, delay
+	write_be32(p, 1);					// frame count
+	write_be32(p, offset);				// offset from mdat start to frame raw data (excluding the tag)
+	write_be32(p, frame->duration);
+	write_be32(p, frame->size);
 	if (frame->key_frame)
 	{
-		write_dword(p, 0x02000000);		// I-frame
+		write_be32(p, 0x02000000);		// I-frame
 	}
 	else
 	{
-		write_dword(p, 0x01010000);		// not I-frame + non key sample
+		write_be32(p, 0x01010000);		// not I-frame + non key sample
 	}
-	write_dword(p, frame->pts_delay);
+	write_be32(p, frame->pts_delay);
 	return p;
 }
 
@@ -301,11 +300,11 @@ hds_write_single_audio_frame_trun_atom(u_char* p, input_frame_t* frame, uint32_t
 	atom_size = TRUN_SIZE_SINGLE_AUDIO_FRAME;
 
 	write_atom_header(p, atom_size, 't', 'r', 'u', 'n');
-	write_dword(p, 0x301);				// flags = data offset, duration, size
-	write_dword(p, 1);					// frame count
-	write_dword(p, offset);				// offset from mdat start to frame raw data (excluding the tag)
-	write_dword(p, frame->duration);
-	write_dword(p, frame->size);
+	write_be32(p, 0x301);				// flags = data offset, duration, size
+	write_be32(p, 1);					// frame count
+	write_be32(p, offset);				// offset from mdat start to frame raw data (excluding the tag)
+	write_be32(p, frame->duration);
+	write_be32(p, frame->size);
 	return p;
 }
 
@@ -339,6 +338,7 @@ hds_muxer_init_track(
 	cur_stream->media_type = cur_track->media_info.media_type;
 	cur_stream->timescale = cur_track->media_info.timescale;
 	cur_stream->frames_source = cur_track->frames_source;
+	cur_stream->frames_source_context = cur_track->frames_source_context;
 	cur_stream->first_frame = cur_track->first_frame;
 	cur_stream->last_frame = cur_track->last_frame;
 
@@ -520,7 +520,6 @@ static vod_status_t
 hds_muxer_init_state(
 	request_context_t* request_context,
 	media_sequence_t* sequence,
-	read_cache_state_t* read_cache_state,
 	write_callback_t write_callback,
 	void* write_context,
 	hds_muxer_state_t** result)
@@ -558,8 +557,7 @@ hds_muxer_init_state(
 	state->clips_end = sequence->filtered_clips_end;
 	state->cur_clip = sequence->filtered_clips + 1;
 
-	state->read_cache_state = read_cache_state;
-	write_buffer_init(&state->write_buffer_state, request_context, write_callback, write_context);
+	write_buffer_init(&state->write_buffer_state, request_context, write_callback, write_context, FALSE);
 
 	state->codec_config_size = 0;
 
@@ -642,7 +640,7 @@ hds_muxer_write_codec_config(u_char* p, hds_muxer_state_t* state, uint64_t cur_f
 		}
 		p = vod_copy(p, cur_track->media_info.extra_data, cur_track->media_info.extra_data_size);
 		packet_size = p - packet_start;
-		write_dword(p, packet_size);
+		write_be32(p, packet_size);
 	}
 	return p;
 }
@@ -653,7 +651,6 @@ hds_muxer_init_fragment(
 	hds_fragment_config_t* conf,
 	uint32_t segment_index,
 	media_sequence_t* sequence,
-	read_cache_state_t* read_cache_state,
 	write_callback_t write_callback,
 	void* write_context,
 	bool_t size_only,
@@ -684,7 +681,6 @@ hds_muxer_init_fragment(
 	rc = hds_muxer_init_state(
 		request_context, 
 		sequence,
-		read_cache_state, 
 		write_callback, 
 		write_context, 
 		&state);
@@ -867,8 +863,9 @@ static vod_status_t
 hds_muxer_start_frame(hds_muxer_state_t* state)
 {
 	hds_muxer_stream_state_t* selected_stream;
+	uint64_t cur_frame_offset;
 	uint64_t cur_frame_dts;
-	uint32_t alloc_size;
+	size_t alloc_size;
 	u_char* p;
 	vod_status_t rc;
 
@@ -884,9 +881,10 @@ hds_muxer_start_frame(hds_muxer_state_t* state)
 
 	// init the frame
 	state->cur_frame = selected_stream->cur_frame;
-	state->cur_source = selected_stream->frames_source;
+	state->frames_source = selected_stream->frames_source;
+	state->frames_source_context = selected_stream->frames_source_context;
 	selected_stream->cur_frame++;
-	state->cur_frame_offset = *selected_stream->cur_frame_input_offset;
+	cur_frame_offset = *selected_stream->cur_frame_input_offset;
 	selected_stream->cur_frame_input_offset++;
 	selected_stream->cur_frame_output_offset++;
 
@@ -905,7 +903,7 @@ hds_muxer_start_frame(hds_muxer_state_t* state)
 		alloc_size += state->codec_config_size;
 	}
 
-	rc = write_buffer_get_bytes(&state->write_buffer_state, alloc_size, &p);
+	rc = write_buffer_get_bytes(&state->write_buffer_state, alloc_size, NULL, &p);
 	if (rc != VOD_OK)
 	{
 		vod_log_debug1(VOD_LOG_DEBUG_LEVEL, state->request_context->log, 0,
@@ -940,7 +938,11 @@ hds_muxer_start_frame(hds_muxer_state_t* state)
 			AAC_PACKET_TYPE_RAW);
 	}
 
-	state->cur_frame_pos = 0;
+	rc = state->frames_source->start_frame(state->frames_source_context, state->cur_frame, cur_frame_offset);
+	if (rc != VOD_OK)
+	{
+		return rc;
+	}
 
 	return VOD_OK;
 }
@@ -953,14 +955,14 @@ hds_muxer_end_frame(hds_muxer_state_t* state)
 	u_char* p;
 
 	// write the frame size
-	rc = write_buffer_get_bytes(&state->write_buffer_state, sizeof(uint32_t), &p);
+	rc = write_buffer_get_bytes(&state->write_buffer_state, sizeof(uint32_t), NULL, &p);
 	if (rc != VOD_OK)
 	{
 		vod_log_debug1(VOD_LOG_DEBUG_LEVEL, state->request_context->log, 0,
 			"hds_muxer_end_frame: write_buffer_get_bytes failed %i", rc);
 		return rc;
 	}
-	write_dword(p, packet_size);
+	write_be32(p, packet_size);
 
 	return VOD_OK;
 }
@@ -970,11 +972,10 @@ hds_muxer_process_frames(hds_muxer_state_t* state)
 {
 	u_char* read_buffer;
 	uint32_t read_size;
-	uint32_t write_size;
-	uint64_t offset;
 	vod_status_t rc;
 	bool_t first_time = (state->cur_frame == NULL);
 	bool_t wrote_data = FALSE;
+	bool_t frame_done;
 
 	for (;;)
 	{
@@ -996,9 +997,14 @@ hds_muxer_process_frames(hds_muxer_state_t* state)
 		}
 
 		// read some data from the frame
-		offset = state->cur_frame_offset + state->cur_frame_pos;
-		if (!read_cache_get_from_cache(state->read_cache_state, state->cur_frame->size - state->cur_frame_pos, state->cache_slot_id, state->cur_source, offset, &read_buffer, &read_size))
+		rc = state->frames_source->read(state->frames_source_context, &read_buffer, &read_size, &frame_done);
+		if (rc != VOD_OK)
 		{
+			if (rc != VOD_AGAIN)
+			{
+				return rc;
+			}
+
 			if (!wrote_data && !first_time)
 			{
 				vod_log_error(VOD_LOG_ERR, state->request_context->log, 0,
@@ -1011,18 +1017,16 @@ hds_muxer_process_frames(hds_muxer_state_t* state)
 		wrote_data = TRUE;
 
 		// write the frame
-		write_size = vod_min(state->cur_frame->size - state->cur_frame_pos, read_size);
-		rc = write_buffer_write(&state->write_buffer_state, read_buffer, write_size);
+		rc = write_buffer_write(&state->write_buffer_state, read_buffer, read_size);
 		if (rc != VOD_OK)
 		{
 			vod_log_debug1(VOD_LOG_DEBUG_LEVEL, state->request_context->log, 0,
 				"hds_muxer_process_frames: write_buffer_write failed %i", rc);
 			return rc;
 		}
-		state->cur_frame_pos += write_size;
 
 		// flush the frame if we finished writing it
-		if (state->cur_frame_pos >= state->cur_frame->size)
+		if (frame_done)
 		{
 			rc = hds_muxer_end_frame(state);
 			if (rc != VOD_OK)

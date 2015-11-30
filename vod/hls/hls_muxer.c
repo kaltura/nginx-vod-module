@@ -17,6 +17,7 @@ hls_muxer_init_track(
 	cur_stream->media_type = track->media_info.media_type;
 	cur_stream->timescale = track->media_info.timescale;
 	cur_stream->frames_source = track->frames_source;
+	cur_stream->frames_source_context = track->frames_source_context;
 	cur_stream->first_frame = track->first_frame;
 	cur_stream->cur_frame = track->first_frame;
 	cur_stream->last_frame = track->last_frame;
@@ -91,7 +92,6 @@ hls_muxer_init(
 	hls_encryption_params_t* encryption_params,
 	uint32_t segment_index,
 	media_set_t* media_set,
-	read_cache_state_t* read_cache_state, 
 	write_callback_t write_callback, 
 	void* write_context,
 	bool_t* simulation_supported)
@@ -102,11 +102,11 @@ hls_muxer_init(
 	const media_filter_t* next_filter;
 	void* next_filter_context;
 	vod_status_t rc;
+	bool_t reuse_buffers;
 
 	*simulation_supported = hls_muxer_simulation_supported(media_set, encryption_params);
 
 	state->request_context = request_context;
-	state->read_cache_state = read_cache_state;
 	state->cur_frame = NULL;
 	state->video_duration = 0;
 
@@ -127,16 +127,21 @@ hls_muxer_init(
 
 		write_callback = (write_callback_t)aes_cbc_encrypt_write;
 		write_context = state->encrypted_write_context;
+		reuse_buffers = TRUE;		// aes_cbc_encrypt allocates new buffers
 	}
 	else
 	{
 		state->encrypted_write_context = NULL;
+		reuse_buffers = FALSE;
 	}
 
 	// init the write queue
-	write_buffer_queue_init(&state->queue, request_context);
-	state->queue.write_callback = write_callback;
-	state->queue.write_context = write_context;
+	write_buffer_queue_init(
+		&state->queue, 
+		request_context, 
+		write_callback,
+		write_context,
+		reuse_buffers);
 
 	// init the packetizer streams and get the packet ids / stream ids
 	rc = mpegts_encoder_init_streams(
@@ -378,6 +383,7 @@ hls_muxer_start_frame(hls_muxer_state_t* state)
 	hls_muxer_stream_state_t* cur_stream;
 	hls_muxer_stream_state_t* selected_stream;
 	output_frame_t output_frame;
+	uint64_t cur_frame_offset;
 	uint64_t cur_frame_time_offset;
 	uint64_t cur_frame_dts;
 	uint64_t buffer_dts;
@@ -396,14 +402,16 @@ hls_muxer_start_frame(hls_muxer_state_t* state)
 	// init the frame
 	state->cur_frame = selected_stream->cur_frame;
 	selected_stream->cur_frame++;
-	state->cur_source = selected_stream->frames_source;
-	state->cur_frame_offset = *selected_stream->cur_frame_offset;
+	state->frames_source = selected_stream->frames_source;
+	state->frames_source_context = selected_stream->frames_source_context;
+	cur_frame_offset = *selected_stream->cur_frame_offset;
 	selected_stream->cur_frame_offset++;
 	cur_frame_time_offset = selected_stream->next_frame_time_offset;
 	selected_stream->next_frame_time_offset += state->cur_frame->duration;
 	cur_frame_dts = selected_stream->next_frame_dts;
 	selected_stream->next_frame_dts = rescale_time(selected_stream->next_frame_time_offset, selected_stream->timescale, HLS_TIMESCALE);
 
+	// TODO: in the case of multi clip without discontinuity, the test below is not sufficient
 	state->last_stream_frame = selected_stream->cur_frame >= selected_stream->last_frame;
 
 	// flush any buffered frames if their delay becomes too big
@@ -439,13 +447,17 @@ hls_muxer_start_frame(hls_muxer_state_t* state)
 	state->cache_slot_id = selected_stream->mpegts_encoder_state.stream_info.pid;
 
 	// start the frame
-	rc = state->cur_writer->start_frame(state->cur_writer_context, &output_frame);
+	rc = state->frames_source->start_frame(state->frames_source_context, state->cur_frame, cur_frame_offset);
 	if (rc != VOD_OK)
 	{
 		return rc;
 	}
 
-	state->cur_frame_pos = 0;
+	rc = state->cur_writer->start_frame(state->cur_writer_context, &output_frame);
+	if (rc != VOD_OK)
+	{
+		return rc;
+	}
 
 	return VOD_OK;
 }
@@ -472,11 +484,10 @@ hls_muxer_process(hls_muxer_state_t* state)
 {
 	u_char* read_buffer;
 	uint32_t read_size;
-	uint32_t write_size;
-	uint64_t offset;
 	vod_status_t rc;
 	bool_t first_time = (state->cur_frame == NULL);
 	bool_t wrote_data = FALSE;
+	bool_t frame_done;
 
 	for (;;)
 	{
@@ -496,9 +507,14 @@ hls_muxer_process(hls_muxer_state_t* state)
 		}
 		
 		// read some data from the frame
-		offset = state->cur_frame_offset + state->cur_frame_pos;
-		if (!read_cache_get_from_cache(state->read_cache_state, state->cur_frame->size - state->cur_frame_pos, state->cache_slot_id, state->cur_source, offset, &read_buffer, &read_size))
+		rc = state->frames_source->read(state->frames_source_context, &read_buffer, &read_size, &frame_done);
+		if (rc != VOD_OK)
 		{
+			if (rc != VOD_AGAIN)
+			{
+				return rc;
+			}
+
 			if (!wrote_data && !first_time)
 			{
 				vod_log_error(VOD_LOG_ERR, state->request_context->log, 0,
@@ -518,16 +534,14 @@ hls_muxer_process(hls_muxer_state_t* state)
 		wrote_data = TRUE;
 		
 		// write the frame
-		write_size = vod_min(state->cur_frame->size - state->cur_frame_pos, read_size);
-		rc = state->cur_writer->write(state->cur_writer_context, read_buffer, write_size);
+		rc = state->cur_writer->write(state->cur_writer_context, read_buffer, read_size);
 		if (rc != VOD_OK)
 		{
 			return rc;
 		}
-		state->cur_frame_pos += write_size;
 		
 		// flush the frame if we finished writing it
-		if (state->cur_frame_pos >= state->cur_frame->size)
+		if (frame_done)
 		{
 			rc = state->cur_writer->flush_frame(state->cur_writer_context, state->last_stream_frame);
 			if (rc != VOD_OK)

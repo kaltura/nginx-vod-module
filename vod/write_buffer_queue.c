@@ -3,11 +3,20 @@
 #define BUFFER_SIZE (188 * 16 * 32)		// chosen to be a multiple of mpegTS packet size and AES block size
 
 void 
-write_buffer_queue_init(write_buffer_queue_t* queue, request_context_t* request_context)
+write_buffer_queue_init(
+	write_buffer_queue_t* queue, 
+	request_context_t* request_context, 
+	write_callback_t write_callback,
+	void* write_context,
+	bool_t reuse_buffers)
 {
+	queue->request_context = request_context;
+	queue->write_callback = write_callback;
+	queue->write_context = write_context;
+	queue->reuse_buffers = reuse_buffers;
+
 	initialize_list_head(&queue->buffers);
 	queue->cur_write_buffer = NULL;
-	queue->request_context = request_context;
 	queue->cur_offset = 0;
 }
 
@@ -85,7 +94,6 @@ vod_status_t
 write_buffer_queue_send(write_buffer_queue_t* queue, off_t max_offset)
 {
 	buffer_header_t* cur_buffer;
-	bool_t reuse_buffer;
 	vod_status_t rc;
 
 	while (!is_list_empty(&queue->buffers))
@@ -107,7 +115,7 @@ write_buffer_queue_send(write_buffer_queue_t* queue, off_t max_offset)
 			queue->cur_write_buffer = NULL;
 		}
 
-		rc = queue->write_callback(queue->write_context, cur_buffer->start_pos, cur_buffer->cur_pos - cur_buffer->start_pos, &reuse_buffer);
+		rc = queue->write_callback(queue->write_context, cur_buffer->start_pos, cur_buffer->cur_pos - cur_buffer->start_pos);
 		if (rc != VOD_OK)
 		{
 			vod_log_debug1(VOD_LOG_DEBUG_LEVEL, queue->request_context->log, 0,
@@ -115,7 +123,7 @@ write_buffer_queue_send(write_buffer_queue_t* queue, off_t max_offset)
 			return rc;
 		}
 
-		if (!reuse_buffer)
+		if (!queue->reuse_buffers)
 		{
 			cur_buffer->start_pos = NULL;
 		}
@@ -130,7 +138,6 @@ vod_status_t
 write_buffer_queue_flush(write_buffer_queue_t* queue)
 {
 	buffer_header_t* cur_buffer;
-	bool_t reuse_buffer;
 	vod_status_t rc;
 
 	while (!is_list_empty(&queue->buffers))
@@ -143,7 +150,7 @@ write_buffer_queue_flush(write_buffer_queue_t* queue)
 			continue;
 		}
 
-		rc = queue->write_callback(queue->write_context, cur_buffer->start_pos, cur_buffer->cur_pos - cur_buffer->start_pos, &reuse_buffer);
+		rc = queue->write_callback(queue->write_context, cur_buffer->start_pos, cur_buffer->cur_pos - cur_buffer->start_pos);
 		if (rc != VOD_OK)
 		{
 			vod_log_debug1(VOD_LOG_DEBUG_LEVEL, queue->request_context->log, 0,

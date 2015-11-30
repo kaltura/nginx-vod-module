@@ -59,15 +59,11 @@ vod_status_t
 aes_cbc_encrypt_write(
 	aes_cbc_encrypt_context_t* state, 
 	u_char* buffer, 
-	uint32_t size, 
-	bool_t* reuse_buffer)
+	uint32_t size)
 {
 	int out_size;
 
 	u_char* encrypted_buffer;
-	bool_t unused;
-
-	*reuse_buffer = TRUE;			// we allocate a new buffer
 
 	encrypted_buffer = vod_alloc(state->request_context->pool, aes_round_to_block(size));
 	if (encrypted_buffer == NULL)
@@ -89,14 +85,13 @@ aes_cbc_encrypt_write(
 		return VOD_OK;
 	}
 
-	return state->callback(state->callback_context, encrypted_buffer, out_size, &unused);
+	return state->callback(state->callback_context, encrypted_buffer, out_size);
 }
 
 vod_status_t 
 aes_cbc_encrypt_flush(aes_cbc_encrypt_context_t* state)
 {
 	int last_block_len;
-	bool_t unused;
 
 	if (1 != EVP_EncryptFinal_ex(&state->cipher, state->last_block, &last_block_len))
 	{
@@ -110,5 +105,5 @@ aes_cbc_encrypt_flush(aes_cbc_encrypt_context_t* state)
 		return VOD_OK;
 	}
 
-	return state->callback(state->callback_context, state->last_block, last_block_len, &unused);
+	return state->callback(state->callback_context, state->last_block, last_block_len);
 }

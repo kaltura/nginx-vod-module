@@ -3,6 +3,8 @@
 
 // includes
 #include "mp4_parser_base.h"
+#include "../input/frames_source.h"
+#include "../input/read_cache.h"
 #include "../codec_config.h"
 #include "../common.h"
 
@@ -65,6 +67,8 @@ enum {			// raw track atoms
 };
 
 // typedefs
+struct media_clip_source_s;
+
 typedef struct {
 	const u_char* ptr;
 	uint64_t size;
@@ -115,17 +119,27 @@ typedef struct {
 } mp4_base_metadata_t;
 
 typedef struct {
-	void* source;
+	struct media_clip_source_s* source;
 	vod_str_t uri;
 	void* drm_info;
 } file_info_t;
 
-typedef struct {
+struct input_frame_s {
 	uint32_t duration;
 	uint32_t size;
 	uint32_t key_frame;
 	uint32_t pts_delay;
-} input_frame_t;
+};
+
+typedef struct input_frame_s input_frame_t;
+
+typedef struct {
+	u_char* auxiliary_info;
+	u_char* auxiliary_info_end;
+	uint8_t default_auxiliary_sample_size;
+	u_char* auxiliary_sample_sizes;		// [frame_count]
+	bool_t use_subsamples;
+} media_encryption_t;
 
 typedef struct {
 	media_info_t media_info;
@@ -133,7 +147,8 @@ typedef struct {
 	uint32_t index;
 	input_frame_t* first_frame;
 	input_frame_t* last_frame;
-	void* frames_source;
+	frames_source_t* frames_source;
+	void* frames_source_context;
 	uint64_t* frame_offsets;		// Saved outside input_frame_t since it's not needed for iframes file
 	uint32_t frame_count;
 	uint32_t key_frame_count;
@@ -145,6 +160,7 @@ typedef struct {
 	int32_t clip_from_frame_offset;
 	raw_atom_t raw_atoms[RTA_COUNT];
 	void* source_clip;
+	media_encryption_t encryption_info;
 } media_track_t;
 
 typedef struct {
@@ -192,6 +208,7 @@ vod_status_t mp4_parser_parse_frames(
 	mp4_base_metadata_t* base,
 	media_parse_params_t* parse_params,
 	bool_t align_segments_to_key_frames,
+	read_cache_state_t* read_cache_state,
 	media_track_array_t* result);
 
 #endif // __MP4_PARSER_H__

@@ -16,7 +16,7 @@
 #include "ngx_buffer_cache.h"
 #include "vod/mp4/mp4_parser.h"
 #include "vod/mp4/mp4_clipper.h"
-#include "vod/read_cache.h"
+#include "vod/input/read_cache.h"
 #include "vod/filters/audio_filter.h"
 #include "vod/filters/rate_filter.h"
 #include "vod/filters/filter.h"
@@ -752,7 +752,7 @@ ngx_http_vod_parse_moov_atom(ngx_http_vod_ctx_t *ctx, u_char* moov_buffer, size_
 	parse_params.clip_from = cur_source->clip_from;
 	parse_params.clip_to = cur_source->clip_to;
 	parse_params.sequence_offset = cur_source->sequence_offset;
-
+	
 	file_info.source = cur_source;
 	file_info.uri = cur_source->uri;
 	file_info.drm_info = cur_source->sequence->drm_info;
@@ -869,6 +869,7 @@ ngx_http_vod_parse_moov_atom(ngx_http_vod_ctx_t *ctx, u_char* moov_buffer, size_
 		&mp4_base_metadata,
 		&parse_params,
 		segmenter->align_to_key_frames,
+		&ctx->read_cache_state,
 		&cur_source->track_array);
 	if (rc != VOD_OK)
 	{
@@ -1250,9 +1251,10 @@ ngx_http_vod_enable_directio(ngx_http_vod_ctx_t *ctx)
 }
 
 static vod_status_t
-ngx_http_vod_write_segment_header_buffer(void* ctx, u_char* buffer, uint32_t size, bool_t* reuse_buffer)
+ngx_http_vod_write_segment_header_buffer(void* ctx, u_char* buffer, uint32_t size)
 {
 	ngx_http_vod_write_segment_context_t* context = (ngx_http_vod_write_segment_context_t*)ctx;
+	ngx_chain_t *chain_head;
 	ngx_chain_t *chain;
 	ngx_buf_t *b;
 
@@ -1263,9 +1265,6 @@ ngx_http_vod_write_segment_header_buffer(void* ctx, u_char* buffer, uint32_t siz
 		return VOD_UNEXPECTED;
 	}
 
-	// caller should not reuse the buffer since we keep the original buffer
-	*reuse_buffer = FALSE;
-	
 	b = ngx_calloc_buf(context->r->pool);
 	if (b == NULL)
 	{
@@ -1286,11 +1285,18 @@ ngx_http_vod_write_segment_header_buffer(void* ctx, u_char* buffer, uint32_t siz
 		return VOD_ALLOC_FAILED;
 	}
 
-	chain->buf = context->chain_head->buf;
-	chain->next = context->chain_head->next;
+	chain_head = context->chain_head;
 
-	context->chain_head->buf = b;
-	context->chain_head->next = chain;
+	chain->buf = chain_head->buf;
+	chain->next = chain_head->next;
+
+	chain_head->buf = b;
+	chain_head->next = chain;
+
+	if (chain_head == context->chain_end)
+	{
+		context->chain_end = chain;
+	}
 
 	context->total_size += size;
 
@@ -1298,16 +1304,13 @@ ngx_http_vod_write_segment_header_buffer(void* ctx, u_char* buffer, uint32_t siz
 }
 
 static vod_status_t 
-ngx_http_vod_write_segment_buffer(void* ctx, u_char* buffer, uint32_t size, bool_t* reuse_buffer)
+ngx_http_vod_write_segment_buffer(void* ctx, u_char* buffer, uint32_t size)
 {
 	ngx_http_vod_write_segment_context_t* context = (ngx_http_vod_write_segment_context_t*)ctx;
 	ngx_buf_t *b;
 	ngx_chain_t *chain;
 	ngx_chain_t out;
 	ngx_int_t rc;
-
-	// caller should not reuse the buffer since we keep the original buffer
-	*reuse_buffer = FALSE;
 
 	// create a wrapping ngx_buf_t
 	b = ngx_calloc_buf(context->r->pool);
@@ -1369,7 +1372,6 @@ ngx_http_vod_init_frame_processing(ngx_http_vod_ctx_t *ctx)
 	segment_writer_t segment_writer;
 	ngx_str_t output_buffer = ngx_null_string;
 	ngx_str_t content_type;
-	bool_t reuse_buffer;
 	ngx_int_t rc;
 
 	// initialize the response writer
@@ -1389,7 +1391,6 @@ ngx_http_vod_init_frame_processing(ngx_http_vod_ctx_t *ctx)
 
 	rc = ctx->submodule_context.request->init_frame_processor(
 		&ctx->submodule_context,
-		&ctx->read_cache_state,
 		&segment_writer,
 		&ctx->frame_processor,
 		&ctx->frame_processor_state,
@@ -1438,7 +1439,7 @@ ngx_http_vod_init_frame_processing(ngx_http_vod_ctx_t *ctx)
 	// write the initial buffer if provided
 	if (output_buffer.len != 0)
 	{
-		rc = segment_writer.write_tail(segment_writer.context, output_buffer.data, output_buffer.len, &reuse_buffer);
+		rc = segment_writer.write_tail(segment_writer.context, output_buffer.data, output_buffer.len);
 		if (rc != VOD_OK)
 		{
 			ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
@@ -2518,6 +2519,7 @@ ngx_http_vod_apply_mapping(ngx_http_vod_ctx_t *ctx, ngx_str_t* mapping)
 			// mapping result is a simple file path, set the uri of the current source
 			cur_source->sequence->mapped_uri = mapped_source->mapped_uri;
 			cur_source->mapped_uri = mapped_source->mapped_uri;
+			cur_source->encryption_key = mapped_source->encryption_key;
 			return NGX_OK;
 		}
 	}

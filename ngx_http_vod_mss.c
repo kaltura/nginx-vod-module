@@ -74,7 +74,6 @@ ngx_http_vod_mss_handle_manifest(
 static ngx_int_t
 ngx_http_vod_mss_init_frame_processor(
 	ngx_http_vod_submodule_context_t* submodule_context,
-	read_cache_state_t* read_cache_state,
 	segment_writer_t* segment_writer,
 	ngx_http_vod_frame_processor_t* frame_processor,
 	void** frame_processor_state,
@@ -85,6 +84,7 @@ ngx_http_vod_mss_init_frame_processor(
 	fragment_writer_state_t* state;
 	segment_writer_t drm_writer;
 	vod_status_t rc;
+	bool_t reuse_buffers = FALSE;
 	bool_t size_only = ngx_http_vod_submodule_size_only(submodule_context);
 
 	if (submodule_context->conf->drm_enabled)
@@ -106,7 +106,11 @@ ngx_http_vod_mss_init_frame_processor(
 			return ngx_http_vod_status_to_ngx_error(rc);
 		}
 
-		segment_writer = &drm_writer;
+		if (drm_writer.write_tail != NULL)
+		{
+			segment_writer = &drm_writer;
+			reuse_buffers = TRUE;		// mp4_encrypt allocates new buffers
+		}
 	}
 	else
 	{
@@ -133,9 +137,9 @@ ngx_http_vod_mss_init_frame_processor(
 		rc = mp4_builder_frame_writer_init(
 			&submodule_context->request_context,
 			submodule_context->media_set.sequences,
-			read_cache_state,
 			segment_writer->write_tail,
 			segment_writer->context,
+			reuse_buffers,
 			&state);
 		if (rc != VOD_OK)
 		{

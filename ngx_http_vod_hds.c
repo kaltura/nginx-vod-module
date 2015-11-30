@@ -42,7 +42,6 @@ ngx_http_vod_hds_handle_manifest(
 static ngx_int_t
 ngx_http_vod_hds_init_frame_processor(
 	ngx_http_vod_submodule_context_t* submodule_context,
-	read_cache_state_t* read_cache_state,
 	segment_writer_t* segment_writer,
 	ngx_http_vod_frame_processor_t* frame_processor,
 	void** frame_processor_state,
@@ -58,7 +57,6 @@ ngx_http_vod_hds_init_frame_processor(
 		&submodule_context->conf->hds.fragment_config,
 		submodule_context->request_params.segment_index,
 		submodule_context->media_set.sequences,
-		read_cache_state,
 		segment_writer->write_tail,
 		segment_writer->context,
 		ngx_http_vod_submodule_size_only(submodule_context),

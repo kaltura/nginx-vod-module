@@ -72,7 +72,7 @@ static vod_inline u_char*
 hds_amf0_append_array_header(u_char* p, uint32_t count)
 {
 	*p++ = AMF0_TYPE_ECMA_ARRAY;
-	write_dword(p, count);
+	write_be32(p, count);
 	return p;
 }
 

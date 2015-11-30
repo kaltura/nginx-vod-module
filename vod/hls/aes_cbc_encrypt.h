@@ -34,8 +34,7 @@ vod_status_t aes_cbc_encrypt_init(
 vod_status_t aes_cbc_encrypt_write(
 	aes_cbc_encrypt_context_t* ctx, 
 	u_char* buffer, 
-	uint32_t size, 
-	bool_t* reuse_buffer);
+	uint32_t size);
 
 vod_status_t aes_cbc_encrypt_flush(aes_cbc_encrypt_context_t* ctx);
 

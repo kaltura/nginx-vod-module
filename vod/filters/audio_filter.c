@@ -7,6 +7,7 @@
 #include <libavfilter/buffersrc.h>
 #include <libavfilter/buffersink.h>
 #include <libavutil/opt.h>
+#include "../input/frames_source_memory.h"
 #include "rate_filter.h"
 
 // constants
@@ -37,11 +38,11 @@
 // typedefs
 typedef struct
 {
-	media_clip_source_t* frames_source;
+	frames_source_t* frames_source;
+	void* frames_source_context;
 	input_frame_t* cur_frame;
 	input_frame_t* last_frame;
 	uint64_t* cur_frame_offset;
-	int cache_slot_id;
 
 	AVCodecContext *decoder;
 	AVFilterContext *buffer_src;
@@ -74,7 +75,6 @@ typedef struct {
 	uint64_t dts;
 
 	// processing state
-	read_cache_state_t* read_cache_state;
 	audio_filter_source_t* cur_source;
 	u_char* frame_buffer;
 	uint32_t cur_frame_pos;
@@ -577,7 +577,11 @@ audio_filter_init_sources_and_graph_desc(audio_filter_init_context_t* state, med
 		cur_source->last_frame = last_frame;
 		cur_source->cur_frame_offset = audio_track->frame_offsets;
 		cur_source->frames_source = audio_track->frames_source;
-		cur_source->cache_slot_id = state->cache_slot_id++;
+		cur_source->frames_source_context = audio_track->frames_source_context;
+
+		cur_source->frames_source->set_cache_slot_id(
+			cur_source->frames_source_context, 
+			state->cache_slot_id++);
 
 		vod_sprintf(filter_name, "%uD%Z", clip->id);
 
@@ -620,7 +624,6 @@ audio_filter_init_sources_and_graph_desc(audio_filter_init_context_t* state, med
 vod_status_t
 audio_filter_alloc_state(
 	request_context_t* request_context,
-	read_cache_state_t* read_cache_state,
 	media_sequence_t* sequence,
 	media_clip_t* clip,
 	media_track_t* output_track,
@@ -822,7 +825,6 @@ audio_filter_alloc_state(
 	}
 
 	state->request_context = request_context;
-	state->read_cache_state = read_cache_state;
 	state->sequence = sequence;
 	state->output = output_track;
 	state->cur_frame_pos = 0;
@@ -912,6 +914,15 @@ audio_filter_update_track(audio_filter_state_t* state)
 		return VOD_OK;
 	}
 	
+	// update the frames source to memory
+	rc = frames_source_memory_init(state->request_context, &output->frames_source_context);
+	if (rc != VOD_OK)
+	{
+		return rc;
+	}
+
+	output->frames_source = &frames_source_memory;
+
 	// calculate the total frames size and duration
 	output->media_info.min_frame_duration = 0;
 	output->media_info.max_frame_duration = 0;
@@ -968,9 +979,7 @@ audio_filter_update_track(audio_filter_state_t* state)
 			return rc;
 		}
 	}
-	
-	output->frames_source = NULL;		// the frames are now in memory
-	
+		
 	// add the new frame count and size
 	state->sequence->total_frame_count += output->frame_count;
 	state->sequence->total_frame_size += output->total_frames_size;
@@ -1272,9 +1281,9 @@ audio_filter_process(void* context)
 	audio_filter_source_t* source;
 	u_char* read_buffer;
 	uint32_t read_size;
-	uint64_t offset;
 	bool_t processed_data = FALSE;
 	vod_status_t rc;
+	bool_t frame_done;
 
 	for (;;)
 	{
@@ -1294,6 +1303,13 @@ audio_filter_process(void* context)
 			}
 
 			state->cur_source = source;
+
+			// start the frame
+			rc = source->frames_source->start_frame(source->frames_source_context, source->cur_frame, *source->cur_frame_offset);
+			if (rc != VOD_OK)
+			{
+				return rc;
+			}
 		}
 		else
 		{
@@ -1301,16 +1317,18 @@ audio_filter_process(void* context)
 		}
 
 		// read some data from the frame
-		offset = *source->cur_frame_offset + state->cur_frame_pos;
-		if (!read_cache_get_from_cache(
-			state->read_cache_state,
-			source->cur_frame->size - state->cur_frame_pos,
-			source->cache_slot_id,
-			source->frames_source,
-			offset,
+		rc = source->frames_source->read(
+			source->frames_source_context,
 			&read_buffer,
-			&read_size))
+			&read_size,
+			&frame_done);
+		if (rc != VOD_OK)
 		{
+			if (rc != VOD_AGAIN)
+			{
+				return rc;
+			}
+
 			if (!processed_data && !state->first_time)
 			{
 				vod_log_error(VOD_LOG_ERR, state->request_context->log, 0,
@@ -1324,23 +1342,7 @@ audio_filter_process(void* context)
 
 		processed_data = TRUE;
 
-		if (state->cur_frame_pos == 0 && read_size >= source->cur_frame->size)
-		{
-			// have the whole frame in one piece
-			rc = audio_filter_process_frame(state, read_buffer);
-			if (rc != VOD_OK)
-			{
-				return rc;
-			}
-
-			// move to the next frame
-			source->cur_frame++;
-			source->cur_frame_offset++;
-			state->cur_source = NULL;
-			continue;
-		}
-
-		if (read_size < source->cur_frame->size - state->cur_frame_pos)
+		if (!frame_done)
 		{
 			// didn't finish the frame, append to the frame buffer
 			vod_memcpy(state->frame_buffer + state->cur_frame_pos, read_buffer, read_size);
@@ -1348,18 +1350,24 @@ audio_filter_process(void* context)
 			continue;
 		}
 
-		// finished the frame
-		vod_memcpy(state->frame_buffer + state->cur_frame_pos, read_buffer, source->cur_frame->size - state->cur_frame_pos);
+		if (state->cur_frame_pos != 0)
+		{
+			// copy the remainder
+			vod_memcpy(state->frame_buffer + state->cur_frame_pos, read_buffer, read_size);
+			state->cur_frame_pos = 0;
+			read_buffer = state->frame_buffer;
+		}
 
-		rc = audio_filter_process_frame(state, state->frame_buffer);
+		// process the frame
+		rc = audio_filter_process_frame(state, read_buffer);
 		if (rc != VOD_OK)
 		{
 			return rc;
 		}
 
+		// move to the next frame
 		source->cur_frame++;
 		source->cur_frame_offset++;
-		state->cur_frame_pos = 0;
 		state->cur_source = NULL;
 	}
 }
@@ -1375,7 +1383,6 @@ audio_filter_process_init(vod_log_t* log)
 vod_status_t
 audio_filter_alloc_state(
 	request_context_t* request_context,
-	read_cache_state_t* read_cache_state,
 	media_sequence_t* sequence,
 	media_clip_t* clip,
 	media_track_t* output_track,

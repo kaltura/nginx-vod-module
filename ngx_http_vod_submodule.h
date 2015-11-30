@@ -4,7 +4,6 @@
 // includes
 #include "ngx_http_vod_request_parse.h"
 #include "vod/common.h"
-#include "vod/read_cache.h"
 
 // macros
 #define DEFINE_SUBMODULE(x) const ngx_http_vod_submodule_t x = {	\
@@ -74,7 +73,6 @@ struct ngx_http_vod_request_s {
 	ngx_int_t (*init_frame_processor)(
 		// in
 		ngx_http_vod_submodule_context_t* submodule_context,
-		read_cache_state_t* read_cache_state,
 		segment_writer_t* segment_writer,
 		// out
 		ngx_http_vod_frame_processor_t* frame_processor,

@@ -1,9 +1,13 @@
 #include <limits.h>
 #include <zlib.h>
+#include "mp4_builder.h"
+#include "mp4_decrypt.h"
 #include "mp4_parser.h"
 #include "mp4_defs.h"
+#include "../input/frames_source_cache.h"
 #include "../read_stream.h"
 #include "../codec_config.h"
+#include "../media_clip.h"
 #include "../common.h"
 
 // TODO: use iterators from mp4_parser_base.c to reduce code duplication
@@ -43,6 +47,8 @@ typedef struct {
 	atom_info_t ctts;
 	atom_info_t stss;
 	atom_info_t stsd;
+	atom_info_t saiz;
+	atom_info_t senc;
 	atom_info_t hdlr;
 	atom_info_t mdhd;
 	atom_info_t dinf;
@@ -59,8 +65,9 @@ typedef struct {
 
 typedef struct {
 	request_context_t* request_context;
-	media_info_t media_info;
 	media_parse_params_t parse_params;
+	media_info_t media_info;
+	atom_info_t sinf_atom;
 } metadata_parse_context_t;
 
 typedef struct {
@@ -90,11 +97,15 @@ typedef struct {
 	uint32_t first_chunk_frame_index;
 	bool_t chunk_equals_sample;
 	uint64_t first_frame_chunk_offset;
+	media_encryption_t encryption_info;
+	uint32_t auxiliary_info_start_offset;
+	uint32_t auxiliary_info_end_offset;
 } frames_parse_context_t;
 
 typedef struct {
 	trak_atom_infos_t trak_atom_infos;
 	media_info_t media_info;
+	atom_info_t sinf_atom;
 	file_info_t file_info;
 	uint32_t track_index;
 } mp4_track_base_metadata_t;
@@ -115,6 +126,8 @@ static const relevant_atom_t relevant_atoms_stbl[] = {
 	{ ATOM_NAME_CTTS, offsetof(trak_atom_infos_t, ctts), NULL },
 	{ ATOM_NAME_STSS, offsetof(trak_atom_infos_t, stss), NULL },
 	{ ATOM_NAME_STSD, offsetof(trak_atom_infos_t, stsd), NULL },
+	{ ATOM_NAME_SAIZ, offsetof(trak_atom_infos_t, saiz), NULL },
+	{ ATOM_NAME_SENC, offsetof(trak_atom_infos_t, senc), NULL },
 	{ ATOM_NAME_NULL, 0, NULL }
 };
 
@@ -1337,6 +1350,42 @@ mp4_parser_parse_stss_atom(atom_info_t* atom_info, frames_parse_context_t* conte
 	return VOD_OK;
 }
 
+static vod_status_t
+mp4_parser_parse_sinf_atoms(void* ctx, atom_info_t* atom_info)
+{
+	metadata_parse_context_t* context = (metadata_parse_context_t*)ctx;
+
+	if (atom_info->name != ATOM_NAME_FRMA)
+	{
+		return VOD_OK;
+	}
+
+	if (atom_info->size < sizeof(uint32_t))
+	{
+		vod_log_error(VOD_LOG_ERR, context->request_context->log, 0,
+			"mp4_parser_parse_sinf_atoms: frma atom size %uL too small", atom_info->size);
+		return VOD_BAD_DATA;
+	}
+
+	context->media_info.format = parse_le32(atom_info->ptr);
+
+	return VOD_OK;
+}
+
+static vod_status_t
+mp4_parser_parse_sinf_atom(atom_info_t* atom_info, metadata_parse_context_t* context)
+{
+	context->sinf_atom = *atom_info;
+
+	return mp4_parser_parse_atoms(
+		context->request_context, 
+		atom_info->ptr, 
+		atom_info->size, 
+		TRUE, 
+		mp4_parser_parse_sinf_atoms, 
+		context);
+}
+
 static vod_status_t 
 mp4_parser_parse_video_extra_data_atom(void* ctx, atom_info_t* atom_info)
 {
@@ -1344,6 +1393,9 @@ mp4_parser_parse_video_extra_data_atom(void* ctx, atom_info_t* atom_info)
 	
 	switch (atom_info->name)
 	{
+	case ATOM_NAME_SINF:
+		return mp4_parser_parse_sinf_atom(atom_info, context);
+
 	case ATOM_NAME_AVCC:
 	case ATOM_NAME_HVCC:
 		break;			// handled outside the switch
@@ -1457,8 +1509,15 @@ mp4_parser_parse_audio_esds_atom(void* ctx, atom_info_t* atom_info)
 	int tag;
 	vod_status_t rc;
 	
-	if (atom_info->name != ATOM_NAME_ESDS)
+	switch (atom_info->name)
 	{
+	case ATOM_NAME_SINF:
+		return mp4_parser_parse_sinf_atom(atom_info, context);
+
+	case ATOM_NAME_ESDS:
+		break;			// handled outside the switch
+
+	default:
 		return VOD_OK;
 	}
 	
@@ -1680,6 +1739,138 @@ mp4_parser_parse_stsd_atom(atom_info_t* atom_info, metadata_parse_context_t* con
 		}
 	}
 	
+	return VOD_OK;
+}
+
+static vod_status_t
+mp4_parser_parse_saiz_atom(atom_info_t* atom_info, frames_parse_context_t* context)
+{
+	const saiz_atom_t* atom;
+	const saiz_with_type_atom_t* atom_with_type;
+	const uint8_t* first_entry;
+	const uint8_t* last_entry;
+	const uint8_t* cur_entry;
+	uint32_t offset;
+	uint8_t default_size;
+
+	if (atom_info->size == 0)		// optional atom
+	{
+		return VOD_OK;
+	}
+
+	if (atom_info->size < sizeof(*atom))
+	{
+		vod_log_error(VOD_LOG_ERR, context->request_context->log, 0,
+			"mp4_parser_parse_saiz_atom: atom size %uL too small (1)", atom_info->size);
+		return VOD_BAD_DATA;
+	}
+
+	atom = (const saiz_atom_t*)atom_info->ptr;
+
+	if ((atom->flags[2] & 0x01) != 0)
+	{
+		if (atom_info->size < sizeof(*atom_with_type))
+		{
+			vod_log_error(VOD_LOG_ERR, context->request_context->log, 0,
+				"mp4_parser_parse_saiz_atom: atom size %uL too small (2)", atom_info->size);
+			return VOD_BAD_DATA;
+		}
+
+		atom_with_type = (const saiz_with_type_atom_t*)atom_info->ptr;
+
+		default_size = atom_with_type->default_size[0];
+		first_entry = (const uint8_t*)(atom_with_type + 1);
+	}
+	else
+	{
+		default_size = atom->default_size[0];
+		first_entry = (const uint8_t*)(atom + 1);
+	}
+
+	context->encryption_info.default_auxiliary_sample_size = default_size;
+
+	if (default_size != 0)
+	{
+		context->auxiliary_info_start_offset = context->first_frame * default_size;
+		context->auxiliary_info_end_offset = context->last_frame * default_size;
+		return VOD_OK;
+	}
+
+	if (first_entry + context->last_frame > atom_info->ptr + atom_info->size)
+	{
+		vod_log_error(VOD_LOG_ERR, context->request_context->log, 0,
+			"mp4_parser_parse_saiz_atom: atom too small to hold %uD entries", context->last_frame);
+		return VOD_BAD_DATA;
+	}
+
+	// save the sample sizes (used for passthrough encryption)
+	context->encryption_info.auxiliary_sample_sizes = vod_alloc(context->request_context->pool, context->frame_count);
+	if (context->encryption_info.auxiliary_sample_sizes == NULL)
+	{
+		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, context->request_context->log, 0,
+			"mp4_parser_parse_saiz_atom: vod_alloc failed");
+		return VOD_ALLOC_FAILED;
+	}
+	vod_memcpy(context->encryption_info.auxiliary_sample_sizes, first_entry + context->first_frame, context->frame_count);
+
+	// get the start offset
+	offset = 0;
+	last_entry = first_entry + context->first_frame;
+	for (cur_entry = first_entry; cur_entry < last_entry; cur_entry++)
+	{
+		offset += *cur_entry;
+	}
+
+	context->auxiliary_info_start_offset = offset;
+
+	// get the end offset
+	last_entry = first_entry + context->last_frame;
+	for (; cur_entry < last_entry; cur_entry++)
+	{
+		offset += *cur_entry;
+	}
+
+	context->auxiliary_info_end_offset = offset;
+
+	return VOD_OK;
+}
+
+static vod_status_t
+mp4_parser_parse_senc_atom(atom_info_t* atom_info, frames_parse_context_t* context)
+{
+	const senc_atom_t* atom;
+	size_t auxiliary_info_size;
+
+	if (atom_info->size == 0 || context->auxiliary_info_start_offset >= context->auxiliary_info_end_offset)		// optional atom
+	{
+		return VOD_OK;
+	}
+
+	if (atom_info->size < sizeof(*atom) + context->auxiliary_info_end_offset)
+	{
+		vod_log_error(VOD_LOG_ERR, context->request_context->log, 0,
+			"mp4_parser_parse_senc_atom: atom smaller than end offset %uD", context->auxiliary_info_end_offset);
+		return VOD_BAD_DATA;
+	}
+
+	atom = (const senc_atom_t*)atom_info->ptr;
+
+	auxiliary_info_size = context->auxiliary_info_end_offset - context->auxiliary_info_start_offset;
+	context->encryption_info.auxiliary_info = vod_alloc(context->request_context->pool, auxiliary_info_size);
+	if (context->encryption_info.auxiliary_info == NULL)
+	{
+		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, context->request_context->log, 0,
+			"mp4_parser_parse_senc_atom: vod_alloc failed");
+		return VOD_ALLOC_FAILED;
+	}
+
+	vod_memcpy(
+		context->encryption_info.auxiliary_info, 
+		atom_info->ptr + sizeof(*atom) + context->auxiliary_info_start_offset, 
+		auxiliary_info_size);
+	context->encryption_info.auxiliary_info_end = context->encryption_info.auxiliary_info + auxiliary_info_size;
+	context->encryption_info.use_subsamples = (atom->flags[2] & 0x02);
+
 	return VOD_OK;
 }
 
@@ -1962,6 +2153,7 @@ mp4_parser_process_moov_atom_callback(void* ctx, atom_info_t* atom_info)
 
 	result_track->trak_atom_infos = trak_atom_infos;
 	result_track->media_info = metadata_parse_context.media_info;
+	result_track->sinf_atom = metadata_parse_context.sinf_atom;
 	result_track->file_info = *context->file_info;
 	result_track->track_index = track_index;
 
@@ -2026,6 +2218,8 @@ static const trak_atom_parser_t trak_atom_parsers[] = {
 	{ mp4_parser_parse_stsz_atom_total_size_estimate_only,	offsetof(trak_atom_infos_t, stsz), PARSE_FLAG_TOTAL_SIZE_ESTIMATE },
 	{ mp4_parser_parse_stco_atom,							offsetof(trak_atom_infos_t, stco), PARSE_FLAG_FRAMES_OFFSET},
 	{ mp4_parser_parse_stss_atom,							offsetof(trak_atom_infos_t, stss), PARSE_FLAG_FRAMES_IS_KEY },
+	{ mp4_parser_parse_saiz_atom,							offsetof(trak_atom_infos_t, saiz), PARSE_FLAG_FRAMES_OFFSET },
+	{ mp4_parser_parse_senc_atom,							offsetof(trak_atom_infos_t, senc), PARSE_FLAG_FRAMES_OFFSET },
 	{ NULL, 0, 0 }
 };
 
@@ -2104,6 +2298,37 @@ mp4_parser_copy_raw_atoms(request_context_t* request_context, raw_atom_t* dest, 
 	return VOD_OK;
 }
 
+static void 
+mp4_parser_strip_stsd_encryption(
+	raw_atom_t* dest_stsd_atom,
+	mp4_track_base_metadata_t* track)
+{
+	atom_info_t* src_sinf_atom = &track->sinf_atom;
+	atom_info_t* src_stsd_atom = &track->trak_atom_infos.stsd;
+	uint32_t original_format = track->media_info.format;
+	uint32_t stsd_entry_size;
+	size_t sinf_size = src_sinf_atom->header_size + src_sinf_atom->size;
+	size_t sinf_offset;
+	u_char* dest = (u_char*)dest_stsd_atom->ptr;
+	u_char* p;
+
+	// strip off the sinf atom
+	sinf_offset = (src_sinf_atom->ptr - src_sinf_atom->header_size) - (src_stsd_atom->ptr - src_stsd_atom->header_size);
+	dest_stsd_atom->size -= sinf_size;
+	vod_memmove(dest + sinf_offset, dest + sinf_offset + sinf_size, dest_stsd_atom->size - sinf_offset);
+
+	// update the stsd entry size + format
+	p = dest + dest_stsd_atom->header_size + sizeof(stsd_atom_t);
+	stsd_entry_size = parse_be32(p) - sinf_size;
+	write_be32(p, stsd_entry_size);
+	write_le32(p, original_format);
+
+	// update the stsd atom size
+	// Note: assuming 32 bit size, in case of 64 bit the atom will get corrupted, but this is very unlikely
+	p = dest;
+	write_be32(p, dest_stsd_atom->size);
+}
+
 static int
 mp4_parser_compare_tracks(const void *s1, const void *s2)
 {
@@ -2124,16 +2349,19 @@ mp4_parser_parse_frames(
 	mp4_base_metadata_t* base,
 	media_parse_params_t* parse_params,
 	bool_t align_segments_to_key_frames,
+	read_cache_state_t* read_cache_state,
 	media_track_array_t* result)
 {
 	mp4_track_base_metadata_t* first_track = (mp4_track_base_metadata_t*)base->tracks.elts;
 	mp4_track_base_metadata_t* last_track = first_track + base->tracks.nelts;
 	mp4_track_base_metadata_t* cur_track;
 	frames_parse_context_t context;
+	frames_source_t* frames_source;
 	media_track_t* result_track;
 	input_frame_t* cur_frame;
 	input_frame_t* last_frame;
 	const trak_atom_parser_t* cur_parser;
+	void* frames_source_context;
 	vod_status_t rc;
 	vod_array_t tracks;
 	uint32_t media_type;
@@ -2218,13 +2446,52 @@ mp4_parser_parse_frames(
 			return VOD_ALLOC_FAILED;
 		}
 
+		// init the frames source
+		frames_source = &frames_source_cache;
+		rc = frames_source_cache_init(
+			request_context,
+			read_cache_state,
+			cur_track->file_info.source,
+			&frames_source_context);
+		if (rc != VOD_OK)
+		{
+			return rc;
+		}
+
+		if (context.encryption_info.auxiliary_info < context.encryption_info.auxiliary_info_end)
+		{
+			if (cur_track->file_info.source->encryption_key == NULL)
+			{
+				vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+					"mp4_parser_parse_frames: media is encrypted and no decryption key was supplied");
+				return VOD_BAD_REQUEST;
+			}
+
+			rc = mp4_decrypt_init(
+				request_context,
+				frames_source,
+				frames_source_context,
+				cur_track->file_info.source->encryption_key,
+				&context.encryption_info,
+				&frames_source_context);
+			if (rc != VOD_OK)
+			{
+				return rc;
+			}
+
+			frames_source = &mp4_decrypt_frames_source;
+		}
+
+		result_track->frames_source = frames_source;
+		result_track->frames_source_context = frames_source_context;
+
 		// copy the result
 		result_track->media_info = cur_track->media_info;
+		result_track->encryption_info = context.encryption_info;
 		result_track->file_info = cur_track->file_info;
 		result_track->index = cur_track->track_index;
 		result_track->first_frame = context.frames;
 		result_track->last_frame = context.frames + context.frame_count;
-		result_track->frames_source = cur_track->file_info.source;
 		result_track->frame_offsets = context.frame_offsets;
 		result_track->frame_count = context.frame_count;
 		result_track->key_frame_count = context.key_frame_count;
@@ -2243,6 +2510,11 @@ mp4_parser_parse_frames(
 			if (rc != VOD_OK)
 			{
 				return rc;
+			}
+
+			if (cur_track->sinf_atom.ptr != NULL)
+			{
+				mp4_parser_strip_stsd_encryption(&result_track->raw_atoms[RTA_STSD], cur_track);
 			}
 		}
 
