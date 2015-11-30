@@ -1254,6 +1254,7 @@ static vod_status_t
 ngx_http_vod_write_segment_header_buffer(void* ctx, u_char* buffer, uint32_t size)
 {
 	ngx_http_vod_write_segment_context_t* context = (ngx_http_vod_write_segment_context_t*)ctx;
+	ngx_chain_t *chain_head;
 	ngx_chain_t *chain;
 	ngx_buf_t *b;
 
@@ -1284,11 +1285,18 @@ ngx_http_vod_write_segment_header_buffer(void* ctx, u_char* buffer, uint32_t siz
 		return VOD_ALLOC_FAILED;
 	}
 
-	chain->buf = context->chain_head->buf;
-	chain->next = context->chain_head->next;
+	chain_head = context->chain_head;
 
-	context->chain_head->buf = b;
-	context->chain_head->next = chain;
+	chain->buf = chain_head->buf;
+	chain->next = chain_head->next;
+
+	chain_head->buf = b;
+	chain_head->next = chain;
+
+	if (chain_head == context->chain_end)
+	{
+		context->chain_end = chain;
+	}
 
 	context->total_size += size;
 

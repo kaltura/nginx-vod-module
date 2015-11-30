@@ -485,6 +485,9 @@ edash_packager_get_fragment_writer(
 
 	if (mp4_encrypt_passthrough_init(&passthrough_context, media_set->sequences))
 	{
+		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
+			"edash_packager_get_fragment_writer: using encryption passthrough");
+
 		// get the header extensions
 		header_extensions.extra_traf_atoms_size = passthrough_context.total_size + ATOM_HEADER_SIZE + sizeof(senc_atom_t);
 		header_extensions.write_extra_traf_atoms_callback = edash_packager_passthrough_write_encryption_atoms;

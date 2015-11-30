@@ -288,6 +288,9 @@ mss_playready_get_fragment_writer(
 
 	if (mp4_encrypt_passthrough_init(&passthrough_context, media_set->sequences))
 	{
+		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
+			"mss_playready_get_fragment_writer: using encryption passthrough");
+
 		// build the fragment header
 		rc = mss_packager_build_fragment_header(
 			request_context,
