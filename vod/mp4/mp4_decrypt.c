@@ -1,5 +1,5 @@
 #include "mp4_decrypt.h"
-#include "mp4_aes_cbc.h"
+#include "mp4_aes_ctr.h"
 #include "mp4_parser.h"
 #include "../read_stream.h"
 
@@ -15,10 +15,10 @@ typedef struct {
 	void* frames_source_context;
 	bool_t reuse_buffers;
 	bool_t use_subsamples;
-	u_char key[MP4_AES_CBC_KEY_SIZE];
+	u_char key[MP4_AES_CTR_KEY_SIZE];
 
 	// decryption state
-	mp4_aes_cbc_state_t cipher;
+	mp4_aes_ctr_state_t cipher;
 	u_char* auxiliary_info_pos;
 	u_char* auxiliary_info_end;
 	uint16_t subsample_count;
@@ -58,7 +58,7 @@ mp4_decrypt_init(
 
 	vod_memzero(state, sizeof(*state));
 
-	rc = mp4_aes_cbc_init(&state->cipher, request_context, key);
+	rc = mp4_aes_ctr_init(&state->cipher, request_context, key);
 	if (rc != VOD_OK)
 	{
 		return rc;
@@ -100,15 +100,15 @@ mp4_decrypt_start_frame(void* ctx, input_frame_t* frame, uint64_t frame_offset)
 	}
 
 	// get the iv
-	if (state->auxiliary_info_pos + MP4_AES_CBC_IV_SIZE > state->auxiliary_info_end)
+	if (state->auxiliary_info_pos + MP4_AES_CTR_IV_SIZE > state->auxiliary_info_end)
 	{
 		vod_log_error(VOD_LOG_ERR, state->request_context->log, 0,
 			"mp4_decrypt_start_frame: failed to get iv from auxiliary info");
 		return VOD_BAD_DATA;
 	}
 
-	mp4_aes_cbc_set_iv(&state->cipher, state->auxiliary_info_pos);
-	state->auxiliary_info_pos += MP4_AES_CBC_IV_SIZE;
+	mp4_aes_ctr_set_iv(&state->cipher, state->auxiliary_info_pos);
+	state->auxiliary_info_pos += MP4_AES_CTR_IV_SIZE;
 
 	if (!state->use_subsamples)
 	{
@@ -187,7 +187,7 @@ mp4_decrypt_process(
 
 		// decrypt encrypted bytes
 		cur_size = vod_min(state->encrypted_bytes, size);
-		rc = mp4_aes_cbc_process(&state->cipher, dest, src, cur_size);
+		rc = mp4_aes_ctr_process(&state->cipher, dest, src, cur_size);
 		if (rc != VOD_OK)
 		{
 			return rc;

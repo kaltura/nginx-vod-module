@@ -119,7 +119,7 @@ NGX_ADDON_DEPS="$NGX_ADDON_DEPS                                     \
                 $ngx_addon_dir/vod/media_clip.h                     \
                 $ngx_addon_dir/vod/media_set.h                      \
                 $ngx_addon_dir/vod/media_set_parser.h               \
-                $ngx_addon_dir/vod/mp4/mp4_aes_cbc.h                \
+                $ngx_addon_dir/vod/mp4/mp4_aes_ctr.h                \
                 $ngx_addon_dir/vod/mp4/mp4_builder.h                \
                 $ngx_addon_dir/vod/mp4/mp4_clipper.h                \
                 $ngx_addon_dir/vod/mp4/mp4_decrypt.h                \
@@ -182,7 +182,7 @@ NGX_ADDON_SRCS="$NGX_ADDON_SRCS                                     \
                 $ngx_addon_dir/vod/input/read_cache.c               \
                 $ngx_addon_dir/vod/json_parser.c                    \
                 $ngx_addon_dir/vod/media_set_parser.c               \
-                $ngx_addon_dir/vod/mp4/mp4_aes_cbc.c                \
+                $ngx_addon_dir/vod/mp4/mp4_aes_ctr.c                \
                 $ngx_addon_dir/vod/mp4/mp4_builder.c                \
                 $ngx_addon_dir/vod/mp4/mp4_clipper.c                \
                 $ngx_addon_dir/vod/mp4/mp4_decrypt.c                \

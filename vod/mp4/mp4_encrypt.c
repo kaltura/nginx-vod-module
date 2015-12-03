@@ -15,7 +15,7 @@ enum {
 
 // fragment types
 typedef struct {
-	u_char iv[MP4_AES_CBC_IV_SIZE];
+	u_char iv[MP4_AES_CTR_IV_SIZE];
 	u_char subsample_count[2];
 } cenc_sample_auxiliary_data_t;
 
@@ -61,8 +61,8 @@ mp4_encrypt_init_state(
 	state->segment_index = segment_index;
 	state->segment_writer = *segment_writer;
 
-	// init the aes cbc
-	rc = mp4_aes_cbc_init(&state->cipher, request_context, drm_info->key);
+	// init the aes ctr
+	rc = mp4_aes_ctr_init(&state->cipher, request_context, drm_info->key);
 	if (rc != VOD_OK)
 	{
 		return rc;
@@ -131,8 +131,8 @@ mp4_encrypt_start_frame(mp4_encrypt_state_t* state)
 	state->cur_frame++;
 
 	// set and increment the iv
-	mp4_aes_cbc_set_iv(&state->cipher, state->iv);
-	mp4_aes_cbc_increment_be64(state->iv);
+	mp4_aes_ctr_set_iv(&state->cipher, state->iv);
+	mp4_aes_ctr_increment_be64(state->iv);
 
 	return VOD_OK;
 }
@@ -388,7 +388,7 @@ mp4_encrypt_video_write_buffer(void* context, u_char* buffer, uint32_t size)
 				cur_write_size = write_end - cur_pos;
 				cur_write_size = vod_min(cur_write_size, alloc_size);
 
-				rc = mp4_aes_cbc_process(&state->base.cipher, output, cur_pos, cur_write_size);
+				rc = mp4_aes_ctr_process(&state->base.cipher, output, cur_pos, cur_write_size);
 				if (rc != VOD_OK)
 				{
 					return rc;
@@ -546,21 +546,21 @@ mp4_encrypt_video_get_fragment_writer(
 size_t 
 mp4_encrypt_audio_get_auxiliary_data_size(mp4_encrypt_state_t* state)
 {
-	return MP4_AES_CBC_IV_SIZE * state->sequence->total_frame_count;
+	return MP4_AES_CTR_IV_SIZE * state->sequence->total_frame_count;
 }
 
 u_char*
 mp4_encrypt_audio_write_auxiliary_data(mp4_encrypt_state_t* state, u_char* p)
 {
 	u_char* end_pos = p + sizeof(state->iv) * state->sequence->total_frame_count;
-	u_char iv[MP4_AES_CBC_IV_SIZE];
+	u_char iv[MP4_AES_CTR_IV_SIZE];
 
 	vod_memcpy(iv, state->iv, sizeof(iv));
 
 	while (p < end_pos)
 	{
 		p = vod_copy(p, iv, sizeof(iv));
-		mp4_aes_cbc_increment_be64(iv);
+		mp4_aes_ctr_increment_be64(iv);
 	}
 
 	return p;
@@ -575,7 +575,7 @@ mp4_encrypt_audio_write_saiz_saio(mp4_encrypt_state_t* state, u_char* p, size_t 
 	// moof.traf.saiz
 	write_atom_header(p, saiz_atom_size, 's', 'a', 'i', 'z');
 	write_be32(p, 0);			// version, flags
-	*p++ = MP4_AES_CBC_IV_SIZE;				// default auxiliary sample size
+	*p++ = MP4_AES_CTR_IV_SIZE;				// default auxiliary sample size
 	write_be32(p, state->sequence->total_frame_count);
 
 	// moof.traf.saio
@@ -626,7 +626,7 @@ mp4_encrypt_audio_write_buffer(void* context, u_char* buffer, uint32_t size)
 			cur_write_size = write_end - cur_pos;
 			cur_write_size = vod_min(cur_write_size, alloc_size);
 
-			rc = mp4_aes_cbc_process(&state->cipher, output, cur_pos, cur_write_size);
+			rc = mp4_aes_ctr_process(&state->cipher, output, cur_pos, cur_write_size);
 			if (rc != VOD_OK)
 			{
 				return rc;
