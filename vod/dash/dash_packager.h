@@ -26,6 +26,7 @@ typedef struct {
 } atom_writer_t;
 
 typedef struct {
+	vod_str_t profiles;
 	vod_str_t init_file_name_prefix;
 	vod_str_t fragment_file_name_prefix;
 	vod_uint_t manifest_format;

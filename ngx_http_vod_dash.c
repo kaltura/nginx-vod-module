@@ -287,6 +287,7 @@ ngx_http_vod_dash_merge_loc_conf(
 	ngx_conf_merge_value(conf->absolute_manifest_urls, prev->absolute_manifest_urls, 1);
 
 	ngx_conf_merge_str_value(conf->manifest_file_name_prefix, prev->manifest_file_name_prefix, "manifest");
+	ngx_conf_merge_str_value(conf->mpd_config.profiles, prev->mpd_config.profiles, "urn:mpeg:dash:profile:isoff-main:2011");
 	ngx_conf_merge_str_value(conf->mpd_config.init_file_name_prefix, prev->mpd_config.init_file_name_prefix, "init");
 	ngx_conf_merge_str_value(conf->mpd_config.fragment_file_name_prefix, prev->mpd_config.fragment_file_name_prefix, "fragment");
 	ngx_conf_merge_uint_value(conf->mpd_config.manifest_format, prev->mpd_config.manifest_format, FORMAT_SEGMENT_TIMELINE);
