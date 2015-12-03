@@ -14,7 +14,7 @@
 	"    type=\"static\"\n"														\
 	"    mediaPresentationDuration=\"PT%uD.%03uDS\"\n"							\
 	"    minBufferTime=\"PT%uDS\"\n"											\
-	"    profiles=\"urn:mpeg:dash:profile:isoff-main:2011\">\n"
+	"    profiles=\"%V\">\n"
 
 #define VOD_DASH_MANIFEST_PERIOD_HEADER											\
 	"  <Period>\n"
@@ -949,7 +949,7 @@ dash_packager_build_mpd(
 		representation_tags_size;
 
 	result_size =
-		sizeof(VOD_DASH_MANIFEST_HEADER) - 1 + 3 * VOD_INT32_LEN +
+		sizeof(VOD_DASH_MANIFEST_HEADER) - 1 + 3 * VOD_INT32_LEN + conf->profiles.len +
 			base_period_size * period_count +
 		sizeof(VOD_DASH_MANIFEST_FOOTER);
 
@@ -1010,7 +1010,8 @@ dash_packager_build_mpd(
 		VOD_DASH_MANIFEST_HEADER,
 		(uint32_t)(media_set->total_duration / 1000),
 		(uint32_t)(media_set->total_duration % 1000),
-		(uint32_t)(segmenter_conf->max_segment_duration / 1000));
+		(uint32_t)(segmenter_conf->max_segment_duration / 1000), 
+		&conf->profiles);
 
 	cur_duration_items[MEDIA_TYPE_VIDEO] = segment_durations[MEDIA_TYPE_VIDEO].items;
 	cur_duration_items[MEDIA_TYPE_AUDIO] = segment_durations[MEDIA_TYPE_AUDIO].items;

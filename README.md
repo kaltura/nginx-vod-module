@@ -33,7 +33,11 @@ without the overhead of short segments for the whole duration of the video
 
 * Clipping of MP4 files for progressive download playback
 
-* DASH: common encryption (cenc) support
+* Decryption of CENC-encrypted MP4 files (it is possible to create such files with MP4Box)
+
+* DASH: common encryption (CENC) support
+
+* MSS: PlayReady encryption support
 
 * HLS: Mux audio and video streams from separate MP4 files (HLS/HDS)
 
@@ -339,6 +343,8 @@ Optional fields:
 	which means the first video track and the first audio track
 * `clipFrom` - an integer that specifies an offset in milliseconds, from the beginning of the 
 	media file, from which to start loading frames
+* `encryptionKey` - a base64 encoded string containing the key (128 bit) that should be used
+	to decrypt the media file. 
 	
 #### Rate filter clip
 
@@ -850,6 +856,13 @@ When enabled the server returns absolute URLs in MPD requests
 * **context**: `http`, `server`, `location`
 
 The name of the MPD file (an mpd extension is implied).
+
+#### vod_dash_profiles
+* **syntax**: `vod_dash_profiles profiles`
+* **default**: `urn:mpeg:dash:profile:isoff-main:2011`
+* **context**: `http`, `server`, `location`
+
+Sets the profiles that are returned in the MPD tag in manifest responses.
 
 #### vod_dash_init_file_name_prefix
 * **syntax**: `vod_dash_init_file_name_prefix name`
