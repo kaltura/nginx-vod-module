@@ -5,7 +5,7 @@
 #include "../dynamic_buffer.h"
 #include "../write_buffer.h"
 #include "../media_set.h"
-#include "mp4_aes_cbc.h"
+#include "mp4_aes_ctr.h"
 
 // constants
 #define MP4_ENCRYPT_KEY_SIZE (16)
@@ -52,8 +52,8 @@ typedef struct {
 	write_buffer_state_t write_buffer;
 
 	// encryption state
-	mp4_aes_cbc_state_t cipher;
-	u_char iv[MP4_AES_CBC_IV_SIZE];
+	mp4_aes_ctr_state_t cipher;
+	u_char iv[MP4_AES_CTR_IV_SIZE];
 
 	// frame state
 	media_clip_filtered_t* cur_clip;

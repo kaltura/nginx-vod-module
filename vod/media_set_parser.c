@@ -147,7 +147,7 @@ media_set_parse_encryption_key(
 	media_filter_parse_context_t* context = ctx;
 	u_char* result;
 
-	result = vod_alloc(context->request_context->pool, MP4_AES_CBC_KEY_SIZE);
+	result = vod_alloc(context->request_context->pool, MP4_AES_CTR_KEY_SIZE);
 	if (result == NULL)
 	{
 		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, context->request_context->log, 0,
@@ -157,7 +157,7 @@ media_set_parse_encryption_key(
 
 	*(u_char**)dest = result;
 
-	return parse_utils_parse_fixed_base64_string(&value->v.str, result, MP4_AES_CBC_KEY_SIZE);
+	return parse_utils_parse_fixed_base64_string(&value->v.str, result, MP4_AES_CTR_KEY_SIZE);
 }
 
 static vod_status_t 

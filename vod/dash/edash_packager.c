@@ -381,7 +381,7 @@ static u_char*
 edash_packager_audio_write_encryption_atoms(void* context, u_char* p, size_t mdat_atom_start)
 {
 	mp4_encrypt_state_t* state = (mp4_encrypt_state_t*)context;
-	size_t senc_data_size = MP4_AES_CBC_IV_SIZE * state->sequence->total_frame_count;
+	size_t senc_data_size = MP4_AES_CTR_IV_SIZE * state->sequence->total_frame_count;
 	size_t senc_atom_size = ATOM_HEADER_SIZE + sizeof(senc_atom_t) + senc_data_size;
 
 	// saiz / saio
@@ -410,7 +410,7 @@ edash_packager_audio_build_fragment_header(
 	header_extensions.extra_traf_atoms_size =
 		state->saiz_atom_size + 
 		state->saio_atom_size + 
-		ATOM_HEADER_SIZE + sizeof(senc_atom_t) + MP4_AES_CBC_IV_SIZE * state->sequence->total_frame_count;
+		ATOM_HEADER_SIZE + sizeof(senc_atom_t) + MP4_AES_CTR_IV_SIZE * state->sequence->total_frame_count;
 	header_extensions.write_extra_traf_atoms_callback = (write_extra_traf_atoms_callback_t)edash_packager_audio_write_encryption_atoms;
 	header_extensions.write_extra_traf_atoms_context = state;
 
