@@ -517,15 +517,14 @@ m3u8_builder_build_master_playlist(
 	uint32_t sequence_index;
 	uint32_t bitrate;
 	u_char* p;
-	size_t max_video_stream_inf = 0;
-	size_t result_size = 0;
-        uint32_t main_media_type;
-        media_track_t* cur_track;
+	size_t max_video_stream_inf;
+	size_t result_size;
+	uint32_t main_media_type;
+	media_track_t* cur_track;
 	media_track_t* audio_track = NULL;
 
 
 
-	// calculate the result size
 	// calculate the result size
 	max_video_stream_inf =
 		sizeof(m3u8_stream_inf_video) - 1 + 3 * VOD_INT32_LEN + MAX_CODEC_NAME_SIZE +
@@ -533,9 +532,8 @@ m3u8_builder_build_master_playlist(
 		sizeof(m3u8_stream_inf_suffix) - 1;
 	result_size = sizeof(m3u8_header);	
 	for (cur_sequence = media_set->sequences; cur_sequence < media_set->sequences_end; cur_sequence++)
-	{	    
-		if(audio_track == NULL)
-			audio_track = cur_sequence->filtered_clips[0].longest_track[MEDIA_TYPE_AUDIO];
+	{	    	
+		audio_track = cur_sequence->filtered_clips[0].longest_track[MEDIA_TYPE_AUDIO];
 		main_media_type = cur_sequence->track_count[MEDIA_TYPE_VIDEO] != 0 ? MEDIA_TYPE_VIDEO : MEDIA_TYPE_AUDIO;
 		for (cur_track = cur_sequence->filtered_clips[0].first_track; cur_track < cur_sequence->filtered_clips[0].last_track; cur_track++)
 		{			
@@ -555,7 +553,7 @@ m3u8_builder_build_master_playlist(
 					result_size += media_set->uri.len;
 				}
 			}
-			result_size += max_video_stream_inf; // using only video since it's larger than audio
+			result_size +=  max_video_stream_inf; // using only video since it's larger than audio
 			result_size += conf->index_file_name_prefix.len;
 			result_size += sizeof("-f-v-a") - 1 + VOD_INT32_LEN * 3;
 			result_size += sizeof(m3u8_url_suffix) - 1;
