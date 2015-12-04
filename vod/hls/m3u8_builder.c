@@ -521,7 +521,7 @@ m3u8_builder_build_master_playlist(
 	size_t result_size;
 	uint32_t main_media_type;
 	media_track_t* cur_track;
-	media_track_t* audio_track = NULL;
+	media_track_t* audio_track;
 
 
 
@@ -575,6 +575,7 @@ m3u8_builder_build_master_playlist(
 	// write the streams
 	for (cur_sequence = media_set->sequences; cur_sequence < media_set->sequences_end; cur_sequence++)
 	{
+                audio_track = cur_sequence->filtered_clips[0].longest_track[MEDIA_TYPE_AUDIO];
 		main_media_type = cur_sequence->track_count[MEDIA_TYPE_VIDEO] != 0 ? MEDIA_TYPE_VIDEO : MEDIA_TYPE_AUDIO;
 		for (cur_track = cur_sequence->filtered_clips[0].first_track; cur_track < cur_sequence->filtered_clips[0].last_track; cur_track++)
 		{
