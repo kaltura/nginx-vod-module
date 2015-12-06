@@ -198,8 +198,10 @@ vod_status_t mp4_parser_uncompress_moov(
 vod_status_t mp4_parser_parse_basic_metadata(
 	request_context_t* request_context,
 	media_parse_params_t* parse_params,
-	const u_char* buffer,
-	size_t size,
+	const u_char* ftyp_buffer,
+	size_t ftyp_size,
+	const u_char* moov_buffer,
+	size_t moov_size,
 	file_info_t* file_info,
 	mp4_base_metadata_t* result);
 
