@@ -60,6 +60,8 @@ typedef struct {
 	media_parse_params_t parse_params;
 	uint32_t track_indexes[MEDIA_TYPE_COUNT];
 	file_info_t* file_info;
+	const u_char* ftyp_buffer;
+	size_t ftyp_size;
 	mp4_base_metadata_t* result;
 } process_moov_context_t;
 
@@ -273,6 +275,8 @@ mp4_parser_parse_mdhd_atom(atom_info_t* atom_info, metadata_parse_context_t* con
 {
 	const mdhd_atom_t* atom = (const mdhd_atom_t*)atom_info->ptr;
 	const mdhd64_atom_t* atom64 = (const mdhd64_atom_t*)atom_info->ptr;
+	uint64_t duration;
+	uint32_t timescale;
 
 	if (atom_info->size < sizeof(*atom))
 	{
@@ -290,31 +294,76 @@ mp4_parser_parse_mdhd_atom(atom_info_t* atom_info, metadata_parse_context_t* con
 			return VOD_BAD_DATA;
 		}
 			
-		context->media_info.timescale = parse_be32(atom64->timescale);
-		context->media_info.full_duration = parse_be64(atom64->duration);
+		timescale = parse_be32(atom64->timescale);
+		duration = parse_be64(atom64->duration);
 	}
 	else
 	{
-		context->media_info.timescale = parse_be32(atom->timescale);
-		context->media_info.full_duration = parse_be32(atom->duration);
+		timescale = parse_be32(atom->timescale);
+		duration = parse_be32(atom->duration);
 	}
 	
-	if (context->media_info.timescale == 0)
+	if (timescale == 0)
 	{
 		vod_log_error(VOD_LOG_ERR, context->request_context->log, 0,
 			"mp4_parser_parse_mdhd_atom: timescale is zero");
 		return VOD_BAD_DATA;
 	}
 
-	if (context->media_info.full_duration > (uint64_t)MAX_DURATION_SEC * context->media_info.timescale)
+	if (duration > (uint64_t)MAX_DURATION_SEC * timescale)
 	{
 		vod_log_error(VOD_LOG_ERR, context->request_context->log, 0,
-			"mp4_parser_parse_mdhd_atom: media duration %uL too big", context->media_info.full_duration);
+			"mp4_parser_parse_mdhd_atom: media duration %uL too big", duration);
 		return VOD_BAD_DATA;
 	}
 
-	context->media_info.duration_millis = rescale_time(context->media_info.full_duration, context->media_info.timescale, 1000);
-	context->media_info.frames_timescale = context->media_info.timescale;
+	context->media_info.timescale = timescale;
+	context->media_info.frames_timescale = timescale;
+	context->media_info.full_duration = duration;
+	context->media_info.duration_millis = rescale_time(duration, timescale, 1000);
+
+	return VOD_OK;
+}
+
+static vod_status_t
+mp4_parser_parse_stts_atom_total_duration_only(atom_info_t* atom_info, metadata_parse_context_t* context)
+{
+	const stts_entry_t* last_entry;
+	const stts_entry_t* cur_entry;
+	uint64_t duration;
+	uint32_t timescale;
+	uint32_t entries;
+	uint32_t sample_duration;
+	uint32_t sample_count;
+	vod_status_t rc;
+
+	rc = mp4_parser_validate_stts_data(context->request_context, atom_info, &entries);
+	if (rc != VOD_OK)
+	{
+		return rc;
+	}
+
+	cur_entry = (const stts_entry_t*)(atom_info->ptr + sizeof(stts_atom_t));
+	last_entry = cur_entry + entries;
+
+	duration = 0;
+	for (; cur_entry < last_entry; cur_entry++)
+	{
+		sample_duration = parse_be32(cur_entry->duration);
+		sample_count = parse_be32(cur_entry->count);
+		duration += (uint64_t)sample_duration * sample_count;
+	}
+
+	timescale = context->media_info.timescale;
+	if (duration >(uint64_t)MAX_DURATION_SEC * timescale)
+	{
+		vod_log_error(VOD_LOG_ERR, context->request_context->log, 0,
+			"mp4_parser_parse_stts_atom_total_duration_only: media duration %uL too big", duration);
+		return VOD_BAD_DATA;
+	}
+
+	context->media_info.full_duration = duration;
+	context->media_info.duration_millis = rescale_time(duration, timescale, 1000);
 
 	return VOD_OK;
 }
@@ -2023,6 +2072,17 @@ mp4_parser_process_moov_atom_callback(void* ctx, atom_info_t* atom_info)
 		return rc;
 	}
 
+	// Microsoft H.264 Encoder generates a wrong duration in mdhd, pull it from stts
+	if (context->ftyp_size >= sizeof(uint32_t) && 
+		parse_le32(context->ftyp_buffer) == FTYP_TYPE_MP42)
+	{
+		rc = mp4_parser_parse_stts_atom_total_duration_only(&trak_atom_infos.stts, &metadata_parse_context);
+		if (rc != VOD_OK)
+		{
+			return rc;
+		}
+	}
+
 	// apply the clipping to the duration
 	if (metadata_parse_context.media_info.duration_millis <= context->parse_params.clip_from)
 	{
@@ -2227,12 +2287,14 @@ vod_status_t
 mp4_parser_parse_basic_metadata(
 	request_context_t* request_context,
 	media_parse_params_t* parse_params,
-	const u_char* buffer,
-	size_t size,
+	const u_char* ftyp_buffer,
+	size_t ftyp_size,
+	const u_char* moov_buffer,
+	size_t moov_size,
 	file_info_t* file_info,
 	mp4_base_metadata_t* result)
 {
-	process_moov_context_t process_moov_context;
+	process_moov_context_t context;
 	vod_status_t rc;
 
 	vod_memzero(result, sizeof(*result));
@@ -2243,13 +2305,21 @@ mp4_parser_parse_basic_metadata(
 		return VOD_ALLOC_FAILED;
 	}
 
-	process_moov_context.request_context = request_context;
-	process_moov_context.parse_params = *parse_params;
-	vod_memzero(process_moov_context.track_indexes, sizeof(process_moov_context.track_indexes));
-	process_moov_context.file_info = file_info;
-	process_moov_context.result = result;
+	context.request_context = request_context;
+	context.parse_params = *parse_params;
+	vod_memzero(context.track_indexes, sizeof(context.track_indexes));
+	context.file_info = file_info;
+	context.ftyp_buffer = ftyp_buffer;
+	context.ftyp_size = ftyp_size;
+	context.result = result;
 
-	rc = mp4_parser_parse_atoms(request_context, buffer, size, TRUE, &mp4_parser_process_moov_atom_callback, &process_moov_context);
+	rc = mp4_parser_parse_atoms(
+		request_context, 
+		moov_buffer, 
+		moov_size, 
+		TRUE, 
+		&mp4_parser_process_moov_atom_callback, 
+		&context);
 	if (rc != VOD_OK)
 	{
 		return rc;

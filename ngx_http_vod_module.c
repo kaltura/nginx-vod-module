@@ -761,6 +761,8 @@ ngx_http_vod_parse_moov_atom(ngx_http_vod_ctx_t *ctx, u_char* moov_buffer, size_
 	rc = mp4_parser_parse_basic_metadata(
 		&ctx->submodule_context.request_context,
 		&parse_params,
+		ctx->ftyp_ptr,
+		ctx->ftyp_size,
 		moov_buffer,
 		moov_size,
 		&file_info,

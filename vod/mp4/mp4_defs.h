@@ -49,6 +49,8 @@
 
 #define DCOM_TYPE_ZLIB (0x62696c7a)
 
+#define FTYP_TYPE_MP42 (0x3234706d)
+
 // MP4 constants from ffmpeg
 #define MP4ODescrTag				0x01
 #define MP4IODescrTag				0x02
