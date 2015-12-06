@@ -512,7 +512,7 @@ takes into account the key frame alignment, in case vod_align_segments_to_key_fr
 * **default**: `empty`
 * **context**: `http`, `server`, `location`
 
-Sets the seed that is used to generate the TS encryption key, if empty, no encryption is performed.
+Sets the seed that is used to generate the TS encryption key and DASH/MSS encryption IVs.
 The parameter value can contain variables, and will usually have the structure "secret-$vod_filepath".
 See the list of nginx variables added by this module below.
 
@@ -591,6 +591,13 @@ Sets the maximum supported MP4 moov atom size.
 * **context**: `http`, `server`, `location`
 
 Sets the size of the cache buffers used when reading MP4 frames.
+
+#### vod_ignore_edit_list
+* **syntax**: `vod_ignore_edit_list on/off`
+* **default**: `off`
+* **context**: `http`, `server`, `location`
+
+When enabled, the module ignores any edit lists (elst) in the MP4 file.
 
 #### vod_child_request
 * **syntax**: `vod_child_request`

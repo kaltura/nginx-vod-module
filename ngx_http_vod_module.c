@@ -746,6 +746,11 @@ ngx_http_vod_parse_moov_atom(ngx_http_vod_ctx_t *ctx, u_char* moov_buffer, size_
 		parse_params.parse_type |= segmenter->parse_type;
 	}
 
+	if (!ctx->submodule_context.conf->ignore_edit_list)
+	{
+		parse_params.parse_type |= PARSE_FLAG_EDIT_LIST;
+	}
+
 	tracks_mask[MEDIA_TYPE_VIDEO] = cur_source->tracks_mask[MEDIA_TYPE_VIDEO] & ctx->submodule_context.request_params.tracks_mask[MEDIA_TYPE_VIDEO];
 	tracks_mask[MEDIA_TYPE_AUDIO] = cur_source->tracks_mask[MEDIA_TYPE_AUDIO] & ctx->submodule_context.request_params.tracks_mask[MEDIA_TYPE_AUDIO];
 	parse_params.required_tracks_mask = tracks_mask;

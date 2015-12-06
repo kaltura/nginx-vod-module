@@ -94,6 +94,7 @@ ngx_http_vod_create_loc_conf(ngx_conf_t *cf)
 	conf->initial_read_size = NGX_CONF_UNSET_SIZE;
 	conf->max_moov_size = NGX_CONF_UNSET_SIZE;
 	conf->cache_buffer_size = NGX_CONF_UNSET_SIZE;
+	conf->ignore_edit_list = NGX_CONF_UNSET;
 	conf->max_mapping_response_size = NGX_CONF_UNSET_SIZE;
 
 	conf->last_modified_time = NGX_CONF_UNSET;
@@ -174,6 +175,8 @@ ngx_http_vod_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child)
 	ngx_conf_merge_size_value(conf->initial_read_size, prev->initial_read_size, 4096);
 	ngx_conf_merge_size_value(conf->max_moov_size, prev->max_moov_size, 128 * 1024 * 1024);
 	ngx_conf_merge_size_value(conf->cache_buffer_size, prev->cache_buffer_size, 256 * 1024);
+	
+	ngx_conf_merge_value(conf->ignore_edit_list, prev->ignore_edit_list, 0);
 
 	err = ngx_merge_upstream_conf(cf, &conf->upstream, &prev->upstream);
 	if (err != NGX_CONF_OK)
@@ -843,6 +846,13 @@ ngx_command_t ngx_http_vod_commands[] = {
 	ngx_conf_set_size_slot,
 	NGX_HTTP_LOC_CONF_OFFSET,
 	offsetof(ngx_http_vod_loc_conf_t, cache_buffer_size),
+	NULL },
+
+	{ ngx_string("vod_ignore_edit_list"),
+	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1,
+	ngx_conf_set_flag_slot,
+	NGX_HTTP_LOC_CONF_OFFSET,
+	offsetof(ngx_http_vod_loc_conf_t, ignore_edit_list),
 	NULL },
 
 	// upstream parameters - only for mapped/remote modes

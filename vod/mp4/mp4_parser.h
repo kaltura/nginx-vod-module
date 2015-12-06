@@ -10,6 +10,7 @@
 
 // macros
 #define rescale_time(time, cur_scale, new_scale) ((((uint64_t)(time)) * (new_scale) + (cur_scale) / 2) / (cur_scale))
+#define rescale_time_neg(time, cur_scale, new_scale) ((time) >= 0 ? rescale_time(time, cur_scale, new_scale) : -rescale_time(-(time), cur_scale, new_scale))
 
 // constants
 #define MAX_CODEC_NAME_SIZE (64)
@@ -34,6 +35,7 @@
 #define PARSE_FLAG_EXTRA_DATA_SIZE		(0x00000004)
 #define PARSE_FLAG_EXTRA_DATA_PARSE		(0x00000008)
 #define PARSE_FLAG_SAVE_RAW_ATOMS		(0x00000010)
+#define PARSE_FLAG_EDIT_LIST			(0x00000020)
 
 // frames
 #define PARSE_FLAG_FRAMES_DURATION		(0x00010000)
@@ -105,6 +107,8 @@ typedef struct media_info_s {
 	vod_str_t codec_name;
 	const u_char* extra_data;
 	uint32_t extra_data_size;
+	int64_t empty_duration;
+	int64_t start_time;
 	union {
 		video_media_info_t video;
 		audio_media_info_t audio;
@@ -114,6 +118,7 @@ typedef struct media_info_s {
 typedef struct {
 	vod_array_t tracks;		// array of mp4_track_base_metadata_t
 	raw_atom_t mvhd_atom;
+	uint32_t mvhd_timescale;
 	uint64_t duration;
 	uint32_t timescale;
 } mp4_base_metadata_t;

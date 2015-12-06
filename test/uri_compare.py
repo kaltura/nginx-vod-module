@@ -88,6 +88,7 @@ class TestThread(stress_base.TestThreadBase):
 
 	def getURL(self, hostHeader, url):
 		headers = self.getG2OHeaders(url)
+		headers.update(EXTRA_HEADERS)
 		headers['Host'] = hostHeader
 		request = urllib2.Request(url, headers=headers)
 		try:

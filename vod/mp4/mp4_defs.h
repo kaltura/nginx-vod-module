@@ -11,6 +11,8 @@
 #define ATOM_NAME_FTYP (0x70797466)		// file type
 #define ATOM_NAME_MOOV (0x766f6f6d)		// movie header
 #define ATOM_NAME_TRAK (0x6b617274)		// track header
+#define ATOM_NAME_EDTS (0x73746465)		// edit box
+#define ATOM_NAME_ELST (0x74736c65)		// edit list box
 #define ATOM_NAME_MDIA (0x6169646d)		// media
 #define ATOM_NAME_HDLR (0x726c6468)		// handler type
 #define ATOM_NAME_MDHD (0x6468646d)		// media header
@@ -330,5 +332,25 @@ typedef struct {
 typedef struct {
 	u_char	uncomp_size[4];
 } cmvd_atom_t;
+
+typedef struct {
+	u_char	version[1];
+	u_char	flags[3];
+	u_char	entries[4];
+} elst_atom_t;
+
+typedef struct {
+	u_char	duration[4];
+	u_char	time[4];
+	u_char	rate_int[2];
+	u_char	rate_frac[2];
+} elst_entry_t;
+
+typedef struct {
+	u_char	duration[8];
+	u_char	time[8];
+	u_char	rate_int[2];
+	u_char	rate_frac[2];
+} elst64_entry_t;
 
 #endif // __MP4_DEFS_H__
