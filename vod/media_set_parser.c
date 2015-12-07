@@ -167,17 +167,25 @@ media_set_parse_null_term_string(
 	void* dest)
 {
 	media_filter_parse_context_t* context = ctx;
+	vod_json_status_t rc;
 	vod_str_t result;
 
-	result.len = value->v.str.len;
-	result.data = vod_alloc(context->request_context->pool, result.len + 1);
+	result.data = vod_alloc(context->request_context->pool, value->v.str.len + 1);
 	if (result.data == NULL)
 	{
 		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, context->request_context->log, 0,
 			"media_set_parse_null_term_string: vod_alloc failed");
 		return VOD_ALLOC_FAILED;
 	}
-	vod_memcpy(result.data, value->v.str.data, result.len);
+
+	rc = vod_json_decode_string(&result, &value->v.str);
+	if (rc != VOD_JSON_OK)
+	{
+		vod_log_error(VOD_LOG_ERR, context->request_context->log, 0,
+			"media_set_parse_null_term_string: vod_json_decode_string failed %i", rc);
+		return VOD_BAD_MAPPING;
+	}
+
 	result.data[result.len] = '\0';
 
 	*(vod_str_t*)dest = result;

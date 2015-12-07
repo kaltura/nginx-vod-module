@@ -56,6 +56,8 @@ vod_json_status_t vod_json_parse(
 	u_char* error, 
 	size_t error_size);
 
+vod_json_status_t vod_json_decode_string(vod_str_t* dest, vod_str_t* src);
+
 vod_status_t vod_json_init_hash(
 	vod_pool_t* pool,
 	vod_pool_t* temp_pool,

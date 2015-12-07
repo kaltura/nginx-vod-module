@@ -425,6 +425,68 @@ error:
 	return rc;
 }
 
+vod_json_status_t
+vod_json_decode_string(vod_str_t* dest, vod_str_t* src)
+{
+	u_char* end_pos;
+	u_char* cur_pos;
+	u_char* p = dest->data;
+
+	cur_pos = src->data;
+	end_pos = cur_pos + src->len;
+	for (; cur_pos < end_pos; cur_pos++)
+	{
+		if (*cur_pos != '\\')
+		{
+			*p++ = *cur_pos;
+			continue;
+		}
+
+		cur_pos++;
+		if (cur_pos >= end_pos)
+		{
+			return VOD_JSON_BAD_DATA;
+		}
+
+		switch (*cur_pos)
+		{
+		case '"':
+			*p++ = '"';
+			break;
+		case '\\':
+			*p++ = '\\';
+			break;
+		case '/':
+			*p++ = '/';
+			break;
+		case 'b':
+			*p++ = '\b';
+			break;
+		case 'f':
+			*p++ = '\f';
+			break;
+		case 'n':
+			*p++ = '\n';
+			break;
+		case 'r':
+			*p++ = '\r';
+			break;
+		case 't':
+			*p++ = '\t';
+			break;
+		case 'u':
+			// TODO: implement this
+			break;
+		default:
+			return VOD_JSON_BAD_DATA;
+		}
+	}
+
+	dest->len = p - dest->data;
+
+	return VOD_OK;
+}
+
 vod_status_t
 vod_json_init_hash(
 	vod_pool_t* pool, 
