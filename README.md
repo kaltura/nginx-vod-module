@@ -378,9 +378,9 @@ A more scalable architecture would be to use proxy servers or a CDN in order to 
 
 In order to perform the encryption, this module needs several parameters, including key & key_id, these parameters
 are fetched from an external server via HTTP GET request.
-The hostname of that server is configured using the vod_drm_upstream parameter, and the request uri is configured 
-using vod_drm_request_uri (this parameter can include nginx variables). 
-The response of that server is a JSON, with the following format:
+The vod_drm_upstream_location parameter specifies an nginx location that is used to access the DRM server,
+and the request uri is configured using vod_drm_request_uri (this parameter can include nginx variables). 
+The response of the DRM server is a JSON, with the following format:
 
 `[{"pssh": [{"data": "CAESEGMyZjg2MTczN2NjNGYzODIaB2thbHR1cmEiCjBfbmptaWlwbXAqBVNEX0hE", "uuid": "edef8ba9-79d6-4ace-a3c8-27dcd51d21ed"}], "key": "GzoNU9Dfwc//Iq3/zbzMUw==", "key_id": "YzJmODYxNzM3Y2M0ZjM4Mg=="}]`
 
@@ -599,35 +599,19 @@ Sets the size of the cache buffers used when reading MP4 frames.
 
 When enabled, the module ignores any edit lists (elst) in the MP4 file.
 
-#### vod_child_request
-* **syntax**: `vod_child_request`
-* **default**: `n/a`
-* **context**: `location`
-
-Configures the enclosing location as handling nginx-vod module child requests (remote/mapped modes only)
-There should be at least one location with this command when working in remote/mapped modes.
-Note that multiple vod locations can point to a single location having vod_child_request.
-
-#### vod_child_request_path
-* **syntax**: `vod_child_request_path path`
-* **default**: `none`
-* **context**: `location`
-
-Sets the path of an internal location that has vod_child_request enabled (remote/mapped modes only)
-
-#### vod_upstream
-* **syntax**: `vod_upstream upstream_name`
+#### vod_upstream_location
+* **syntax**: `vod_upstream_location location`
 * **default**: `none`
 * **context**: `http`, `server`, `location`
 
-Sets the upstream that should be used for reading the MP4 file (remote mode) or mapping the request URI (mapped mode).
+Sets an nginx location that is used to read the MP4 file (remote mode) or mapping the request URI (mapped mode).
 
-#### vod_upstream_host_header
-* **syntax**: `vod_upstream_host_header host_name`
-* **default**: `the host name of original request`
+#### vod_max_upstream_headers_size
+* **syntax**: `vod_max_upstream_headers_size size`
+* **default**: `4k`
 * **context**: `http`, `server`, `location`
 
-Sets the value of the HTTP host header that should be sent to the upstream (remote/mapped modes only).
+Sets the size that is allocated for holding the response headers when issuing upstream requests (to vod_xxx_upstream_location).
 
 #### vod_upstream_extra_args
 * **syntax**: `vod_upstream_extra_args "arg1=value1&arg2=value2&..."`
@@ -636,27 +620,6 @@ Sets the value of the HTTP host header that should be sent to the upstream (remo
 
 Extra query string arguments that should be added to the upstream request (remote/mapped modes only).
 The parameter value can contain variables.
-
-#### vod_connect_timeout
-* **syntax**: `vod_connect_timeout timeout`
-* **default**: `60s`
-* **context**: `http`, `server`, `location`
-
-Sets the timeout in milliseconds for connecting to the upstream (remote/mapped modes only).
-
-#### vod_send_timeout
-* **syntax**: `vod_send_timeout timeout`
-* **default**: `60s`
-* **context**: `http`, `server`, `location`
-
-Sets the timeout in milliseconds for sending data to the upstream (remote/mapped modes only).
-
-#### vod_read_timeout
-* **syntax**: `vod_read_timeout timeout`
-* **default**: `60s`
-* **context**: `http`, `server`, `location`
-
-Sets the timeout in milliseconds for reading data from the upstream (remote/mapped modes only).
 
 #### vod_path_mapping_cache
 * **syntax**: `vod_path_mapping_cache zone_name zone_size`
@@ -686,33 +649,12 @@ Sets the postfix that is expected in URI mapping responses (mapped mode only).
 
 Sets the maximum length of a path returned from upstream (mapped mode only).
 
-#### vod_fallback_upstream
-* **syntax**: `vod_fallback_upstream upstream_name`
+#### vod_fallback_upstream_location
+* **syntax**: `vod_fallback_upstream_location location`
 * **default**: `none`
 * **context**: `http`, `server`, `location`
 
-Sets an upstream to forward the request to when encountering a file not found error (local/mapped modes only).
-
-#### vod_fallback_connect_timeout
-* **syntax**: `vod_fallback_connect_timeout timeout`
-* **default**: `60s`
-* **context**: `http`, `server`, `location`
-
-Sets the timeout in milliseconds for connecting to the fallback upstream (local/mapped modes only).
-
-#### vod_fallback_send_timeout
-* **syntax**: `vod_fallback_send_timeout timeout`
-* **default**: `60s`
-* **context**: `http`, `server`, `location`
-
-Sets the timeout in milliseconds for sending data to the fallback upstream (local/mapped modes only).
-
-#### vod_fallback_read_timeout
-* **syntax**: `vod_fallback_read_timeout timeout`
-* **default**: `60s`
-* **context**: `http`, `server`, `location`
-
-Sets the timeout in milliseconds for reading data from the fallback upstream (local/mapped modes only).
+Sets an nginx location to which the request is forwarded after encountering a file not found error (local/mapped modes only).
 
 #### vod_proxy_header_name
 * **syntax**: `vod_proxy_header_name name`
@@ -805,33 +747,12 @@ Sets the number of clear (unencrypted) segments in the beginning of the stream. 
 
 Sets the maximum length of a drm info returned from upstream.
 
-#### vod_drm_upstream
-* **syntax**: `vod_drm_upstream upstream_name`
+#### vod_drm_upstream_location
+* **syntax**: `vod_drm_upstream_location location`
 * **default**: `none`
 * **context**: `http`, `server`, `location`
 
-Sets the upstream that should be used for getting the DRM info for the file.
-
-#### vod_drm_connect_timeout
-* **syntax**: `vod_drm_connect_timeout timeout`
-* **default**: `60s`
-* **context**: `http`, `server`, `location`
-
-Sets the timeout in milliseconds for connecting to the upstream.
-
-#### vod_drm_send_timeout
-* **syntax**: `vod_drm_send_timeout timeout`
-* **default**: `60s`
-* **context**: `http`, `server`, `location`
-
-Sets the timeout in milliseconds for sending data to the upstream.
-
-#### vod_drm_read_timeout
-* **syntax**: `vod_drm_read_timeout timeout`
-* **default**: `60s`
-* **context**: `http`, `server`, `location`
-
-Sets the timeout in milliseconds for reading data from the upstream.
+Sets the nginx location that should be used for getting the DRM info for the file.
 
 #### vod_drm_info_cache
 * **syntax**: `vod_drm_info_cache zone_name zone_size`
@@ -1026,34 +947,49 @@ Note: Configuration directives that can accept variables are explicitly marked a
 
 	http {
 		upstream fallback {
-			server kalhls-a-pa.origin.kaltura.com:80;
+			server fallback.kaltura.com:80;
 		}
 
-		server {		
+		server {
+			# vod settings
+			vod_mode local;
+			vod_fallback_upstream_location /fallback;
+			vod_last_modified 'Sun, 19 Nov 2000 08:52:00 GMT';
+			vod_last_modified_types *;
+
+			# vod caches
+			vod_moov_cache moov_cache 512m;
+			vod_response_cache response_cache 128m;
+			
+			# gzip manifests
+			gzip on;
+			gzip_types application/vnd.apple.mpegurl;
+
+			# file handle caching / aio
 			open_file_cache          max=1000 inactive=5m;
 			open_file_cache_valid    2m;
 			open_file_cache_min_uses 1;
 			open_file_cache_errors   on;
-
 			aio on;
+			
+			location ^~ /fallback/ {
+				internal;
+				proxy_pass http://fallback/;
+				proxy_set_header Host $http_host;
+			}
 
 			location /content/ {
+				root /web/;
 				vod hls;
-				vod_mode local;
-				vod_moov_cache moov_cache 512m;
-				vod_fallback_upstream fallback;
-
-				root /web/content;
 				
-				gzip on;
-				gzip_types application/vnd.apple.mpegurl;
-
+				add_header Access-Control-Allow-Headers '*';
+				add_header Access-Control-Expose-Headers 'Server,range,Content-Length,Content-Range';
+				add_header Access-Control-Allow-Methods 'GET, HEAD, OPTIONS';
+				add_header Access-Control-Allow-Origin '*';
 				expires 100d;
-				add_header Last-Modified "Sun, 19 Nov 2000 08:52:00 GMT";
 			}
 		}
 	}
-
 
 #### Mapped configuration
 
@@ -1063,41 +999,57 @@ Note: Configuration directives that can accept variables are explicitly marked a
 		}
 
 		upstream fallback {
-			server kalhls-a-pa.origin.kaltura.com:80;
+			server fallback.kaltura.com:80;
 		}
 
 		server {
+			# vod settings
+			vod_mode mapped;
+			vod_upstream_location /kalapi;
+			vod_upstream_extra_args "pathOnly=1";
+			vod_fallback_upstream_location /fallback;
+			vod_last_modified 'Sun, 19 Nov 2000 08:52:00 GMT';
+			vod_last_modified_types *;
 
+			# vod caches
+			vod_moov_cache moov_cache 512m;
+			vod_response_cache response_cache 128m;
+			vod_path_mapping_cache mapping_cache 5m;
+			
+			# gzip manifests
+			gzip on;
+			gzip_types application/vnd.apple.mpegurl;
+
+			# file handle caching / aio
 			open_file_cache          max=1000 inactive=5m;
 			open_file_cache_valid    2m;
 			open_file_cache_min_uses 1;
 			open_file_cache_errors   on;
-
 			aio on;
 			
-			location ^~ /__child_request__/ {
+			location ^~ /fallback/ {
 				internal;
-				vod_child_request;
+				proxy_pass http://fallback/;
+				proxy_set_header Host $http_host;
 			}
-		
+
+			location ^~ /kalapi/ {
+				internal;
+				proxy_pass http://kalapi/;
+				proxy_set_header Host $http_host;
+			}
+
 			location ~ ^/p/\d+/(sp/\d+/)?serveFlavor/ {
+				# encrypted hls
 				vod hls;
-				vod_mode mapped;
-				vod_moov_cache moov_cache 512m;
 				vod_secret_key "mukkaukk$vod_filepath";
 				vod_hls_encryption_method aes-128;
-				vod_child_request_path /__child_request__/;
-				vod_upstream kalapi;
-				vod_upstream_host_header www.kaltura.com;
-				vod_upstream_extra_args "pathOnly=1";
-				vod_path_mapping_cache mapping_cache 5m;
-				vod_fallback_upstream fallback;
-
-				gzip on;
-				gzip_types application/vnd.apple.mpegurl;
-
+				
+				add_header Access-Control-Allow-Headers '*';
+				add_header Access-Control-Expose-Headers 'Server,range,Content-Length,Content-Range';
+				add_header Access-Control-Allow-Methods 'GET, HEAD, OPTIONS';
+				add_header Access-Control-Allow-Origin '*';
 				expires 100d;
-				add_header Last-Modified "Sun, 19 Nov 2000 08:52:00 GMT";
 			}
 		}
 	}
@@ -1109,32 +1061,46 @@ Note: Configuration directives that can accept variables are explicitly marked a
 			server www.kaltura.com:80;
 		}
 
-		server {		
-			location ^~ /__child_request__/ {
+		server {
+			# vod settings
+			vod_mode remote;
+			vod_upstream_location /kalapi;
+			vod_last_modified 'Sun, 19 Nov 2000 08:52:00 GMT';
+			vod_last_modified_types *;
+
+			# vod caches
+			vod_moov_cache moov_cache 512m;
+			vod_response_cache response_cache 128m;
+			
+			# gzip manifests
+			gzip on;
+			gzip_types application/vnd.apple.mpegurl;
+
+			# file handle caching / aio
+			open_file_cache          max=1000 inactive=5m;
+			open_file_cache_valid    2m;
+			open_file_cache_min_uses 1;
+			open_file_cache_errors   on;
+			aio on;
+			
+			location ^~ /kalapi/ {
 				internal;
-				vod_child_request;
+				proxy_pass http://kalapi/;
+				proxy_set_header Host $http_host;
 			}
 
 			location ~ ^/p/\d+/(sp/\d+/)?serveFlavor/ {
 				vod hls;
-				vod_mode remote;
-				vod_moov_cache moov_cache 512m;
-				vod_secret_key "mukkaukk$vod_suburi";
-				vod_hls_encryption_method aes-128;
-				vod_child_request_path /__child_request__/;
-				vod_upstream kalapi;
-				vod_upstream_host_header www.kaltura.com;
-
-				gzip on;
-				gzip_types application/vnd.apple.mpegurl;
-
+				
+				add_header Access-Control-Allow-Headers '*';
+				add_header Access-Control-Expose-Headers 'Server,range,Content-Length,Content-Range';
+				add_header Access-Control-Allow-Methods 'GET, HEAD, OPTIONS';
+				add_header Access-Control-Allow-Origin '*';
 				expires 100d;
-				add_header Last-Modified "Sun, 19 Nov 2000 08:52:00 GMT";
 			}
 		}
 	}
 
-	
 ### Copyright & License
 
 All code in this project is released under the [AGPLv3 license](http://www.gnu.org/licenses/agpl-3.0.html) unless a different license for a particular library is specified in the applicable library path. 

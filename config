@@ -52,7 +52,7 @@ if [ $ngx_found = yes ]; then
     CORE_LIBS="$CORE_LIBS -lavfilter -lavutil"
 fi
 
-HTTP_MODULES="$HTTP_MODULES ngx_http_vod_module"
+HTTP_AUX_FILTER_MODULES="$HTTP_AUX_FILTER_MODULES ngx_http_vod_module"
 
 NGX_ADDON_DEPS="$NGX_ADDON_DEPS                                     \
                 $ngx_addon_dir/ngx_async_open_file_cache.h          \

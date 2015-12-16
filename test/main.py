@@ -127,9 +127,18 @@ def assertIn(needle, haystack):
     print 'Assertion failed - %s in %s' % (needle, haystack)
     assert(False)
 
+def assertNotIn(needle, haystack):
+    if not needle in haystack:
+        return
+    print 'Assertion failed - %s not in %s' % (needle, haystack)
+    assert(False)
+    
 def assertInIgnoreCase(needle, haystack):
     assertIn(needle.lower(), haystack.lower())
 
+def assertNotInIgnoreCase(needle, haystack):
+    assertNotIn(needle.lower(), haystack.lower())
+    
 def assertStartsWith(buffer, prefix):
     if buffer.startswith(prefix):
         return
@@ -216,7 +225,7 @@ class LogTracker:
             assert(logLine in buffer)
 
 ### Misc utility functions
-def getHttpResponse(body = '', status = '200 OK', length = None, headers = {}):
+def getHttpResponseRegular(body = '', status = '200 OK', length = None, headers = {}):
     if length == None:
         length = len(body)
     headersStr = ''
@@ -224,6 +233,15 @@ def getHttpResponse(body = '', status = '200 OK', length = None, headers = {}):
         for curHeader in headers.items():
             headersStr +='%s: %s\r\n' % curHeader
     return 'HTTP/1.1 %s\r\nContent-Length: %s\r\n%s\r\n%s' % (status, length, headersStr, body)
+
+def getHttpResponseChunked(body = '', status = '200 OK', length = None, headers = {}):
+    if length == None:
+        length = len(body)
+    headersStr = ''
+    if len(headers) > 0:
+        for curHeader in headers.items():
+            headersStr +='%s: %s\r\n' % curHeader
+    return 'HTTP/1.1 %s\r\nTransfer-Encoding: Chunked\r\n%s\r\n%x\r\n%s\r\n0\r\n' % (status, headersStr, length, body)
 
 def getPathMappingResponse(path):
     return getHttpResponse('{"sequences":[{"clips":[{"type":"source","path":"%s"}]}]}' % path)
@@ -270,8 +288,8 @@ def socketSendByteByByte(s, msg):
             break
 
 def socketSendAndShutdown(s, msg):
-    socketSend(s, msg)
     try:
+        socketSend(s, msg)
         s.shutdown(socket.SHUT_WR)
     except socket.error:        # the server may terminate the connection due to bad data in some tests
         pass
@@ -302,13 +320,16 @@ def socketExpectHttpVerbAndSend(s, verb, msg):
     assertStartsWith(buffer, verb)
     socketSendAndShutdown(s, msg)
 
-def socketExpectHttpHeaderAndHandle(s, header, handler):
+def socketExpectHttpHeaderAndHandle(s, posHeader, negHeader, handler):
     headers = socketReadHttpHeaders(s)
-    assertInIgnoreCase(header, headers)
+    if posHeader != None:
+        assertInIgnoreCase(posHeader, headers)
+    if negHeader != None:
+        assertNotInIgnoreCase(negHeader, headers)
     handler(s, headers)
 
 def socketExpectHttpHeaderAndSend(s, header, msg):
-    socketExpectHttpHeaderAndHandle(s, header, lambda s, h: socketSendAndShutdown(s, msg))
+    socketExpectHttpHeaderAndHandle(s, header, None, lambda s, h: socketSendAndShutdown(s, msg))
 
 def socketReadHttpResponse(s):
     # get content length
@@ -611,8 +632,11 @@ class BasicTestSuite(TestSuite):
             request = urllib2.Request(url)
             request.get_method = lambda : 'HEAD'
             headResponse = urllib2.urlopen(request)
-            assertEquals(int(headResponse.info().getheader('Content-Length')), len(fullResponse))
+            contentLength = headResponse.info().getheader('Content-Length')
             assertEquals(headResponse.info().getheader('Content-Type'), contentType)
+            if getHttpResponse == getHttpResponseChunked and contentLength == None:
+                return
+            assertEquals(int(contentLength), len(fullResponse))
 
     def testRangeRequestSanity(self):
         for curPrefix, curRequest, contentType in ALL_REQUESTS:
@@ -779,18 +803,24 @@ class UpstreamTestSuite(TestSuite):
     
     def testBadStatusLine(self):
         TcpServer(self.serverPort, lambda s: socketSendAndShutdown(s, 'BAD STATUS LINE\r\n'))
-        assertRequestFails(getUniqueUrl(self.baseUrl, self.urlFile), 500)
-        self.logTracker.assertContains('failed to parse status line')
+        request = urllib2.Request(getUniqueUrl(self.baseUrl, self.urlFile))
+        try:
+            response = urllib2.urlopen(request).read()
+            assertEquals(response.strip(), 'BAD STATUS LINE')
+        except urllib2.HTTPError, e:
+            assertEquals(e.getcode(), 502)        # returns 502 in case the request was 'in memory'
+            
+        self.logTracker.assertContains('upstream sent no valid HTTP/1.0 header')
 
     def testBadContentLength(self):
         TcpServer(self.serverPort, lambda s: socketSendAndShutdown(s, 'HTTP/1.1 200 OK\r\nContent-Length: abcd\r\n'))
         assertRequestFails(getUniqueUrl(self.baseUrl, self.urlFile), 502)
-        self.logTracker.assertContains('failed to parse content length')
+        self.logTracker.assertContains('upstream prematurely closed connection')
 
     def testInvalidHeader(self):
         TcpServer(self.serverPort, lambda s: socketSendAndShutdown(s, 'HTTP/1.1 200 OK\r\nBad\rHeader\r\n'))
         assertRequestFails(getUniqueUrl(self.baseUrl, self.urlFile), 502)
-        self.logTracker.assertContains('failed to parse header line')
+        self.logTracker.assertContains('upstream sent invalid header')
 
     def testSocketShutdownWhileReadingHeaders(self):
         TcpServer(self.serverPort, lambda s: socketSendAndShutdown(s, 'HTTP/1.1 200 OK\r\nContent'))
@@ -804,14 +834,9 @@ class MemoryUpstreamTestSuite(UpstreamTestSuite):
         self.validateResponse = validateResponse
 
     def testContentLengthTooBig(self):
-        TcpServer(self.serverPort, lambda s: socketSendAndShutdown(s, 'HTTP/1.1 200 OK\r\nContent-Length: 999999999\r\n'))
+        TcpServer(self.serverPort, lambda s: socketSendAndShutdown(s, 'HTTP/1.1 200 OK\r\nContent-Length: 99999999\r\n\r\n' + 'x' * 99999999))
         assertRequestFails(getUniqueUrl(self.baseUrl, self.urlFile), 502)
-        self.logTracker.assertContains('content length 999999999 exceeds the limit')
-
-    def testNoContentLength(self):
-        TcpServer(self.serverPort, lambda s: socketSendAndShutdown(s, 'HTTP/1.1 200 OK\r\n\r\n'))
-        assertRequestFails(getUniqueUrl(self.baseUrl, self.urlFile), 502)
-        self.logTracker.assertContains('got no content-length header')
+        self.logTracker.assertContains('upstream buffer is too small to read response')
 
     def testSocketShutdownWhileReadingBody(self):
         TcpServer(self.serverPort, lambda s: socketSendAndShutdown(s, 'HTTP/1.1 200 OK\r\nContent-Length: 10\r\n\r\nabc'))
@@ -824,14 +849,14 @@ class MemoryUpstreamTestSuite(UpstreamTestSuite):
         self.logTracker.assertContains('upstream returned a bad status 400')
 
     def testHeadersForwardedToUpstream(self):
-        TcpServer(self.serverPort, lambda s: socketExpectHttpHeaderAndHandle(s, 'mukka: ukk', self.upstreamHandler))
+        TcpServer(self.serverPort, lambda s: socketExpectHttpHeaderAndHandle(s, 'mukka: ukk', None, self.upstreamHandler))
         url = getUniqueUrl(self.baseUrl, self.urlFile)
         request = urllib2.Request(url, headers={'mukka':'ukk'})
         response = urllib2.urlopen(request)
         self.validateResponse(response.read(), url)
 
     def testUpstreamHostHeader(self):
-        TcpServer(self.serverPort, lambda s: socketExpectHttpHeaderAndHandle(s, 'Host: blabla.com', self.upstreamHandler))
+        TcpServer(self.serverPort, lambda s: socketExpectHttpHeaderAndHandle(s, 'Host: blabla.com', None, self.upstreamHandler))
         url = getUniqueUrl(self.baseUrl, self.urlFile)
         request = urllib2.Request(url, headers={'Host': 'blabla.com'})
         response = urllib2.urlopen(request)
@@ -840,7 +865,7 @@ class MemoryUpstreamTestSuite(UpstreamTestSuite):
     def testUpstreamHostHeaderHttp10(self):
         if KEEPALIVE_PREFIX in self.baseUrl:
             return        # cannot test HTTP/1.0 with keepalive
-        TcpServer(self.serverPort, lambda s: socketExpectHttpHeaderAndHandle(s, 'Host: %s' % SERVER_NAME, self.upstreamHandler))
+        TcpServer(self.serverPort, lambda s: socketExpectHttpHeaderAndHandle(s, 'http/1.0', 'Host:', self.upstreamHandler))
         url = getUniqueUrl(self.baseUrl, self.urlFile)
         body = sendHttp10Request(url)
         self.validateResponse(body, '')
@@ -856,7 +881,10 @@ class DumpUpstreamTestSuite(UpstreamTestSuite):
         request = urllib2.Request(getUniqueUrl(self.baseUrl, self.urlFile))
         request.get_method = lambda : 'HEAD'
         headResponse = urllib2.urlopen(request)
-        assertEquals(int(headResponse.info().getheader('Content-Length')), 123)
+        contentLength = headResponse.info().getheader('Content-Length')
+        if getHttpResponse == getHttpResponseChunked and contentLength == None:
+            return
+        assertEquals(int(contentLength), 123)
 
     def testHeadersForwarded(self):
         TcpServer(self.serverPort, lambda s: socketExpectHttpHeaderAndSend(s, 'Shuki: tuki', getHttpResponse('abcde')))
@@ -1058,7 +1086,7 @@ class RemoteTestSuite(ModeTestSuite):
             pass        # the error may be handled before the headers buffer is flushed
         except urllib2.HTTPError:
             pass        # this error is received when testing with keepalive
-        self.logTracker.assertContains('upstream request failed')
+        self.logTracker.assertContains('read failed')
 
     def testZeroBytesRead(self):
         TcpServer(API_SERVER_PORT, lambda s: socketSendAndShutdown(s, getHttpResponse('')))
@@ -1093,7 +1121,7 @@ class DrmTestSuite(ModeTestSuite):
         assert(missResponse == hitResponse)
         
 class MainTestSuite(TestSuite):
-    def runChildSuites(self):
+    def runChildSuites(self):        
         DrmTestSuite(NGINX_REMOTE).run()
 
         # all combinations of (encrypted, non encrypted) x (keep alive, no keep alive)
@@ -1103,7 +1131,8 @@ class MainTestSuite(TestSuite):
                 MappedTestSuite(NGINX_HOST + keepAlivePrefix + '/tmapped', encryptionPrefix).run()
                 RemoteTestSuite(NGINX_HOST + keepAlivePrefix + '/tremote', encryptionPrefix).run()
 
-socketSend = socketSendRegular
-MainTestSuite().run()
-socketSend = socketSendByteByByte
-MainTestSuite().run()
+for getHttpResponse in [getHttpResponseChunked, getHttpResponseRegular]:
+    socketSend = socketSendRegular
+    MainTestSuite().run()
+    socketSend = socketSendByteByByte
+    MainTestSuite().run()

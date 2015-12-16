@@ -212,8 +212,8 @@ TEST_CASES = [
         ('', 'clipTo/10000/a.mp4', 404, 'moov size 499999992 exceeds the max'),
     ]),
     ('TRUNCATED_MOOV', lambda: truncateFile(getAtomEndPos('moov') - 100), [
-        ('/hls', 'index.m3u8', 404, 'is smaller than moov end offset'),
-        ('', 'clipTo/10000/a.mp4', 404, 'is smaller than moov end offset'),
+        ('/hls', 'index.m3u8', 404, 'is smaller than moov size'),
+        ('', 'clipTo/10000/a.mp4', 404, 'is smaller than moov size'),
     ]),
     ('TRUNCATED_MDAT', lambda: truncateFile(getAtomPos('mdat') + 1000), [
         ('/hls', 'seg-1.ts', 0, 'no data was handled, probably a truncated file'),
