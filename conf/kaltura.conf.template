@@ -49,8 +49,7 @@ http {
 
 		# common vod settings
 		vod_mode mapped;
-		vod_child_request_path /__child_request__/;
-		vod_upstream kalapi;
+		vod_upstream_location /kalapi_proxy;
 		vod_upstream_extra_args "pathOnly=1";
 
 		# shared memory zones
@@ -85,9 +84,10 @@ http {
 		}
 		
 		# internal location for vod subrequests
-		location /__child_request__/ {
+		location /kalapi_proxy/ {
 			internal;
-			vod_child_request;
+			proxy_pass http://kalapi/;
+			proxy_set_header Host $http_host;
 		}
 		
 		# serve flavor progressive (clipFrom/To are not supported with 'vod none' so they are proxied)

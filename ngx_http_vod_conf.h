@@ -16,7 +16,7 @@ struct ngx_http_vod_request_params_s;
 struct ngx_http_vod_loc_conf_s {
 	// config fields
 	ngx_http_vod_submodule_t submodule;
-	ngx_str_t child_request_location;
+	ngx_str_t upstream_location;
 	ngx_int_t(*request_handler)(ngx_http_request_t *r);
 	ngx_str_t multi_uri_suffix;
 	segmenter_conf_t segmenter;
@@ -29,17 +29,15 @@ struct ngx_http_vod_loc_conf_s {
 	size_t initial_read_size;
 	size_t max_moov_size;
 	size_t cache_buffer_size;
+	size_t max_upstream_headers_size;
 	ngx_flag_t ignore_edit_list;
-	ngx_http_upstream_conf_t upstream;
-	ngx_str_t upstream_host_header;
 	ngx_http_complex_value_t *upstream_extra_args;
 	ngx_shm_zone_t* path_mapping_cache_zone;
 	ngx_str_t path_response_prefix;
 	ngx_str_t path_response_postfix;
 	size_t max_mapping_response_size;
-	ngx_http_upstream_conf_t fallback_upstream;
-	ngx_str_t proxy_header_name;
-	ngx_str_t proxy_header_value;
+	ngx_str_t fallback_upstream_location;
+	ngx_table_elt_t proxy_header;
 
 	time_t last_modified_time;
 	ngx_hash_t  last_modified_types;
@@ -47,7 +45,7 @@ struct ngx_http_vod_loc_conf_s {
 
 	ngx_flag_t drm_enabled;
 	ngx_uint_t drm_clear_lead_segment_count;
-	ngx_http_upstream_conf_t drm_upstream;
+	ngx_str_t drm_upstream_location;
 	size_t drm_max_info_length;
 	ngx_shm_zone_t* drm_info_cache_zone;
 	ngx_http_complex_value_t *drm_request_uri;
@@ -64,7 +62,6 @@ struct ngx_http_vod_loc_conf_s {
 #endif
 
 	// derived fields
-	ngx_str_t proxy_header;
 	ngx_hash_t uri_params_hash;
 	ngx_hash_t pd_uri_params_hash;
 

@@ -108,7 +108,6 @@ void vod_log_error(vod_uint_t level, vod_log_t *log, int err,
 #define vod_copy(dst, src, n) ngx_copy(dst, src, n)
 
 // memory alloc functions
-#define vod_memalign(pool, size, alignment) ngx_pmemalign(pool, size, alignment)
 #define vod_alloc(pool, size) ngx_palloc(pool, size)
 #define vod_free(pool, ptr) ngx_pfree(pool, ptr)
 #define vod_pool_cleanup_add(pool, size) ngx_pool_cleanup_add(pool, size)

@@ -6,7 +6,8 @@
 
 // typedefs
 typedef struct {
-	u_char* buffer;
+	u_char* buffer_start;
+	u_char* buffer_pos;
 	uint32_t buffer_size;		// size of data read
 	void* source;				// opaque context that indicates from where the buffer should be read
 	uint64_t start_offset;
@@ -46,15 +47,13 @@ bool_t read_cache_get_from_cache(
 void read_cache_disable_buffer_reuse(
 	read_cache_state_t* state);
 
-vod_status_t read_cache_get_read_buffer(
+void read_cache_get_read_buffer(
 	read_cache_state_t* state, 
 	void** source,
 	uint64_t* out_offset,
 	u_char** buffer, 
 	uint32_t* size);
 	
-void read_cache_read_completed(
-	read_cache_state_t* state, 
-	ssize_t bytes_read);
+void read_cache_read_completed(read_cache_state_t* state, vod_buf_t* buf);
 
 #endif // __READ_CACHE_H__

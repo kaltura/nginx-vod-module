@@ -347,17 +347,18 @@ ngx_async_read_completed_callback(ngx_event_t *ev)
 	else
 	{
 		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, state->log, 0, "ngx_async_read_completed_callback: ngx_file_aio_read returned %z", rc);
+		state->buf->last += rc;
 		bytes_read = rc;
 		rc = NGX_OK;
 	}
 
-	state->read_callback(state->callback_context, rc, bytes_read);
+	state->read_callback(state->callback_context, rc, NULL, bytes_read);
 
 	ngx_http_run_posted_requests(c);
 }
 
-ssize_t 
-ngx_async_file_read(ngx_file_reader_state_t* state, u_char *buf, size_t size, off_t offset)
+ngx_int_t 
+ngx_async_file_read(ngx_file_reader_state_t* state, ngx_buf_t *buf, size_t size, off_t offset)
 {
 	ssize_t rc;
 
@@ -365,7 +366,7 @@ ngx_async_file_read(ngx_file_reader_state_t* state, u_char *buf, size_t size, of
 
 	if (state->use_aio)
 	{
-		rc = ngx_file_aio_read(&state->file, buf, size, offset, state->r->pool);
+		rc = ngx_file_aio_read(&state->file, buf->last, size, offset, state->r->pool);
 		if (rc == NGX_AGAIN)
 		{
 			// wait for completion
@@ -374,46 +375,48 @@ ngx_async_file_read(ngx_file_reader_state_t* state, u_char *buf, size_t size, of
 
 			state->r->main->blocked++;
 			state->r->aio = 1;
+
+			state->buf = buf;
 			return rc;
 		}
 	}
 	else
 	{
-		rc = ngx_read_file(&state->file, buf, size, offset);
+		rc = ngx_read_file(&state->file, buf->last, size, offset);
 	}
 
 	if (rc < 0)
 	{
 		ngx_log_error(NGX_LOG_ERR, state->log, 0, "ngx_async_file_read: ngx_file_aio_read failed rc=%z", rc);
-	}
-	else
-	{
-		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, state->log, 0, "ngx_async_file_read: ngx_file_aio_read returned %z", rc);
+		return rc;
 	}
 
-	return rc;
+	ngx_log_debug1(NGX_LOG_DEBUG_HTTP, state->log, 0, "ngx_async_file_read: ngx_file_aio_read returned %z", rc);
+	buf->last += rc;
+	
+	return NGX_OK;
 }
 
 #else
 
-ssize_t 
-ngx_async_file_read(ngx_file_reader_state_t* state, u_char *buf, size_t size, off_t offset)
+ngx_int_t 
+ngx_async_file_read(ngx_file_reader_state_t* state, ngx_buf_t *buf, size_t size, off_t offset)
 {
 	ssize_t rc;
 
 	ngx_log_debug2(NGX_LOG_DEBUG_HTTP, state->log, 0, "ngx_async_file_read: reading offset %O size %uz", offset, size);
 
-	rc = ngx_read_file(&state->file, buf, size, offset);
+	rc = ngx_read_file(&state->file, buf->last, size, offset);
 	if (rc < 0)
 	{
 		ngx_log_error(NGX_LOG_ERR, state->log, 0, "ngx_async_file_read: ngx_read_file failed rc=%z", rc);
-	}
-	else
-	{
-		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, state->log, 0, "ngx_async_file_read: ngx_read_file returned %z", rc);
+		return rc;
 	}
 
-	return rc;
+	ngx_log_debug1(NGX_LOG_DEBUG_HTTP, state->log, 0, "ngx_async_file_read: ngx_read_file returned %z", rc);
+	buf->last += rc;
+
+	return NGX_OK;
 }
 
 #endif

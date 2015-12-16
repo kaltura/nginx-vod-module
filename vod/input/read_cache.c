@@ -62,7 +62,7 @@ read_cache_get_from_cache(
 		if (cur_buffer->source == source && 
 			offset >= cur_buffer->start_offset && offset < cur_buffer->end_offset)
 		{
-			*buffer = cur_buffer->buffer + (offset - cur_buffer->start_offset);
+			*buffer = cur_buffer->buffer_pos + (offset - cur_buffer->start_offset);
 			*size = cur_buffer->end_offset - offset;
 			return TRUE;
 		}
@@ -83,7 +83,7 @@ read_cache_disable_buffer_reuse(read_cache_state_t* state)
 	state->reuse_buffers = FALSE;
 }
 
-vod_status_t 
+void 
 read_cache_get_read_buffer(
 	read_cache_state_t* state, 
 	void** source, 
@@ -94,18 +94,6 @@ read_cache_get_read_buffer(
 	cache_buffer_t* target_buffer = state->target_buffer;
 	cache_buffer_t* cur_buffer;
 	uint32_t read_size;
-	
-	// allocate a new buffer if the buffer is not allocated or buffer reuse is disabled
-	if (!state->reuse_buffers || target_buffer->buffer == NULL)
-	{
-		target_buffer->buffer = vod_memalign(state->request_context->pool, state->buffer_size + 1, state->alignment);
-		if (target_buffer->buffer == NULL)
-		{
-			vod_log_debug0(VOD_LOG_DEBUG_LEVEL, state->request_context->log, 0,
-				"read_cache_get_read_buffer: vod_memalign failed");
-			return VOD_ALLOC_FAILED;
-		}
-	}
 	
 	// make sure we don't read anything we already have in cache
 	read_size = state->buffer_size;
@@ -122,18 +110,20 @@ read_cache_get_read_buffer(
 	// return the target buffer pointer and size
 	*source = target_buffer->source;
 	*out_offset = target_buffer->start_offset;
-	*buffer = target_buffer->buffer;
+	*buffer = state->reuse_buffers ? target_buffer->buffer_start : NULL;
 	*size = read_size;
-
-	return VOD_OK;
 }
 
 void 
-read_cache_read_completed(read_cache_state_t* state, ssize_t bytes_read)
+read_cache_read_completed(read_cache_state_t* state, vod_buf_t* buf)
 {
+	cache_buffer_t* target_buffer = state->target_buffer;
+
 	// update the buffer size
-	state->target_buffer->buffer_size = bytes_read;
-	state->target_buffer->end_offset = state->target_buffer->start_offset + bytes_read;
+	target_buffer->buffer_start = buf->start;
+	target_buffer->buffer_pos = buf->pos;
+	target_buffer->buffer_size = buf->last - buf->pos;
+	target_buffer->end_offset = target_buffer->start_offset + target_buffer->buffer_size;
 
 	// no longer have an active request
 	state->target_buffer = NULL;

@@ -12,7 +12,7 @@
 #endif
 
 // typedefs
-typedef void (*ngx_async_read_callback_t)(void* context, ngx_int_t rc, ssize_t bytes_read);
+typedef void (*ngx_async_read_callback_t)(void* context, ngx_int_t rc, ngx_buf_t* buf, ssize_t bytes_read);
 
 typedef struct {
 	ngx_http_request_t *r;
@@ -25,6 +25,7 @@ typedef struct {
 	ngx_flag_t use_aio;
 	ngx_async_read_callback_t read_callback;
 	void* callback_context;
+	ngx_buf_t* buf;
 #endif
 } ngx_file_reader_state_t;
 
@@ -52,7 +53,7 @@ ngx_int_t ngx_file_reader_init_async(
 
 ngx_int_t ngx_file_reader_dump_file_part(ngx_file_reader_state_t* state, off_t start, off_t end);
 
-ssize_t ngx_async_file_read(ngx_file_reader_state_t* state, u_char *buf, size_t size, off_t offset);
+ngx_int_t ngx_async_file_read(ngx_file_reader_state_t* state, ngx_buf_t *buf, size_t size, off_t offset);
 
 ngx_int_t ngx_file_reader_enable_directio(ngx_file_reader_state_t* state);
 
