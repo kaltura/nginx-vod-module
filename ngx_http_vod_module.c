@@ -1090,14 +1090,23 @@ ngx_http_vod_state_machine_parse_moov_atoms(ngx_http_vod_ctx_t *ctx)
 
 		case STATE_PARSE_MOOV_READ_DATA:
 		
-			// prepend the prefix buffer
-			prefix_size = ctx->prefix_buffer.last - ctx->prefix_buffer.pos;
-			ctx->read_buffer.start -= prefix_size;
+			if (ctx->prefix_buffer.start != NULL)
+			{
+				// prepend the prefix buffer
+				prefix_size = ctx->prefix_buffer.last - ctx->prefix_buffer.pos;
+				ctx->read_buffer.start -= prefix_size;
 
-			prefix_size -= ctx->moov_offset;
-			ctx->read_buffer.pos -= prefix_size;
-			ngx_memcpy(ctx->read_buffer.pos, ctx->prefix_buffer.pos + ctx->moov_offset, prefix_size);
-			ngx_pfree(ctx->submodule_context.r->pool, ctx->prefix_buffer.start);
+				prefix_size -= ctx->moov_offset;
+				ctx->read_buffer.pos -= prefix_size;
+				ngx_memcpy(ctx->read_buffer.pos, ctx->prefix_buffer.pos + ctx->moov_offset, prefix_size);
+
+				ngx_pfree(ctx->submodule_context.r->pool, ctx->prefix_buffer.start);
+				ctx->prefix_buffer.start = NULL;
+			}
+			else
+			{
+				ctx->read_buffer.pos += ctx->moov_offset;
+			}
 
 			// make sure we got the whole moov atom
 			if (ctx->read_buffer.pos + ctx->moov_size > ctx->read_buffer.last)
