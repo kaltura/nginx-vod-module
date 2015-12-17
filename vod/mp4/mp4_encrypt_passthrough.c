@@ -1,4 +1,7 @@
 #include "mp4_encrypt_passthrough.h"
+
+#if (NGX_HAVE_OPENSSL_EVP)
+
 #include "mp4_decrypt.h"
 #include "mp4_encrypt.h"
 #include "mp4_builder.h"
@@ -96,3 +99,25 @@ mp4_encrypt_passthrough_write_saiz_saio(
 
 	return p;
 }
+
+#else
+
+// empty stubs
+bool_t
+mp4_encrypt_passthrough_init(
+	mp4_encrypt_passthrough_context_t* context,
+	media_sequence_t* sequence)
+{
+	return FALSE;
+}
+
+u_char* 
+mp4_encrypt_passthrough_write_saiz_saio(
+	mp4_encrypt_passthrough_context_t* context,
+	u_char* p,
+	size_t auxiliary_data_offset)
+{
+	return NULL;
+}
+
+#endif //(NGX_HAVE_OPENSSL_EVP)

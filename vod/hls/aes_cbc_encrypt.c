@@ -1,5 +1,7 @@
 #include "aes_cbc_encrypt.h"
 
+#if (NGX_HAVE_OPENSSL_EVP)
+
 static void 
 aes_cbc_encrypt_cleanup(aes_cbc_encrypt_context_t* state)
 {
@@ -107,3 +109,35 @@ aes_cbc_encrypt_flush(aes_cbc_encrypt_context_t* state)
 
 	return state->callback(state->callback_context, state->last_block, last_block_len);
 }
+
+#else
+
+// empty stubs
+vod_status_t 
+aes_cbc_encrypt_init(
+	aes_cbc_encrypt_context_t** ctx,
+	request_context_t* request_context,
+	write_callback_t callback,
+	void* callback_context,
+	const u_char* key,
+	const u_char* iv)
+{
+	return VOD_UNEXPECTED;
+}
+
+vod_status_t 
+aes_cbc_encrypt_write(
+	aes_cbc_encrypt_context_t* ctx,
+	u_char* buffer,
+	uint32_t size)
+{
+	return VOD_UNEXPECTED;
+}
+
+vod_status_t 
+aes_cbc_encrypt_flush(aes_cbc_encrypt_context_t* ctx)
+{
+	return VOD_UNEXPECTED;
+}
+
+#endif //(NGX_HAVE_OPENSSL_EVP)

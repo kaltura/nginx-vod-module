@@ -1,5 +1,8 @@
-#include <openssl/aes.h>
 #include "sample_aes_aac_filter.h"
+
+#if (NGX_HAVE_OPENSSL_EVP)
+
+#include <openssl/aes.h>
 #include "aes_cbc_encrypt.h"
 
 #define SAMPLE_AES_KEY_SIZE (16)
@@ -158,3 +161,32 @@ sample_aes_aac_filter_write_frame_body(void* context, const u_char* buffer, uint
 
 	return VOD_OK;
 }
+
+#else
+
+// empty stubs
+vod_status_t 
+sample_aes_aac_filter_init(
+	void** context,
+	request_context_t* request_context,
+	media_filter_write_t write_callback,
+	void* write_context,
+	u_char* key,
+	u_char* iv)
+{
+	return VOD_UNEXPECTED;
+}
+
+vod_status_t 
+sample_aes_aac_start_frame(void* context, output_frame_t* frame)
+{
+	return VOD_UNEXPECTED;
+}
+
+vod_status_t 
+sample_aes_aac_filter_write_frame_body(void* context, const u_char* buffer, uint32_t size)
+{
+	return VOD_UNEXPECTED;
+}
+
+#endif //(NGX_HAVE_OPENSSL_EVP)
