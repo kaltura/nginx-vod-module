@@ -1,5 +1,8 @@
-#include <openssl/evp.h>
 #include "sample_aes_avc_filter.h"
+
+#if (NGX_HAVE_OPENSSL_EVP)
+
+#include <openssl/evp.h>
 #include "aes_cbc_encrypt.h"
 #include "../avc_defs.h"
 
@@ -213,3 +216,32 @@ sample_aes_avc_filter_write_nal_body(void* context, const u_char* buffer, uint32
 
 	return VOD_OK;
 }
+
+#else
+
+// empty stubs
+vod_status_t 
+sample_aes_avc_filter_init(
+	void** context,
+	request_context_t* request_context,
+	media_filter_write_t write_callback,
+	void* write_context,
+	u_char* key,
+	u_char* iv)
+{
+	return VOD_UNEXPECTED;
+}
+
+vod_status_t 
+sample_aes_avc_start_nal_unit(void* context, int unit_type, uint32_t unit_size)
+{
+	return VOD_UNEXPECTED;
+}
+
+vod_status_t 
+sample_aes_avc_filter_write_nal_body(void* context, const u_char* buffer, uint32_t size)
+{
+	return VOD_UNEXPECTED;
+}
+
+#endif //(NGX_HAVE_OPENSSL_EVP)

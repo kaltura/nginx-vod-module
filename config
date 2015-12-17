@@ -1,5 +1,20 @@
 ngx_addon_name=ngx_http_vod_module
 
+# openssl evp
+#
+ngx_feature="OpenSSL EVP library"
+ngx_feature_name="NGX_HAVE_OPENSSL_EVP"
+ngx_feature_run=no
+ngx_feature_incs="#include <openssl/evp.h>"
+ngx_feature_path=
+ngx_feature_libs="-lcrypto"
+ngx_feature_test="EVP_CIPHER_CTX cipher; EVP_CIPHER_CTX_init(&cipher);"
+. auto/feature
+
+if [ $ngx_found = yes ]; then
+	CORE_LIBS="$CORE_LIBS $ngx_feature_libs"
+fi
+
 # clock_gettime
 #
 ngx_feature="clock_gettime()"
@@ -18,7 +33,7 @@ if [ $ngx_found != yes ]; then
     . auto/feature
 
     if [ $ngx_found = yes ]; then
-        CORE_LIBS="$CORE_LIBS -lrt"
+        CORE_LIBS="$CORE_LIBS $ngx_feature_libs"
     fi
 fi
 

@@ -21,6 +21,8 @@
 #define mss_track_index(bitrate)	((bitrate) & 0x1F)
 
 //typedefs
+typedef u_char* (*mss_write_extra_traf_atoms_callback_t)(void* context, u_char* p, size_t mdat_atom_start);
+
 typedef u_char* (*mss_write_tags_callback_t)(void* context, u_char* p, media_set_t* media_set);
 
 typedef struct {
@@ -43,7 +45,7 @@ vod_status_t mss_packager_build_fragment_header(
 	media_sequence_t* sequence,
 	uint32_t segment_index,
 	size_t extra_traf_atoms_size,
-	write_extra_traf_atoms_callback_t write_extra_traf_atoms_callback,
+	mss_write_extra_traf_atoms_callback_t write_extra_traf_atoms_callback,
 	void* write_extra_traf_atoms_context,
 	bool_t size_only,
 	vod_str_t* result,

@@ -864,6 +864,7 @@ ngx_command_t ngx_http_vod_commands[] = {
 	offsetof(ngx_http_vod_loc_conf_t, last_modified_types_keys),
 	NULL },
 
+#if (NGX_HAVE_OPENSSL_EVP)
 	// drm
 	{ ngx_string("vod_drm_enabled"),
 	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1,
@@ -906,7 +907,8 @@ ngx_command_t ngx_http_vod_commands[] = {
 	NGX_HTTP_LOC_CONF_OFFSET,
 	offsetof(ngx_http_vod_loc_conf_t, drm_request_uri),
 	NULL },
-	
+#endif //(NGX_HAVE_OPENSSL_EVP)
+
 	// request format settings
 	{ ngx_string("vod_clip_to_param_name"),
 	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1,

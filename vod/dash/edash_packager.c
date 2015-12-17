@@ -341,7 +341,7 @@ edash_packager_video_write_fragment_header(mp4_encrypt_video_state_t* state)
 		state->base.saiz_atom_size + 
 		state->base.saio_atom_size + 
 		ATOM_HEADER_SIZE + sizeof(senc_atom_t) + state->auxiliary_data.pos - state->auxiliary_data.start;
-	header_extensions.write_extra_traf_atoms_callback = (write_extra_traf_atoms_callback_t)edash_packager_video_write_encryption_atoms;
+	header_extensions.write_extra_traf_atoms_callback = edash_packager_video_write_encryption_atoms;
 	header_extensions.write_extra_traf_atoms_context = state;
 
 	// build the fragment header
@@ -411,7 +411,7 @@ edash_packager_audio_build_fragment_header(
 		state->saiz_atom_size + 
 		state->saio_atom_size + 
 		ATOM_HEADER_SIZE + sizeof(senc_atom_t) + MP4_AES_CTR_IV_SIZE * state->sequence->total_frame_count;
-	header_extensions.write_extra_traf_atoms_callback = (write_extra_traf_atoms_callback_t)edash_packager_audio_write_encryption_atoms;
+	header_extensions.write_extra_traf_atoms_callback = edash_packager_audio_write_encryption_atoms;
 	header_extensions.write_extra_traf_atoms_context = state;
 
 	// build the fragment header

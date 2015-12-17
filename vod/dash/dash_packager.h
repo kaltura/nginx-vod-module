@@ -15,6 +15,8 @@ enum {
 	FORMAT_SEGMENT_TEMPLATE,
 };
 
+typedef u_char* (*dash_write_extra_traf_atoms_callback_t)(void* context, u_char* p, size_t mdat_atom_start);
+
 typedef u_char* (*write_tags_callback_t)(void* context, u_char* p, media_track_t* track);
 
 typedef u_char* (*atom_writer_func_t)(void* context, u_char* p);
@@ -35,7 +37,7 @@ typedef struct {
 
 typedef struct {
 	size_t extra_traf_atoms_size;
-	write_extra_traf_atoms_callback_t write_extra_traf_atoms_callback;
+	dash_write_extra_traf_atoms_callback_t write_extra_traf_atoms_callback;
 	void* write_extra_traf_atoms_context;
 } dash_fragment_header_extensions_t;
 

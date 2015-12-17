@@ -145,6 +145,7 @@ media_set_parse_encryption_key(
 	void* dest)
 {
 	media_filter_parse_context_t* context = ctx;
+#if (NGX_HAVE_OPENSSL_EVP)
 	u_char* result;
 
 	result = vod_alloc(context->request_context->pool, MP4_AES_CTR_KEY_SIZE);
@@ -158,6 +159,11 @@ media_set_parse_encryption_key(
 	*(u_char**)dest = result;
 
 	return parse_utils_parse_fixed_base64_string(&value->v.str, result, MP4_AES_CTR_KEY_SIZE);
+#else
+	vod_log_error(VOD_LOG_ERR, context->request_context->log, 0,
+		"media_set_parse_encryption_key: decryption not supported, recompile with openssl to enable it");
+	return VOD_BAD_REQUEST;
+#endif //(NGX_HAVE_OPENSSL_EVP)
 }
 
 static vod_status_t 

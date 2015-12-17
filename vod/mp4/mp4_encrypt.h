@@ -15,8 +15,6 @@
 #define VOD_GUID_LENGTH (sizeof("00000000-0000-0000-0000-000000000000") - 1)
 
 // typedef
-typedef u_char* (*write_extra_traf_atoms_callback_t)(void* context, u_char* p, size_t mdat_atom_start);
-
 struct mp4_encrypt_video_state_s;
 typedef struct mp4_encrypt_video_state_s mp4_encrypt_video_state_t;
 
@@ -52,7 +50,9 @@ typedef struct {
 	write_buffer_state_t write_buffer;
 
 	// encryption state
+#if (NGX_HAVE_OPENSSL_EVP)
 	mp4_aes_ctr_state_t cipher;
+#endif
 	u_char iv[MP4_AES_CTR_IV_SIZE];
 
 	// frame state

@@ -1,4 +1,7 @@
 #include "mp4_encrypt.h"
+
+#if (NGX_HAVE_OPENSSL_EVP)
+
 #include "mp4_decrypt.h"
 #include "mp4_builder.h"
 #include "../read_stream.h"
@@ -693,3 +696,63 @@ mp4_encrypt_audio_get_fragment_writer(
 
 	return VOD_OK;
 }
+
+#else
+
+// empty stubs
+u_char* 
+mp4_encrypt_write_guid(u_char* p, u_char* guid)
+{
+	return NULL;
+}
+
+vod_status_t 
+mp4_encrypt_video_get_fragment_writer(
+	segment_writer_t* result,
+	request_context_t* request_context,
+	media_set_t* media_set,
+	uint32_t segment_index,
+	mp4_encrypt_video_write_fragment_header_t write_fragment_header,
+	segment_writer_t* segment_writer,
+	const u_char* iv)
+{
+	return VOD_UNEXPECTED;
+}
+
+vod_status_t 
+mp4_encrypt_audio_get_fragment_writer(
+	segment_writer_t* result,
+	request_context_t* request_context,
+	media_set_t* media_set,
+	uint32_t segment_index,
+	segment_writer_t* segment_writer,
+	const u_char* iv)
+{
+	return VOD_UNEXPECTED;
+}
+
+u_char* 
+mp4_encrypt_video_write_saiz_saio(mp4_encrypt_video_state_t* state, u_char* p, size_t auxiliary_data_offset)
+{
+	return NULL;
+}
+
+size_t 
+mp4_encrypt_audio_get_auxiliary_data_size(mp4_encrypt_state_t* state)
+{
+	return 0;
+}
+
+u_char* 
+mp4_encrypt_audio_write_auxiliary_data(mp4_encrypt_state_t* state, u_char* p)
+{
+	return NULL;
+}
+
+u_char* 
+mp4_encrypt_audio_write_saiz_saio(mp4_encrypt_state_t* state, u_char* p, size_t auxiliary_data_offset)
+{
+	return NULL;
+}
+
+#endif //(NGX_HAVE_OPENSSL_EVP)
