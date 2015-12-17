@@ -255,6 +255,14 @@ ngx_child_request_initial_wev_handler(ngx_http_request_t *r)
 		return;
 	}
 
+	// if the upstream module already started receiving, don't touch the buffer
+	if (u->buffer.start != NULL)
+	{
+		ngx_log_error(NGX_LOG_WARN, r->connection->log, 0,
+			"ngx_child_request_initial_wev_handler: upstream buffer was already allocated");
+		return;
+	}
+
 	// initialize the upstream buffer
 	ctx = ngx_http_get_module_ctx(r, ngx_http_vod_module);
 	u->buffer = *ctx->response_buffer;
