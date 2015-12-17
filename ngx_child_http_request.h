@@ -5,7 +5,7 @@
 #include <ngx_http.h>
 
 // typedefs
-typedef void(*ngx_child_request_callback_t)(void* context, ngx_int_t rc, ngx_buf_t* buf, off_t bytes_read);
+typedef void(*ngx_child_request_callback_t)(void* context, ngx_int_t rc, ngx_buf_t* buf, ssize_t bytes_read);
 
 typedef struct {
 	ngx_uint_t method;

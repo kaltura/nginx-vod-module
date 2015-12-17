@@ -415,7 +415,7 @@ ngx_http_vod_alloc_read_buffer(ngx_http_vod_ctx_t *ctx, size_t size, int alloc_p
 ////// DRM
 
 static void
-ngx_http_vod_drm_info_request_finished(void* context, ngx_int_t rc, ngx_buf_t* response, off_t content_length)
+ngx_http_vod_drm_info_request_finished(void* context, ngx_int_t rc, ngx_buf_t* response, ssize_t content_length)
 {
 	ngx_http_vod_loc_conf_t *conf;
 	ngx_http_vod_ctx_t *ctx;
@@ -2544,7 +2544,7 @@ ngx_http_vod_local_request_handler(ngx_http_request_t *r)
 
 ////// Mapped mode only
 
-static void ngx_http_vod_path_request_finished(void* context, ngx_int_t rc, ngx_buf_t* response, off_t content_length);
+static void ngx_http_vod_path_request_finished(void* context, ngx_int_t rc, ngx_buf_t* response, ssize_t content_length);
 
 static ngx_int_t
 ngx_http_vod_apply_mapping(ngx_http_vod_ctx_t *ctx, ngx_str_t* mapping)
@@ -2785,7 +2785,7 @@ ngx_http_vod_run_mapped_mode_state_machine(ngx_http_request_t *r)
 }
 
 static void 
-ngx_http_vod_path_request_finished(void* context, ngx_int_t rc, ngx_buf_t* response, off_t content_length)
+ngx_http_vod_path_request_finished(void* context, ngx_int_t rc, ngx_buf_t* response, ssize_t content_length)
 {
 	ngx_http_vod_loc_conf_t* conf;
 	ngx_http_vod_ctx_t *ctx;
