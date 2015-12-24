@@ -45,11 +45,11 @@ http {
 
 	server {
 		listen @VOD_PACKAGER_PORT@;
-        listen @VOD_PACKAGER_SSL_PORT@ ssl;
+        	listen @VOD_PACKAGER_SSL_PORT@ ssl;
 		server_name @VOD_PACKAGER_HOST@;
 
-        ssl_certificate  @SSL_CERTIFICATE_FILE@;
-        ssl_certificate_key @SSL_CERTIFICATE_CHAIN_FILE@;
+        	ssl_certificate  @SSL_CERTIFICATE_FILE@;
+        	ssl_certificate_key @SSL_CERTIFICATE_CHAIN_FILE@;
 
 		# common vod settings
 		vod_mode mapped;
