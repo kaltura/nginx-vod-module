@@ -993,7 +993,7 @@ dash_packager_build_mpd(
 	ngx_tm_t start_time_gmt;
 	size_t base_url_temp_buffer_size = 0;
 	size_t base_period_size;
-	size_t result_size;
+	size_t result_size = 0;
 	size_t urls_length;
 	uint64_t clip_start_offset;
 	uint32_t min_update_period;
@@ -1003,7 +1003,7 @@ dash_packager_build_mpd(
 	uint32_t media_type;
 	vod_status_t rc;
 	u_char* base_url_temp_buffer = NULL;
-	u_char* p;
+	u_char* p = NULL;
 
 	// get segment durations and count for each media type
 	for (media_type = 0; media_type < MEDIA_TYPE_COUNT; media_type++)
