@@ -33,7 +33,6 @@ typedef struct {
 vod_status_t mss_packager_build_manifest(
 	request_context_t* request_context,
 	mss_manifest_config_t* conf,
-	segmenter_conf_t* segmenter_conf,
 	media_set_t* media_set,
 	size_t extra_tags_size,
 	mss_write_tags_callback_t write_extra_tags,
@@ -42,7 +41,7 @@ vod_status_t mss_packager_build_manifest(
 
 vod_status_t mss_packager_build_fragment_header(
 	request_context_t* request_context,
-	media_sequence_t* sequence,
+	media_set_t* media_set,
 	uint32_t segment_index,
 	size_t extra_traf_atoms_size,
 	mss_write_extra_traf_atoms_callback_t write_extra_traf_atoms_callback,

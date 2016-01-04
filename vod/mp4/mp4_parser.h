@@ -161,7 +161,7 @@ typedef struct {
 	uint64_t total_frames_duration;
 	uint32_t first_frame_index;
 	uint64_t first_frame_time_offset;
-	uint64_t clip_sequence_offset;
+	uint64_t clip_start_time;
 	int32_t clip_from_frame_offset;
 	raw_atom_t raw_atoms[RTA_COUNT];
 	void* source_clip;

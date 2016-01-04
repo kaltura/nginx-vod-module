@@ -62,14 +62,24 @@ static ngx_http_vod_cache_info_t cache_infos[] = {
 		ngx_string("</moov_cache>\r\n"),
 	},
 	{
-		offsetof(ngx_http_vod_loc_conf_t, response_cache_zone),
+		offsetof(ngx_http_vod_loc_conf_t, response_cache_zone[CACHE_TYPE_VOD]),
 		ngx_string("<response_cache>\r\n"),
 		ngx_string("</response_cache>\r\n"),
 	},
 	{
-		offsetof(ngx_http_vod_loc_conf_t, path_mapping_cache_zone),
+		offsetof(ngx_http_vod_loc_conf_t, response_cache_zone[CACHE_TYPE_LIVE]),
+		ngx_string("<live_response_cache>\r\n"),
+		ngx_string("</live_response_cache>\r\n"),
+	},
+	{
+		offsetof(ngx_http_vod_loc_conf_t, path_mapping_cache_zone[CACHE_TYPE_VOD]),
 		ngx_string("<path_mapping_cache>\r\n"),
 		ngx_string("</path_mapping_cache>\r\n"),
+	},
+	{
+		offsetof(ngx_http_vod_loc_conf_t, path_mapping_cache_zone[CACHE_TYPE_LIVE]),
+		ngx_string("<live_path_mapping_cache>\r\n"),
+		ngx_string("</live_path_mapping_cache>\r\n"),
 	},
 	{
 		offsetof(ngx_http_vod_loc_conf_t, drm_info_cache_zone),

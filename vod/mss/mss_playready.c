@@ -71,7 +71,6 @@ vod_status_t
 mss_playready_build_manifest(
 	request_context_t* request_context,
 	mss_manifest_config_t* conf,
-	segmenter_conf_t* segmenter_conf,
 	media_set_t* media_set,
 	vod_str_t* result)
 {
@@ -94,7 +93,6 @@ mss_playready_build_manifest(
 	return mss_packager_build_manifest(
 		request_context,
 		conf,
-		segmenter_conf,
 		media_set,
 		extra_tags_size,
 		mss_playready_write_protection_tag,
@@ -173,7 +171,7 @@ mss_playready_audio_build_fragment_header(
 
 	rc = mss_packager_build_fragment_header(
 		state->request_context,
-		state->sequence,
+		state->media_set,
 		state->segment_index,
 		writer_context.uuid_piff_atom_size + state->saiz_atom_size + state->saio_atom_size,
 		mss_playready_audio_write_extra_traf_atoms,
@@ -204,7 +202,7 @@ mss_playready_video_write_fragment_header(mp4_encrypt_video_state_t* state)
 
 	rc = mss_packager_build_fragment_header(
 		state->base.request_context,
-		state->base.sequence,
+		state->base.media_set,
 		state->base.segment_index,
 		writer_context.uuid_piff_atom_size + state->base.saiz_atom_size + state->base.saio_atom_size,
 		mss_playready_video_write_extra_traf_atoms,
@@ -294,7 +292,7 @@ mss_playready_get_fragment_writer(
 		// build the fragment header
 		rc = mss_packager_build_fragment_header(
 			request_context,
-			media_set->sequences,
+			media_set,
 			segment_index,
 			passthrough_context.total_size + ATOM_HEADER_SIZE + sizeof(uuid_piff_atom_t),
 			mss_playready_passthrough_write_encryption_atoms, 

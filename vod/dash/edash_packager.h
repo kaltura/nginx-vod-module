@@ -9,7 +9,6 @@ vod_status_t edash_packager_build_mpd(
 	request_context_t* request_context,
 	dash_manifest_config_t* conf,
 	vod_str_t* base_url,
-	segmenter_conf_t* segmenter_conf,
 	media_set_t* media_set,
 	vod_str_t* result);
 

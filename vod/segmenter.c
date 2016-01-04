@@ -211,18 +211,19 @@ vod_status_t
 segmenter_get_segment_index_discontinuity(
 	request_context_t* request_context,
 	segmenter_conf_t* conf, 
+	uint32_t initial_segment_index,
 	uint32_t* clip_durations,
 	uint32_t total_clip_count,
 	uint64_t time_millis, 
 	uint32_t* result)
 {
-	uint64_t clip_start_offset = 0;
+	uint64_t clip_start_offset;
 	uint64_t prev_clips_duration = 0;
 	uint64_t ignore;
 	uint32_t* cur_duration;
 	uint32_t* end_duration = clip_durations + total_clip_count;
 	uint32_t clip_segment_limit;
-	uint32_t segment_index = 0;
+	uint32_t segment_index = initial_segment_index;
 
 	for (cur_duration = clip_durations; ; cur_duration++)
 	{
@@ -232,6 +233,9 @@ segmenter_get_segment_index_discontinuity(
 				"segmenter_get_segment_index_discontinuity: invalid segment time %uD", time_millis);
 			return VOD_BAD_REQUEST;
 		}
+
+		// get the clip start offset
+		segmenter_get_start_end_offsets(conf, segment_index, &clip_start_offset, &ignore);
 
 		// get segment limit for the current clip
 		clip_segment_limit = conf->get_segment_count(conf, clip_start_offset + *cur_duration);
@@ -256,7 +260,6 @@ segmenter_get_segment_index_discontinuity(
 		prev_clips_duration += *cur_duration;
 
 		// move to the next clip
-		segmenter_get_start_end_offsets(conf, clip_segment_limit, &clip_start_offset, &ignore);
 		segment_index = clip_segment_limit;
 	}
 
@@ -285,11 +288,12 @@ segmenter_get_start_end_ranges_no_discontinuity(
 	uint32_t segment_index,
 	uint32_t* clip_durations,
 	uint32_t total_clip_count,
-	uint64_t total_duration,
+	uint64_t start_time,
+	uint64_t end_time,
 	uint64_t last_segment_end,
 	get_clip_ranges_result_t* result)
 {
-	uint64_t clip_start_offset = 0;
+	uint64_t clip_start_offset = start_time;
 	uint64_t next_start_offset;
 	uint64_t start;
 	uint64_t end;
@@ -299,14 +303,15 @@ segmenter_get_start_end_ranges_no_discontinuity(
 	uint32_t segment_count;
 	uint32_t index;
 
-	result->clip_first_segment_index = 0;
+	result->clip_index_segment_index = 0;
+	result->first_clip_segment_index = 0;
 
 	// get the segment count
-	segment_count = conf->get_segment_count(conf, total_duration);
+	segment_count = conf->get_segment_count(conf, end_time);
 	if (segment_count == INVALID_SEGMENT_COUNT)
 	{
 		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-			"segmenter_get_start_end_ranges_no_discontinuity: segment count is invalid for total duration %uL", total_duration);
+			"segmenter_get_start_end_ranges_no_discontinuity: segment count is invalid for total duration %uL", end_time);
 		return VOD_BAD_DATA;
 	}
 
@@ -324,6 +329,14 @@ segmenter_get_start_end_ranges_no_discontinuity(
 		segment_index,
 		&start,
 		&end);
+
+	if (start < start_time)
+	{
+		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+			"segmenter_get_start_end_ranges_no_discontinuity: segment start time %uL is less than sequence start time %uL",
+			start, start_time);
+		return VOD_BAD_REQUEST;
+	}
 
 	if (segment_index + 1 >= segment_count)
 	{
@@ -392,6 +405,8 @@ segmenter_get_start_end_ranges_no_discontinuity(
 		start = 0;
 		end -= clip_durations[index];
 	}
+	
+	result->initial_sequence_offset -= start_time;
 
 	return VOD_OK;
 }
@@ -402,20 +417,21 @@ segmenter_get_start_end_ranges_discontinuity(
 	segmenter_conf_t* conf,
 	uint32_t clip_index,
 	uint32_t segment_index,
+	uint32_t initial_segment_index,
 	uint32_t* clip_durations,
 	uint32_t total_clip_count,
 	uint64_t total_duration,
 	get_clip_ranges_result_t* result)
 {
-	uint64_t clip_start_offset = 0;
+	uint64_t clip_start_offset;
 	uint64_t start;
 	uint64_t end;
 	uint64_t ignore;
 	uint32_t* end_duration = clip_durations + total_clip_count;
 	uint32_t* cur_duration;
 	uint32_t cur_segment_limit;
-	uint32_t last_segment_limit = 0;
-	uint32_t clip_first_segment_index = 0;
+	uint32_t last_segment_limit = initial_segment_index;
+	uint32_t clip_index_segment_index = 0;
 	media_range_t* cur_clip_range;
 	uint64_t prev_clips_duration = 0;
 
@@ -427,6 +443,9 @@ segmenter_get_start_end_ranges_discontinuity(
 				"segmenter_get_start_end_ranges_discontinuity: invalid segment index %uD or clip index", segment_index);
 			return VOD_BAD_REQUEST;
 		}
+
+		// get the clip start offset
+		segmenter_get_start_end_offsets(conf, last_segment_limit, &clip_start_offset, &ignore);
 
 		// get segment limit for the current clip
 		cur_segment_limit = conf->get_segment_count(conf, clip_start_offset + *cur_duration);
@@ -444,8 +463,8 @@ segmenter_get_start_end_ranges_discontinuity(
 
 		if (clip_index == 1)
 		{
-			clip_first_segment_index = cur_segment_limit;
-			segment_index += clip_first_segment_index;
+			clip_index_segment_index = cur_segment_limit - initial_segment_index;
+			segment_index += clip_index_segment_index;
 		}
 		
 		if (clip_index > 0 && clip_index != INVALID_CLIP_INDEX)
@@ -460,8 +479,15 @@ segmenter_get_start_end_ranges_discontinuity(
 
 		// move to the next clip
 		prev_clips_duration += *cur_duration;
-		segmenter_get_start_end_offsets(conf, cur_segment_limit, &clip_start_offset, &ignore);
 		last_segment_limit = cur_segment_limit;
+	}
+
+	if (segment_index < last_segment_limit)
+	{
+		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+			"segmenter_get_start_end_ranges_discontinuity: segment index %uD smaller than last segment index %uD", 
+			segment_index, last_segment_limit);
+		return VOD_BAD_REQUEST;
 	}
 
 	// get start / end position relative to the clip start
@@ -499,7 +525,8 @@ segmenter_get_start_end_ranges_discontinuity(
 	result->min_clip_index = result->max_clip_index = cur_duration - clip_durations;
 	result->clip_count = 1;
 	result->clip_ranges = cur_clip_range;
-	result->clip_first_segment_index = clip_first_segment_index;
+	result->clip_index_segment_index = clip_index_segment_index;
+	result->first_clip_segment_index = last_segment_limit;
 
 	return VOD_OK;
 }
@@ -508,19 +535,21 @@ static vod_status_t
 segmenter_get_segment_durations_estimate_internal(
 	request_context_t* request_context,
 	segmenter_conf_t* conf,
+	media_set_t* media_set,
 	uint32_t* clip_durations,
 	uint32_t total_clip_count,
+	uint64_t cur_clip_duration,
 	segment_durations_t* result)
 {
 	segment_duration_item_t* cur_item;
-	uint64_t clip_start_offset = 0;
+	uint64_t clip_start_offset;
 	uint64_t ignore;
+	uint64_t clip_offset;
 	uint32_t* end_duration = clip_durations + total_clip_count;
-	uint32_t* cur_duration;
+	uint32_t* cur_duration = clip_durations;
 	uint32_t bootstrap_segment_limit;
-	uint32_t segment_index = 0;
-	uint32_t clip_segment_limit = 0;
-	uint32_t clip_offset;
+	uint32_t segment_index = media_set->initial_segment_index;
+	uint32_t clip_segment_limit;
 	uint32_t segment_duration;
 	bool_t discontinuity;
 
@@ -536,10 +565,13 @@ segmenter_get_segment_durations_estimate_internal(
 	cur_item = result->items - 1;
 
 	discontinuity = FALSE;
-	for (cur_duration = clip_durations; cur_duration < end_duration; cur_duration++)
+	for (;;)
 	{
+		// find the clip start offset
+		segmenter_get_start_end_offsets(conf, segment_index, &clip_start_offset, &ignore);
+
 		// get segment limit for the current clip
-		clip_segment_limit = conf->get_segment_count(conf, clip_start_offset + *cur_duration);
+		clip_segment_limit = conf->get_segment_count(conf, clip_start_offset + cur_clip_duration);
 		if (clip_segment_limit == INVALID_SEGMENT_COUNT)
 		{
 			vod_log_error(VOD_LOG_ERR, request_context->log, 0,
@@ -588,14 +620,14 @@ segmenter_get_segment_durations_estimate_internal(
 			}
 			cur_item->repeat_count += clip_segment_limit - segment_index - 1;
 
-			clip_offset += segment_duration * (clip_segment_limit - segment_index - 1);
+			clip_offset += (uint64_t)segment_duration * (clip_segment_limit - segment_index - 1);
 			segment_index = clip_segment_limit - 1;
 		}
 
 		// last segment
-		if (segment_index < clip_segment_limit && clip_offset < *cur_duration)
+		if (segment_index < clip_segment_limit && clip_offset < cur_clip_duration)
 		{
-			segment_duration = *cur_duration - clip_offset;
+			segment_duration = cur_clip_duration - clip_offset;
 			if (cur_item < result->items || segment_duration != cur_item->duration || discontinuity)
 			{
 				cur_item++;
@@ -605,12 +637,21 @@ segmenter_get_segment_durations_estimate_internal(
 				cur_item->discontinuity = discontinuity;
 			}
 			cur_item->repeat_count++;
+			
+			clip_offset += segment_duration;
 			segment_index = clip_segment_limit;
 		}
 
-		// update clip_start_offset
-		segmenter_get_start_end_offsets(conf, clip_segment_limit, &clip_start_offset, &ignore);
+		// move to the next clip
+		cur_duration++;
+		if (cur_duration >= end_duration)
+		{
+			break;
+		}
 
+		cur_clip_duration = *cur_duration;
+
+		// update clip_start_offset
 		discontinuity = TRUE;
 	}
 
@@ -635,19 +676,24 @@ segmenter_get_segment_durations_estimate(
 	media_track_t** longest_track;
 	media_sequence_t* sequences_end;
 	media_sequence_t* cur_sequence;
-	uint32_t duration_millis;
+	uint64_t duration_millis;
 
-	if (media_set->total_clip_count > 1)
+	if (media_set->durations != NULL)
 	{
-		result->duration_millis = media_set->total_duration;
+		duration_millis = media_set->total_duration;
 
 		if (media_set->use_discontinuity)
 		{
+			result->start_time = media_set->first_clip_time;
+			result->end_time = media_set->first_clip_time + duration_millis;
+
 			return segmenter_get_segment_durations_estimate_internal(
 				request_context,
 				conf,
+				media_set,
 				media_set->durations,
 				media_set->total_clip_count,
+				media_set->durations[0],
 				result);
 		}
 
@@ -655,7 +701,7 @@ segmenter_get_segment_durations_estimate(
 	}
 	else
 	{
-		result->duration_millis = 0;
+		duration_millis = 0;
 
 		if (sequence != NULL)
 		{
@@ -673,27 +719,31 @@ segmenter_get_segment_durations_estimate(
 			longest_track = cur_sequence->filtered_clips[0].longest_track;
 
 			if (longest_track[MEDIA_TYPE_VIDEO] != NULL && 
-				longest_track[MEDIA_TYPE_VIDEO]->media_info.duration_millis > result->duration_millis &&
+				longest_track[MEDIA_TYPE_VIDEO]->media_info.duration_millis > duration_millis &&
 				(media_type == MEDIA_TYPE_NONE || media_type == MEDIA_TYPE_VIDEO))
 			{
-				result->duration_millis = longest_track[MEDIA_TYPE_VIDEO]->media_info.duration_millis;
+				duration_millis = longest_track[MEDIA_TYPE_VIDEO]->media_info.duration_millis;
 			}
 
 			if (longest_track[MEDIA_TYPE_AUDIO] != NULL &&
-				longest_track[MEDIA_TYPE_AUDIO]->media_info.duration_millis > result->duration_millis &&
+				longest_track[MEDIA_TYPE_AUDIO]->media_info.duration_millis > duration_millis &&
 				(media_type == MEDIA_TYPE_NONE || media_type == MEDIA_TYPE_AUDIO))
 			{
-				result->duration_millis = longest_track[MEDIA_TYPE_AUDIO]->media_info.duration_millis;
+				duration_millis = longest_track[MEDIA_TYPE_AUDIO]->media_info.duration_millis;
 			}
 		}
 	}
 
-	duration_millis = result->duration_millis;
+	result->start_time = media_set->first_clip_time;
+	result->end_time = media_set->first_clip_time + duration_millis;
+
 	return segmenter_get_segment_durations_estimate_internal(
 		request_context,
 		conf,
-		&duration_millis,
+		media_set,
+		NULL,
 		1,
+		duration_millis,
 		result);
 }
 
@@ -768,9 +818,10 @@ segmenter_get_segment_durations_accurate(
 	uint64_t segment_limit_millis;
 	uint64_t segment_limit;
 	uint64_t cur_duration;
+	uint32_t duration_millis;
 	bool_t align_to_key_frames;
 
-	if (media_set->total_clip_count > 1)
+	if (media_set->durations != NULL)
 	{
 		// in case of a playlist fall back to estimate
 		return segmenter_get_segment_durations_estimate(
@@ -794,7 +845,7 @@ segmenter_get_segment_durations_accurate(
 		sequences_end = media_set->sequences_end;
 	}
 
-	result->duration_millis = 0;
+	duration_millis = 0;
 	for (; cur_sequence < sequences_end; cur_sequence++)
 	{
 		last_track = cur_sequence->filtered_clips[0].last_track;
@@ -812,10 +863,10 @@ segmenter_get_segment_durations_accurate(
 				main_track = cur_track;
 			}
 
-			if (cur_track->media_info.duration_millis > result->duration_millis)
+			if (cur_track->media_info.duration_millis > duration_millis)
 			{
 				longest_track = cur_track;
-				result->duration_millis = cur_track->media_info.duration_millis;
+				duration_millis = cur_track->media_info.duration_millis;
 			}
 		}
 	}
@@ -840,7 +891,7 @@ segmenter_get_segment_durations_accurate(
 	}
 
 	// get the segment count
-	result->segment_count = conf->get_segment_count(conf, result->duration_millis);
+	result->segment_count = conf->get_segment_count(conf, duration_millis);
 	if (result->segment_count == INVALID_SEGMENT_COUNT)
 	{
 		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
@@ -934,7 +985,7 @@ post_bootstrap:
 	}
 	
 	// in case the main video track is shorter than the audio track, add the estimated durations of the remaining audio-only segments
-	if (main_track->media_info.duration_millis < result->duration_millis && 
+	if (main_track->media_info.duration_millis < duration_millis && 
 		!align_to_key_frames)
 	{
 		segmenter_boundary_iterator_init(&boundary_iterator, conf, result->segment_count);
@@ -998,6 +1049,9 @@ post_bootstrap:
 		result->item_count--;
 		result->segment_count -= cur_item->repeat_count;
 	}
+
+	result->start_time = 0;
+	result->end_time = duration_millis;
 
 	return VOD_OK;
 }

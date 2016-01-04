@@ -3,8 +3,9 @@
 
 // macros
 #define MAX_SEGMENT_COUNT (10 * 1024)			// more than 1 day when using 10 sec segments
-#define M3U8_HEADER_PART1 "#EXTM3U\n#EXT-X-TARGETDURATION:%d\n#EXT-X-ALLOW-CACHE:YES\n#EXT-X-PLAYLIST-TYPE:VOD\n"
-#define M3U8_HEADER_PART2 "#EXT-X-VERSION:%d\n#EXT-X-MEDIA-SEQUENCE:1\n"
+#define M3U8_HEADER_PART1 "#EXTM3U\n#EXT-X-TARGETDURATION:%d\n#EXT-X-ALLOW-CACHE:YES\n"
+#define M3U8_HEADER_VOD "#EXT-X-PLAYLIST-TYPE:VOD\n"
+#define M3U8_HEADER_PART2 "#EXT-X-VERSION:%d\n#EXT-X-MEDIA-SEQUENCE:%uD\n"
 
 
 // constants
@@ -206,17 +207,18 @@ m3u8_builder_build_iframe_playlist(
 	hls_muxer_conf_t* muxer_conf,
 	vod_str_t* base_url,
 	request_params_t* request_params,
-	segmenter_conf_t* segmenter_conf,
 	media_set_t* media_set,
 	vod_str_t* result)
 {
 	hls_encryption_params_t encryption_params;
 	write_segment_context_t ctx;
 	segment_durations_t segment_durations;
+	segmenter_conf_t* segmenter_conf = media_set->segmenter_conf;
 	size_t iframe_length;
 	size_t result_size;
 	hls_muxer_state_t muxer_state;
 	bool_t simulation_supported;
+	uint64_t duration_millis;
 	uint32_t sequence_index;
 	vod_status_t rc; 
 
@@ -291,7 +293,8 @@ m3u8_builder_build_iframe_playlist(
 		return rc;
 	}
 
-	iframe_length = sizeof("#EXTINF:.000,\n") - 1 + vod_get_int_print_len(vod_div_ceil(segment_durations.duration_millis, 1000)) +
+	duration_millis = segment_durations.end_time - segment_durations.start_time;
+	iframe_length = sizeof("#EXTINF:.000,\n") - 1 + vod_get_int_print_len(vod_div_ceil(duration_millis, 1000)) +
 		sizeof(byte_range_tag_format) + VOD_INT32_LEN + vod_get_int_print_len(MAX_FRAME_SIZE) - (sizeof("%uD%uD") - 1) +
 		base_url->len + conf->segment_file_name_prefix.len + 1 + vod_get_int_print_len(segment_durations.segment_count) + ctx.tracks_spec.len + sizeof(".ts\n") - 1;
 
@@ -346,13 +349,14 @@ m3u8_builder_build_index_playlist(
 	vod_str_t* segments_base_url,
 	request_params_t* request_params,
 	hls_encryption_params_t* encryption_params,
-	segmenter_conf_t* segmenter_conf,
 	media_set_t* media_set,
 	vod_str_t* result)
 {
 	segment_durations_t segment_durations;
 	segment_duration_item_t* cur_item;
 	segment_duration_item_t* last_item;
+	segmenter_conf_t* segmenter_conf = media_set->segmenter_conf;
+	uint64_t duration_millis;
 	uint32_t sequence_index;
 	vod_str_t extinf;
 	uint32_t segment_index;
@@ -392,12 +396,15 @@ m3u8_builder_build_index_playlist(
 	}
 
 	// get the required buffer length
-	segment_length = sizeof("#EXTINF:.000,\n") - 1 + vod_get_int_print_len(vod_div_ceil(segment_durations.duration_millis, 1000)) +
-		segments_base_url->len + conf->segment_file_name_prefix.len + 1 + vod_get_int_print_len(segment_durations.segment_count) + tracks_spec.len + sizeof(".ts\n") - 1;
+	duration_millis = segment_durations.end_time - segment_durations.start_time;
+	last_segment_index = segment_durations.items[0].segment_index + segment_durations.segment_count;
+	segment_length = sizeof("#EXTINF:.000,\n") - 1 + vod_get_int_print_len(vod_div_ceil(duration_millis, 1000)) +
+		segments_base_url->len + conf->segment_file_name_prefix.len + 1 + vod_get_int_print_len(last_segment_index) + tracks_spec.len + sizeof(".ts\n") - 1;
 
 	result_size =
 		sizeof(M3U8_HEADER_PART1) + VOD_INT64_LEN + 
-		sizeof(M3U8_HEADER_PART2) + VOD_INT64_LEN + 
+		sizeof(M3U8_HEADER_VOD) +
+		sizeof(M3U8_HEADER_PART2) + VOD_INT64_LEN + VOD_INT32_LEN + 
 		segment_length * segment_durations.segment_count +
 		segment_durations.discontinuities * (sizeof(m3u8_discontinuity) - 1) +
 		sizeof(m3u8_footer);
@@ -429,6 +436,11 @@ m3u8_builder_build_index_playlist(
 		M3U8_HEADER_PART1,
 		(segmenter_conf->max_segment_duration + 500) / 1000);
 	
+	if (media_set->type == MEDIA_SET_VOD)
+	{
+		p = vod_copy(p, M3U8_HEADER_VOD, sizeof(M3U8_HEADER_VOD) - 1);
+	}
+
 	if (encryption_params->type != HLS_ENC_NONE)
 	{
 		p = vod_copy(p, encryption_key_tag_part1, sizeof(encryption_key_tag_part1) - 1);
@@ -455,7 +467,8 @@ m3u8_builder_build_index_playlist(
 	p = vod_sprintf(
 		p,
 		M3U8_HEADER_PART2,
-		conf->m3u8_version);
+		conf->m3u8_version, 
+		segment_durations.items[0].segment_index + 1);
 
 	// write the segments
 	scale = conf->m3u8_version >= 3 ? 1000 : 1;
@@ -487,7 +500,10 @@ m3u8_builder_build_index_playlist(
 	}
 
 	// write the footer
-	p = vod_copy(p, m3u8_footer, sizeof(m3u8_footer) - 1);
+	if (media_set->type == MEDIA_SET_VOD)
+	{
+		p = vod_copy(p, m3u8_footer, sizeof(m3u8_footer) - 1);
+	}
 
 	result->len = p - result->data;
 

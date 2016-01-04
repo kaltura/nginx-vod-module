@@ -26,7 +26,7 @@ static const ngx_http_vod_match_definition_t fragment_match_definition[] = {
 // content types
 static u_char mp4_audio_content_type[] = "audio/mp4";
 static u_char mp4_video_content_type[] = "video/mp4";
-static u_char manifest_content_type[] = "text/xml";
+static u_char manifest_content_type[] = "application/vnd.ms-sstr+xml";
 
 static ngx_int_t 
 ngx_http_vod_mss_handle_manifest(
@@ -41,7 +41,6 @@ ngx_http_vod_mss_handle_manifest(
 		rc = mss_playready_build_manifest(
 			&submodule_context->request_context,
 			&submodule_context->conf->mss.manifest_conf,
-			&submodule_context->conf->segmenter,
 			&submodule_context->media_set,
 			response);
 	}
@@ -50,7 +49,6 @@ ngx_http_vod_mss_handle_manifest(
 		rc = mss_packager_build_manifest(
 			&submodule_context->request_context,
 			&submodule_context->conf->mss.manifest_conf,
-			&submodule_context->conf->segmenter,
 			&submodule_context->media_set,
 			0,
 			NULL,
@@ -116,7 +114,7 @@ ngx_http_vod_mss_init_frame_processor(
 	{
 		rc = mss_packager_build_fragment_header(
 			&submodule_context->request_context,
-			submodule_context->media_set.sequences,
+			&submodule_context->media_set,
 			submodule_context->request_params.segment_index,
 			0,
 			NULL,
@@ -168,7 +166,7 @@ ngx_http_vod_mss_init_frame_processor(
 }
 
 static const ngx_http_vod_request_t mss_manifest_request = {
-	0,
+	REQUEST_FLAG_TIME_DEPENDENT_ON_LIVE,
 	PARSE_FLAG_TOTAL_SIZE_ESTIMATE | PARSE_FLAG_PARSED_EXTRA_DATA,
 	REQUEST_CLASS_MANIFEST,
 	ngx_http_vod_mss_handle_manifest,

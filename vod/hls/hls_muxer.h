@@ -35,6 +35,7 @@ typedef struct {
 	input_frame_t* last_frame;
 
 	// time offsets
+	uint64_t clip_start_time;
 	uint64_t first_frame_time_offset;
 	uint64_t next_frame_time_offset;
 	uint64_t next_frame_dts;
@@ -87,6 +88,7 @@ typedef struct {
 	int cache_slot_id;
 	frames_source_t* frames_source;
 	void* frames_source_context;
+	bool_t first_time;
 } hls_muxer_state_t;
 
 // functions

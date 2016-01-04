@@ -7,6 +7,8 @@
 #define DEFAULT_PES_HEADER_FREQ 16
 #define DEFAULT_PES_PAYLOAD_SIZE ((DEFAULT_PES_HEADER_FREQ - 1) * 184 + 170)
 
+#define hls_rescale_millis(millis) ((millis) * (HLS_TIMESCALE / 1000))
+
 static vod_status_t
 hls_muxer_init_track(
 	hls_muxer_stream_state_t* cur_stream,
@@ -21,7 +23,8 @@ hls_muxer_init_track(
 	cur_stream->first_frame = track->first_frame;
 	cur_stream->cur_frame = track->first_frame;
 	cur_stream->last_frame = track->last_frame;
-	cur_stream->first_frame_time_offset = track->first_frame_time_offset + track->clip_sequence_offset;
+	cur_stream->clip_start_time = track->clip_start_time;
+	cur_stream->first_frame_time_offset = track->first_frame_time_offset;
 	cur_stream->clip_from_frame_offset = track->clip_from_frame_offset;
 	cur_stream->next_frame_time_offset = cur_stream->first_frame_time_offset;
 	cur_stream->next_frame_dts = rescale_time(cur_stream->next_frame_time_offset, cur_stream->timescale, HLS_TIMESCALE);
@@ -109,6 +112,7 @@ hls_muxer_init(
 	state->request_context = request_context;
 	state->cur_frame = NULL;
 	state->video_duration = 0;
+	state->first_time = TRUE;
 
 	state->clips_start = media_set->sequences[0].filtered_clips;
 	state->clips_end = media_set->sequences[0].filtered_clips_end;
@@ -292,7 +296,7 @@ hls_muxer_init(
 
 	mpegts_encoder_finalize_streams(&init_streams_state);
 
-	if (media_set->total_clip_count > 1)
+	if (media_set->durations != NULL)
 	{
 		state->video_duration = media_set->total_duration;
 	}
@@ -306,6 +310,8 @@ hls_muxer_reinit_tracks(hls_muxer_state_t* state)
 	media_track_t* track;
 	hls_muxer_stream_state_t* cur_stream;
 	vod_status_t rc;
+
+	state->first_time = TRUE;
 
 	track = state->cur_clip->first_track;
 	for (cur_stream = state->first_stream; cur_stream < state->last_stream; cur_stream++, track++)
@@ -383,6 +389,7 @@ hls_muxer_start_frame(hls_muxer_state_t* state)
 	hls_muxer_stream_state_t* cur_stream;
 	hls_muxer_stream_state_t* selected_stream;
 	output_frame_t output_frame;
+	uint64_t clip_start_time;
 	uint64_t cur_frame_offset;
 	uint64_t cur_frame_time_offset;
 	uint64_t cur_frame_dts;
@@ -438,8 +445,10 @@ hls_muxer_start_frame(hls_muxer_state_t* state)
 	state->cur_writer_context = selected_stream->top_filter_context;
 
 	// initialize the mpeg ts frame info
-	output_frame.pts = rescale_time(cur_frame_time_offset + state->cur_frame->pts_delay, selected_stream->timescale, HLS_TIMESCALE);
-	output_frame.dts = cur_frame_dts;
+	clip_start_time = hls_rescale_millis(selected_stream->clip_start_time);
+	output_frame.pts = rescale_time(cur_frame_time_offset + state->cur_frame->pts_delay, selected_stream->timescale, HLS_TIMESCALE) + 
+		clip_start_time;
+	output_frame.dts = cur_frame_dts + clip_start_time;
 	output_frame.key = state->cur_frame->key_frame;
 	output_frame.size = state->cur_frame->size;
 	output_frame.header_size = 0;
@@ -485,7 +494,6 @@ hls_muxer_process(hls_muxer_state_t* state)
 	u_char* read_buffer;
 	uint32_t read_size;
 	vod_status_t rc;
-	bool_t first_time = (state->cur_frame == NULL);
 	bool_t wrote_data = FALSE;
 	bool_t frame_done;
 
@@ -515,7 +523,7 @@ hls_muxer_process(hls_muxer_state_t* state)
 				return rc;
 			}
 
-			if (!wrote_data && !first_time)
+			if (!wrote_data && !state->first_time)
 			{
 				vod_log_error(VOD_LOG_ERR, state->request_context->log, 0,
 					"hls_muxer_process: no data was handled, probably a truncated file");
@@ -527,6 +535,8 @@ hls_muxer_process(hls_muxer_state_t* state)
 			{
 				return rc;
 			}
+
+			state->first_time = FALSE;
 
 			return VOD_AGAIN;
 		}
@@ -607,7 +617,7 @@ hls_muxer_simulation_write_frame(hls_muxer_stream_state_t* selected_stream, inpu
 
 	// initialize the mpeg ts frame info
 	// Note: no need to initialize the pts or original size
-	output_frame.dts = cur_frame_dts;
+	output_frame.dts = cur_frame_dts + hls_rescale_millis(selected_stream->clip_start_time);
 	output_frame.key = cur_frame->key_frame;
 	output_frame.header_size = 0;
 

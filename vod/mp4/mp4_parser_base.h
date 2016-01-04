@@ -27,7 +27,7 @@ typedef struct {
 
 typedef struct {
 	uint32_t* required_tracks_mask;
-	uint64_t sequence_offset;
+	uint64_t clip_start_time;
 	uint32_t clip_from;
 	uint32_t clip_to;
 	media_range_t* range;

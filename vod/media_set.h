@@ -18,6 +18,12 @@
 #define MAX_SEQUENCES (32)
 #define MAX_SOURCES (32)
 
+// enums
+enum {
+	MEDIA_SET_VOD,
+	MEDIA_SET_LIVE,
+};
+
 // typedefs
 struct segmenter_conf_s;
 struct audio_filter_s;
@@ -64,6 +70,7 @@ struct media_sequence_s {
 
 typedef struct {
 	// initialized during parsing
+	struct segmenter_conf_s* segmenter_conf;
 	uint32_t total_clip_count;				// number of clips in the whole set
 	uint32_t clip_count;					// number of clips relevant to serve the current request
 	uint32_t* durations;					// [total_clip_count], in millis
@@ -75,6 +82,12 @@ typedef struct {
 	media_clip_source_t** sources;
 	media_clip_source_t** sources_end;
 	bool_t use_discontinuity;
+	uint32_t initial_segment_index;
+	uint32_t initial_clip_segment_index;
+	uint32_t initial_clip_index;
+	uint64_t first_clip_time;
+	uint64_t segment_start_time;
+	uint32_t type;
 	vod_str_t uri;
 
 	// initialized while applying filters

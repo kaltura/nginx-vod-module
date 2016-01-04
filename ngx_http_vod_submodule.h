@@ -23,6 +23,7 @@
 // request flags
 #define REQUEST_FLAG_SINGLE_TRACK (0x1)
 #define REQUEST_FLAG_SINGLE_TRACK_PER_MEDIA_TYPE (0x2)
+#define REQUEST_FLAG_TIME_DEPENDENT_ON_LIVE (0x4)
 
 // request classes
 enum {
