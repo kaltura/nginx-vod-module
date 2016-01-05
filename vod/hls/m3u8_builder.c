@@ -619,7 +619,7 @@ m3u8_builder_build_master_playlist(
 			else
 			{
 				audio = &cur_track->media_info;
-				p = vod_sprintf(p, m3u8_stream_inf_audio, audio->bitrate, audio->codec_name);
+				p = vod_sprintf(p, m3u8_stream_inf_audio, audio->bitrate, &audio->codec_name);
 			}
 			p = vod_copy(p, m3u8_stream_inf_suffix, sizeof(m3u8_stream_inf_suffix) - 1);
 			// write the track url
