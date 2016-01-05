@@ -6,6 +6,9 @@
 #include "filters/mix_filter.h"
 #include "parse_utils.h"
 
+#define MAX_CLIP_DURATION (86400000)		// 1 day
+#define MAX_SEQUENCE_DURATION (864000000)		// 10 days
+
 // typedefs
 enum {
 	MEDIA_SET_PARAM_DISCONTINUITY,
@@ -131,8 +134,22 @@ media_set_parse_durations(
 			return VOD_BAD_MAPPING;
 		}
 
+		if (cur_pos->v.num.nom > MAX_CLIP_DURATION)
+		{
+			vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+				"media_set_parse_durations: clip duration %L too large", cur_pos->v.num.nom);
+			return VOD_BAD_MAPPING;
+		}
+
 		*cur_output = cur_pos->v.num.nom;
 		total_duration += cur_pos->v.num.nom;
+	}
+
+	if (total_duration > MAX_SEQUENCE_DURATION)
+	{
+		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+			"media_set_parse_durations: total duration %uL too large", total_duration);
+		return VOD_BAD_MAPPING;
 	}
 
 	media_set->total_clip_count = array->nelts;
@@ -653,7 +670,7 @@ media_set_parse_live_params(
 	media_set_t* media_set, 
 	uint64_t* segment_base_time)
 {
-	// initial segment index
+	// first clip time
 	if (params[MEDIA_SET_PARAM_FIRST_CLIP_TIME] == NULL)
 	{
 		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
@@ -696,7 +713,8 @@ media_set_parse_live_params(
 			}
 			request_params->clip_index -= media_set->initial_clip_index;
 
-			// adjust the segment index to the first clip
+			// adjust the segment index to the first clip, 
+			// it will be further adjusted after the start/end ranges get calculated
 			if (request_params->segment_index != INVALID_SEGMENT_INDEX)
 			{
 				request_params->segment_index += media_set->initial_segment_index;
@@ -795,6 +813,7 @@ media_set_get_live_window(
 	// get the ranges of the first and last segments
 	if (media_set->use_discontinuity)
 	{
+		// TODO: consider optimizing this by creating dedicated segmenter functions
 		rc = segmenter_get_start_end_ranges_discontinuity(
 			request_context,
 			segmenter,
@@ -876,6 +895,7 @@ media_set_get_live_window(
 	}
 
 	// trim the durations array
+	// Note: min_clip_index and max_clip_index can be identical
 	media_set->durations[max_clip_ranges.max_clip_index] = max_clip_ranges.clip_ranges[max_clip_ranges.clip_count - 1].end;
 	media_set->durations[min_clip_ranges.min_clip_index] -= min_clip_ranges.clip_ranges[0].start;
 	media_set->durations += min_clip_ranges.min_clip_index;
@@ -1122,7 +1142,7 @@ media_set_parse_json(
 			}
 		}
 
-		// clip start/end ranges
+		// get the segment start/end ranges
 		if (result->use_discontinuity)
 		{
 			rc = segmenter_get_start_end_ranges_discontinuity(
@@ -1199,16 +1219,16 @@ media_set_parse_json(
 		}
 		else
 		{
-			// if consistent media info was set to false, parse all clips
+			// clip index not specified on the request
 			if (params[MEDIA_SET_PARAM_CONSISTENT_SEQUENCE_MEDIA_INFO] != NULL &&
 				!params[MEDIA_SET_PARAM_CONSISTENT_SEQUENCE_MEDIA_INFO]->v.boolean)
 			{
 				parse_all_clips = TRUE;
 			}
 
-			// clip index not specified on the request
 			if (result->type == MEDIA_SET_LIVE)
 			{
+				// trim the playlist to a smaller window according to the current time
 				rc = media_set_get_live_window(
 					request_context,
 					segmenter,

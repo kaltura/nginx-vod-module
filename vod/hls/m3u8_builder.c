@@ -397,7 +397,7 @@ m3u8_builder_build_index_playlist(
 
 	// get the required buffer length
 	duration_millis = segment_durations.end_time - segment_durations.start_time;
-	last_segment_index = segment_durations.items[0].segment_index + segment_durations.segment_count;
+	last_segment_index = media_set->initial_segment_index + segment_durations.segment_count;
 	segment_length = sizeof("#EXTINF:.000,\n") - 1 + vod_get_int_print_len(vod_div_ceil(duration_millis, 1000)) +
 		segments_base_url->len + conf->segment_file_name_prefix.len + 1 + vod_get_int_print_len(last_segment_index) + tracks_spec.len + sizeof(".ts\n") - 1;
 
@@ -468,7 +468,7 @@ m3u8_builder_build_index_playlist(
 		p,
 		M3U8_HEADER_PART2,
 		conf->m3u8_version, 
-		segment_durations.items[0].segment_index + 1);
+		media_set->initial_segment_index + 1);
 
 	// write the segments
 	scale = conf->m3u8_version >= 3 ? 1000 : 1;

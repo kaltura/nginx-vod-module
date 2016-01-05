@@ -12,11 +12,11 @@
 $playlistType = "live";			// live / vod
 $discontinuity = true;
 $filePaths = array(
-	"/web/content/r71v1/entry/data/241/803/0_p7y00o7h_0_93j6yqit_1.mp4",
-	"/web/content/r70v1/entry/data/138/192/1_46gm1o7f_1_22any1sp_1.mp4",
-	"/web/content/r70v1/entry/data/138/192/1_5bik2rp6_1_kg6dq8kb_1.mp4",
+	"/path/to/video1.mp4",
+	"/path/to/video2.mp4",
+	"/path/to/video3.mp4",
 	);
-$ffprobeBin = '/web/content/shared/bin/ffmpeg-2.7.2-bin/ffprobe.sh';
+$ffprobeBin = '/path/to/ffprobe.sh';
 $timeMargin = 10000;		// a safety margin to compensate for clock differences
 
 // nginx conf params

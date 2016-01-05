@@ -82,8 +82,8 @@ typedef struct {
 	media_clip_source_t** sources;
 	media_clip_source_t** sources_end;
 	bool_t use_discontinuity;
-	uint32_t initial_segment_index;
-	uint32_t initial_clip_segment_index;
+	uint32_t initial_segment_index;			// the index of the first segment in the playlist
+	uint32_t initial_clip_segment_index;	// the index of the first segment of the first playlist clip (can be less than initial_segment_index when the beginning of the clip is outside the live window)
 	uint32_t initial_clip_index;
 	uint64_t first_clip_time;
 	uint64_t segment_start_time;

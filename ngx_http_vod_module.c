@@ -542,7 +542,8 @@ ngx_http_vod_state_machine_get_drm_info(ngx_http_vod_ctx_t *ctx)
 				&conf->drm_info_cache_zone, 
 				1, 
 				ctx->submodule_context.cur_sequence->uri_key, 
-				&drm_info.data, &drm_info.len))
+				&drm_info.data, 
+				&drm_info.len))
 			{
 				ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
 					"ngx_http_vod_state_machine_get_drm_info: drm info cache hit, size is %uz", drm_info.len);

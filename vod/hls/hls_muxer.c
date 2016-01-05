@@ -23,7 +23,7 @@ hls_muxer_init_track(
 	cur_stream->first_frame = track->first_frame;
 	cur_stream->cur_frame = track->first_frame;
 	cur_stream->last_frame = track->last_frame;
-	cur_stream->clip_start_time = track->clip_start_time;
+	cur_stream->clip_start_time = hls_rescale_millis(track->clip_start_time);
 	cur_stream->first_frame_time_offset = track->first_frame_time_offset;
 	cur_stream->clip_from_frame_offset = track->clip_from_frame_offset;
 	cur_stream->next_frame_time_offset = cur_stream->first_frame_time_offset;
@@ -389,7 +389,6 @@ hls_muxer_start_frame(hls_muxer_state_t* state)
 	hls_muxer_stream_state_t* cur_stream;
 	hls_muxer_stream_state_t* selected_stream;
 	output_frame_t output_frame;
-	uint64_t clip_start_time;
 	uint64_t cur_frame_offset;
 	uint64_t cur_frame_time_offset;
 	uint64_t cur_frame_dts;
@@ -445,10 +444,9 @@ hls_muxer_start_frame(hls_muxer_state_t* state)
 	state->cur_writer_context = selected_stream->top_filter_context;
 
 	// initialize the mpeg ts frame info
-	clip_start_time = hls_rescale_millis(selected_stream->clip_start_time);
 	output_frame.pts = rescale_time(cur_frame_time_offset + state->cur_frame->pts_delay, selected_stream->timescale, HLS_TIMESCALE) + 
-		clip_start_time;
-	output_frame.dts = cur_frame_dts + clip_start_time;
+		selected_stream->clip_start_time;
+	output_frame.dts = cur_frame_dts + selected_stream->clip_start_time;
 	output_frame.key = state->cur_frame->key_frame;
 	output_frame.size = state->cur_frame->size;
 	output_frame.header_size = 0;
@@ -617,7 +615,7 @@ hls_muxer_simulation_write_frame(hls_muxer_stream_state_t* selected_stream, inpu
 
 	// initialize the mpeg ts frame info
 	// Note: no need to initialize the pts or original size
-	output_frame.dts = cur_frame_dts + hls_rescale_millis(selected_stream->clip_start_time);
+	output_frame.dts = cur_frame_dts + selected_stream->clip_start_time;
 	output_frame.key = cur_frame->key_frame;
 	output_frame.header_size = 0;
 

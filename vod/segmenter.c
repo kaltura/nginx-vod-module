@@ -92,11 +92,13 @@ segmenter_get_segment_count_last_short(segmenter_conf_t* conf, uint64_t duration
 	if (duration_millis > conf->bootstrap_segments_total_duration)
 	{
 		duration_millis -= conf->bootstrap_segments_total_duration;
-		result = conf->bootstrap_segments_count + vod_div_ceil(duration_millis, conf->segment_duration);
-		if (result > MAX_SEGMENT_COUNT)
+
+		if (duration_millis > (uint64_t)conf->segment_duration * (UINT_MAX - conf->bootstrap_segments_count - 2))
 		{
 			return INVALID_SEGMENT_COUNT;
 		}
+
+		result = conf->bootstrap_segments_count + vod_div_ceil(duration_millis, conf->segment_duration);
 	}
 	else
 	{
@@ -119,14 +121,16 @@ segmenter_get_segment_count_last_long(segmenter_conf_t* conf, uint64_t duration_
 	if (duration_millis >= conf->bootstrap_segments_total_duration)
 	{
 		duration_millis -= conf->bootstrap_segments_total_duration;
+
+		if (duration_millis > (uint64_t)conf->segment_duration * (UINT_MAX - conf->bootstrap_segments_count - 2))
+		{
+			return INVALID_SEGMENT_COUNT;
+		}
+
 		result = conf->bootstrap_segments_count + duration_millis / conf->segment_duration;
 		if (result < 1)
 		{
 			result = 1;
-		}
-		else if (result > MAX_SEGMENT_COUNT)
-		{
-			return INVALID_SEGMENT_COUNT;
 		}
 	}
 	else
@@ -150,14 +154,16 @@ segmenter_get_segment_count_last_rounded(segmenter_conf_t* conf, uint64_t durati
 	if (duration_millis >= conf->bootstrap_segments_total_duration)
 	{
 		duration_millis -= conf->bootstrap_segments_total_duration;
+
+		if (duration_millis > (uint64_t)conf->segment_duration * (UINT_MAX - conf->bootstrap_segments_count - 2))
+		{
+			return INVALID_SEGMENT_COUNT;
+		}
+
 		result = conf->bootstrap_segments_count + (duration_millis + conf->segment_duration / 2) / conf->segment_duration;
 		if (result < 1)
 		{
 			result = 1;
-		}
-		else if (result > MAX_SEGMENT_COUNT)
-		{
-			return INVALID_SEGMENT_COUNT;
 		}
 	}
 	else
@@ -638,7 +644,6 @@ segmenter_get_segment_durations_estimate_internal(
 			}
 			cur_item->repeat_count++;
 			
-			clip_offset += segment_duration;
 			segment_index = clip_segment_limit;
 		}
 
@@ -656,7 +661,14 @@ segmenter_get_segment_durations_estimate_internal(
 	}
 
 	// finalize the result
-	result->segment_count = clip_segment_limit;
+	result->segment_count = clip_segment_limit - media_set->initial_segment_index;
+	if (result->segment_count > MAX_SEGMENT_COUNT)
+	{
+		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+			"segmenter_get_segment_durations_accurate: segment count %uD is invalid", result->segment_count);
+		return VOD_BAD_MAPPING;
+	}
+
 	result->item_count = cur_item + 1 - result->items;
 	result->timescale = 1000;
 	result->discontinuities = total_clip_count - 1;
@@ -892,10 +904,10 @@ segmenter_get_segment_durations_accurate(
 
 	// get the segment count
 	result->segment_count = conf->get_segment_count(conf, duration_millis);
-	if (result->segment_count == INVALID_SEGMENT_COUNT)
+	if (result->segment_count > MAX_SEGMENT_COUNT)
 	{
 		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-			"segmenter_get_segment_durations_accurate: segment count is invalid");
+			"segmenter_get_segment_durations_accurate: segment count %uD is invalid", result->segment_count);
 		return VOD_BAD_DATA;
 	}
 

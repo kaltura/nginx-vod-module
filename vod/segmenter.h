@@ -35,7 +35,7 @@ typedef struct {
 	uint64_t initial_sequence_offset;
 	media_range_t* clip_ranges;
 	uint32_t clip_count;
-	uint32_t clip_index_segment_index;			// the initial segment index of the clip 'clip_index'
+	uint32_t clip_index_segment_index;			// the initial segment index of the clip 'clip_index' (segmenter_get_start_end_ranges_discontinuity parameter)
 	uint32_t first_clip_segment_index;
 } get_clip_ranges_result_t;
 

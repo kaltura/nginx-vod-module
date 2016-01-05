@@ -344,7 +344,7 @@ hds_muxer_init_track(
 	cur_stream->first_frame = cur_track->first_frame;
 	cur_stream->last_frame = cur_track->last_frame;
 
-	cur_stream->clip_start_time = cur_track->clip_start_time;
+	cur_stream->clip_start_time = hds_rescale_millis(cur_track->clip_start_time);
 	cur_stream->first_frame_time_offset = cur_track->first_frame_time_offset;
 	cur_stream->next_frame_time_offset = cur_stream->first_frame_time_offset;
 	cur_stream->next_frame_dts = rescale_time(cur_stream->next_frame_time_offset, cur_stream->timescale, HDS_TIMESCALE);
@@ -470,7 +470,7 @@ hds_calculate_output_offsets_and_write_afra_entries(
 		{
 			*p = hds_write_afra_atom_entry(
 				*p, 
-				selected_stream->next_frame_dts + hds_rescale_millis(selected_stream->clip_start_time), 
+				selected_stream->next_frame_dts + selected_stream->clip_start_time, 
 				cur_offset + afra_entries_base);
 			cur_offset += state->codec_config_size;
 		}
@@ -852,7 +852,7 @@ hds_muxer_init_fragment(
 		p = hds_muxer_write_codec_config(
 			p, 
 			state, 
-			state->first_stream->next_frame_dts + hds_rescale_millis(state->first_stream->clip_start_time));
+			state->first_stream->next_frame_dts + state->first_stream->clip_start_time);
 	}
 
 	header->len = p - header->data;
@@ -900,7 +900,7 @@ hds_muxer_start_frame(hds_muxer_state_t* state)
 	selected_stream->cur_frame_output_offset++;
 
 	selected_stream->next_frame_time_offset += state->cur_frame->duration;
-	cur_frame_dts = selected_stream->next_frame_dts + hds_rescale_millis(selected_stream->clip_start_time);
+	cur_frame_dts = selected_stream->next_frame_dts + selected_stream->clip_start_time;
 	selected_stream->next_frame_dts = rescale_time(selected_stream->next_frame_time_offset, selected_stream->timescale, HDS_TIMESCALE);
 
 	state->cache_slot_id = selected_stream->media_type;
