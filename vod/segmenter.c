@@ -665,7 +665,7 @@ segmenter_get_segment_durations_estimate_internal(
 	if (result->segment_count > MAX_SEGMENT_COUNT)
 	{
 		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-			"segmenter_get_segment_durations_accurate: segment count %uD is invalid", result->segment_count);
+			"segmenter_get_segment_durations_estimate_internal: segment count %uD is invalid", result->segment_count);
 		return VOD_BAD_MAPPING;
 	}
 

@@ -44,7 +44,7 @@ function getDurationMillis($filePath)
 	}
 	
 	// execute ffprobe
-	$commandLine = "{$ffprobeBin} -i {$filePath} -show_format -print_format json -v quiet";
+	$commandLine = "{$ffprobeBin} -i {$filePath} -show_streams -print_format json -v quiet";
 	$output = null;
 	exec($commandLine, $output);
 	
