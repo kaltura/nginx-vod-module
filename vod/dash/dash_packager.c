@@ -1156,8 +1156,9 @@ dash_packager_build_mpd(
 	cur_duration_items[MEDIA_TYPE_AUDIO] = segment_durations[MEDIA_TYPE_AUDIO].items;
 
 	clip_start_offset = 0;
+	clip_index = 0;
 
-	for (clip_index = 0; clip_index < period_count; clip_index++)
+	for (;;)
 	{
 		p = dash_packager_write_mpd_period(
 			p,
@@ -1171,6 +1172,12 @@ dash_packager_build_mpd(
 			media_set,
 			write_representation_tags,
 			representation_tags_writer_context);
+
+		clip_index++;
+		if (clip_index >= period_count)
+		{
+			break;
+		}
 
 		clip_start_offset += media_set->durations[clip_index];
 	}

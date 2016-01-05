@@ -26,7 +26,7 @@ static const ngx_http_vod_match_definition_t fragment_match_definition[] = {
 // content types
 static u_char mp4_audio_content_type[] = "audio/mp4";
 static u_char mp4_video_content_type[] = "video/mp4";
-static u_char manifest_content_type[] = "application/vnd.ms-sstr+xml";
+static u_char manifest_content_type[] = "text/xml";		// TODO: consider moving to application/vnd.ms-sstr+xml
 
 static ngx_int_t 
 ngx_http_vod_mss_handle_manifest(

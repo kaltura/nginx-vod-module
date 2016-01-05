@@ -8,7 +8,7 @@
 // manifest constants
 #define MSS_MANIFEST_HEADER_PREFIX \
 	"<?xml version=\"1.0\" encoding=\"utf-8\"?>\n"	\
-	"<SmoothStreamingMedia MajorVersion=\"2\" MinorVersion=\"1\" Duration=\"%uL\""
+	"<SmoothStreamingMedia MajorVersion=\"2\" MinorVersion=\"0\" Duration=\"%uL\""
 
 #define MSS_MANIFEST_HEADER_LIVE_ATTRIBUTES \
 	" DVRWindowLength=\"%uL\" LookAheadFragmentCount=\"%uD\" IsLive=\"TRUE\" CanSeek=\"TRUE\" CanPause=\"TRUE\""
