@@ -17,6 +17,7 @@ $filePaths = array(
 	"/web/content/r70v1/entry/data/138/192/1_5bik2rp6_1_kg6dq8kb_1.mp4",
 	);
 $ffprobeBin = '/web/content/shared/bin/ffmpeg-2.7.2-bin/ffprobe.sh';
+$timeMargin = 10000;		// a safety margin to compensate for clock differences
 
 // nginx conf params
 $segmentDuration = 10000;
@@ -47,13 +48,20 @@ function getDurationMillis($filePath)
 	$output = null;
 	exec($commandLine, $output);
 	
-	// parse the result
+	// parse the result - take the shortest duration
 	$ffmpegResult = json_decode(implode("\n", $output));
-	$duration = floatval($ffmpegResult->format->duration);
-	$duration = intval($duration * 1000);
+	$duration = null;
+	foreach ($ffmpegResult->streams as $stream)
+	{
+		$curDuration = floor(floatval($stream->duration) * 1000);
+		if (is_null($duration) || $curDuration < $duration)
+		{
+			$duration = $curDuration;
+		}
+	}
 	
 	// store to cache
-	apc_store($cacheKey,, $duration);
+	apc_store($cacheKey, $duration);
 	
 	return $duration;
 }
@@ -67,8 +75,17 @@ if ($playlistType == "live")
 	// find the duration of each cycle
 	$cycleDuration = array_sum($durations);
 	
+	// if the cycle is too small to cover the DVR window, duplicate it
+	$dvrWindowSize = $segmentDuration * $segmentCount;
+	while ($cycleDuration <= $dvrWindowSize + $timeMargin)
+	{
+		$filePaths = array_merge($filePaths, $filePaths);
+		$durations = array_merge($durations, $durations);
+		$cycleDuration *= 2;
+	}
+	
 	// start the playlist from now() - <dvr window size>
-	$currentTime = (time() - 10) * 1000 - $segmentDuration * $segmentCount;
+	$currentTime = time() * 1000 - $timeMargin - $dvrWindowSize;
 	
 	// set the first clip time to now() rounded down to cycle duration
 	$result["firstClipTime"] = floor($currentTime / $cycleDuration) * $cycleDuration;
@@ -102,8 +119,8 @@ if ($playlistType == "live")
 
 	// duplicate the clips, this is required so that we won't run out of segments 
 	// close to the end of a cycle
-	$durations = array_merge($durations, $durations);
 	$filePaths = array_merge($filePaths, $filePaths);
+	$durations = array_merge($durations, $durations);
 }
 
 // generate the result object

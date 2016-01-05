@@ -3326,6 +3326,7 @@ ngx_http_vod_handler(ngx_http_request_t *r)
 	ctx->submodule_context.conf = conf;
 	ctx->submodule_context.request_params = request_params;
 	ctx->submodule_context.media_set = media_set;
+	ctx->submodule_context.media_set.segmenter_conf = &conf->segmenter;
 	ctx->submodule_context.request = request;
 	ctx->submodule_context.cur_source = media_set.sources;
 	ctx->submodule_context.request_context.pool = r->pool;

@@ -861,8 +861,17 @@ media_set_get_live_window(
 		}
 	}
 
-	if (min_clip_ranges.clip_count <= 0 || max_clip_ranges.clip_count <= 0)
+	if (min_clip_ranges.clip_count <= 0)
 	{
+		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+			"media_set_get_live_window: no clips found for the min segment %uD", min_segment_index);
+		return VOD_BAD_MAPPING;
+	}
+
+	if (max_clip_ranges.clip_count <= 0)
+	{
+		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+			"media_set_get_live_window: no clips found for the max segment %uD", max_segment_index);
 		return VOD_BAD_MAPPING;
 	}
 
