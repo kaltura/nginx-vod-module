@@ -1,6 +1,6 @@
 #include "sample_aes_aac_filter.h"
 
-#if (NGX_HAVE_OPENSSL_EVP)
+#if (VOD_HAVE_OPENSSL_EVP)
 
 #include <openssl/aes.h>
 #include "aes_cbc_encrypt.h"
@@ -189,4 +189,4 @@ sample_aes_aac_filter_write_frame_body(void* context, const u_char* buffer, uint
 	return VOD_UNEXPECTED;
 }
 
-#endif //(NGX_HAVE_OPENSSL_EVP)
+#endif //(VOD_HAVE_OPENSSL_EVP)

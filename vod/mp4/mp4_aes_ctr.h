@@ -3,9 +3,9 @@
 
 // includes
 #include "../common.h"
-#if (NGX_HAVE_OPENSSL_EVP)
+#if (VOD_HAVE_OPENSSL_EVP)
 #include <openssl/evp.h>
-#endif //(NGX_HAVE_OPENSSL_EVP)
+#endif //(VOD_HAVE_OPENSSL_EVP)
 
 // constants
 #ifndef AES_BLOCK_SIZE
@@ -19,9 +19,9 @@
 // typedefs
 typedef struct {
 	request_context_t* request_context;
-#if (NGX_HAVE_OPENSSL_EVP)
+#if (VOD_HAVE_OPENSSL_EVP)
 	EVP_CIPHER_CTX cipher;
-#endif //(NGX_HAVE_OPENSSL_EVP)
+#endif //(VOD_HAVE_OPENSSL_EVP)
 	u_char counter[MP4_AES_CTR_COUNTER_SIZE];
 	u_char encrypted_counter[MP4_AES_CTR_COUNTER_SIZE];
 	int block_offset;

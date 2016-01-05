@@ -2626,7 +2626,7 @@ mp4_parser_parse_frames(
 		return VOD_ALLOC_FAILED;
 	}
 
-	ngx_memzero(result, sizeof(*result));
+	vod_memzero(result, sizeof(*result));
 	result->mvhd_atom = base->mvhd_atom;
 
 	// in case we need to parse the frame sizes, we already find the total size

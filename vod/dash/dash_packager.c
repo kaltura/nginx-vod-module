@@ -990,7 +990,7 @@ dash_packager_build_mpd(
 	segment_durations_t segment_durations[MEDIA_TYPE_COUNT];
 	segment_duration_item_t* cur_duration_items[MEDIA_TYPE_COUNT];
 	segmenter_conf_t* segmenter_conf = media_set->segmenter_conf;
-	ngx_tm_t start_time_gmt;
+	vod_tm_t start_time_gmt;
 	size_t base_url_temp_buffer_size = 0;
 	size_t base_period_size;
 	size_t result_size = 0;
@@ -1134,14 +1134,14 @@ dash_packager_build_mpd(
 		window_size = segment_durations[media_type].end_time - segment_durations[media_type].start_time;
 		min_update_period = segmenter_conf->segment_duration / 2;
 
-		ngx_gmtime(segment_durations[media_type].start_time / 1000, &start_time_gmt);
+		vod_gmtime(segment_durations[media_type].start_time / 1000, &start_time_gmt);
 
 		p = vod_sprintf(result->data,
 			VOD_DASH_MANIFEST_HEADER_LIVE,
 			(uint32_t)(min_update_period / 1000),
 			(uint32_t)(min_update_period % 1000),
-			start_time_gmt.ngx_tm_year, start_time_gmt.ngx_tm_mon, start_time_gmt.ngx_tm_mday,
-			start_time_gmt.ngx_tm_hour, start_time_gmt.ngx_tm_min, start_time_gmt.ngx_tm_sec,
+			start_time_gmt.vod_tm_year, start_time_gmt.vod_tm_mon, start_time_gmt.vod_tm_mday,
+			start_time_gmt.vod_tm_hour, start_time_gmt.vod_tm_min, start_time_gmt.vod_tm_sec,
 			(uint32_t)(segmenter_conf->max_segment_duration / 1000),
 			(uint32_t)(segmenter_conf->max_segment_duration % 1000),
 			(uint32_t)(window_size / 1000),

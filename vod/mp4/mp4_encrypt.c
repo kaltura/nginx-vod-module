@@ -1,6 +1,6 @@
 #include "mp4_encrypt.h"
 
-#if (NGX_HAVE_OPENSSL_EVP)
+#if (VOD_HAVE_OPENSSL_EVP)
 
 #include "mp4_decrypt.h"
 #include "mp4_builder.h"
@@ -755,4 +755,4 @@ mp4_encrypt_audio_write_saiz_saio(mp4_encrypt_state_t* state, u_char* p, size_t 
 	return NULL;
 }
 
-#endif //(NGX_HAVE_OPENSSL_EVP)
+#endif //(VOD_HAVE_OPENSSL_EVP)

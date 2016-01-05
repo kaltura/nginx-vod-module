@@ -176,7 +176,7 @@ media_set_parse_encryption_key(
 	void* dest)
 {
 	media_filter_parse_context_t* context = ctx;
-#if (NGX_HAVE_OPENSSL_EVP)
+#if (VOD_HAVE_OPENSSL_EVP)
 	u_char* result;
 
 	result = vod_alloc(context->request_context->pool, MP4_AES_CTR_KEY_SIZE);
@@ -194,7 +194,7 @@ media_set_parse_encryption_key(
 	vod_log_error(VOD_LOG_ERR, context->request_context->log, 0,
 		"media_set_parse_encryption_key: decryption not supported, recompile with openssl to enable it");
 	return VOD_BAD_REQUEST;
-#endif //(NGX_HAVE_OPENSSL_EVP)
+#endif //(VOD_HAVE_OPENSSL_EVP)
 }
 
 static vod_status_t 
@@ -768,7 +768,7 @@ media_set_get_live_window(
 	uint32_t max_segment_index;
 
 	// non-segment request
-	current_time = ngx_time() * 1000;
+	current_time = vod_time() * 1000;
 	if (media_set->first_clip_time > current_time)
 	{
 		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
@@ -1032,12 +1032,12 @@ media_set_parse_json(
 	if (params[MEDIA_SET_PARAM_PLAYLIST_TYPE] != NULL)
 	{
 		if (params[MEDIA_SET_PARAM_PLAYLIST_TYPE]->v.str.len == playlist_type_vod.len &&
-			ngx_strncasecmp(params[MEDIA_SET_PARAM_PLAYLIST_TYPE]->v.str.data, playlist_type_vod.data, playlist_type_vod.len) == 0)
+			vod_strncasecmp(params[MEDIA_SET_PARAM_PLAYLIST_TYPE]->v.str.data, playlist_type_vod.data, playlist_type_vod.len) == 0)
 		{
 			result->type = MEDIA_SET_VOD;
 		}
 		else if (params[MEDIA_SET_PARAM_PLAYLIST_TYPE]->v.str.len == playlist_type_live.len &&
-			ngx_strncasecmp(params[MEDIA_SET_PARAM_PLAYLIST_TYPE]->v.str.data, playlist_type_live.data, playlist_type_live.len) == 0)
+			vod_strncasecmp(params[MEDIA_SET_PARAM_PLAYLIST_TYPE]->v.str.data, playlist_type_live.data, playlist_type_live.len) == 0)
 		{
 			result->type = MEDIA_SET_LIVE;
 		}

@@ -87,6 +87,7 @@ void vod_log_error(vod_uint_t level, vod_log_t *log, int err,
 
 #define VOD_HAVE_LIB_AV_CODEC NGX_HAVE_LIB_AV_CODEC 
 #define VOD_HAVE_LIB_AV_FILTER NGX_HAVE_LIB_AV_FILTER
+#define VOD_HAVE_OPENSSL_EVP NGX_HAVE_OPENSSL_EVP
 
 // macros
 #define vod_container_of(ptr, type, member) (type *)((char *)(ptr) - offsetof(type, member))
@@ -117,6 +118,7 @@ void vod_log_error(vod_uint_t level, vod_log_t *log, int err,
 #define vod_sprintf ngx_sprintf
 #define vod_snprintf ngx_snprintf
 #define vod_strncmp(s1, s2, n) ngx_strncmp(s1, s2, n)
+#define vod_strncasecmp(s1, s2, n) ngx_strncasecmp(s1, s2, n)
 #define vod_atoi(str, len) ngx_atoi(str, len)
 #define vod_atofp(str, len, point) ngx_atofp(str, len, point)
 
@@ -133,6 +135,18 @@ void vod_log_error(vod_uint_t level, vod_log_t *log, int err,
 #define vod_hash_init(hinit, names, nelts) ngx_hash_init(hinit, names, nelts)
 #define vod_hash_find(hash, key, name, len) ngx_hash_find(hash, key, name, len)
 
+// time functions
+#define vod_time() ngx_time()
+#define vod_gmtime(t, tp) ngx_gmtime(t, tp)
+#define vod_tm_sec   ngx_tm_sec
+#define vod_tm_min   ngx_tm_min
+#define vod_tm_hour  ngx_tm_hour
+#define vod_tm_mday  ngx_tm_mday
+#define vod_tm_mon   ngx_tm_mon
+#define vod_tm_year  ngx_tm_year
+#define vod_tm_wday  ngx_tm_wday
+#define vod_tm_isdst ngx_tm_isdst
+
 // types
 #define vod_hash_t ngx_hash_t
 #define vod_hash_key_t ngx_hash_key_t
@@ -145,6 +159,7 @@ void vod_log_error(vod_uint_t level, vod_log_t *log, int err,
 #define vod_str_t ngx_str_t
 #define vod_buf_t ngx_buf_t
 #define vod_chain_t ngx_chain_t
+#define vod_tm_t ngx_tm_t
 
 #define vod_string(str) ngx_string(str)
 #define vod_null_string ngx_null_string
