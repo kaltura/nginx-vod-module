@@ -57,32 +57,32 @@ static ngx_http_vod_stat_def_t buffer_cache_stat_defs[] = {
 
 static ngx_http_vod_cache_info_t cache_infos[] = {
 	{
-		offsetof(ngx_http_vod_loc_conf_t, moov_cache_zone),
+		offsetof(ngx_http_vod_loc_conf_t, moov_cache),
 		ngx_string("<moov_cache>\r\n"),
 		ngx_string("</moov_cache>\r\n"),
 	},
 	{
-		offsetof(ngx_http_vod_loc_conf_t, response_cache_zone[CACHE_TYPE_VOD]),
+		offsetof(ngx_http_vod_loc_conf_t, response_cache[CACHE_TYPE_VOD]),
 		ngx_string("<response_cache>\r\n"),
 		ngx_string("</response_cache>\r\n"),
 	},
 	{
-		offsetof(ngx_http_vod_loc_conf_t, response_cache_zone[CACHE_TYPE_LIVE]),
+		offsetof(ngx_http_vod_loc_conf_t, response_cache[CACHE_TYPE_LIVE]),
 		ngx_string("<live_response_cache>\r\n"),
 		ngx_string("</live_response_cache>\r\n"),
 	},
 	{
-		offsetof(ngx_http_vod_loc_conf_t, path_mapping_cache_zone[CACHE_TYPE_VOD]),
+		offsetof(ngx_http_vod_loc_conf_t, path_mapping_cache[CACHE_TYPE_VOD]),
 		ngx_string("<path_mapping_cache>\r\n"),
 		ngx_string("</path_mapping_cache>\r\n"),
 	},
 	{
-		offsetof(ngx_http_vod_loc_conf_t, path_mapping_cache_zone[CACHE_TYPE_LIVE]),
+		offsetof(ngx_http_vod_loc_conf_t, path_mapping_cache[CACHE_TYPE_LIVE]),
 		ngx_string("<live_path_mapping_cache>\r\n"),
 		ngx_string("</live_path_mapping_cache>\r\n"),
 	},
 	{
-		offsetof(ngx_http_vod_loc_conf_t, drm_info_cache_zone),
+		offsetof(ngx_http_vod_loc_conf_t, drm_info_cache),
 		ngx_string("<drm_info_cache>\r\n"),
 		ngx_string("</drm_info_cache>\r\n"),
 	},
@@ -122,7 +122,7 @@ ngx_http_vod_status_reset(ngx_http_request_t *r)
 {
 	ngx_perf_counters_t* perf_counters;
 	ngx_http_vod_loc_conf_t *conf;
-	ngx_shm_zone_t *cur_cache;
+	ngx_buffer_cache_t *cur_cache;
 	unsigned i;
 
 	conf = ngx_http_get_module_loc_conf(r, ngx_http_vod_module);
@@ -130,7 +130,7 @@ ngx_http_vod_status_reset(ngx_http_request_t *r)
 
 	for (i = 0; i < sizeof(cache_infos) / sizeof(cache_infos[0]); i++)
 	{
-		cur_cache = *(ngx_shm_zone_t **)((u_char*)conf + cache_infos[i].conf_offset);
+		cur_cache = *(ngx_buffer_cache_t **)((u_char*)conf + cache_infos[i].conf_offset);
 		if (cur_cache == NULL)
 		{
 			continue;
@@ -161,7 +161,7 @@ ngx_http_vod_status_handler(ngx_http_request_t *r)
 	ngx_buffer_cache_stats_t stats;
 	ngx_http_vod_loc_conf_t *conf;
 	ngx_http_vod_stat_def_t* cur_stat;
-	ngx_shm_zone_t *cur_cache;
+	ngx_buffer_cache_t *cur_cache;
 	ngx_str_t response;
 	ngx_str_t reset;
 	u_char* p;
@@ -188,7 +188,7 @@ ngx_http_vod_status_handler(ngx_http_request_t *r)
 	result_size = sizeof(status_prefix) - 1;
 	for (i = 0; i < sizeof(cache_infos) / sizeof(cache_infos[0]); i++)
 	{
-		cur_cache = *(ngx_shm_zone_t **)((u_char*)conf + cache_infos[i].conf_offset);
+		cur_cache = *(ngx_buffer_cache_t **)((u_char*)conf + cache_infos[i].conf_offset);
 		if (cur_cache == NULL)
 		{
 			continue;
@@ -223,7 +223,7 @@ ngx_http_vod_status_handler(ngx_http_request_t *r)
 
 	for (i = 0; i < sizeof(cache_infos) / sizeof(cache_infos[0]); i++)
 	{
-		cur_cache = *(ngx_shm_zone_t **)((u_char*)conf + cache_infos[i].conf_offset);
+		cur_cache = *(ngx_buffer_cache_t **)((u_char*)conf + cache_infos[i].conf_offset);
 		if (cur_cache == NULL)
 		{
 			continue;

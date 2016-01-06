@@ -15,7 +15,7 @@
 
 	the shared memory is composed of 3 sections:
 	1. fixed size headers - contains the ngx_slab_pool_t struct allocated by nginx,
-		the log context string and ngx_buffer_cache_t
+		the log context string and ngx_buffer_cache_sh_t
 	2. entries - an array of ngx_buffer_cache_entry_t, each entry has a key and 
 		points to a buffer in the buffers section. the entries are connected with a 
 		red/black tree for fast lookup by key. the entries section grows as needed until 
@@ -111,7 +111,7 @@ ngx_buffer_cache_rbtree_lookup(ngx_rbtree_t *rbtree, const u_char* key, uint32_t
 }
 
 static void
-ngx_buffer_cache_reset(ngx_buffer_cache_t *cache)
+ngx_buffer_cache_reset(ngx_buffer_cache_sh_t *cache)
 {
 	cache->entries_end = cache->entries_start;
 	cache->buffers_start = cache->buffers_end;
@@ -129,29 +129,25 @@ ngx_buffer_cache_reset(ngx_buffer_cache_t *cache)
 static ngx_int_t
 ngx_buffer_cache_init(ngx_shm_zone_t *shm_zone, void *data)
 {
-	ngx_buffer_cache_t *cache = data;
-	ngx_slab_pool_t *shpool;
+	ngx_buffer_cache_sh_t *sh;
+	ngx_buffer_cache_t *ocache = data;
+	ngx_buffer_cache_t *cache;
 	u_char* p;
 
-	if (cache) 
-	{
-		if ((intptr_t)shm_zone->data != cache->expiration)
-		{
-			ngx_log_error(NGX_LOG_EMERG, shm_zone->shm.log, 0,
-				"cache \"%V\" had previously different expiration",
-				&shm_zone->shm.name);
-			return NGX_ERROR;
-		}
+	cache = shm_zone->data;
 
-		shm_zone->data = data;
+	if (ocache)
+	{
+		cache->sh = ocache->sh;
+		cache->shpool = ocache->shpool;
 		return NGX_OK;
 	}
 
-	shpool = (ngx_slab_pool_t *)shm_zone->shm.addr;
+	cache->shpool = (ngx_slab_pool_t *)shm_zone->shm.addr;
 
 	if (shm_zone->shm.exists) 
 	{
-		shm_zone->data = shpool->data;
+		cache->sh = cache->shpool->data;
 		return NGX_OK;
 	}
 
@@ -159,35 +155,34 @@ ngx_buffer_cache_init(ngx_shm_zone_t *shm_zone, void *data)
 	p = shm_zone->shm.addr + sizeof(ngx_slab_pool_t);
 
 	// initialize the log context
-	shpool->log_ctx = p;
-	p = ngx_sprintf(shpool->log_ctx, " in buffer cache \"%V\"%Z", &shm_zone->shm.name);
+	cache->shpool->log_ctx = p;
+	p = ngx_sprintf(cache->shpool->log_ctx, " in buffer cache \"%V\"%Z", &shm_zone->shm.name);
 
-	// allocate the cache state
-	cache = (ngx_buffer_cache_t*)p;
-	p += sizeof(*cache);
+	// allocate the shared cache state
+	sh = (ngx_buffer_cache_sh_t*)p;
+	p += sizeof(*sh);
+	cache->sh = sh;
+
+	cache->shpool->data = sh;
 
 	// initialize fixed cache fields
-	cache->entries_start = (ngx_buffer_cache_entry_t*)p;
-	cache->buffers_end = shm_zone->shm.addr + shm_zone->shm.size;
-	cache->expiration = (intptr_t)shm_zone->data;
-	cache->access_time = 0;
+	sh->entries_start = (ngx_buffer_cache_entry_t*)p;
+	sh->buffers_end = shm_zone->shm.addr + shm_zone->shm.size;
+	sh->access_time = 0;
 
 	// reset the stats
-	ngx_memzero(&cache->stats, sizeof(cache->stats));
+	ngx_memzero(&sh->stats, sizeof(sh->stats));
 
 	// reset the cache status
-	ngx_buffer_cache_reset(cache);
-	cache->reset = 0;
-
-	// set the cache struct as the data of the shared pool
-	shpool->data = cache;
+	ngx_buffer_cache_reset(sh);
+	sh->reset = 0;
 
 	return NGX_OK;
 }
 
 /* Note: must be called with the mutex locked */
 static ngx_buffer_cache_entry_t*
-ngx_buffer_cache_free_oldest_entry(ngx_buffer_cache_t *cache, ngx_flag_t expired_only)
+ngx_buffer_cache_free_oldest_entry(ngx_buffer_cache_sh_t *cache, uint32_t expiration)
 {
 	ngx_buffer_cache_entry_t* entry;
 
@@ -205,7 +200,7 @@ ngx_buffer_cache_free_oldest_entry(ngx_buffer_cache_t *cache, ngx_flag_t expired
 	}
 
 	// make sure the entry is expired, if that is the requirement
-	if (expired_only && ngx_time() < entry->write_time + cache->expiration)
+	if (expiration && ngx_time() < entry->write_time + expiration)
 	{
 		return NULL;
 	}
@@ -241,7 +236,7 @@ ngx_buffer_cache_free_oldest_entry(ngx_buffer_cache_t *cache, ngx_flag_t expired
 
 /* Note: must be called with the mutex locked */
 static ngx_buffer_cache_entry_t*
-ngx_buffer_cache_get_free_entry(ngx_buffer_cache_t *cache)
+ngx_buffer_cache_get_free_entry(ngx_buffer_cache_sh_t *cache)
 {
 	ngx_buffer_cache_entry_t* entry;
 
@@ -269,7 +264,7 @@ ngx_buffer_cache_get_free_entry(ngx_buffer_cache_t *cache)
 /* Note: must be called with the mutex locked */
 static u_char*
 ngx_buffer_cache_get_free_buffer(
-	ngx_buffer_cache_t *cache,
+	ngx_buffer_cache_sh_t *cache,
 	size_t size)
 {
 	u_char* buffer_start;
@@ -326,35 +321,31 @@ ngx_buffer_cache_get_free_buffer(
 
 ngx_flag_t
 ngx_buffer_cache_fetch(
-	ngx_shm_zone_t *shm_zone,
+	ngx_buffer_cache_t* cache,
 	u_char* key,
 	u_char** buffer,
 	size_t* buffer_size)
 {
 	ngx_buffer_cache_entry_t* entry;
-	ngx_buffer_cache_t *cache;
-	ngx_slab_pool_t *shpool;
+	ngx_buffer_cache_sh_t *sh = cache->sh;
 	ngx_flag_t result = 0;
 	uint32_t hash;
 
 	hash = ngx_crc32_short(key, BUFFER_CACHE_KEY_SIZE);
 
-	shpool = (ngx_slab_pool_t *)shm_zone->shm.addr;
-	cache = shpool->data;
+	ngx_shmtx_lock(&cache->shpool->mutex);
 
-	ngx_shmtx_lock(&shpool->mutex);
-
-	if (!cache->reset)
+	if (!sh->reset)
 	{
-		entry = ngx_buffer_cache_rbtree_lookup(&cache->rbtree, key, hash);
+		entry = ngx_buffer_cache_rbtree_lookup(&sh->rbtree, key, hash);
 		if (entry != NULL && entry->state == CES_READY && 
 			(cache->expiration == 0 || ngx_time() < entry->write_time + cache->expiration))
 		{
 			result = 1;
 
 			// update stats
-			cache->stats.fetch_hit++;
-			cache->stats.fetch_bytes += entry->buffer_size;
+			sh->stats.fetch_hit++;
+			sh->stats.fetch_bytes += entry->buffer_size;
 
 			// copy buffer pointer and size
 			*buffer = entry->start_offset;
@@ -362,30 +353,29 @@ ngx_buffer_cache_fetch(
 
 			// Note: setting the access time of the entry and cache to prevent it 
 			//		from being freed while the caller uses the buffer
-			cache->access_time = entry->access_time = ngx_time();
+			sh->access_time = entry->access_time = ngx_time();
 		}
 		else
 		{
 			// update stats
-			cache->stats.fetch_miss++;
+			sh->stats.fetch_miss++;
 		}
 	}
 
-	ngx_shmtx_unlock(&shpool->mutex);
+	ngx_shmtx_unlock(&cache->shpool->mutex);
 
 	return result;
 }
 
 ngx_flag_t
 ngx_buffer_cache_store_gather(
-	ngx_shm_zone_t *shm_zone, 
+	ngx_buffer_cache_t* cache, 
 	u_char* key, 
 	ngx_str_t* buffers,
 	size_t buffer_count)
 {
 	ngx_buffer_cache_entry_t* entry;
-	ngx_buffer_cache_t *cache;
-	ngx_slab_pool_t *shpool;
+	ngx_buffer_cache_sh_t *sh = cache->sh;
 	ngx_str_t* cur_buffer;
 	ngx_str_t* last_buffer;
 	size_t buffer_size;
@@ -395,28 +385,25 @@ ngx_buffer_cache_store_gather(
 
 	hash = ngx_crc32_short(key, BUFFER_CACHE_KEY_SIZE);
 
-	shpool = (ngx_slab_pool_t *)shm_zone->shm.addr;
-	cache = shpool->data;
+	ngx_shmtx_lock(&cache->shpool->mutex);
 
-	ngx_shmtx_lock(&shpool->mutex);
-
-	if (cache->reset)
+	if (sh->reset)
 	{
 		// a previous store operation was killed in progress, need to reset the cache
 		// since the data structures may be corrupt. we can only reset the cache after
 		// the access time expires since other processes may still be reading from / 
 		// writing to the cache
-		if (ngx_time() < cache->access_time + CACHE_LOCK_EXPIRATION)
+		if (ngx_time() < sh->access_time + CACHE_LOCK_EXPIRATION)
 		{
-			ngx_shmtx_unlock(&shpool->mutex);
+			ngx_shmtx_unlock(&cache->shpool->mutex);
 			return 0;
 		}
 
 		// reset the cache, leave the reset flag enabled
-		ngx_buffer_cache_reset(cache);
+		ngx_buffer_cache_reset(sh);
 
 		// update stats
-		cache->stats.reset++;
+		sh->stats.reset++;
 	}
 	else
 	{
@@ -425,7 +412,7 @@ ngx_buffer_cache_store_gather(
 		{
 			for (evictions = MAX_EVICTIONS_PER_STORE; evictions > 0; evictions--)
 			{
-				if (!ngx_buffer_cache_free_oldest_entry(cache, 1))
+				if (!ngx_buffer_cache_free_oldest_entry(sh, cache->expiration))
 				{
 					break;
 				}
@@ -433,20 +420,20 @@ ngx_buffer_cache_store_gather(
 		}
 
 		// make sure the entry does not already exist
-		entry = ngx_buffer_cache_rbtree_lookup(&cache->rbtree, key, hash);
+		entry = ngx_buffer_cache_rbtree_lookup(&sh->rbtree, key, hash);
 		if (entry != NULL)
 		{
-			cache->stats.store_exists++;
-			ngx_shmtx_unlock(&shpool->mutex);
+			sh->stats.store_exists++;
+			ngx_shmtx_unlock(&cache->shpool->mutex);
 			return 0;
 		}
 
 		// enable the reset flag before we start making any changes
-		cache->reset = 1;
+		sh->reset = 1;
 	}
 
 	// allocate a new entry
-	entry = ngx_buffer_cache_get_free_entry(cache);
+	entry = ngx_buffer_cache_get_free_entry(sh);
 	if (entry == NULL)
 	{
 		goto error;
@@ -461,7 +448,7 @@ ngx_buffer_cache_store_gather(
 	}
 
 	// allocate a buffer to hold the data
-	target_buffer = ngx_buffer_cache_get_free_buffer(cache, buffer_size);
+	target_buffer = ngx_buffer_cache_get_free_buffer(sh, buffer_size);
 	if (target_buffer == NULL)
 	{
 		goto error;
@@ -475,26 +462,26 @@ ngx_buffer_cache_store_gather(
 	entry->buffer_size = buffer_size;
 
 	// update the write position
-	cache->buffers_write = target_buffer;
+	sh->buffers_write = target_buffer;
 
 	// move from free_queue to used_queue
 	ngx_queue_remove(&entry->queue_node);
-	ngx_queue_insert_tail(&cache->used_queue, &entry->queue_node);
+	ngx_queue_insert_tail(&sh->used_queue, &entry->queue_node);
 
 	// insert to rbtree
-	ngx_rbtree_insert(&cache->rbtree, &entry->node);
+	ngx_rbtree_insert(&sh->rbtree, &entry->node);
 
 	// update stats
-	cache->stats.store_ok++;
-	cache->stats.store_bytes += buffer_size;
+	sh->stats.store_ok++;
+	sh->stats.store_bytes += buffer_size;
 
 	// Note: the memcpy is performed after releasing the lock to avoid holding the lock for a long time
 	//		setting the access time of the entry and cache prevents it from being freed
-	cache->access_time = entry->access_time = ngx_time();
+	sh->access_time = entry->access_time = ngx_time();
 	entry->write_time = ngx_time();
 
-	cache->reset = 0;
-	ngx_shmtx_unlock(&shpool->mutex);
+	sh->reset = 0;
+	ngx_shmtx_unlock(&cache->shpool->mutex);
 
 	for (cur_buffer = buffers; cur_buffer < last_buffer; cur_buffer++)
 	{
@@ -507,15 +494,15 @@ ngx_buffer_cache_store_gather(
 	return 1;
 
 error:
-	cache->stats.store_err++;
-	cache->reset = 0;
-	ngx_shmtx_unlock(&shpool->mutex);
+	sh->stats.store_err++;
+	sh->reset = 0;
+	ngx_shmtx_unlock(&cache->shpool->mutex);
 	return 0;
 }
 
 ngx_flag_t
 ngx_buffer_cache_store(
-	ngx_shm_zone_t *shm_zone,
+	ngx_buffer_cache_t* cache,
 	u_char* key,
 	u_char* source_buffer,
 	size_t buffer_size)
@@ -525,59 +512,57 @@ ngx_buffer_cache_store(
 	buffer.data = source_buffer;
 	buffer.len = buffer_size;
 
-	return ngx_buffer_cache_store_gather(shm_zone, key, &buffer, 1);
+	return ngx_buffer_cache_store_gather(cache, key, &buffer, 1);
 }
 
 void
 ngx_buffer_cache_get_stats(
-	ngx_shm_zone_t *shm_zone,
+	ngx_buffer_cache_t* cache,
 	ngx_buffer_cache_stats_t* stats)
 {
-	ngx_buffer_cache_t *cache;
-	ngx_slab_pool_t *shpool;
+	ngx_buffer_cache_sh_t *sh = cache->sh;
 
-	shpool = (ngx_slab_pool_t *)shm_zone->shm.addr;
-	cache = shpool->data;
+	ngx_shmtx_lock(&cache->shpool->mutex);
 
-	ngx_shmtx_lock(&shpool->mutex);
+	memcpy(stats, &sh->stats, sizeof(sh->stats));
 
-	memcpy(stats, &cache->stats, sizeof(cache->stats));
+	stats->entries = sh->entries_end - sh->entries_start;
+	stats->data_size = sh->buffers_end - sh->buffers_start;
 
-	stats->entries = cache->entries_end - cache->entries_start;
-	stats->data_size = cache->buffers_end - cache->buffers_start;
-
-	ngx_shmtx_unlock(&shpool->mutex);
+	ngx_shmtx_unlock(&cache->shpool->mutex);
 }
 
 void
-ngx_buffer_cache_reset_stats(ngx_shm_zone_t *shm_zone)
+ngx_buffer_cache_reset_stats(ngx_buffer_cache_t* cache)
 {
-	ngx_buffer_cache_t *cache;
-	ngx_slab_pool_t *shpool;
+	ngx_shmtx_lock(&cache->shpool->mutex);
 
-	shpool = (ngx_slab_pool_t *)shm_zone->shm.addr;
-	cache = shpool->data;
+	ngx_memzero(&cache->sh->stats, sizeof(cache->sh->stats));
 
-	ngx_shmtx_lock(&shpool->mutex);
-
-	ngx_memzero(&cache->stats, sizeof(cache->stats));
-
-	ngx_shmtx_unlock(&shpool->mutex);
+	ngx_shmtx_unlock(&cache->shpool->mutex);
 }
 
-ngx_shm_zone_t* 
-ngx_buffer_cache_create_zone(ngx_conf_t *cf, ngx_str_t *name, size_t size, time_t expiration, void *tag)
+ngx_buffer_cache_t*
+ngx_buffer_cache_create(ngx_conf_t *cf, ngx_str_t *name, size_t size, time_t expiration, void *tag)
 {
-	ngx_shm_zone_t* result;
+	ngx_buffer_cache_t* cache;
 
-	result = ngx_shared_memory_add(cf, name, size, tag);
-	if (result == NULL)
+	cache = ngx_pcalloc(cf->pool, sizeof(ngx_buffer_cache_t));
+	if (cache == NULL) 
+	{
+		return NGX_CONF_ERROR;
+	}
+
+	cache->expiration = expiration;
+
+	cache->shm_zone = ngx_shared_memory_add(cf, name, size, tag);
+	if (cache->shm_zone == NULL)
 	{
 		return NULL;
 	}
 
-	result->init = ngx_buffer_cache_init;
-	result->data = (void*)(intptr_t)expiration;
+	cache->shm_zone->init = ngx_buffer_cache_init;
+	cache->shm_zone->data = cache;
 
-	return result;
+	return cache;
 }

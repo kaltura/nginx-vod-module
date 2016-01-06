@@ -215,7 +215,7 @@ ngx_http_vod_set_suburi_var(ngx_http_request_t *r, ngx_http_variable_value_t *v,
 static ngx_flag_t
 ngx_buffer_cache_fetch_perf(
 	ngx_perf_counters_t* perf_counters,
-	ngx_shm_zone_t *shm_zone,
+	ngx_buffer_cache_t* cache,
 	u_char* key,
 	u_char** buffer,
 	size_t* buffer_size)
@@ -225,7 +225,7 @@ ngx_buffer_cache_fetch_perf(
 	
 	ngx_perf_counter_start(pcctx);
 
-	result = ngx_buffer_cache_fetch(shm_zone, key, buffer, buffer_size);
+	result = ngx_buffer_cache_fetch(cache, key, buffer, buffer_size);
 
 	ngx_perf_counter_end(perf_counters, pcctx, PC_FETCH_CACHE);
 
@@ -236,16 +236,16 @@ static ngx_flag_t
 ngx_buffer_cache_fetch_copy_perf(
 	ngx_http_request_t* r,
 	ngx_perf_counters_t* perf_counters,
-	ngx_shm_zone_t** shm_zones,
-	uint32_t zone_count,
+	ngx_buffer_cache_t** caches,
+	uint32_t cache_count,
 	u_char* key,
 	u_char** buffer,
 	size_t* buffer_size)
 {
 	ngx_perf_counter_context(pcctx);
-	ngx_shm_zone_t** shm_zones_end = shm_zones + zone_count;
-	ngx_shm_zone_t** shm_zone_ptr;
-	ngx_shm_zone_t* shm_zone;
+	ngx_buffer_cache_t** caches_end = caches + cache_count;
+	ngx_buffer_cache_t** cache_ptr;
+	ngx_buffer_cache_t* cache;
 	ngx_flag_t result;
 	u_char* original_buffer;
 	u_char* buffer_copy;
@@ -253,15 +253,15 @@ ngx_buffer_cache_fetch_copy_perf(
 
 	ngx_perf_counter_start(pcctx);
 
-	for (shm_zone_ptr = shm_zones; shm_zone_ptr < shm_zones_end; shm_zone_ptr++)
+	for (cache_ptr = caches; cache_ptr < caches_end; cache_ptr++)
 	{
-		shm_zone = *shm_zone_ptr;
-		if (shm_zone == NULL)
+		cache = *cache_ptr;
+		if (cache == NULL)
 		{
 			continue;
 		}
 
-		result = ngx_buffer_cache_fetch(shm_zone, key, &original_buffer, &original_size);
+		result = ngx_buffer_cache_fetch(cache, key, &original_buffer, &original_size);
 		if (!result)
 		{
 			continue;
@@ -294,7 +294,7 @@ ngx_buffer_cache_fetch_copy_perf(
 static ngx_flag_t
 ngx_buffer_cache_store_perf(
 	ngx_perf_counters_t* perf_counters,
-	ngx_shm_zone_t *shm_zone,
+	ngx_buffer_cache_t* cache,
 	u_char* key,
 	u_char* source_buffer,
 	size_t buffer_size)
@@ -304,7 +304,7 @@ ngx_buffer_cache_store_perf(
 
 	ngx_perf_counter_start(pcctx);
 
-	result = ngx_buffer_cache_store(shm_zone, key, source_buffer, buffer_size);
+	result = ngx_buffer_cache_store(cache, key, source_buffer, buffer_size);
 
 	ngx_perf_counter_end(perf_counters, pcctx, PC_STORE_CACHE);
 
@@ -314,7 +314,7 @@ ngx_buffer_cache_store_perf(
 static ngx_flag_t 
 ngx_buffer_cache_store_gather_perf(
 	ngx_perf_counters_t* perf_counters,
-	ngx_shm_zone_t *shm_zone,
+	ngx_buffer_cache_t* cache,
 	u_char* key,
 	ngx_str_t* buffers,
 	size_t buffer_count)
@@ -324,7 +324,7 @@ ngx_buffer_cache_store_gather_perf(
 
 	ngx_perf_counter_start(pcctx);
 
-	result = ngx_buffer_cache_store_gather(shm_zone, key, buffers, buffer_count);
+	result = ngx_buffer_cache_store_gather(cache, key, buffers, buffer_count);
 
 	ngx_perf_counter_end(perf_counters, pcctx, PC_STORE_CACHE);
 
@@ -482,11 +482,11 @@ ngx_http_vod_drm_info_request_finished(void* context, ngx_int_t rc, ngx_buf_t* r
 	}
 
 	// save to cache
-	if (conf->drm_info_cache_zone != NULL)
+	if (conf->drm_info_cache != NULL)
 	{
 		if (ngx_buffer_cache_store_perf(
 			ctx->perf_counters,
-			conf->drm_info_cache_zone,
+			conf->drm_info_cache,
 			ctx->submodule_context.cur_sequence->uri_key,
 			drm_info.data,
 			drm_info.len))
@@ -533,13 +533,13 @@ ngx_http_vod_state_machine_get_drm_info(ngx_http_vod_ctx_t *ctx)
 		ctx->submodule_context.cur_sequence < ctx->submodule_context.media_set.sequences_end;
 		ctx->submodule_context.cur_sequence++)
 	{
-		if (conf->drm_info_cache_zone != NULL)
+		if (conf->drm_info_cache != NULL)
 		{
 			// try to read the drm info from cache
 			if (ngx_buffer_cache_fetch_copy_perf(
 				r, 
 				ctx->perf_counters, 
-				&conf->drm_info_cache_zone, 
+				&conf->drm_info_cache, 
 				1, 
 				ctx->submodule_context.cur_sequence->uri_key, 
 				&drm_info.data, 
@@ -1029,10 +1029,10 @@ ngx_http_vod_state_machine_parse_moov_atoms(ngx_http_vod_ctx_t *ctx)
 		switch (ctx->state)
 		{
 		case STATE_PARSE_MOOV_INITIAL:
-			if (conf->moov_cache_zone != NULL)
+			if (conf->moov_cache != NULL)
 			{
 				// try to read the moov atom from cache
-				if (ngx_buffer_cache_fetch_perf(ctx->perf_counters, conf->moov_cache_zone, cur_source->file_key, &cache_buffer, &cache_size) &&
+				if (ngx_buffer_cache_fetch_perf(ctx->perf_counters, conf->moov_cache, cur_source->file_key, &cache_buffer, &cache_size) &&
 					cache_size > sizeof(size_t))
 				{
 					ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
@@ -1185,7 +1185,7 @@ ngx_http_vod_state_machine_parse_moov_atoms(ngx_http_vod_ctx_t *ctx)
 			}
 
 			// save the moov atom to cache
-			if (conf->moov_cache_zone != NULL)
+			if (conf->moov_cache != NULL)
 			{
 				cache_buffers[0].data = (u_char*)&ctx->ftyp_size;
 				cache_buffers[0].len = sizeof(ctx->ftyp_size);
@@ -1196,7 +1196,7 @@ ngx_http_vod_state_machine_parse_moov_atoms(ngx_http_vod_ctx_t *ctx)
 
 				if (ngx_buffer_cache_store_gather_perf(
 					ctx->perf_counters,
-					conf->moov_cache_zone,
+					conf->moov_cache,
 					cur_source->file_key,
 					cache_buffers,
 					3))
@@ -1291,7 +1291,7 @@ static ngx_int_t
 ngx_http_vod_handle_metadata_request(ngx_http_vod_ctx_t *ctx)
 {
 	ngx_http_vod_loc_conf_t* conf;
-	ngx_shm_zone_t* cache_zone;
+	ngx_buffer_cache_t* cache;
 	ngx_str_t cache_buffers[3];
 	ngx_str_t content_type;
 	ngx_str_t response = ngx_null_string;
@@ -1317,23 +1317,23 @@ ngx_http_vod_handle_metadata_request(ngx_http_vod_ctx_t *ctx)
 	if (ctx->submodule_context.media_set.type != MEDIA_SET_LIVE ||
 		(ctx->submodule_context.request->flags & REQUEST_FLAG_TIME_DEPENDENT_ON_LIVE) == 0)
 	{
-		cache_zone = conf->response_cache_zone[CACHE_TYPE_VOD];
+		cache = conf->response_cache[CACHE_TYPE_VOD];
 		last_modified = -1;
 	}
 	else
 	{
-		cache_zone = conf->response_cache_zone[CACHE_TYPE_LIVE];
+		cache = conf->response_cache[CACHE_TYPE_LIVE];
 		last_modified = ngx_time();
 	}
 
-	if (cache_zone != NULL && response.data != NULL)
+	if (cache != NULL && response.data != NULL)
 	{
 		cache_buffers[0].data = (u_char*)&content_type.len;
 		cache_buffers[0].len = sizeof(content_type.len);
 		cache_buffers[1] = content_type;
 		cache_buffers[2] = response;
 
-		if (ngx_buffer_cache_store_gather_perf(ctx->perf_counters, cache_zone, ctx->request_key, cache_buffers, 3))
+		if (ngx_buffer_cache_store_gather_perf(ctx->perf_counters, cache, ctx->request_key, cache_buffers, 3))
 		{
 			ngx_log_debug0(NGX_LOG_DEBUG_HTTP, ctx->submodule_context.request_context.log, 0,
 				"ngx_http_vod_handle_metadata_request: stored in response cache");
@@ -2750,7 +2750,7 @@ ngx_http_vod_run_mapped_mode_state_machine(ngx_http_request_t *r)
 		if (ngx_buffer_cache_fetch_copy_perf(
 			ctx->submodule_context.r,
 			ctx->perf_counters,
-			conf->path_mapping_cache_zone,
+			conf->path_mapping_cache,
 			CACHE_TYPE_COUNT,
 			cur_source->file_key,
 			&mapping.data,
@@ -2833,7 +2833,7 @@ ngx_http_vod_path_request_finished(void* context, ngx_int_t rc, ngx_buf_t* respo
 	ngx_http_vod_loc_conf_t* conf;
 	ngx_http_vod_ctx_t *ctx;
 	ngx_http_request_t *r = context;
-	ngx_shm_zone_t* cache_zone;
+	ngx_buffer_cache_t* cache;
 	ngx_str_t mapping;
 	u_char* file_key;
 
@@ -2883,12 +2883,12 @@ ngx_http_vod_path_request_finished(void* context, ngx_int_t rc, ngx_buf_t* respo
 	conf = ctx->submodule_context.conf;
 
 	// Note: this is ok because CACHE_TYPE_xxx matches MEDIA_TYPE_xxx in order
-	cache_zone = conf->path_mapping_cache_zone[ctx->submodule_context.media_set.type];
-	if (cache_zone != NULL)
+	cache = conf->path_mapping_cache[ctx->submodule_context.media_set.type];
+	if (cache != NULL)
 	{
 		if (ngx_buffer_cache_store_perf(
 			ctx->perf_counters,
-			cache_zone,
+			cache,
 			file_key,
 			response->pos,
 			response->last + 1 - response->pos))		// store with the null
@@ -3268,7 +3268,7 @@ ngx_http_vod_handler(ngx_http_request_t *r)
 		if (ngx_buffer_cache_fetch_copy_perf(
 			r, 
 			perf_counters, 
-			conf->response_cache_zone, 
+			conf->response_cache, 
 			CACHE_TYPE_COUNT,
 			request_key, 
 			&cache_buffer, 

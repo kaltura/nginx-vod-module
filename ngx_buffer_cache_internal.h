@@ -35,7 +35,6 @@ typedef struct {
 
 typedef struct {
 	ngx_atomic_t reset;
-	uint32_t expiration;
 	time_t access_time;
 	ngx_rbtree_t rbtree;
 	ngx_rbtree_node_t sentinel;
@@ -48,6 +47,15 @@ typedef struct {
 	u_char* buffers_read;
 	u_char* buffers_write;
 	ngx_buffer_cache_stats_t stats;
-} ngx_buffer_cache_t;
+} ngx_buffer_cache_sh_t;
+
+struct ngx_buffer_cache_s {
+	ngx_buffer_cache_sh_t *sh;
+	ngx_slab_pool_t *shpool;
+
+	uint32_t expiration;
+
+	ngx_shm_zone_t *shm_zone;
+};
 
 #endif // _NGX_BUFFER_CACHE_INTERNAL_H_INCLUDED_

@@ -163,21 +163,21 @@ ngx_http_vod_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child)
 		ngx_strncasecmp(conf->segments_base_url.data, (u_char *) "https://", 8) == 0);
 
 
-	if (conf->moov_cache_zone == NULL)
+	if (conf->moov_cache == NULL)
 	{
-		conf->moov_cache_zone = prev->moov_cache_zone;
+		conf->moov_cache = prev->moov_cache;
 	}
 
 	for (cache_type = 0; cache_type < CACHE_TYPE_COUNT; cache_type++)
 	{
-		if (conf->response_cache_zone[cache_type] == NULL)
+		if (conf->response_cache[cache_type] == NULL)
 		{
-			conf->response_cache_zone[cache_type] = prev->response_cache_zone[cache_type];
+			conf->response_cache[cache_type] = prev->response_cache[cache_type];
 		}
 
-		if (conf->path_mapping_cache_zone[cache_type] == NULL)
+		if (conf->path_mapping_cache[cache_type] == NULL)
 		{
-			conf->path_mapping_cache_zone[cache_type] = prev->path_mapping_cache_zone[cache_type];
+			conf->path_mapping_cache[cache_type] = prev->path_mapping_cache[cache_type];
 		}
 	}
 
@@ -217,9 +217,9 @@ ngx_http_vod_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child)
 	ngx_conf_merge_uint_value(conf->drm_clear_lead_segment_count, prev->drm_clear_lead_segment_count, 1);
 	ngx_conf_merge_str_value(conf->drm_upstream_location, prev->drm_upstream_location, "");
 	ngx_conf_merge_size_value(conf->drm_max_info_length, prev->drm_max_info_length, 4096);
-	if (conf->drm_info_cache_zone == NULL)
+	if (conf->drm_info_cache == NULL)
 	{
-		conf->drm_info_cache_zone = prev->drm_info_cache_zone;
+		conf->drm_info_cache = prev->drm_info_cache;
 	}
 	if (conf->drm_request_uri == NULL)
 	{
@@ -499,21 +499,21 @@ ngx_http_vod_manifest_segment_durations_mode_command(ngx_conf_t *cf, ngx_command
 static char *
 ngx_http_vod_cache_command(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
 {
-	ngx_shm_zone_t **zone = (ngx_shm_zone_t **)((u_char*)conf + cmd->offset);
+	ngx_buffer_cache_t **cache = (ngx_buffer_cache_t **)((u_char*)conf + cmd->offset);
 	ngx_str_t  *value;
 	ssize_t size;
 	time_t expiration;
 
 	value = cf->args->elts;
 
-	if (*zone != NULL) 
+	if (*cache != NULL) 
 	{
 		return "is duplicate";
 	}
 
 	if (ngx_strcmp(value[1].data, "off") == 0) 
 	{
-		*zone = NULL;
+		*cache = NULL;
 		return NGX_CONF_OK;
 	}
 
@@ -547,11 +547,11 @@ ngx_http_vod_cache_command(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
 		expiration = 0;
 	}
 
-	*zone = ngx_buffer_cache_create_zone(cf, &value[1], size, expiration, &ngx_http_vod_module);
-	if (*zone == NULL)
+	*cache = ngx_buffer_cache_create(cf, &value[1], size, expiration, &ngx_http_vod_module);
+	if (*cache == NULL)
 	{
 		ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
-			"failed to create cache zone");
+			"failed to create cache");
 		return NGX_CONF_ERROR;
 	}
 
@@ -767,21 +767,21 @@ ngx_command_t ngx_http_vod_commands[] = {
 	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE123,
 	ngx_http_vod_cache_command,
 	NGX_HTTP_LOC_CONF_OFFSET,
-	offsetof(ngx_http_vod_loc_conf_t, moov_cache_zone),
+	offsetof(ngx_http_vod_loc_conf_t, moov_cache),
 	NULL },
 
 	{ ngx_string("vod_response_cache"),
 	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE123,
 	ngx_http_vod_cache_command,
 	NGX_HTTP_LOC_CONF_OFFSET,
-	offsetof(ngx_http_vod_loc_conf_t, response_cache_zone[CACHE_TYPE_VOD]),
+	offsetof(ngx_http_vod_loc_conf_t, response_cache[CACHE_TYPE_VOD]),
 	NULL },
 
 	{ ngx_string("vod_live_response_cache"),
 	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE123,
 	ngx_http_vod_cache_command,
 	NGX_HTTP_LOC_CONF_OFFSET,
-	offsetof(ngx_http_vod_loc_conf_t, response_cache_zone[CACHE_TYPE_LIVE]),
+	offsetof(ngx_http_vod_loc_conf_t, response_cache[CACHE_TYPE_LIVE]),
 	NULL },
 
 	{ ngx_string("vod_initial_read_size"),
@@ -839,14 +839,14 @@ ngx_command_t ngx_http_vod_commands[] = {
 	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE123,
 	ngx_http_vod_cache_command,
 	NGX_HTTP_LOC_CONF_OFFSET,
-	offsetof(ngx_http_vod_loc_conf_t, path_mapping_cache_zone[CACHE_TYPE_VOD]),
+	offsetof(ngx_http_vod_loc_conf_t, path_mapping_cache[CACHE_TYPE_VOD]),
 	NULL },
 
 	{ ngx_string("vod_live_path_mapping_cache"),
 	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE123,
 	ngx_http_vod_cache_command,
 	NGX_HTTP_LOC_CONF_OFFSET,
-	offsetof(ngx_http_vod_loc_conf_t, path_mapping_cache_zone[CACHE_TYPE_LIVE]),
+	offsetof(ngx_http_vod_loc_conf_t, path_mapping_cache[CACHE_TYPE_LIVE]),
 	NULL },
 
 	{ ngx_string("vod_path_response_prefix"),
@@ -941,7 +941,7 @@ ngx_command_t ngx_http_vod_commands[] = {
 	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE123,
 	ngx_http_vod_cache_command,
 	NGX_HTTP_LOC_CONF_OFFSET,
-	offsetof(ngx_http_vod_loc_conf_t, drm_info_cache_zone),
+	offsetof(ngx_http_vod_loc_conf_t, drm_info_cache),
 	NULL },
 
 	{ ngx_string("vod_drm_request_uri"),

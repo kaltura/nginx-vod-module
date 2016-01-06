@@ -461,6 +461,7 @@ static u_char*
 dash_packager_write_segment_list(
 	u_char* p,
 	dash_manifest_config_t* conf,
+	uint32_t start_number,
 	media_set_t* media_set,
 	vod_str_t* base_url,
 	u_char* base_url_temp_buffer,
@@ -525,7 +526,7 @@ dash_packager_write_segment_list(
 			VOD_DASH_MANIFEST_SEGMENT_URL,
 			&cur_base_url,
 			&conf->fragment_file_name_prefix,
-			i + 1,
+			start_number + i + 1,
 			&track_spec);
 	}
 
@@ -720,6 +721,7 @@ dash_packager_write_mpd_period(
 					p = dash_packager_write_segment_list(
 						p,
 						conf,
+						start_number,
 						media_set,
 						base_url,
 						base_url_temp_buffer,
@@ -823,6 +825,7 @@ dash_packager_write_mpd_period(
 					p = dash_packager_write_segment_list(
 						p,
 						conf,
+						start_number,
 						media_set,
 						base_url,
 						base_url_temp_buffer,
