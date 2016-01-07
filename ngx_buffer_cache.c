@@ -561,6 +561,13 @@ ngx_buffer_cache_create(ngx_conf_t *cf, ngx_str_t *name, size_t size, time_t exp
 		return NULL;
 	}
 
+	if (cache->shm_zone->data) 
+	{
+		ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
+			"duplicate zone \"%V\"", name);
+		return NGX_CONF_ERROR;
+	}
+
 	cache->shm_zone->init = ngx_buffer_cache_init;
 	cache->shm_zone->data = cache;
 
