@@ -112,6 +112,7 @@ mp4_builder_write_trun_atom(
 static void
 mp4_builder_init_track(fragment_writer_state_t* state, media_track_t* track)
 {
+	state->first_time = TRUE;
 	state->frames_source = track->frames_source;
 	state->frames_source_context = track->frames_source_context;
 	state->cur_frame = track->first_frame;
@@ -147,7 +148,6 @@ mp4_builder_frame_writer_init(
 	state->write_callback = write_callback;
 	state->write_context = write_context;
 	state->reuse_buffers = reuse_buffers;
-	state->first_time = TRUE;
 	state->frame_started = FALSE;
 	state->sequence = sequence;
 	state->cur_clip = sequence->filtered_clips;

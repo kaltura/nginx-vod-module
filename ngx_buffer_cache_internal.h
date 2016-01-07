@@ -12,6 +12,7 @@
 #define ENTRY_LOCK_EXPIRATION (5)
 #define ENTRIES_ALLOC_MARGIN (1024)		// 1K entries ~= 100KB, we reserve this space to make sure allocating entries does not become the bottleneck
 #define BUFFER_ALIGNMENT (16)
+#define MAX_EVICTIONS_PER_STORE (128)
 
 // enums
 enum {
@@ -28,6 +29,7 @@ typedef struct {
 	size_t buffer_size;
 	ngx_atomic_t state;
 	time_t access_time;
+	time_t write_time;
 	u_char key[BUFFER_CACHE_KEY_SIZE];
 } ngx_buffer_cache_entry_t;
 
@@ -45,6 +47,15 @@ typedef struct {
 	u_char* buffers_read;
 	u_char* buffers_write;
 	ngx_buffer_cache_stats_t stats;
-} ngx_buffer_cache_t;
+} ngx_buffer_cache_sh_t;
+
+struct ngx_buffer_cache_s {
+	ngx_buffer_cache_sh_t *sh;
+	ngx_slab_pool_t *shpool;
+
+	uint32_t expiration;
+
+	ngx_shm_zone_t *shm_zone;
+};
 
 #endif // _NGX_BUFFER_CACHE_INTERNAL_H_INCLUDED_

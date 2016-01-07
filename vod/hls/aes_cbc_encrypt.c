@@ -1,6 +1,6 @@
 #include "aes_cbc_encrypt.h"
 
-#if (NGX_HAVE_OPENSSL_EVP)
+#if (VOD_HAVE_OPENSSL_EVP)
 
 static void 
 aes_cbc_encrypt_cleanup(aes_cbc_encrypt_context_t* state)
@@ -140,4 +140,4 @@ aes_cbc_encrypt_flush(aes_cbc_encrypt_context_t* ctx)
 	return VOD_UNEXPECTED;
 }
 
-#endif //(NGX_HAVE_OPENSSL_EVP)
+#endif //(VOD_HAVE_OPENSSL_EVP)

@@ -3,9 +3,9 @@
 
 // includes
 #include "../common.h"
-#if (NGX_HAVE_OPENSSL_EVP)
+#if (VOD_HAVE_OPENSSL_EVP)
 #include <openssl/evp.h>
-#endif // (NGX_HAVE_OPENSSL_EVP)
+#endif // (VOD_HAVE_OPENSSL_EVP)
 
 // macros
 #ifndef AES_BLOCK_SIZE
@@ -18,9 +18,9 @@ typedef struct {
 	request_context_t* request_context;
 	write_callback_t callback;
 	void* callback_context;
-#if (NGX_HAVE_OPENSSL_EVP)
+#if (VOD_HAVE_OPENSSL_EVP)
 	EVP_CIPHER_CTX cipher;
-#endif //(NGX_HAVE_OPENSSL_EVP)
+#endif //(VOD_HAVE_OPENSSL_EVP)
 	u_char last_block[AES_BLOCK_SIZE];
 } aes_cbc_encrypt_context_t;
 

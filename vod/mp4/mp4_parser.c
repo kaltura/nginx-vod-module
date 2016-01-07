@@ -2626,7 +2626,7 @@ mp4_parser_parse_frames(
 		return VOD_ALLOC_FAILED;
 	}
 
-	ngx_memzero(result, sizeof(*result));
+	vod_memzero(result, sizeof(*result));
 	result->mvhd_atom = base->mvhd_atom;
 
 	// in case we need to parse the frame sizes, we already find the total size
@@ -2753,7 +2753,7 @@ mp4_parser_parse_frames(
 		result_track->total_frames_duration = context.total_frames_duration;
 		result_track->first_frame_index = context.first_frame;
 		result_track->first_frame_time_offset = context.first_frame_time_offset;
-		result_track->clip_sequence_offset = rescale_time(parse_params->sequence_offset, 1000, cur_track->media_info.timescale);
+		result_track->clip_start_time = parse_params->clip_start_time;
 		result_track->clip_from_frame_offset = context.clip_from_frame_offset;
 		result_track->source_clip = NULL;
 

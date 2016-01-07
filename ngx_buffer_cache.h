@@ -8,6 +8,9 @@
 #define BUFFER_CACHE_KEY_SIZE (16)
 
 // typedefs
+struct ngx_buffer_cache_s;
+typedef struct ngx_buffer_cache_s ngx_buffer_cache_t;
+
 typedef struct {
 	ngx_atomic_t store_ok;
 	ngx_atomic_t store_bytes;
@@ -27,29 +30,34 @@ typedef struct {
 
 // functions
 ngx_flag_t ngx_buffer_cache_fetch(
-	ngx_shm_zone_t *shm_zone,
+	ngx_buffer_cache_t* cache,
 	u_char* key,
 	u_char** buffer,
 	size_t* buffer_size);
 
 ngx_flag_t ngx_buffer_cache_store(
-	ngx_shm_zone_t *shm_zone,
+	ngx_buffer_cache_t* cache,
 	u_char* key,
 	u_char* source_buffer,
 	size_t buffer_size);
 
 ngx_flag_t ngx_buffer_cache_store_gather(
-	ngx_shm_zone_t *shm_zone,
+	ngx_buffer_cache_t* cache,
 	u_char* key,
 	ngx_str_t* buffers,
 	size_t buffer_count);
 
 void ngx_buffer_cache_get_stats(
-	ngx_shm_zone_t *shm_zone,
+	ngx_buffer_cache_t* cache,
 	ngx_buffer_cache_stats_t* stats);
 
-void ngx_buffer_cache_reset_stats(ngx_shm_zone_t *shm_zone);
+void ngx_buffer_cache_reset_stats(ngx_buffer_cache_t* cache);
 
-ngx_shm_zone_t* ngx_buffer_cache_create_zone(ngx_conf_t *cf, ngx_str_t *name, size_t size, void *tag);
+ngx_buffer_cache_t* ngx_buffer_cache_create(
+	ngx_conf_t *cf, 
+	ngx_str_t *name, 
+	size_t size, 
+	time_t expiration, 
+	void *tag);
 
 #endif // _NGX_BUFFER_CACHE_H_INCLUDED_

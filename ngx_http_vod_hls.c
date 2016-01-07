@@ -121,7 +121,6 @@ ngx_http_vod_hls_handle_index_playlist(
 		&segments_base_url,
 		&submodule_context->request_params,
 		&encryption_params,
-		&submodule_context->conf->segmenter,
 		&submodule_context->media_set,
 		response);
 	if (rc != VOD_OK)
@@ -171,7 +170,6 @@ ngx_http_vod_hls_handle_iframe_playlist(
 		&submodule_context->conf->hls.muxer_config,
 		&base_url,
 		&submodule_context->request_params,
-		&submodule_context->conf->segmenter,
 		&submodule_context->media_set,
 		response);
 	if (rc != VOD_OK)
@@ -285,7 +283,7 @@ static const ngx_http_vod_request_t hls_master_request = {
 };
 
 static const ngx_http_vod_request_t hls_index_request = {
-	REQUEST_FLAG_SINGLE_TRACK_PER_MEDIA_TYPE,
+	REQUEST_FLAG_SINGLE_TRACK_PER_MEDIA_TYPE | REQUEST_FLAG_TIME_DEPENDENT_ON_LIVE,
 	PARSE_BASIC_METADATA_ONLY,
 	REQUEST_CLASS_MANIFEST,
 	ngx_http_vod_hls_handle_index_playlist,

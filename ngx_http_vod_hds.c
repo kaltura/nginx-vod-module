@@ -7,9 +7,11 @@
 // content types
 static u_char f4m_content_type[] = "video/f4m";
 static u_char f4f_content_type[] = "video/f4f";
+static u_char abst_content_type[] = "video/abst";
 
 // file extensions
 static const u_char manifest_file_ext[] = ".f4m";
+static const u_char bootstrap_file_ext[] = ".abst";
 
 static ngx_int_t 
 ngx_http_vod_hds_handle_manifest(
@@ -23,7 +25,6 @@ ngx_http_vod_hds_handle_manifest(
 		&submodule_context->request_context,
 		&submodule_context->conf->hds.manifest_config,
 		&submodule_context->r->uri,
-		&submodule_context->conf->segmenter,
 		&submodule_context->media_set,
 		response);
 	if (rc != VOD_OK)
@@ -35,6 +36,31 @@ ngx_http_vod_hds_handle_manifest(
 
 	content_type->data = f4m_content_type;
 	content_type->len = sizeof(f4m_content_type) - 1;
+
+	return NGX_OK;
+}
+
+static ngx_int_t
+ngx_http_vod_hds_handle_bootstrap(
+	ngx_http_vod_submodule_context_t* submodule_context,
+	ngx_str_t* response,
+	ngx_str_t* content_type)
+{
+	vod_status_t rc;
+	
+	rc = hds_packager_build_bootstrap(
+		&submodule_context->request_context,
+		&submodule_context->media_set,
+		response);
+	if (rc != VOD_OK)
+	{
+		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, submodule_context->request_context.log, 0,
+			"ngx_http_vod_hds_handle_bootstrap: hds_packager_build_bootstrap failed %i", rc);
+		return ngx_http_vod_status_to_ngx_error(rc);
+	}
+
+	content_type->data = abst_content_type;
+	content_type->len = sizeof(abst_content_type) - 1;
 
 	return NGX_OK;
 }
@@ -88,6 +114,14 @@ static const ngx_http_vod_request_t hds_manifest_request = {
 	NULL,
 };
 
+static const ngx_http_vod_request_t hds_bootstrap_request = {
+	REQUEST_FLAG_SINGLE_TRACK_PER_MEDIA_TYPE | REQUEST_FLAG_TIME_DEPENDENT_ON_LIVE,
+	0,
+	REQUEST_CLASS_MANIFEST,
+	ngx_http_vod_hds_handle_bootstrap,
+	NULL,
+};
+
 static const ngx_http_vod_request_t hds_fragment_request = {
 	REQUEST_FLAG_SINGLE_TRACK_PER_MEDIA_TYPE,
 	PARSE_FLAG_FRAMES_ALL | PARSE_FLAG_EXTRA_DATA,
@@ -112,6 +146,7 @@ ngx_http_vod_hds_merge_loc_conf(
 	ngx_http_vod_hds_loc_conf_t *prev)
 {
 	ngx_conf_merge_str_value(conf->manifest_config.fragment_file_name_prefix, prev->manifest_config.fragment_file_name_prefix, "frag");
+	ngx_conf_merge_str_value(conf->manifest_config.bootstrap_file_name_prefix, prev->manifest_config.bootstrap_file_name_prefix, "bootstrap");
 	ngx_conf_merge_str_value(conf->manifest_file_name_prefix, prev->manifest_file_name_prefix, "manifest");
 	ngx_conf_merge_value(conf->fragment_config.generate_moof_atom, prev->fragment_config.generate_moof_atom, 1);
 
@@ -163,6 +198,13 @@ ngx_http_vod_hds_parse_uri_file_name(
 		}
 
 		*request = &hds_fragment_request;
+	}
+	// bootstrap request
+	else if (ngx_http_vod_match_prefix_postfix(start_pos, end_pos, &conf->hds.manifest_config.bootstrap_file_name_prefix, bootstrap_file_ext))
+	{
+		start_pos += conf->hds.manifest_config.bootstrap_file_name_prefix.len;
+		end_pos -= (sizeof(bootstrap_file_ext) - 1);
+		*request = &hds_bootstrap_request;
 	}
 	// manifest request
 	else if (ngx_http_vod_match_prefix_postfix(start_pos, end_pos, &conf->hds.manifest_file_name_prefix, manifest_file_ext))

@@ -83,7 +83,6 @@ edash_packager_build_mpd(
 	request_context_t* request_context,
 	dash_manifest_config_t* conf,
 	vod_str_t* base_url,
-	segmenter_conf_t* segmenter_conf,
 	media_set_t* media_set,
 	vod_str_t* result)
 {
@@ -111,7 +110,6 @@ edash_packager_build_mpd(
 		request_context,
 		conf,
 		base_url,
-		segmenter_conf,
 		media_set,
 		representation_tags_size,
 		edash_packager_write_content_protection,

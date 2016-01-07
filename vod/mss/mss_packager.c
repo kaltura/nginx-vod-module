@@ -2,11 +2,19 @@
 
 // constants
 #define MSS_TIMESCALE (10000000)
+#define MSS_LOOK_AHEAD_COUNT (2)
+#define TFRF_ATOM_SIZE (ATOM_HEADER_SIZE + sizeof(uuid_tfrf_atom_t) + sizeof(uuid_tfrf_entry_t) * MSS_LOOK_AHEAD_COUNT)
 
 // manifest constants
-#define MSS_MANIFEST_HEADER \
+#define MSS_MANIFEST_HEADER_PREFIX \
 	"<?xml version=\"1.0\" encoding=\"utf-8\"?>\n"	\
-	"<SmoothStreamingMedia MajorVersion=\"2\" MinorVersion=\"0\" Duration=\"%uL\">\n"
+	"<SmoothStreamingMedia MajorVersion=\"2\" MinorVersion=\"0\" Duration=\"%uL\""
+
+#define MSS_MANIFEST_HEADER_LIVE_ATTRIBUTES \
+	" DVRWindowLength=\"%uL\" LookAheadFragmentCount=\"%uD\" IsLive=\"TRUE\" CanSeek=\"TRUE\" CanPause=\"TRUE\""
+
+#define MSS_MANIFEST_HEADER_SUFFIX \
+	">\n"
 
 #define MSS_STREAM_INDEX_HEADER \
 	"  <StreamIndex Type=\"%s\" QualityLevels=\"%uD\" Chunks=\"%uD\" Url=\"QualityLevels({bitrate})/Fragments(%s={start time})\">\n"
@@ -24,11 +32,19 @@
 #define MSS_CHUNK_TAG \
 	"    <c n=\"%uD\" d=\"%uL\"></c>\n"
 
+#define MSS_CHUNK_TAG_LIVE_FIRST \
+	"    <c t=\"%uL\" d=\"%uL\"/>\n"
+
+#define MSS_CHUNK_TAG_LIVE \
+	"    <c d=\"%uL\"/>\n"
+
 #define MSS_STREAM_INDEX_FOOTER \
 	"  </StreamIndex>\n"
 
 #define MSS_MANIFEST_FOOTER \
 	"</SmoothStreamingMedia>\n"
+
+#define mss_rescale_millis(millis) ((millis) * (MSS_TIMESCALE / 1000))
 
 // typedefs
 typedef struct {
@@ -40,16 +56,38 @@ typedef struct {
 } uuid_tfxd_atom_t;
 
 typedef struct {
+	u_char uuid[16];
+	u_char version[1];
+	u_char flags[3];
+	u_char count[1];
+} uuid_tfrf_atom_t;
+
+typedef struct {
+	u_char timestamp[8];
+	u_char duration[8];
+} uuid_tfrf_entry_t;
+
+typedef struct {
 	u_char version[1];
 	u_char flags[3];
 	u_char track_id[4];
 	u_char default_sample_flags[4];
 } tfhd_atom_t;
 
+typedef struct {
+	uint64_t timestamp;
+	uint64_t duration;
+} segment_timing_info_t;
+
 // constants
 static const uint8_t tfxd_uuid[] = {
 	0x6d, 0x1d, 0x9b, 0x05, 0x42, 0xd5, 0x44, 0xe6,
 	0x80, 0xe2, 0x14, 0x1d, 0xaf, 0xf7, 0x57, 0xb2
+};
+
+static const uint8_t tfrf_uuid[] = {
+	0xD4, 0x80, 0x7E, 0xF2, 0xCA, 0x39, 0x46, 0x95,
+	0x8E, 0x54, 0x26, 0xCB, 0x9E, 0x46, 0xA7, 0x9F,
 };
 
 static u_char*
@@ -81,6 +119,38 @@ mss_write_manifest_chunks(u_char* p, segment_durations_t* segment_durations)
 		for (; segment_index < last_segment_index; segment_index++)
 		{
 			p = vod_sprintf(p, MSS_CHUNK_TAG, segment_index, rescale_time(cur_item->duration, segment_durations->timescale, MSS_TIMESCALE));
+		}
+	}
+
+	return p;
+}
+
+static u_char*
+mss_write_manifest_chunks_live(u_char* p, segment_durations_t* segment_durations)
+{
+	segment_duration_item_t* cur_item;
+	segment_duration_item_t* last_item = segment_durations->items + segment_durations->item_count;
+	uint32_t repeat_count;
+	bool_t first_time = TRUE;
+
+	for (cur_item = segment_durations->items; cur_item < last_item; cur_item++)
+	{
+		repeat_count = cur_item->repeat_count;
+
+		// output the timestamp in the first chunk
+		if (first_time)
+		{
+			p = vod_sprintf(p, MSS_CHUNK_TAG_LIVE_FIRST, 
+				mss_rescale_millis(segment_durations->start_time), 
+				rescale_time(cur_item->duration, segment_durations->timescale, MSS_TIMESCALE));
+			repeat_count--;
+			first_time = FALSE;
+		}
+		
+		// output only the duration in subsequent chunks
+		for (; repeat_count > 0; repeat_count--)
+		{
+			p = vod_sprintf(p, MSS_CHUNK_TAG_LIVE, rescale_time(cur_item->duration, segment_durations->timescale, MSS_TIMESCALE));
 		}
 	}
 
@@ -180,13 +250,13 @@ vod_status_t
 mss_packager_build_manifest(
 	request_context_t* request_context, 
 	mss_manifest_config_t* conf,
-	segmenter_conf_t* segmenter_conf,
 	media_set_t* media_set,
 	size_t extra_tags_size,
 	mss_write_tags_callback_t write_extra_tags,
 	void* extra_tags_writer_context,
 	vod_str_t* result)
 {
+	segmenter_conf_t* segmenter_conf = media_set->segmenter_conf;
 	media_sequence_t* cur_sequence;
 	media_track_t* last_track;
 	media_track_t* cur_track;
@@ -208,9 +278,14 @@ mss_packager_build_manifest(
 
 	// calculate the result size
 	result_size = 
-		sizeof(MSS_MANIFEST_HEADER) - 1 + VOD_INT64_LEN + 
+		sizeof(MSS_MANIFEST_HEADER_PREFIX) - 1 + VOD_INT64_LEN + sizeof(MSS_MANIFEST_HEADER_SUFFIX) - 1 +
 		extra_tags_size +
 		sizeof(MSS_MANIFEST_FOOTER);
+	if (media_set->type == MEDIA_SET_LIVE)
+	{
+		result_size += sizeof(MSS_MANIFEST_HEADER_LIVE_ATTRIBUTES) - 1 + VOD_INT64_LEN + VOD_INT32_LEN;
+	}
+
 	for (media_type = 0; media_type < MEDIA_TYPE_COUNT; media_type++)
 	{
 		if (media_set->track_count[media_type] == 0)
@@ -234,7 +309,17 @@ mss_packager_build_manifest(
 			sizeof(MSS_STREAM_INDEX_HEADER) - 1 + 2 * sizeof(MSS_STREAM_TYPE_VIDEO) + 2 * VOD_INT32_LEN +
 			sizeof(MSS_STREAM_INDEX_FOOTER);
 
-		result_size += segment_durations[media_type].segment_count * (sizeof(MSS_CHUNK_TAG) + VOD_INT32_LEN + VOD_INT64_LEN);
+		switch (media_set->type)
+		{
+		case MEDIA_SET_VOD:
+			result_size += segment_durations[media_type].segment_count * (sizeof(MSS_CHUNK_TAG) + VOD_INT32_LEN + VOD_INT64_LEN);
+			break;
+
+		case MEDIA_SET_LIVE:
+			result_size += segment_durations[media_type].segment_count * (sizeof(MSS_CHUNK_TAG_LIVE) + VOD_INT64_LEN) + 
+				sizeof(MSS_CHUNK_TAG_LIVE_FIRST) + 2 * VOD_INT64_LEN;
+			break;
+		}
 	}
 
 	mss_packager_remove_redundant_tracks(conf->duplicate_bitrate_threshold,	media_set);
@@ -268,8 +353,25 @@ mss_packager_build_manifest(
 		return VOD_ALLOC_FAILED;
 	}
 
-	duration_100ns = rescale_time(media_set->total_duration, 1000, MSS_TIMESCALE);
-	p = vod_sprintf(result->data, MSS_MANIFEST_HEADER, duration_100ns);
+	// header
+	if (media_set->type != MEDIA_SET_LIVE)
+	{
+		duration_100ns = mss_rescale_millis(media_set->total_duration);
+	}
+	else
+	{
+		duration_100ns = 0;
+	}
+
+	p = vod_sprintf(result->data, MSS_MANIFEST_HEADER_PREFIX, duration_100ns);
+	if (media_set->type == MEDIA_SET_LIVE)
+	{
+		media_type = media_set->track_count[MEDIA_TYPE_VIDEO] != 0 ? MEDIA_TYPE_VIDEO : MEDIA_TYPE_AUDIO;
+		p = vod_sprintf(p, MSS_MANIFEST_HEADER_LIVE_ATTRIBUTES, 
+			mss_rescale_millis(segment_durations[media_type].segment_count * segmenter_conf->segment_duration),
+			MSS_LOOK_AHEAD_COUNT);
+	}
+	p = vod_copy(p, MSS_MANIFEST_HEADER_SUFFIX, sizeof(MSS_MANIFEST_HEADER_SUFFIX) - 1);
 
 	if (media_set->track_count[MEDIA_TYPE_VIDEO] != 0)
 	{
@@ -305,7 +407,16 @@ mss_packager_build_manifest(
 			}
 		}
 
-		p = mss_write_manifest_chunks(p, &segment_durations[MEDIA_TYPE_VIDEO]);
+		switch (media_set->type)
+		{
+		case MEDIA_SET_VOD:
+			p = mss_write_manifest_chunks(p, &segment_durations[MEDIA_TYPE_VIDEO]);
+			break;
+
+		case MEDIA_SET_LIVE:
+			p = mss_write_manifest_chunks_live(p, &segment_durations[MEDIA_TYPE_VIDEO]);
+			break;
+		}
 
 		p = vod_copy(p, MSS_STREAM_INDEX_FOOTER, sizeof(MSS_STREAM_INDEX_FOOTER) - 1);
 	}
@@ -345,7 +456,16 @@ mss_packager_build_manifest(
 			}
 		}
 
-		p = mss_write_manifest_chunks(p, &segment_durations[MEDIA_TYPE_AUDIO]);
+		switch (media_set->type)
+		{
+		case MEDIA_SET_VOD:
+			p = mss_write_manifest_chunks(p, &segment_durations[MEDIA_TYPE_AUDIO]);
+			break;
+
+		case MEDIA_SET_LIVE:
+			p = mss_write_manifest_chunks_live(p, &segment_durations[MEDIA_TYPE_AUDIO]);
+			break;
+		}
 
 		p = vod_copy(p, MSS_STREAM_INDEX_FOOTER, sizeof(MSS_STREAM_INDEX_FOOTER) - 1);
 	}
@@ -382,39 +502,68 @@ mss_write_tfhd_atom(u_char* p, uint32_t track_id, uint32_t flags)
 	return p;
 }
 
-static u_char*
-mss_write_uuid_tfxd_atom(u_char* p, media_sequence_t* sequence)
+static void 
+mss_get_segment_timing_info(media_sequence_t* sequence, segment_timing_info_t* result)
 {
 	media_clip_filtered_t* cur_clip;
 	media_track_t* track;
-	size_t atom_size = ATOM_HEADER_SIZE + sizeof(uuid_tfxd_atom_t);
-	uint64_t timestamp;
-	uint64_t duration;
 
 	cur_clip = sequence->filtered_clips;
 	track = cur_clip->first_track;
-	timestamp = rescale_time(track->first_frame_time_offset + track->clip_sequence_offset, track->media_info.timescale, MSS_TIMESCALE);
-	duration = rescale_time(track->total_frames_duration, track->media_info.timescale, MSS_TIMESCALE);
+	result->timestamp = rescale_time(track->first_frame_time_offset, track->media_info.timescale, MSS_TIMESCALE) + mss_rescale_millis(track->clip_start_time);
+	result->duration = rescale_time(track->total_frames_duration, track->media_info.timescale, MSS_TIMESCALE);
 	cur_clip++;
 
 	for (; cur_clip < sequence->filtered_clips_end; cur_clip++)
 	{
 		track = cur_clip->first_track;
-		duration += rescale_time(track->total_frames_duration, track->media_info.timescale, MSS_TIMESCALE);
+		result->duration += rescale_time(track->total_frames_duration, track->media_info.timescale, MSS_TIMESCALE);
 	}
+}
+
+static u_char*
+mss_write_uuid_tfxd_atom(u_char* p, segment_timing_info_t* timing_info)
+{
+	size_t atom_size = ATOM_HEADER_SIZE + sizeof(uuid_tfxd_atom_t);
 
 	write_atom_header(p, atom_size, 'u', 'u', 'i', 'd');
 	p = vod_copy(p, tfxd_uuid, sizeof(tfxd_uuid));
 	write_be32(p, 0x01000000);		// version / flags
-	write_be64(p, timestamp);
-	write_be64(p, duration);
+	write_be64(p, timing_info->timestamp);
+	write_be64(p, timing_info->duration);
+	return p;
+}
+
+static u_char*
+mss_write_uuid_tfrf_atom(u_char* p, segment_timing_info_t* timing_info)
+{
+	size_t atom_size = TFRF_ATOM_SIZE;
+	uint64_t timestamp;
+	uint64_t duration;
+	int i;
+
+	timestamp = timing_info->timestamp;
+	duration = timing_info->duration;
+
+	write_atom_header(p, atom_size, 'u', 'u', 'i', 'd');
+	p = vod_copy(p, tfrf_uuid, sizeof(tfrf_uuid));
+	write_be32(p, 0x01000000);		// version / flags
+	*p++ = MSS_LOOK_AHEAD_COUNT;
+
+	for (i = 0; i < MSS_LOOK_AHEAD_COUNT; i++)
+	{
+		timestamp += duration;
+		write_be64(p, timestamp);
+		write_be64(p, duration);
+	}
+
 	return p;
 }
 
 vod_status_t
 mss_packager_build_fragment_header(
 	request_context_t* request_context,
-	media_sequence_t* sequence,
+	media_set_t* media_set,
 	uint32_t segment_index,
 	size_t extra_traf_atoms_size,
 	mss_write_extra_traf_atoms_callback_t write_extra_traf_atoms_callback,
@@ -423,7 +572,9 @@ mss_packager_build_fragment_header(
 	vod_str_t* result,
 	size_t* total_fragment_size)
 {
+	segment_timing_info_t timing_info;
 	media_clip_filtered_t* cur_clip;
+	media_sequence_t* sequence = media_set->sequences;
 	input_frame_t* last_frame;
 	input_frame_t* cur_frame;
 	media_track_t* first_track = sequence->filtered_clips[0].first_track;
@@ -446,6 +597,11 @@ mss_packager_build_fragment_header(
 		trun_atom_size +
 		ATOM_HEADER_SIZE + sizeof(uuid_tfxd_atom_t) + 
 		extra_traf_atoms_size;
+
+	if (media_set->type == MEDIA_SET_LIVE)
+	{
+		traf_atom_size += TFRF_ATOM_SIZE;
+	}
 
 	moof_atom_size =
 		ATOM_HEADER_SIZE +
@@ -513,7 +669,25 @@ mss_packager_build_fragment_header(
 		sequence,
 		moof_atom_size + ATOM_HEADER_SIZE);
 
-	p = mss_write_uuid_tfxd_atom(p, sequence);
+
+	if (media_set->type == MEDIA_SET_LIVE)
+	{
+		// using only estimate timing info in live, since we don't have the accurate timing
+		//	for the lookahead segments. the timestamp has to be consistent between segments/manifest
+		//	otherwise some segments may be pulled more than once
+		timing_info.timestamp = mss_rescale_millis(media_set->segment_start_time);
+		timing_info.duration = mss_rescale_millis(media_set->segmenter_conf->segment_duration);
+
+		p = mss_write_uuid_tfxd_atom(p, &timing_info);
+
+		p = mss_write_uuid_tfrf_atom(p, &timing_info);
+	}
+	else
+	{
+		mss_get_segment_timing_info(sequence, &timing_info);
+
+		p = mss_write_uuid_tfxd_atom(p, &timing_info);
+	}
 
 	// moof.traf.xxx
 	if (write_extra_traf_atoms_callback != NULL)

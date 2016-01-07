@@ -1,6 +1,6 @@
 #include "mp4_encrypt_passthrough.h"
 
-#if (NGX_HAVE_OPENSSL_EVP)
+#if (VOD_HAVE_OPENSSL_EVP)
 
 #include "mp4_decrypt.h"
 #include "mp4_encrypt.h"
@@ -120,4 +120,4 @@ mp4_encrypt_passthrough_write_saiz_saio(
 	return NULL;
 }
 
-#endif //(NGX_HAVE_OPENSSL_EVP)
+#endif //(VOD_HAVE_OPENSSL_EVP)

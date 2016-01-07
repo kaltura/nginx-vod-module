@@ -1,6 +1,6 @@
 #include "mp4_decrypt.h"
 
-#if (NGX_HAVE_OPENSSL_EVP)
+#if (VOD_HAVE_OPENSSL_EVP)
 
 #include "mp4_aes_ctr.h"
 #include "mp4_parser.h"
@@ -323,4 +323,4 @@ mp4_decrypt_init(
 	return VOD_UNEXPECTED;
 }
 
-#endif //(NGX_HAVE_OPENSSL_EVP)
+#endif //(VOD_HAVE_OPENSSL_EVP)

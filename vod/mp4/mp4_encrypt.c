@@ -1,6 +1,6 @@
 #include "mp4_encrypt.h"
 
-#if (NGX_HAVE_OPENSSL_EVP)
+#if (VOD_HAVE_OPENSSL_EVP)
 
 #include "mp4_decrypt.h"
 #include "mp4_builder.h"
@@ -83,7 +83,7 @@ mp4_encrypt_init_state(
 	iv_int = parse_be64(iv);
 	iv_int += sequence->filtered_clips[0].first_track->first_frame_index;
 	// Note: we don't know how many frames were in previous clips (were not parsed), assuming there won't be more than 60 fps
-	iv_int += (sequence->filtered_clips[0].first_track->clip_sequence_offset * MAX_FRAME_RATE) / sequence->filtered_clips[0].first_track->media_info.timescale;
+	iv_int += (sequence->filtered_clips[0].first_track->clip_start_time * MAX_FRAME_RATE) / 1000;
 	p = state->iv;
 	write_be64(p, iv_int);
 
@@ -755,4 +755,4 @@ mp4_encrypt_audio_write_saiz_saio(mp4_encrypt_state_t* state, u_char* p, size_t 
 	return NULL;
 }
 
-#endif //(NGX_HAVE_OPENSSL_EVP)
+#endif //(VOD_HAVE_OPENSSL_EVP)

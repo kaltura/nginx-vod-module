@@ -9,6 +9,9 @@
 // constants
 #define HDS_TIMESCALE (1000)
 
+// macros
+#define hds_rescale_millis(millis) (millis)
+
 // typedefs
 struct hds_muxer_state_s;
 typedef struct hds_muxer_state_s hds_muxer_state_t;

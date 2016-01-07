@@ -10,14 +10,19 @@
 // typedefs
 typedef struct {
 	vod_str_t fragment_file_name_prefix;
+	vod_str_t bootstrap_file_name_prefix;
 } hds_manifest_config_t;
 
 // functions
+vod_status_t hds_packager_build_bootstrap(
+	request_context_t* request_context,
+	media_set_t* media_set,
+	vod_str_t* result);
+
 vod_status_t hds_packager_build_manifest(
 	request_context_t* request_context,
 	hds_manifest_config_t* conf,
 	vod_str_t* manifest_id,
-	segmenter_conf_t* segmenter_conf,
 	media_set_t* media_set,
 	vod_str_t* result);
 

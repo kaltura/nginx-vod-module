@@ -120,7 +120,7 @@ hds_get_max_duration(media_track_t** tracks, uint64_t* duration, uint32_t* times
 }
 
 static u_char*
-hds_amf0_write_metadata(u_char* p, media_track_t** tracks)
+hds_amf0_write_metadata(u_char* p, media_set_t* media_set, media_track_t** tracks)
 {
 	media_info_t* media_info;
 	uint64_t file_size = 0;
@@ -129,7 +129,6 @@ hds_amf0_write_metadata(u_char* p, media_track_t** tracks)
 	uint32_t count;
 	uint32_t bitrate = 0;
 
-	hds_get_max_duration(tracks, &duration, &timescale);
 
 	count = AMF0_COMMON_FIELDS_COUNT;
 	if (tracks[MEDIA_TYPE_VIDEO] != NULL)
@@ -141,9 +140,18 @@ hds_amf0_write_metadata(u_char* p, media_track_t** tracks)
 		count += AMF0_AUDIO_FIELDS_COUNT;
 	}
 
+	if (media_set->type != MEDIA_SET_VOD)
+	{
+		count--;		// duration is returned only for vod
+	}
+
 	p = hds_amf0_append_string(p, &amf0_on_metadata);
 	p = hds_amf0_append_array_header(p, count);
-	p = hds_amf0_append_array_number_value(p, &amf0_duration, (double)duration / (double)timescale);
+	if (media_set->type == MEDIA_SET_VOD)
+	{
+		hds_get_max_duration(tracks, &duration, &timescale);
+		p = hds_amf0_append_array_number_value(p, &amf0_duration, (double)duration / (double)timescale);
+	}
 	if (tracks[MEDIA_TYPE_VIDEO] != NULL)
 	{
 		media_info = &tracks[MEDIA_TYPE_VIDEO]->media_info;
@@ -172,13 +180,13 @@ hds_amf0_write_metadata(u_char* p, media_track_t** tracks)
 }
 
 u_char*
-hds_amf0_write_base64_metadata(u_char* p, u_char* temp_buffer, media_track_t** tracks)
+hds_amf0_write_base64_metadata(u_char* p, u_char* temp_buffer, media_set_t* media_set, media_track_t** tracks)
 {
 	vod_str_t binary;
 	vod_str_t base64;
 
 	binary.data = temp_buffer;
-	binary.len = hds_amf0_write_metadata(temp_buffer, tracks) - binary.data;
+	binary.len = hds_amf0_write_metadata(temp_buffer, media_set, tracks) - binary.data;
 
 	base64.data = p;
 

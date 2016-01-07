@@ -53,7 +53,6 @@ ngx_http_vod_dash_handle_manifest(
 			&submodule_context->request_context,
 			&submodule_context->conf->dash.mpd_config,
 			&base_url,
-			&submodule_context->conf->segmenter,
 			&submodule_context->media_set,
 			response);
 	}
@@ -63,7 +62,6 @@ ngx_http_vod_dash_handle_manifest(
 			&submodule_context->request_context,
 			&submodule_context->conf->dash.mpd_config,
 			&base_url,
-			&submodule_context->conf->segmenter,
 			&submodule_context->media_set,
 			0,
 			NULL,
@@ -236,7 +234,7 @@ ngx_http_vod_dash_init_frame_processor(
 }
 
 static const ngx_http_vod_request_t dash_manifest_request = {
-	0,
+	REQUEST_FLAG_TIME_DEPENDENT_ON_LIVE,
 	PARSE_FLAG_DURATION_LIMITS_AND_TOTAL_SIZE | PARSE_FLAG_CODEC_NAME,
 	REQUEST_CLASS_MANIFEST,
 	ngx_http_vod_dash_handle_manifest,

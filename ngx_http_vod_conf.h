@@ -10,6 +10,14 @@
 #include "ngx_http_vod_mss_conf.h"
 #include "vod/segmenter.h"
 
+// enum
+enum {
+	CACHE_TYPE_VOD,
+	CACHE_TYPE_LIVE,
+
+	CACHE_TYPE_COUNT
+};
+
 // typedefs
 struct ngx_http_vod_request_params_s;
 
@@ -24,15 +32,15 @@ struct ngx_http_vod_loc_conf_s {
 	ngx_str_t https_header_name;
 	ngx_str_t segments_base_url;
 	ngx_flag_t segments_base_url_has_scheme;
-	ngx_shm_zone_t* moov_cache_zone;
-	ngx_shm_zone_t* response_cache_zone;
+	ngx_buffer_cache_t* moov_cache;
+	ngx_buffer_cache_t* response_cache[CACHE_TYPE_COUNT];
 	size_t initial_read_size;
 	size_t max_moov_size;
 	size_t cache_buffer_size;
 	size_t max_upstream_headers_size;
 	ngx_flag_t ignore_edit_list;
 	ngx_http_complex_value_t *upstream_extra_args;
-	ngx_shm_zone_t* path_mapping_cache_zone;
+	ngx_buffer_cache_t* path_mapping_cache[CACHE_TYPE_COUNT];
 	ngx_str_t path_response_prefix;
 	ngx_str_t path_response_postfix;
 	size_t max_mapping_response_size;
@@ -47,7 +55,7 @@ struct ngx_http_vod_loc_conf_s {
 	ngx_uint_t drm_clear_lead_segment_count;
 	ngx_str_t drm_upstream_location;
 	size_t drm_max_info_length;
-	ngx_shm_zone_t* drm_info_cache_zone;
+	ngx_buffer_cache_t* drm_info_cache;
 	ngx_http_complex_value_t *drm_request_uri;
 
 	ngx_str_t clip_to_param_name;

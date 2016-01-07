@@ -50,7 +50,7 @@ typedef struct {
 	write_buffer_state_t write_buffer;
 
 	// encryption state
-#if (NGX_HAVE_OPENSSL_EVP)
+#if (VOD_HAVE_OPENSSL_EVP)
 	mp4_aes_ctr_state_t cipher;
 #endif
 	u_char iv[MP4_AES_CTR_IV_SIZE];

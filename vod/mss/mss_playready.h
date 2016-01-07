@@ -10,7 +10,6 @@
 vod_status_t mss_playready_build_manifest(
 	request_context_t* request_context,
 	mss_manifest_config_t* conf,
-	segmenter_conf_t* segmenter_conf,
 	media_set_t* media_set,
 	vod_str_t* result);
 

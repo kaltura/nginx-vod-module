@@ -1,6 +1,6 @@
 #include "mp4_aes_ctr.h"
 
-#if (NGX_HAVE_OPENSSL_EVP)
+#if (VOD_HAVE_OPENSSL_EVP)
 
 static void
 mp4_aes_ctr_cleanup(mp4_aes_ctr_state_t* state)
@@ -110,4 +110,4 @@ mp4_aes_ctr_process(mp4_aes_ctr_state_t* state, u_char* dest, const u_char* src,
 	return VOD_OK;
 }
 
-#endif //(NGX_HAVE_OPENSSL_EVP)
+#endif //(VOD_HAVE_OPENSSL_EVP)
