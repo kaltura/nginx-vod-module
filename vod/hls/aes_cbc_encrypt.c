@@ -60,6 +60,49 @@ aes_cbc_encrypt_init(
 }
 
 vod_status_t 
+aes_cbc_encrypt(
+	aes_cbc_encrypt_context_t* state,
+	vod_str_t* dest,
+	vod_str_t* src,
+	bool_t flush)
+{
+	u_char* output;
+	int out_size;
+
+	output = vod_alloc(state->request_context->pool, aes_round_to_block(src->len) + AES_BLOCK_SIZE);
+	if (output == NULL)
+	{
+		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, state->request_context->log, 0,
+			"aes_cbc_encrypt: vod_alloc failed");
+		return VOD_ALLOC_FAILED;
+	}
+
+	if (1 != EVP_EncryptUpdate(&state->cipher, output, &out_size, src->data, src->len))
+	{
+		vod_log_error(VOD_LOG_ERR, state->request_context->log, 0,
+			"aes_cbc_encrypt: EVP_EncryptUpdate failed");
+		return VOD_UNEXPECTED;
+	}
+
+	dest->data = output;
+	dest->len = out_size;
+
+	if (flush)
+	{
+		if (1 != EVP_EncryptFinal_ex(&state->cipher, output + out_size, &out_size))
+		{
+			vod_log_error(VOD_LOG_ERR, state->request_context->log, 0,
+				"aes_cbc_encrypt: EVP_EncryptFinal_ex failed");
+			return VOD_UNEXPECTED;
+		}
+
+		dest->len += out_size;
+	}
+
+	return VOD_OK;
+}
+
+vod_status_t 
 aes_cbc_encrypt_write(
 	aes_cbc_encrypt_context_t* state,
 	u_char* buffer,
