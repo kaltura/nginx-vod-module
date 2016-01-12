@@ -1,0 +1,17 @@
+# HTTPS server
+#
+server {
+    listen     @VOD_PACKAGER_SSL_PORT@   ssl;
+    server_name @VOD_PACKAGER_HOST@;
+
+    ssl_certificate      @SSL_CERT@;
+    ssl_certificate_key  @SSL_KEY@;
+
+    ssl_session_cache shared:SSL:1m;
+    ssl_session_timeout  5m;
+
+    ssl_ciphers  HIGH:!aNULL:!MD5;
+    ssl_prefer_server_ciphers   on;
+
+    include /etc/nginx/conf.d/kaltura.conf;
+}
