@@ -2012,6 +2012,11 @@ ngx_http_vod_run_state_machine(ngx_http_vod_ctx_t *ctx)
 			return rc;
 		}
 
+		if (ctx->frame_processor_state == NULL)
+		{
+			return ngx_http_vod_finalize_segment_response(ctx);
+		}
+
 		ctx->submodule_context.request_context.log->action = "processing frames";
 		ctx->state = STATE_PROCESS_FRAMES;
 		// fallthrough
@@ -3332,6 +3337,7 @@ ngx_http_vod_handler(ngx_http_request_t *r)
 	ctx->submodule_context.cur_source = media_set.sources;
 	ctx->submodule_context.request_context.pool = r->pool;
 	ctx->submodule_context.request_context.log = r->connection->log;
+	ctx->submodule_context.request_context.output_buffer_pool = conf->output_buffer_pool;
 	ctx->perf_counters = perf_counters;
 	ngx_perf_counter_copy(ctx->total_perf_counter_context, pcctx);
 

@@ -8,6 +8,7 @@
 #include "ngx_buffer_cache.h"
 #include "ngx_http_vod_udrm.h"
 #include "vod/media_set_parser.h"
+#include "vod/buffer_pool.h"
 #include "vod/common.h"
 
 static ngx_str_t  ngx_http_vod_last_modified_default_types[] = {
@@ -186,6 +187,11 @@ ngx_http_vod_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child)
 	ngx_conf_merge_size_value(conf->cache_buffer_size, prev->cache_buffer_size, 256 * 1024);
 	ngx_conf_merge_size_value(conf->max_upstream_headers_size, prev->max_upstream_headers_size, 4 * 1024);
 	
+	if (conf->output_buffer_pool == NULL)
+	{
+		conf->output_buffer_pool = prev->output_buffer_pool;
+	}
+
 	ngx_conf_merge_value(conf->ignore_edit_list, prev->ignore_edit_list, 0);
 
 	if (conf->upstream_extra_args == NULL)
@@ -588,6 +594,42 @@ ngx_http_vod_perf_counters_command(ngx_conf_t *cf, ngx_command_t *cmd, void *con
 	return NGX_CONF_OK;
 }
 
+static char*
+ngx_http_vod_buffer_pool_command(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
+{
+	buffer_pool_t** buffer_pool = (buffer_pool_t **)((u_char*)conf + cmd->offset);
+	ngx_str_t  *value;
+	ngx_int_t max_count;
+	ssize_t buffer_size;
+
+	if (*buffer_pool != NULL)
+	{
+		return "is duplicate";
+	}
+
+	value = cf->args->elts;
+
+	buffer_size = ngx_parse_size(&value[1]);
+	if (buffer_size == NGX_ERROR)
+	{
+		return "invalid size";
+	}
+
+	max_count = ngx_atoi(value[2].data, value[2].len);
+	if (max_count == NGX_ERROR)
+	{
+		return "invalid count";
+	}
+	
+	*buffer_pool = buffer_pool_create(cf->pool, cf->log, buffer_size, max_count);
+	if (*buffer_pool == NULL)
+	{
+		return NGX_CONF_ERROR;
+	}
+	
+	return NGX_CONF_OK;
+}
+
 static char *
 ngx_http_vod(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
 {
@@ -810,6 +852,13 @@ ngx_command_t ngx_http_vod_commands[] = {
 	ngx_conf_set_flag_slot,
 	NGX_HTTP_LOC_CONF_OFFSET,
 	offsetof(ngx_http_vod_loc_conf_t, ignore_edit_list),
+	NULL },
+
+	{ ngx_string("vod_output_buffer_pool"),
+	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE2,
+	ngx_http_vod_buffer_pool_command,
+	NGX_HTTP_LOC_CONF_OFFSET,
+	offsetof(ngx_http_vod_loc_conf_t, output_buffer_pool),
 	NULL },
 
 	// upstream parameters - only for mapped/remote modes

@@ -2,6 +2,8 @@
 
 #if (VOD_HAVE_OPENSSL_EVP)
 
+#include "../buffer_pool.h"
+
 static void 
 aes_cbc_encrypt_cleanup(aes_cbc_encrypt_context_t* state)
 {
@@ -59,20 +61,33 @@ aes_cbc_encrypt_init(
 
 vod_status_t 
 aes_cbc_encrypt_write(
-	aes_cbc_encrypt_context_t* state, 
-	u_char* buffer, 
+	aes_cbc_encrypt_context_t* state,
+	u_char* buffer,
 	uint32_t size)
 {
+	u_char* encrypted_buffer;
+	size_t required_size = aes_round_to_block(size);
+	size_t buffer_size = required_size;
 	int out_size;
 
-	u_char* encrypted_buffer;
-
-	encrypted_buffer = vod_alloc(state->request_context->pool, aes_round_to_block(size));
+	encrypted_buffer = buffer_pool_alloc(
+		state->request_context,
+		state->request_context->output_buffer_pool,
+		&buffer_size);
 	if (encrypted_buffer == NULL)
 	{
 		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, state->request_context->log, 0,
-			"aes_cbc_encrypt_write: vod_alloc failed");
+			"aes_cbc_encrypt_write: buffer_pool_alloc failed");
 		return VOD_ALLOC_FAILED;
+	}
+
+	if (buffer_size < required_size)
+	{
+		// Note: this should never happen since the buffer pool size is a multiple of 16
+		vod_log_error(VOD_LOG_ERR, state->request_context->log, 0,
+			"aes_cbc_encrypt_write: allocated size %uz smaller than required size %uz", 
+			buffer_size, required_size);
+		return VOD_UNEXPECTED;
 	}
 
 	if (1 != EVP_EncryptUpdate(&state->cipher, encrypted_buffer, &out_size, buffer, size))

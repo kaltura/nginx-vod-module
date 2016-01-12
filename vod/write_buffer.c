@@ -1,4 +1,5 @@
 #include "write_buffer.h"
+#include "buffer_pool.h"
 
 // constants
 #define WRITE_BUFFER_SIZE (65536)
@@ -22,6 +23,7 @@ vod_status_t
 write_buffer_flush(write_buffer_state_t* state, bool_t reallocate)
 {
 	vod_status_t rc;
+	size_t buffer_size;
 
 	if (state->cur_pos > state->start_pos)
 	{
@@ -42,14 +44,18 @@ write_buffer_flush(write_buffer_state_t* state, bool_t reallocate)
 
 	if (reallocate)
 	{
-		state->start_pos = vod_alloc(state->request_context->pool, WRITE_BUFFER_SIZE);
+		buffer_size = WRITE_BUFFER_SIZE;
+		state->start_pos = buffer_pool_alloc(
+			state->request_context, 
+			state->request_context->output_buffer_pool, 
+			&buffer_size);
 		if (state->start_pos == NULL)
 		{
 			vod_log_debug0(VOD_LOG_DEBUG_LEVEL, state->request_context->log, 0,
 				"write_buffer_flush: vod_alloc failed");
 			return VOD_ALLOC_FAILED;
 		}
-		state->end_pos = state->start_pos + WRITE_BUFFER_SIZE;
+		state->end_pos = state->start_pos + buffer_size;
 		state->cur_pos = state->start_pos;
 	}
 	else
@@ -69,13 +75,6 @@ write_buffer_get_bytes(
 {
 	vod_status_t rc;
 
-	if (min_size > WRITE_BUFFER_SIZE)
-	{
-		vod_log_error(VOD_LOG_ERR, state->request_context->log, 0,
-			"write_buffer_get_bytes: invalid size request %uz", min_size);
-		return VOD_UNEXPECTED;
-	}
-
 	if (state->cur_pos + min_size > state->end_pos)
 	{
 		rc = write_buffer_flush(state, TRUE);
@@ -83,6 +82,13 @@ write_buffer_get_bytes(
 		{
 			return rc;
 		}
+	}
+
+	if (min_size > (size_t)(state->end_pos - state->start_pos))
+	{
+		vod_log_error(VOD_LOG_ERR, state->request_context->log, 0,
+			"write_buffer_get_bytes: invalid size request %uz", min_size);
+		return VOD_UNEXPECTED;
 	}
 
 	*buffer = state->cur_pos;

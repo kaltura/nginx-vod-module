@@ -139,6 +139,8 @@ static const uint32_t tag_size_by_media_type[MEDIA_TYPE_COUNT] = {
 	sizeof(adobe_mux_packet_header_t) + sizeof(audio_tag_header_aac),
 };
 
+static vod_status_t hds_muxer_start_frame(hds_muxer_state_t* state);
+
 static vod_status_t
 hds_get_sound_info(request_context_t* request_context, media_info_t* media_info, uint8_t* result)
 {
@@ -865,8 +867,21 @@ hds_muxer_init_fragment(
 		return VOD_UNEXPECTED;
 	}
 
-	*processor_state = state;
+	rc = hds_muxer_start_frame(state);
+	if (rc != VOD_OK)
+	{
+		if (rc == VOD_NOT_FOUND)
+		{
+			*processor_state = NULL;		// no frames, nothing to do
+			return VOD_OK;
+		}
 
+		vod_log_debug1(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
+			"hds_muxer_init_fragment: hds_muxer_start_frame failed %i", rc);
+		return rc;
+	}
+
+	*processor_state = state;
 	return VOD_OK;
 }
 
@@ -883,10 +898,6 @@ hds_muxer_start_frame(hds_muxer_state_t* state)
 	rc = hds_muxer_choose_stream(state, &selected_stream);
 	if (rc != VOD_OK)
 	{
-		if (rc == VOD_NOT_FOUND)
-		{
-			return VOD_OK;		// done
-		}
 		return rc;
 	}
 
@@ -989,23 +1000,6 @@ hds_muxer_process_frames(hds_muxer_state_t* state)
 
 	for (;;)
 	{
-		// start a new frame if we don't have a frame
-		if (state->cur_frame == NULL)
-		{
-			rc = hds_muxer_start_frame(state);
-			if (rc != VOD_OK)
-			{
-				vod_log_debug1(VOD_LOG_DEBUG_LEVEL, state->request_context->log, 0,
-					"hds_muxer_process_frames: hds_muxer_start_frame failed %i", rc);
-				return rc;
-			}
-
-			if (state->cur_frame == NULL)
-			{
-				break;		// done
-			}
-		}
-
 		// read some data from the frame
 		rc = state->frames_source->read(state->frames_source_context, &read_buffer, &read_size, &frame_done);
 		if (rc != VOD_OK)
@@ -1038,18 +1032,32 @@ hds_muxer_process_frames(hds_muxer_state_t* state)
 			return rc;
 		}
 
-		// flush the frame if we finished writing it
-		if (frame_done)
+		// if not done, ask the cache for more data
+		if (!frame_done)
 		{
-			rc = hds_muxer_end_frame(state);
-			if (rc != VOD_OK)
+			continue;
+		}
+
+		// end the frame and start a new one
+		rc = hds_muxer_end_frame(state);
+		if (rc != VOD_OK)
+		{
+			vod_log_debug1(VOD_LOG_DEBUG_LEVEL, state->request_context->log, 0,
+				"hds_muxer_process_frames: write_buffer_write failed %i", rc);
+			return rc;
+		}
+
+		rc = hds_muxer_start_frame(state);
+		if (rc != VOD_OK)
+		{
+			if (rc == VOD_NOT_FOUND)
 			{
-				vod_log_debug1(VOD_LOG_DEBUG_LEVEL, state->request_context->log, 0,
-					"hds_muxer_process_frames: write_buffer_write failed %i", rc);
-				return rc;
+				break;		// done
 			}
 
-			state->cur_frame = NULL;
+			vod_log_debug1(VOD_LOG_DEBUG_LEVEL, state->request_context->log, 0,
+				"hds_muxer_process_frames: hds_muxer_start_frame failed %i", rc);
+			return rc;
 		}
 	}
 

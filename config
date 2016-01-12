@@ -98,6 +98,7 @@ NGX_ADDON_DEPS="$NGX_ADDON_DEPS                                     \
                 $ngx_addon_dir/ngx_perf_counters_x.h                \
                 $ngx_addon_dir/vod/avc_defs.h                       \
                 $ngx_addon_dir/vod/bit_read_stream.h                \
+                $ngx_addon_dir/vod/buffer_pool.h                    \
                 $ngx_addon_dir/vod/codec_config.h                   \
                 $ngx_addon_dir/vod/common.h                         \
                 $ngx_addon_dir/vod/dash/dash_packager.h             \
@@ -169,6 +170,7 @@ NGX_ADDON_SRCS="$NGX_ADDON_SRCS                                     \
                 $ngx_addon_dir/ngx_http_vod_udrm.c                  \
                 $ngx_addon_dir/ngx_http_vod_utils.c                 \
                 $ngx_addon_dir/ngx_perf_counters.c                  \
+                $ngx_addon_dir/vod/buffer_pool.c                    \
                 $ngx_addon_dir/vod/codec_config.c                   \
                 $ngx_addon_dir/vod/common.c                         \
                 $ngx_addon_dir/vod/dash/dash_packager.c             \

@@ -63,6 +63,7 @@ typedef struct {
 	request_context_t* request_context;
 
 	hls_encryption_params_t* encryption_params;
+	u_char* pat_packet_start;
 	u_char* pmt_packet_start;
 	u_char* pmt_packet_end;
 	u_char* pmt_packet_pos;
@@ -83,7 +84,8 @@ vod_status_t mpegts_encoder_init_streams(
 	uint32_t segment_index);
 
 void mpegts_encoder_finalize_streams(
-	mpegts_encoder_init_streams_state_t* stream_state);
+	mpegts_encoder_init_streams_state_t* stream_state, 
+	vod_str_t* ts_header);
 
 vod_status_t mpegts_encoder_init(
 	mpegts_encoder_state_t* state,

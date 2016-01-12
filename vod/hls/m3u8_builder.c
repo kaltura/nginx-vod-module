@@ -216,8 +216,6 @@ m3u8_builder_build_iframe_playlist(
 	segmenter_conf_t* segmenter_conf = media_set->segmenter_conf;
 	size_t iframe_length;
 	size_t result_size;
-	hls_muxer_state_t muxer_state;
-	bool_t simulation_supported;
 	uint64_t duration_millis;
 	uint32_t sequence_index;
 	vod_status_t rc; 
@@ -230,29 +228,6 @@ m3u8_builder_build_iframe_playlist(
 	encryption_params.type = HLS_ENC_NONE;
 	encryption_params.key = NULL;
 	encryption_params.iv = NULL;
-
-	// initialize the muxer
-	rc = hls_muxer_init(
-		&muxer_state, 
-		request_context, 
-		muxer_conf, 
-		&encryption_params, 
-		0, 
-		media_set, 
-		NULL, 
-		NULL, 
-		&simulation_supported);
-	if (rc != VOD_OK)
-	{
-		return rc;
-	}
-
-	if (!simulation_supported)
-	{
-		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-			"m3u8_builder_build_iframe_playlist: simulation not supported for this file, cant create iframe playlist");
-		return VOD_BAD_REQUEST;
-	}
 
 	// build the required tracks string
 	rc = m3u8_builder_build_required_tracks_string(
@@ -320,7 +295,14 @@ m3u8_builder_build_iframe_playlist(
 		ctx.base_url = base_url;
 		ctx.segment_file_name_prefix = &conf->segment_file_name_prefix;
 	
-		rc = hls_muxer_simulate_get_iframes(&muxer_state, &segment_durations, media_set, m3u8_builder_append_iframe_string, &ctx);
+		rc = hls_muxer_simulate_get_iframes(
+			request_context,
+			&segment_durations, 
+			muxer_conf,
+			&encryption_params,
+			media_set, 
+			m3u8_builder_append_iframe_string, 
+			&ctx);
 		if (rc != VOD_OK)
 		{
 			return rc;
@@ -372,7 +354,7 @@ m3u8_builder_build_index_playlist(
 
 	// build the required tracks string
 	rc = m3u8_builder_build_required_tracks_string(
-		request_context, 
+		request_context,
 		media_set,
 		sequence_index,
 		request_params,
@@ -402,9 +384,9 @@ m3u8_builder_build_index_playlist(
 		segments_base_url->len + conf->segment_file_name_prefix.len + 1 + vod_get_int_print_len(last_segment_index) + tracks_spec.len + sizeof(".ts\n") - 1;
 
 	result_size =
-		sizeof(M3U8_HEADER_PART1) + VOD_INT64_LEN + 
+		sizeof(M3U8_HEADER_PART1) + VOD_INT64_LEN +
 		sizeof(M3U8_HEADER_VOD) +
-		sizeof(M3U8_HEADER_PART2) + VOD_INT64_LEN + VOD_INT32_LEN + 
+		sizeof(M3U8_HEADER_PART2) + VOD_INT64_LEN + VOD_INT32_LEN +
 		segment_length * segment_durations.segment_count +
 		segment_durations.discontinuities * (sizeof(m3u8_discontinuity) - 1) +
 		sizeof(m3u8_footer);
@@ -413,11 +395,11 @@ m3u8_builder_build_index_playlist(
 	{
 		result_size +=
 			sizeof(encryption_key_tag_part1) - 1 +
-			sizeof(encryption_type_sample_aes) - 1 + 
+			sizeof(encryption_type_sample_aes) - 1 +
 			sizeof(encryption_key_tag_part2) - 1 +
 			base_url->len +
-			conf->encryption_key_file_name.len + 
-			sizeof("-f") - 1 + VOD_INT32_LEN + 
+			conf->encryption_key_file_name.len +
+			sizeof("-f") - 1 + VOD_INT32_LEN +
 			sizeof(encryption_key_tag_part3) - 1;
 	}
 
@@ -435,7 +417,7 @@ m3u8_builder_build_index_playlist(
 		result->data,
 		M3U8_HEADER_PART1,
 		(segmenter_conf->max_segment_duration + 500) / 1000);
-	
+
 	if (media_set->type == MEDIA_SET_VOD)
 	{
 		p = vod_copy(p, M3U8_HEADER_VOD, sizeof(M3U8_HEADER_VOD) - 1);

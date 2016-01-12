@@ -17,6 +17,7 @@ typedef struct {
 typedef struct {
 	// input params
 	request_context_t* request_context;
+	buffer_pool_t* output_buffer_pool;
 	write_callback_t write_callback;
 	void* write_context;
 	bool_t reuse_buffers;

@@ -93,21 +93,22 @@ ngx_http_vod_hls_handle_index_playlist(
 	ngx_str_t* response,
 	ngx_str_t* content_type)
 {
+	ngx_http_vod_loc_conf_t* conf = submodule_context->conf;
 	hls_encryption_params_t encryption_params;
 	ngx_str_t segments_base_url = ngx_null_string;
 	ngx_str_t base_url = ngx_null_string;
 	vod_status_t rc;
 	u_char iv[AES_BLOCK_SIZE];
 
-	if (submodule_context->conf->hls.absolute_index_urls)
+	if (conf->hls.absolute_index_urls)
 	{
-		ngx_http_vod_get_base_url(submodule_context->r, &submodule_context->conf->https_header_name, NULL, 0, &submodule_context->r->uri, &base_url);
+		ngx_http_vod_get_base_url(submodule_context->r, &conf->https_header_name, NULL, 0, &submodule_context->r->uri, &base_url);
 
 		ngx_http_vod_get_base_url(
 			submodule_context->r, 
-			&submodule_context->conf->https_header_name, 
-			&submodule_context->conf->segments_base_url, 
-			submodule_context->conf->segments_base_url_has_scheme, 
+			&conf->https_header_name, 
+			&conf->segments_base_url, 
+			conf->segments_base_url_has_scheme, 
 			&submodule_context->r->uri, 
 			&segments_base_url);
 	}
@@ -116,7 +117,7 @@ ngx_http_vod_hls_handle_index_playlist(
 
 	rc = m3u8_builder_build_index_playlist(
 		&submodule_context->request_context,
-		&submodule_context->conf->hls.m3u8_config,
+		&conf->hls.m3u8_config,
 		&base_url,
 		&segments_base_url,
 		&submodule_context->request_params,
@@ -142,10 +143,11 @@ ngx_http_vod_hls_handle_iframe_playlist(
 	ngx_str_t* response,
 	ngx_str_t* content_type)
 {
+	ngx_http_vod_loc_conf_t* conf = submodule_context->conf;
 	ngx_str_t base_url = ngx_null_string;
 	vod_status_t rc;
 	
-	if (submodule_context->conf->hls.encryption_method != HLS_ENC_NONE)
+	if (conf->hls.encryption_method != HLS_ENC_NONE)
 	{
 		ngx_log_error(NGX_LOG_ERR, submodule_context->request_context.log, 0,
 			"ngx_http_vod_hls_handle_iframe_playlist: iframes playlist not supported with encryption");
@@ -159,15 +161,15 @@ ngx_http_vod_hls_handle_iframe_playlist(
 		return NGX_HTTP_BAD_REQUEST;
 	}
 
-	if (submodule_context->conf->hls.absolute_iframe_urls)
+	if (conf->hls.absolute_iframe_urls)
 	{
-		ngx_http_vod_get_base_url(submodule_context->r, &submodule_context->conf->https_header_name, NULL, 0, &submodule_context->r->uri, &base_url);
+		ngx_http_vod_get_base_url(submodule_context->r, &conf->https_header_name, NULL, 0, &submodule_context->r->uri, &base_url);
 	}
 
 	rc = m3u8_builder_build_iframe_playlist(
 		&submodule_context->request_context,
-		&submodule_context->conf->hls.m3u8_config,
-		&submodule_context->conf->hls.muxer_config,
+		&conf->hls.m3u8_config,
+		&conf->hls.muxer_config,
 		&base_url,
 		&submodule_context->request_params,
 		&submodule_context->media_set,
@@ -225,21 +227,11 @@ ngx_http_vod_hls_init_frame_processor(
 	hls_encryption_params_t encryption_params;
 	hls_muxer_state_t* state;
 	vod_status_t rc;
-	bool_t simulation_supported;
 	u_char iv[AES_BLOCK_SIZE];
-
-	state = ngx_pcalloc(submodule_context->request_context.pool, sizeof(hls_muxer_state_t));
-	if (state == NULL)
-	{
-		ngx_log_debug0(NGX_LOG_DEBUG_HTTP, submodule_context->request_context.log, 0,
-			"ngx_http_vod_hls_init_frame_processor: ngx_pcalloc failed");
-		return NGX_HTTP_INTERNAL_SERVER_ERROR;
-	}
 
 	ngx_http_vod_hls_init_encryption_params(&encryption_params, submodule_context, iv);
 
-	rc = hls_muxer_init(
-		state,
+	rc = hls_muxer_init_segment(
 		&submodule_context->request_context,
 		&submodule_context->conf->hls.muxer_config,
 		&encryption_params,
@@ -247,22 +239,14 @@ ngx_http_vod_hls_init_frame_processor(
 		&submodule_context->media_set,
 		segment_writer->write_tail,
 		segment_writer->context,
-		&simulation_supported);
+		response_size, 
+		output_buffer,
+		&state);
 	if (rc != VOD_OK)
 	{
 		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, submodule_context->request_context.log, 0,
 			"ngx_http_vod_hls_init_frame_processor: hls_muxer_init failed %i", rc);
 		return ngx_http_vod_status_to_ngx_error(rc);
-	}
-
-	if (simulation_supported)
-	{
-		rc = hls_muxer_simulate_get_segment_size(state, response_size);
-		if (rc != VOD_OK)
-		{
-			return ngx_http_vod_status_to_ngx_error(rc);
-		}
-		hls_muxer_simulation_reset(state);
 	}
 
 	*frame_processor = (ngx_http_vod_frame_processor_t)hls_muxer_process;

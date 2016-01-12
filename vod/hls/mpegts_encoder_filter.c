@@ -361,13 +361,15 @@ mpegts_encoder_init_streams(
 	}
 
 	// append PAT packet
-	cur_packet = write_buffer_queue_get_buffer(queue, MPEGTS_PACKET_SIZE, NULL);
+	cur_packet = vod_alloc(request_context->pool, MPEGTS_PACKET_SIZE * 2);
 	if (cur_packet == NULL)
 	{
 		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
-			"mpegts_encoder_init_streams: write_buffer_queue_get_buffer failed (1)");
+			"mpegts_encoder_init_streams: vod_alloc failed");
 		return VOD_ALLOC_FAILED;
 	}
+
+	stream_state->pat_packet_start = cur_packet;
 
 	vod_memcpy(cur_packet, pat_packet, sizeof(pat_packet));
 	vod_memset(cur_packet + sizeof(pat_packet), 0xff, MPEGTS_PACKET_SIZE - sizeof(pat_packet));
@@ -376,18 +378,13 @@ mpegts_encoder_init_streams(
 	cur_packet[3] |= (segment_index & 0x0F);
 
 	// append PMT packet
-	stream_state->pmt_packet_start = write_buffer_queue_get_buffer(queue, MPEGTS_PACKET_SIZE, NULL);
-	if (stream_state->pmt_packet_start == NULL)
-	{
-		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
-			"mpegts_encoder_init_streams: write_buffer_queue_get_buffer failed (2)");
-		return VOD_ALLOC_FAILED;
-	}
-	stream_state->pmt_packet_end = stream_state->pmt_packet_start + MPEGTS_PACKET_SIZE;
+	cur_packet += MPEGTS_PACKET_SIZE;
+	stream_state->pmt_packet_start = cur_packet;
+	stream_state->pmt_packet_end = cur_packet + MPEGTS_PACKET_SIZE;
 
-	vod_memcpy(stream_state->pmt_packet_start, pmt_header_template, sizeof(pmt_header_template));
-	stream_state->pmt_packet_start[3] |= (segment_index & 0x0F);
-	stream_state->pmt_packet_pos = stream_state->pmt_packet_start + sizeof(pmt_header_template);
+	vod_memcpy(cur_packet, pmt_header_template, sizeof(pmt_header_template));
+	cur_packet[3] |= (segment_index & 0x0F);
+	stream_state->pmt_packet_pos = cur_packet + sizeof(pmt_header_template);
 
 	return VOD_OK;
 }
@@ -528,7 +525,7 @@ mpegts_encoder_add_stream(
 }
 
 void 
-mpegts_encoder_finalize_streams(mpegts_encoder_init_streams_state_t* stream_state)
+mpegts_encoder_finalize_streams(mpegts_encoder_init_streams_state_t* stream_state, vod_str_t* ts_header)
 {
 	u_char* p = stream_state->pmt_packet_pos;
 	u_char* crc_start_offset;
@@ -558,6 +555,9 @@ mpegts_encoder_finalize_streams(mpegts_encoder_init_streams_state_t* stream_stat
 
 	// set the padding
 	vod_memset(p, 0xFF, stream_state->pmt_packet_end - p);
+
+	ts_header->data = stream_state->pat_packet_start;
+	ts_header->len = MPEGTS_PACKET_SIZE * 2;
 }
 
 // stateful functions
@@ -606,7 +606,7 @@ mpegts_encoder_init(
 	return VOD_OK;
 }
 
-static vod_status_t 
+static vod_inline vod_status_t 
 mpegts_encoder_init_packet(mpegts_encoder_state_t* state, bool_t write_direct)
 {
 	if (write_direct || !state->interleave_frames)

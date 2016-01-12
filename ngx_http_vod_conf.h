@@ -37,6 +37,7 @@ struct ngx_http_vod_loc_conf_s {
 	size_t initial_read_size;
 	size_t max_moov_size;
 	size_t cache_buffer_size;
+	buffer_pool_t* output_buffer_pool;
 	size_t max_upstream_headers_size;
 	ngx_flag_t ignore_edit_list;
 	ngx_http_complex_value_t *upstream_extra_args;
