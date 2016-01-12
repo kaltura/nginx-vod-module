@@ -1,56 +1,4 @@
 
-#user  nobody;
-worker_processes  4;
-
-error_log  @LOG_DIR@/error_log;
-
-pid		/var/run/nginx.pid;
-
-events {
-	worker_connections  1024;
-	multi_accept on;
-	use epoll;
-}
-
-http {
-	upstream kalapi {
-		server @WWW_HOST@;
-	}
-		
-	include	   mime.types;
-	default_type  application/octet-stream;
-
-	log_format  main  '$remote_addr - $remote_user [$time_local] "$request" '
-		'$status $bytes_sent $request_time "$http_referer" "$http_user_agent" "-" - '
-		'"$sent_http_x_kaltura" "$http_host" $pid $sent_http_x_kaltura_session - '
-		'$request_length "$sent_http_content_range" "$http_x_forwarded_for" '
-		'"$http_x_forwarded_server" "$http_x_forwarded_host" "$sent_http_cache_control" '
-		'$connection ';
-
-	access_log @LOG_DIR@/access_log main;
-
-	sendfile on;
-	tcp_nopush on;
-	tcp_nodelay on;
-
-	keepalive_timeout 60;
-	keepalive_requests 1000;
-	client_header_timeout 20;
-	client_body_timeout 20;
-	reset_timedout_connection on;
-	send_timeout 20;
-
-	gzip  on;
-	gzip_types application/vnd.apple.mpegurl video/f4m application/dash+xml text/xml;
-
-	server {
-		listen @VOD_PACKAGER_PORT@;
-        	listen @VOD_PACKAGER_SSL_PORT@ ssl;
-		server_name @VOD_PACKAGER_HOST@;
-
-        	ssl_certificate  @SSL_CERTIFICATE_FILE@;
-        	ssl_certificate_key @SSL_CERTIFICATE_CHAIN_FILE@;
-
 		# common vod settings
 		vod_mode mapped;
 		vod_upstream_location /kalapi_proxy;
@@ -170,5 +118,3 @@ http {
 		location = /50x.html {
 			root   html;
 		}
-	}
-}
