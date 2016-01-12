@@ -1,59 +1,8 @@
 
-#user  nobody;
-worker_processes  4;
-
-error_log  @LOG_DIR@/error_log;
-
-pid		/var/run/nginx.pid;
-
-events {
-	worker_connections  1024;
-	multi_accept on;
-	use epoll;
-}
-
-http {
-	upstream kalapi {
-		server @WWW_HOST@;
-	}
-		
-	include	   mime.types;
-	default_type  application/octet-stream;
-
-	log_format  main  '$remote_addr - $remote_user [$time_local] "$request" '
-		'$status $bytes_sent $request_time "$http_referer" "$http_user_agent" "-" - '
-		'"$sent_http_x_kaltura" "$http_host" $pid $sent_http_x_kaltura_session - '
-		'$request_length "$sent_http_content_range" "$http_x_forwarded_for" '
-		'"$http_x_forwarded_server" "$http_x_forwarded_host" "$sent_http_cache_control" '
-		'$connection ';
-
-	access_log @LOG_DIR@/access_log main;
-
-	sendfile on;
-	tcp_nopush on;
-	tcp_nodelay on;
-
-	keepalive_timeout 60;
-	keepalive_requests 1000;
-	client_header_timeout 20;
-	client_body_timeout 20;
-	reset_timedout_connection on;
-	send_timeout 20;
-
-	gzip  on;
-	gzip_types application/vnd.apple.mpegurl video/f4m application/dash+xml text/xml;
-
-	server {
-		listen @VOD_PACKAGER_PORT@;
-        	listen @VOD_PACKAGER_SSL_PORT@ ssl;
-		server_name @VOD_PACKAGER_HOST@;
-
-        	ssl_certificate  @SSL_CERTIFICATE_FILE@;
-        	ssl_certificate_key @SSL_CERTIFICATE_CHAIN_FILE@;
-
 		# common vod settings
 		vod_mode mapped;
-		vod_upstream_location /kalapi_proxy;
+		vod_child_request_path /__child_request__/;
+		vod_upstream kalapi;
 		vod_upstream_extra_args "pathOnly=1";
 
 		# shared memory zones
@@ -88,10 +37,9 @@ http {
 		}
 		
 		# internal location for vod subrequests
-		location /kalapi_proxy/ {
+		location /__child_request__/ {
 			internal;
-			proxy_pass http://kalapi/;
-			proxy_set_header Host $http_host;
+			vod_child_request;
 		}
 		
 		# serve flavor progressive (clipFrom/To are not supported with 'vod none' so they are proxied)
@@ -101,74 +49,3 @@ http {
 			add_header Last-Modified "Sun, 19 Nov 2000 08:52:00 GMT";
 			expires 100d;
 		}
-		
-		# serve flavor HLS
-		location ~ ^/hls/p/\d+/(sp/\d+/)?serveFlavor/ {
-			vod hls;
-			vod_bootstrap_segment_durations 2000;
-			vod_bootstrap_segment_durations 2000;
-			vod_bootstrap_segment_durations 2000;
-			vod_bootstrap_segment_durations 4000;
-
-			add_header Last-Modified "Sun, 19 Nov 2000 08:52:00 GMT";
-			add_header Access-Control-Allow-Headers "*";
-			add_header Access-Control-Expose-Headers "Server,range,Content-Length,Content-Range";
-			add_header Access-Control-Allow-Methods "GET, HEAD, OPTIONS";
-			add_header Access-Control-Allow-Origin "*";
-			expires 100d;
-		}
-		
-		# serve flavor DASH
-		location ~ ^/dash/p/\d+/(sp/\d+/)?serveFlavor/ {
-			vod dash;
-			vod_segment_duration 4000;
-			vod_bootstrap_segment_durations 3500;
-			vod_align_segments_to_key_frames on;
-			vod_dash_manifest_format segmenttemplate;
-			
-			add_header Last-Modified "Sun, 19 Nov 2000 08:52:00 GMT";
-			add_header Access-Control-Allow-Headers "origin,range,accept-encoding,referer";
-			add_header Access-Control-Expose-Headers "Server,range,Content-Length,Content-Range";
-			add_header Access-Control-Allow-Methods "GET, HEAD, OPTIONS";
-			add_header Access-Control-Allow-Origin "*";
-			expires 100d;
-		}
-		
-		# serve flavor HDS
-		location ~ ^/hds/p/\d+/(sp/\d+/)?serveFlavor/ {
-			vod hds;
-			vod_segment_duration 6000;
-			vod_align_segments_to_key_frames on;
-			vod_segment_count_policy last_rounded;
-			
-			add_header Last-Modified "Sun, 19 Nov 2000 08:52:00 GMT";
-			add_header Access-Control-Allow-Origin "*";
-			expires 100d;
-		}
-
-		# serve flavor MSS
-		location ~ ^/mss/p/\d+/(sp/\d+/)?serveFlavor/ {
-			vod mss;
-			vod_segment_duration 4000;
-			vod_manifest_segment_durations_mode accurate;
-			
-			add_header Last-Modified "Sun, 19 Nov 2000 08:52:00 GMT";
-			expires 100d;
-		}	
-		
-		# all unidentified requests fallback to api (inc. playManifest)
-		location @api_fallback {
-			proxy_pass http://kalapi;
-			proxy_set_header Host $http_host;
-		}
-		
-		#error_page  404			  /404.html;
-
-		# redirect server error pages to the static page /50x.html
-		#
-		error_page   500 502 503 504  /50x.html;
-		location = /50x.html {
-			root   html;
-		}
-	}
-}
