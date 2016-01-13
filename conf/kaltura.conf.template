@@ -1,21 +1,4 @@
 
-		# common vod settings
-		vod_mode mapped;
-		vod_upstream_location /kalapi_proxy;
-		vod_upstream_extra_args "pathOnly=1";
-
-		# shared memory zones
-		vod_moov_cache moov_cache 512m;
-		vod_path_mapping_cache mapping_cache 64m;
-		vod_response_cache response_cache 64m;
-		vod_performance_counters perf_counters;
-
-		# common file caching / aio
-		open_file_cache max=1000 inactive=5m;
-		open_file_cache_valid 2m;
-		open_file_cache_min_uses 1;
-		open_file_cache_errors on;
-		aio on;
 		
 		# static files (crossdomain.xml, robots.txt etc.) + fallback to api
 		location / {
