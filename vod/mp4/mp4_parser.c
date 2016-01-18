@@ -1452,7 +1452,7 @@ mp4_parser_parse_stsz_atom(atom_info_t* atom_info, frames_parse_context_t* conte
 			if (cur_size > MAX_FRAME_SIZE)
 			{
 				vod_log_error(VOD_LOG_ERR, context->request_context->log, 0,
-					"mp4_parser_parse_stsz_atom: frame size %uD too big", cur_frame->size);
+					"mp4_parser_parse_stsz_atom: frame size %uD too big", cur_size);
 				return VOD_BAD_DATA;
 			}
 			context->total_frames_size += cur_size;
