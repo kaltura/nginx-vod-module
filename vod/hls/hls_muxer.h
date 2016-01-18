@@ -92,8 +92,7 @@ typedef struct {
 } hls_muxer_state_t;
 
 // functions
-vod_status_t hls_muxer_init(
-	hls_muxer_state_t* state,
+vod_status_t hls_muxer_init_segment(
 	request_context_t* request_context,
 	hls_muxer_conf_t* conf,
 	hls_encryption_params_t* encryption_params,
@@ -101,19 +100,19 @@ vod_status_t hls_muxer_init(
 	media_set_t* media_set,
 	write_callback_t write_callback,
 	void* write_context,
-	bool_t* simulation_supported);
+	size_t* response_size,
+	vod_str_t* response_header,
+	hls_muxer_state_t** processor_state);
 
 vod_status_t hls_muxer_process(hls_muxer_state_t* state);
 
 vod_status_t hls_muxer_simulate_get_iframes(
-	hls_muxer_state_t* state,
+	request_context_t* request_context,
 	segment_durations_t* segment_durations,
+	hls_muxer_conf_t* muxer_conf,
+	hls_encryption_params_t* encryption_params,
 	media_set_t* media_set,
 	hls_get_iframe_positions_callback_t callback,
 	void* context);
-
-vod_status_t hls_muxer_simulate_get_segment_size(hls_muxer_state_t* state, size_t* result);
-
-void hls_muxer_simulation_reset(hls_muxer_state_t* state);
 
 #endif // __HLS_MUXER_H__

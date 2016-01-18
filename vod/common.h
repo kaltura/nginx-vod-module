@@ -262,9 +262,13 @@ typedef struct {
 	void* context;
 } segment_writer_t;
 
+struct buffer_pool_s;
+typedef struct buffer_pool_s buffer_pool_t;
+
 typedef struct {
 	vod_pool_t* pool;
 	vod_log_t *log;
+	buffer_pool_t* output_buffer_pool;
 	bool_t simulation_only;
 } request_context_t;
 

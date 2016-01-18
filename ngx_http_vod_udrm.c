@@ -77,11 +77,10 @@ ngx_http_vod_udrm_parse_response(
 	vod_json_get_object_values(element, &drm_info_keys_hash, drm_info_values);
 
 	if (drm_info_values[DRM_INFO_PARAM_KEY] == NULL ||
-		drm_info_values[DRM_INFO_PARAM_KEY_ID] == NULL ||
-		drm_info_values[DRM_INFO_PARAM_PSSH] == NULL)
+		drm_info_values[DRM_INFO_PARAM_KEY_ID] == NULL)
 	{
 		ngx_log_error(NGX_LOG_ERR, request_context->log, 0,
-			"ngx_http_vod_udrm_parse_response: missing fields, \"key\", \"key_id\", \"pssh\" are mandatory");
+			"ngx_http_vod_udrm_parse_response: missing fields, \"key\", \"key_id\" are mandatory");
 		return NGX_ERROR;
 	}
 
@@ -107,6 +106,15 @@ ngx_http_vod_udrm_parse_response(
 		ngx_log_error(NGX_LOG_ERR, request_context->log, 0,
 			"ngx_http_vod_udrm_parse_response: parse_utils_parse_fixed_base64_string(key_id) failed %i", rc);
 		return NGX_ERROR;
+	}
+
+	if (drm_info_values[DRM_INFO_PARAM_PSSH] == NULL)
+	{
+		result->pssh_array.count = 0;
+		result->pssh_array.first = NULL;
+		result->pssh_array.last = NULL;
+		*output = result;
+		return NGX_OK;
 	}
 
 	pssh_array = &drm_info_values[DRM_INFO_PARAM_PSSH]->v.arr;

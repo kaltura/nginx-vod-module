@@ -1,4 +1,5 @@
 #include "write_buffer_queue.h"
+#include "buffer_pool.h"
 
 #define BUFFER_SIZE (188 * 16 * 32)		// chosen to be a multiple of mpegTS packet size and AES block size
 
@@ -11,6 +12,7 @@ write_buffer_queue_init(
 	bool_t reuse_buffers)
 {
 	queue->request_context = request_context;
+	queue->output_buffer_pool = request_context->output_buffer_pool;
 	queue->write_callback = write_callback;
 	queue->write_context = write_context;
 	queue->reuse_buffers = reuse_buffers;
@@ -24,6 +26,7 @@ u_char*
 write_buffer_queue_get_buffer(write_buffer_queue_t* queue, uint32_t size, void* writer_context)
 {
 	buffer_header_t* write_buffer = queue->cur_write_buffer;
+	size_t buffer_size;
 	u_char* result;
 
 	// optimization for the common case
@@ -34,11 +37,6 @@ write_buffer_queue_get_buffer(write_buffer_queue_t* queue, uint32_t size, void* 
 		queue->cur_offset += size;
 		queue->last_writer_context = writer_context;
 		return result;
-	}
-
-	if (size > BUFFER_SIZE)
-	{
-		return NULL;
 	}
 
 	if (write_buffer != NULL)
@@ -71,17 +69,27 @@ write_buffer_queue_get_buffer(write_buffer_queue_t* queue, uint32_t size, void* 
 	if (write_buffer->start_pos == NULL)
 	{
 		// allocate a buffer
-		write_buffer->start_pos = vod_alloc(queue->request_context->pool, BUFFER_SIZE);
+		buffer_size = BUFFER_SIZE;
+		write_buffer->start_pos = buffer_pool_alloc(queue->request_context, queue->output_buffer_pool, &buffer_size);
 		if (write_buffer->start_pos == NULL)
 		{
 			return NULL;
 		}
 
 		write_buffer->cur_pos = write_buffer->start_pos;
-		write_buffer->end_pos = write_buffer->start_pos + BUFFER_SIZE;
+		write_buffer->end_pos = write_buffer->start_pos + buffer_size;
+	}
+	else
+	{
+		buffer_size = write_buffer->end_pos - write_buffer->start_pos;
 	}
 
-	write_buffer->end_offset = queue->cur_offset + BUFFER_SIZE;
+	write_buffer->end_offset = queue->cur_offset + buffer_size;
+
+	if (size > buffer_size)
+	{
+		return NULL;
+	}
 
 	result = write_buffer->cur_pos;
 	write_buffer->cur_pos += size;

@@ -361,7 +361,7 @@ ngx_http_vod_dash_parse_drm_info(
 	ngx_str_t* drm_info,
 	void** output)
 {
-	return 	ngx_http_vod_udrm_parse_response(
+	return ngx_http_vod_udrm_parse_response(
 		&submodule_context->request_context,
 		drm_info,
 		output);
