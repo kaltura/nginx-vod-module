@@ -363,16 +363,31 @@ hls_muxer_init_segment(
 	rc = hls_muxer_start_frame(state);
 	if (rc != VOD_OK)
 	{
-		if (rc == VOD_NOT_FOUND)
+		if (rc != VOD_NOT_FOUND)
 		{
-			*processor_state = NULL;		// no frames, nothing to do
-			return VOD_OK;
+			return rc;
 		}
 
-		return rc;
+		*processor_state = NULL;		// no frames, nothing to do
+	}
+	else
+	{
+		*processor_state = state;
 	}
 
-	*processor_state = state;
+	if (state->encrypted_write_context != NULL)
+	{
+		rc = aes_cbc_encrypt(
+			state->encrypted_write_context,
+			response_header,
+			response_header,
+			*processor_state == NULL);
+		if (rc != VOD_OK)
+		{
+			return rc;
+		}
+	}
+
 	return VOD_OK;
 }
 

@@ -83,7 +83,7 @@ buffer_pool_alloc(request_context_t* request_context, buffer_pool_t* buffer_pool
 	cln = vod_pool_cleanup_add(request_context->pool, sizeof(buffer_pool_cleanup_t));
 	if (cln == NULL)
 	{
-		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, log, 0,
+		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
 			"buffer_pool_alloc: vod_pool_cleanup_add failed");
 		return NULL;
 	}
