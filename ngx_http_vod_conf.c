@@ -599,7 +599,7 @@ ngx_http_vod_buffer_pool_command(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
 {
 	buffer_pool_t** buffer_pool = (buffer_pool_t **)((u_char*)conf + cmd->offset);
 	ngx_str_t  *value;
-	ngx_int_t max_count;
+	ngx_int_t count;
 	ssize_t buffer_size;
 
 	if (*buffer_pool != NULL)
@@ -615,13 +615,13 @@ ngx_http_vod_buffer_pool_command(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
 		return "invalid size";
 	}
 
-	max_count = ngx_atoi(value[2].data, value[2].len);
-	if (max_count == NGX_ERROR)
+	count = ngx_atoi(value[2].data, value[2].len);
+	if (count == NGX_ERROR)
 	{
 		return "invalid count";
 	}
 	
-	*buffer_pool = buffer_pool_create(cf->pool, cf->log, buffer_size, max_count);
+	*buffer_pool = buffer_pool_create(cf->pool, cf->log, buffer_size, count);
 	if (*buffer_pool == NULL)
 	{
 		return NGX_CONF_ERROR;

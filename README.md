@@ -75,13 +75,18 @@ For asynchronous file open using thread pool add `--with-threads` (nginx 1.7.11+
 
     ./configure --add-module=/path/to/nginx-vod-module --with-threads
 
+We recommend setting the gcc optimization parameter `-O3` - we got about 8% reduction in the mp4 parse time
+and frame processing time compared to the nginx default `-O`
+
+    ./configure --add-module=/path/to/nginx-vod-module --with-cc-opt="-O3"
+	
 To compile nginx with debug messages add `--with-debug`
 
     ./configure --add-module=/path/to/nginx-vod-module --with-debug
 
-To disable compiler optimizations (for debugging with gdb) add `CFLAGS="-g -O0"`
+To disable compiler optimizations (for debugging with gdb) add `--with-cc-opt="-O0"`
 
-	CFLAGS="-g -O0" ./configure ....
+    ./configure --add-module=/path/to/nginx-vod-module --with-cc-opt="-O0"
 
 #### RHEL/CentOS RPM
 If you are using RHEL or CentOS 6, you can install by setting up the repo:
