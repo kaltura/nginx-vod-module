@@ -312,7 +312,7 @@ TEST_CASES = [
         ('', 'clipTo/10000/a.mp4', 404, 'too small to hold 100000000 entries'),
     ]),
     ('STSC_ZERO_CHUNK_INDEX', lambda: applyPatch(getAtomDataPos('moov.trak.mdia.minf.stbl.stsc') + 8, struct.pack('>L', 0)), [
-        ('/hls', 'seg-1.ts', 404, 'chunk index is zero'),
+        ('/hls', 'seg-1.ts', 404, 'first chunk index is not 1'),
         ('', 'clipTo/10000/a.mp4', 404, 'chunk index is zero'),
     ]),
     ('STSC_INVALID_SPC', lambda: applyPatch(getAtomDataPos('moov.trak.mdia.minf.stbl.stsc') + 4, struct.pack('>LLL', 1, 1, 0)), [
