@@ -75,8 +75,14 @@ buffer_pool_alloc(request_context_t* request_context, buffer_pool_t* buffer_pool
 	vod_pool_cleanup_t* cln;
 	void* result;
 
-	if (buffer_pool == NULL || buffer_pool->head == NULL)
+	if (buffer_pool == NULL)
 	{
+		return vod_alloc(request_context->pool, *buffer_size);
+	}
+
+	if (buffer_pool->head == NULL)
+	{
+		*buffer_size = buffer_pool->size;
 		return vod_alloc(request_context->pool, *buffer_size);
 	}
 
