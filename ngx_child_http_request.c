@@ -102,7 +102,7 @@ ngx_child_request_wev_handler(ngx_http_request_t *r)
 
 	// get the final error code
 	rc = ctx->error_code;
-	if (rc == NGX_OK)
+	if (rc == NGX_OK && is_in_memory(ctx))
 	{
 		if (u->headers_in.status_n != NGX_HTTP_OK && u->headers_in.status_n != NGX_HTTP_PARTIAL_CONTENT)
 		{
@@ -118,7 +118,7 @@ ngx_child_request_wev_handler(ngx_http_request_t *r)
 			}
 			rc = NGX_HTTP_BAD_GATEWAY;
 		}
-		else if (u->length != 0 && u->length != -1 && is_in_memory(ctx) && !u->headers_in.chunked)
+		else if (u->length != 0 && u->length != -1 && !u->headers_in.chunked)
 		{
 			ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
 				"ngx_child_request_wev_handler: upstream connection was closed with %O bytes left to read", u->length);
