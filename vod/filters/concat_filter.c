@@ -55,7 +55,7 @@ concat_filter_parse(
 	uint32_t max_index;
 	uint32_t clip_count;
 	uint32_t cur_duration;
-	uint32_t start_offset;
+	uint32_t start_offset = 0;
 	uint32_t next_offset;
 	uint32_t offset;
 	uint32_t i;
@@ -108,7 +108,6 @@ concat_filter_parse(
 		min_index = 0;
 		max_index = 0;
 		clip_count = 1;
-		start_offset = 0;
 		range = NULL;
 	}
 	else
