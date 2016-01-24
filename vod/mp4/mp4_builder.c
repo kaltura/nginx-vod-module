@@ -199,6 +199,7 @@ mp4_builder_frame_writer_process(fragment_writer_state_t* state)
 			{
 				state->cur_frame_part = *state->cur_frame_part.next;
 				state->cur_frame = state->cur_frame_part.first_frame;
+				state->first_time = TRUE;
 				break;
 			}
 
@@ -306,6 +307,7 @@ mp4_builder_frame_writer_process(fragment_writer_state_t* state)
 			{
 				state->cur_frame_part = *state->cur_frame_part.next;
 				state->cur_frame = state->cur_frame_part.first_frame;
+				state->first_time = TRUE;
 				break;
 			}
 

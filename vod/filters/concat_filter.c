@@ -367,7 +367,23 @@ concat_filter_concat(
 		// merge the frame parts
 		for (i = 0; i < src_clip->track_array.total_track_count; i++)
 		{
-			dest_clip->track_array.first_track[i].frames.next = &src_clip->track_array.first_track[i].frames;
+			if (src_clip->track_array.first_track[i].frame_count <= 0)
+			{
+				continue;
+			}
+
+			if (dest_clip->track_array.first_track[i].frame_count > 0)
+			{
+				dest_clip->track_array.first_track[i].frames.next = &src_clip->track_array.first_track[i].frames;
+			}
+			else
+			{
+				dest_clip->track_array.first_track[i].frames = src_clip->track_array.first_track[i].frames;
+			}
+			dest_clip->track_array.first_track[i].frame_count += src_clip->track_array.first_track[i].frame_count;
+			dest_clip->track_array.first_track[i].key_frame_count += src_clip->track_array.first_track[i].key_frame_count;
+			dest_clip->track_array.first_track[i].total_frames_duration += src_clip->track_array.first_track[i].total_frames_duration;
+			dest_clip->track_array.first_track[i].total_frames_size += src_clip->track_array.first_track[i].total_frames_size;
 		}
 	}
 
