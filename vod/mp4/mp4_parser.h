@@ -130,6 +130,7 @@ typedef struct {
 } file_info_t;
 
 struct input_frame_s {
+	uint64_t offset;
 	uint32_t duration;
 	uint32_t size;
 	uint32_t key_frame;
@@ -146,15 +147,19 @@ typedef struct {
 	bool_t use_subsamples;
 } media_encryption_t;
 
-typedef struct {
-	media_info_t media_info;
-	file_info_t file_info;
-	uint32_t index;
+typedef struct frame_list_part_s {
 	input_frame_t* first_frame;
 	input_frame_t* last_frame;
 	frames_source_t* frames_source;
 	void* frames_source_context;
-	uint64_t* frame_offsets;		// Saved outside input_frame_t since it's not needed for iframes file
+	struct frame_list_part_s* next;
+} frame_list_part_t;
+
+typedef struct {
+	media_info_t media_info;
+	file_info_t file_info;
+	uint32_t index;
+	frame_list_part_t frames;
 	uint32_t frame_count;
 	uint32_t key_frame_count;
 	uint64_t total_frames_size;

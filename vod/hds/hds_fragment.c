@@ -86,8 +86,6 @@ typedef struct {
 	int media_type;
 	uint8_t sound_info;
 	uint32_t timescale;
-	frames_source_t* frames_source;
-	void* frames_source_context;
 	uint32_t frame_count;
 	uint32_t index;
 
@@ -97,13 +95,9 @@ typedef struct {
 	uint64_t next_frame_dts;
 
 	// input frames
-	input_frame_t* first_frame;
+	frame_list_part_t* first_frame_part;
+	frame_list_part_t cur_frame_part;
 	input_frame_t* cur_frame;
-	input_frame_t* last_frame;
-
-	// frame input offsets
-	uint64_t* first_frame_input_offset;
-	uint64_t* cur_frame_input_offset;
 
 	// frame output offsets
 	uint32_t* first_frame_output_offset;
@@ -341,20 +335,14 @@ hds_muxer_init_track(
 	cur_stream->track = cur_track;
 	cur_stream->media_type = cur_track->media_info.media_type;
 	cur_stream->timescale = cur_track->media_info.timescale;
-	cur_stream->frames_source = cur_track->frames_source;
-	cur_stream->frames_source_context = cur_track->frames_source_context;
-	cur_stream->first_frame = cur_track->first_frame;
-	cur_stream->last_frame = cur_track->last_frame;
+	cur_stream->first_frame_part = &cur_track->frames;
+	cur_stream->cur_frame_part = cur_track->frames;
+	cur_stream->cur_frame = cur_track->frames.first_frame;
 
 	cur_stream->clip_start_time = hds_rescale_millis(cur_track->clip_start_time);
 	cur_stream->first_frame_time_offset = cur_track->first_frame_time_offset;
 	cur_stream->next_frame_time_offset = cur_stream->first_frame_time_offset;
 	cur_stream->next_frame_dts = rescale_time(cur_stream->next_frame_time_offset, cur_stream->timescale, HDS_TIMESCALE);
-
-	cur_stream->cur_frame = cur_stream->first_frame;
-
-	cur_stream->first_frame_input_offset = cur_track->frame_offsets;
-	cur_stream->cur_frame_input_offset = cur_stream->first_frame_input_offset;
 
 	if (cur_track->media_info.media_type == MEDIA_TYPE_AUDIO)
 	{
@@ -410,9 +398,16 @@ hds_muxer_choose_stream(hds_muxer_state_t* state, hds_muxer_stream_state_t** res
 	{
 		for (cur_stream = state->first_stream; cur_stream < state->last_stream; cur_stream++)
 		{
-			if (cur_stream->cur_frame >= cur_stream->last_frame)
+			if (cur_stream->cur_frame >= cur_stream->cur_frame_part.last_frame)
 			{
-				continue;
+				if (cur_stream->cur_frame_part.next == NULL)
+				{
+					continue;
+				}
+
+				cur_stream->cur_frame_part = *cur_stream->cur_frame_part.next;
+				cur_stream->cur_frame = cur_stream->cur_frame_part.first_frame;
+				state->first_time = TRUE;
 			}
 
 			if (min_dts == NULL || cur_stream->next_frame_dts < min_dts->next_frame_dts)
@@ -515,7 +510,8 @@ hds_calculate_output_offsets_and_write_afra_entries(
 	{
 		for (cur_stream = state->first_stream; cur_stream < state->last_stream; cur_stream++)
 		{
-			cur_stream->cur_frame = cur_stream->first_frame;
+			cur_stream->cur_frame_part = *cur_stream->first_frame_part;
+			cur_stream->cur_frame = cur_stream->cur_frame_part.first_frame;
 			cur_stream->cur_frame_output_offset = cur_stream->first_frame_output_offset;
 			cur_stream->next_frame_time_offset = cur_stream->first_frame_time_offset;
 			cur_stream->next_frame_dts = rescale_time(cur_stream->next_frame_time_offset, cur_stream->timescale, HDS_TIMESCALE);
@@ -671,8 +667,9 @@ hds_muxer_init_fragment(
 	media_clip_filtered_t* cur_clip;
 	media_track_t* cur_track;
 	hds_muxer_stream_state_t* cur_stream;
+	frame_list_part_t* part;
 	input_frame_t* cur_frame;
-	input_frame_t* frames_end;
+	input_frame_t* last_frame;
 	hds_muxer_state_t* state;
 	vod_status_t rc;
 	uint32_t track_id = 1;
@@ -810,11 +807,23 @@ hds_muxer_init_fragment(
 				for (cur_clip = sequence->filtered_clips; cur_clip < sequence->filtered_clips_end; cur_clip++)
 				{
 					cur_track = cur_clip->first_track + cur_stream->index;
-					frames_end = cur_track->last_frame;
-					for (cur_frame = cur_track->first_frame, output_offset = cur_stream->first_frame_output_offset;
-						cur_frame < frames_end;
+					
+					part = &cur_track->frames;
+					last_frame = part->last_frame;
+					for (cur_frame = part->first_frame, output_offset = cur_stream->first_frame_output_offset; ;
 						cur_frame++, output_offset++)
 					{
+						if (cur_frame >= last_frame)
+						{
+							if (part->next == NULL)
+							{
+								break;
+							}
+							part = part->next;
+							cur_frame = part->first_frame;
+							last_frame = part->last_frame;
+						}
+
 						p = hds_write_single_video_frame_trun_atom(p, cur_frame, *output_offset);
 					}
 				}
@@ -824,11 +833,23 @@ hds_muxer_init_fragment(
 				for (cur_clip = sequence->filtered_clips; cur_clip < sequence->filtered_clips_end; cur_clip++)
 				{
 					cur_track = cur_clip->first_track + cur_stream->index;
-					frames_end = cur_track->last_frame;
-					for (cur_frame = cur_track->first_frame, output_offset = cur_stream->first_frame_output_offset;
-						cur_frame < frames_end;
+
+					part = &cur_track->frames;
+					last_frame = part->last_frame;
+					for (cur_frame = part->first_frame, output_offset = cur_stream->first_frame_output_offset; ;
 						cur_frame++, output_offset++)
 					{
+						if (cur_frame >= last_frame)
+						{
+							if (part->next == NULL)
+							{
+								break;
+							}
+							part = part->next;
+							cur_frame = part->first_frame;
+							last_frame = part->last_frame;
+						}
+
 						p = hds_write_single_audio_frame_trun_atom(p, cur_frame, *output_offset);
 					}
 				}
@@ -889,7 +910,6 @@ static vod_status_t
 hds_muxer_start_frame(hds_muxer_state_t* state)
 {
 	hds_muxer_stream_state_t* selected_stream;
-	uint64_t cur_frame_offset;
 	uint64_t cur_frame_dts;
 	size_t alloc_size;
 	u_char* p;
@@ -903,11 +923,9 @@ hds_muxer_start_frame(hds_muxer_state_t* state)
 
 	// init the frame
 	state->cur_frame = selected_stream->cur_frame;
-	state->frames_source = selected_stream->frames_source;
-	state->frames_source_context = selected_stream->frames_source_context;
+	state->frames_source = selected_stream->cur_frame_part.frames_source;
+	state->frames_source_context = selected_stream->cur_frame_part.frames_source_context;
 	selected_stream->cur_frame++;
-	cur_frame_offset = *selected_stream->cur_frame_input_offset;
-	selected_stream->cur_frame_input_offset++;
 	selected_stream->cur_frame_output_offset++;
 
 	selected_stream->next_frame_time_offset += state->cur_frame->duration;
@@ -960,7 +978,7 @@ hds_muxer_start_frame(hds_muxer_state_t* state)
 			AAC_PACKET_TYPE_RAW);
 	}
 
-	rc = state->frames_source->start_frame(state->frames_source_context, state->cur_frame, cur_frame_offset);
+	rc = state->frames_source->start_frame(state->frames_source_context, state->cur_frame);
 	if (rc != VOD_OK)
 	{
 		return rc;

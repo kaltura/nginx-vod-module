@@ -574,6 +574,7 @@ mss_packager_build_fragment_header(
 {
 	segment_timing_info_t timing_info;
 	media_clip_filtered_t* cur_clip;
+	frame_list_part_t* part;
 	media_sequence_t* sequence = media_set->sequences;
 	input_frame_t* last_frame;
 	input_frame_t* cur_frame;
@@ -655,10 +656,21 @@ mss_packager_build_fragment_header(
 	for (cur_clip = sequence->filtered_clips; cur_clip < sequence->filtered_clips_end; cur_clip++)
 	{
 		track = cur_clip->first_track;
-		cur_frame = track->first_frame;
-		last_frame = track->last_frame;
-		for (; cur_frame < last_frame; cur_frame++)
+		part = &track->frames;
+		last_frame = part->last_frame;
+		for (cur_frame = part->first_frame; ; cur_frame++)
 		{
+			if (cur_frame >= last_frame)
+			{
+				if (part->next == NULL)
+				{
+					break;
+				}
+				part = part->next;
+				cur_frame = part->first_frame;
+				last_frame = part->last_frame;
+			}
+
 			cur_frame->duration = rescale_time(cur_frame->duration, track->media_info.timescale, MSS_TIMESCALE);
 			cur_frame->pts_delay = rescale_time(cur_frame->pts_delay, track->media_info.timescale, MSS_TIMESCALE);
 		}

@@ -11,6 +11,7 @@ typedef struct {
 	media_range_t* range;
 	uint64_t sequence_offset;
 	uint32_t duration;
+	vod_array_t sources;
 } media_filter_parse_context_t;
 
 // main functions

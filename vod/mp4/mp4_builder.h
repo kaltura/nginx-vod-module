@@ -71,11 +71,9 @@ typedef struct {
 
 	media_sequence_t* sequence;
 	media_clip_filtered_t* cur_clip;
-	frames_source_t* frames_source;
-	void* frames_source_context;
+	frame_list_part_t* first_frame_part;
+	frame_list_part_t cur_frame_part;
 	input_frame_t* cur_frame;
-	input_frame_t* last_frame;
-	uint64_t* cur_frame_offset;
 	bool_t first_time;
 	bool_t frame_started;
 } fragment_writer_state_t;
