@@ -967,7 +967,6 @@ media_set_parse_json(
 	uint32_t* duration_end;
 	u_char error[128];
 	
-	vod_memzero(result, sizeof(media_set_t));
 	result->segmenter_conf = segmenter;
 	result->uri = *uri;
 
@@ -1014,6 +1013,7 @@ media_set_parse_json(
 		result->clip_count = 1;
 		result->durations = NULL;
 		result->use_discontinuity = FALSE;
+		result->type = MEDIA_SET_VOD;
 
 		// parse the sequences
 		context.clip_ranges.clip_ranges = NULL;
