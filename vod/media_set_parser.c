@@ -967,6 +967,7 @@ media_set_parse_json(
 	uint32_t* duration_end;
 	u_char error[128];
 	
+	vod_memzero(result, sizeof(media_set_t));
 	result->segmenter_conf = segmenter;
 	result->uri = *uri;
 
@@ -1024,6 +1025,7 @@ media_set_parse_json(
 		context.media_set = result;
 		context.base.request_context = request_context;
 		context.clip_id = 1;
+		context.expected_clip_count = 1;
 
 		return media_set_parse_sequences(&context, &params[MEDIA_SET_PARAM_SEQUENCES]->v.arr, request_params);
 	}
