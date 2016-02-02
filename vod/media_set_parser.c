@@ -1013,6 +1013,7 @@ media_set_parse_json(
 		result->clip_count = 1;
 		result->durations = NULL;
 		result->use_discontinuity = FALSE;
+		result->type = MEDIA_SET_VOD;
 
 		// parse the sequences
 		context.clip_ranges.clip_ranges = NULL;
@@ -1024,6 +1025,7 @@ media_set_parse_json(
 		context.media_set = result;
 		context.base.request_context = request_context;
 		context.clip_id = 1;
+		context.expected_clip_count = 1;
 
 		return media_set_parse_sequences(&context, &params[MEDIA_SET_PARAM_SEQUENCES]->v.arr, request_params);
 	}
