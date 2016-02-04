@@ -3,7 +3,7 @@
 
 // includes
 #include "../mp4/mp4_builder.h"
-#include "../mp4/mp4_parser.h"
+#include "../media_format.h"
 #include "../segmenter.h"
 #include "../common.h"
 

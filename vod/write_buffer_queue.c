@@ -19,6 +19,7 @@ write_buffer_queue_init(
 
 	initialize_list_head(&queue->buffers);
 	queue->cur_write_buffer = NULL;
+	queue->last_writer_context = NULL;
 	queue->cur_offset = 0;
 }
 

@@ -1,5 +1,5 @@
 #include "codec_config.h"
-#include "mp4/mp4_parser.h"
+#include "media_format.h"
 #include "bit_read_stream.h"
 
 #define AOT_ESCAPE (31)
@@ -7,14 +7,14 @@
 vod_status_t 
 codec_config_avcc_get_nal_units(
 	request_context_t* request_context,
-	const u_char* extra_data,
-	uint32_t extra_data_size,
+	vod_str_t* extra_data,
 	bool_t size_only,
 	uint32_t* nal_packet_size_length,
-	u_char** result,
-	uint32_t* result_size)
+	vod_str_t* result)
 {
-	const u_char* extra_data_end = extra_data + extra_data_size;
+	size_t extra_data_size = extra_data->len;
+	const u_char* extra_data_start = extra_data->data;
+	const u_char* extra_data_end = extra_data_start + extra_data_size;
 	const u_char* cur_pos;
 	u_char* p;
 	size_t actual_size;
@@ -25,15 +25,15 @@ codec_config_avcc_get_nal_units(
 	if (extra_data_size < sizeof(avcc_config_t))
 	{
 		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-			"codec_config_avcc_get_nal_units: extra data size %uD too small", extra_data_size);
+			"codec_config_avcc_get_nal_units: extra data size %uz too small", extra_data_size);
 		return VOD_BAD_DATA;
 	}
 
-	*nal_packet_size_length = (((avcc_config_t*)extra_data)->nula_length_size & 0x3) + 1;
+	*nal_packet_size_length = (((avcc_config_t*)extra_data_start)->nula_length_size & 0x3) + 1;
 
 	// calculate total size and validate
-	*result_size = 0;
-	cur_pos = extra_data + sizeof(avcc_config_t);
+	result->len = 0;
+	cur_pos = extra_data_start + sizeof(avcc_config_t);
 	for (i = 0; i < 2; i++)		// once for SPS, once for PPS
 	{
 		if (cur_pos >= extra_data_end)
@@ -61,28 +61,28 @@ codec_config_avcc_get_nal_units(
 			}
 
 			cur_pos += unit_size;
-			*result_size += sizeof(uint32_t) + unit_size;
+			result->len += sizeof(uint32_t) + unit_size;
 		}
 	}
 
 	if (size_only)
 	{
-		*result = NULL;
+		result->data = NULL;
 		return VOD_OK;
 	}
 
 	// allocate buffer
-	p = vod_alloc(request_context->pool, *result_size);
+	p = vod_alloc(request_context->pool, result->len);
 	if (p == NULL)
 	{
 		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
 			"codec_config_avcc_get_nal_units: vod_alloc failed");
 		return VOD_ALLOC_FAILED;
 	}
-	*result = p;
+	result->data = p;
 
 	// copy data
-	cur_pos = extra_data + sizeof(avcc_config_t);
+	cur_pos = extra_data_start + sizeof(avcc_config_t);
 	for (i = 0; i < 2; i++)		// once for SPS, once for PPS
 	{
 		for (unit_count = *cur_pos++ & 0x1f; unit_count; unit_count--)
@@ -99,16 +99,16 @@ codec_config_avcc_get_nal_units(
 		}
 	}
 
-	actual_size = p - *result;
-	if (actual_size != *result_size)
+	actual_size = p - result->data;
+	if (actual_size != result->len)
 	{
 		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-			"codec_config_avcc_get_nal_units: actual extra data size %uz is different than calculated size %uD",
-			actual_size, *result_size);
+			"codec_config_avcc_get_nal_units: actual extra data size %uz is different than calculated size %uz",
+			actual_size, result->len);
 		return VOD_UNEXPECTED;
 	}
 
-	vod_log_buffer(VOD_LOG_DEBUG_LEVEL, request_context->log, 0, "codec_config_avcc_get_nal_units: parsed extra data ", *result, *result_size);
+	vod_log_buffer(VOD_LOG_DEBUG_LEVEL, request_context->log, 0, "codec_config_avcc_get_nal_units: parsed extra data ", result->data, result->len);
 	return VOD_OK;
 }
 
@@ -116,14 +116,13 @@ codec_config_avcc_get_nal_units(
 static vod_status_t 
 codec_config_hevc_config_parse(
 	request_context_t* request_context, 
-	const u_char* buffer, 
-	int size, 
+	vod_str_t* extra_data, 
 	hevc_config_t* cfg, 
 	const u_char** end_pos)
 {
 	bit_reader_state_t reader;
 
-	bit_read_stream_init(&reader, buffer, size);
+	bit_read_stream_init(&reader, extra_data->data, extra_data->len);
 
 	cfg->configurationVersion = bit_read_stream_get(&reader, 8);
 	cfg->profile_space = bit_read_stream_get(&reader, 2);
@@ -184,12 +183,10 @@ codec_config_hevc_config_parse(
 vod_status_t
 codec_config_hevc_get_nal_units(
 	request_context_t* request_context,
-	const u_char* extra_data,
-	uint32_t extra_data_size,
+	vod_str_t* extra_data,
 	bool_t size_only,
 	uint32_t* nal_packet_size_length,
-	u_char** result,
-	uint32_t* result_size)
+	vod_str_t* result)
 {
 	hevc_config_t cfg;
 	vod_status_t rc;
@@ -202,7 +199,7 @@ codec_config_hevc_get_nal_units(
 	uint8_t type_count;
 	u_char* p;
 
-	rc = codec_config_hevc_config_parse(request_context, extra_data, extra_data_size, &cfg, &start_pos);
+	rc = codec_config_hevc_config_parse(request_context, extra_data, &cfg, &start_pos);
 	if (rc != VOD_OK)
 	{
 		return rc;
@@ -210,10 +207,10 @@ codec_config_hevc_get_nal_units(
 
 	*nal_packet_size_length = cfg.nal_unit_size;
 
-	end_pos = extra_data + extra_data_size;
+	end_pos = extra_data->data + extra_data->len;
 
 	// calculate total size and validate
-	*result_size = 0;
+	result->len = 0;
 	cur_pos = start_pos;
 	if (cur_pos >= end_pos)
 	{
@@ -254,25 +251,25 @@ codec_config_hevc_get_nal_units(
 				return VOD_BAD_DATA;
 			}
 
-			*result_size += sizeof(uint32_t) + unit_size;
+			result->len += sizeof(uint32_t) + unit_size;
 		}
 	}
 
 	if (size_only)
 	{
-		*result = NULL;
+		result->data = NULL;
 		return VOD_OK;
 	}
 
 	// allocate buffer
-	p = vod_alloc(request_context->pool, *result_size);
+	p = vod_alloc(request_context->pool, result->len);
 	if (p == NULL)
 	{
 		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
 			"codec_config_hevc_get_nal_units: vod_alloc failed");
 		return VOD_ALLOC_FAILED;
 	}
-	*result = p;
+	result->data = p;
 
 	// copy data
 	cur_pos = start_pos;
@@ -296,16 +293,16 @@ codec_config_hevc_get_nal_units(
 	}
 
 	// verify size
-	actual_size = p - *result;
-	if (actual_size != *result_size)
+	actual_size = p - result->data;
+	if (actual_size != result->len)
 	{
 		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-			"codec_config_hevc_get_nal_units: actual extra data size %uz is different than calculated size %uD",
-			actual_size, *result_size);
+			"codec_config_hevc_get_nal_units: actual extra data size %uz is different than calculated size %uz",
+			actual_size, result->len);
 		return VOD_UNEXPECTED;
 	}
 
-	vod_log_buffer(VOD_LOG_DEBUG_LEVEL, request_context->log, 0, "codec_config_hevc_get_nal_units: parsed extra data ", *result, *result_size);
+	vod_log_buffer(VOD_LOG_DEBUG_LEVEL, request_context->log, 0, "codec_config_hevc_get_nal_units: parsed extra data ", result->data, result->len);
 	return VOD_OK;
 }
 
@@ -315,14 +312,14 @@ codec_config_get_avc_codec_name(request_context_t* request_context, media_info_t
 	avcc_config_t* config;
 	u_char* p;
 
-	if (media_info->extra_data_size < sizeof(avcc_config_t))
+	if (media_info->extra_data.len < sizeof(avcc_config_t))
 	{
 		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
 			"codec_config_get_avc_codec_name: extra data too small");
 		return VOD_BAD_DATA;
 	}
 
-	config = (avcc_config_t*)media_info->extra_data;
+	config = (avcc_config_t*)media_info->extra_data.data;
 
 	p = vod_sprintf(media_info->codec_name.data, "%*s.%02uxD%02uxD%02uxD",
 		(size_t)sizeof(uint32_t),
@@ -360,7 +357,7 @@ codec_config_get_hevc_codec_name(request_context_t* request_context, media_info_
 	char profile_space[2] = { 0, 0 };
 	int shift;
 
-	rc = codec_config_hevc_config_parse(request_context, media_info->extra_data, media_info->extra_data_size, &cfg, NULL);
+	rc = codec_config_hevc_config_parse(request_context, &media_info->extra_data, &cfg, NULL);
 	if (rc != VOD_OK)
 	{
 		return rc;
@@ -404,15 +401,12 @@ codec_config_get_hevc_codec_name(request_context_t* request_context, media_info_
 vod_status_t
 codec_config_get_video_codec_name(request_context_t* request_context, media_info_t* media_info)
 {
-	switch (media_info->format)
+	switch (media_info->codec_id)
 	{
-	case FORMAT_AVC1:
-	case FORMAT_h264:
-	case FORMAT_H264:
+	case VOD_CODEC_ID_AVC:
 		return codec_config_get_avc_codec_name(request_context, media_info);
 
-	case FORMAT_HEV1:
-	case FORMAT_HVC1:
+	case VOD_CODEC_ID_HEVC:
 		return codec_config_get_hevc_codec_name(request_context, media_info);
 
 	default:
@@ -426,13 +420,13 @@ codec_config_get_audio_codec_name(request_context_t* request_context, media_info
 	u_char* p;
 
 	// Note: currently only mp4a is supported
-	if (media_info->extra_data_size > 0)
+	if (media_info->extra_data.len > 0)
 	{
 		p = vod_sprintf(media_info->codec_name.data, "%*s.%02uxD.%01uD",
 			(size_t)sizeof(uint32_t),
 			&media_info->format,
 			(uint32_t)media_info->u.audio.object_type_id,
-			(uint32_t)(media_info->extra_data[0] & 0xF8) >> 3);
+			(uint32_t)(media_info->extra_data.data[0] & 0xF8) >> 3);
 	}
 	else
 	{
@@ -450,15 +444,14 @@ codec_config_get_audio_codec_name(request_context_t* request_context, media_info
 vod_status_t
 codec_config_mp4a_config_parse(
 	request_context_t* request_context, 
-	const u_char* buffer, 
-	int size, 
+	vod_str_t* extra_data, 
 	mp4a_config_t* result)
 {
 	bit_reader_state_t reader;
 
-	vod_log_buffer(VOD_LOG_DEBUG_LEVEL, request_context->log, 0, "codec_config_mp4a_config_parse: extra data ", buffer, size);
+	vod_log_buffer(VOD_LOG_DEBUG_LEVEL, request_context->log, 0, "codec_config_mp4a_config_parse: extra data ", extra_data->data, extra_data->len);
 
-	bit_read_stream_init(&reader, buffer, size);
+	bit_read_stream_init(&reader, extra_data->data, extra_data->len);
 
 	result->object_type = bit_read_stream_get(&reader, 5);
 	if (result->object_type == AOT_ESCAPE)

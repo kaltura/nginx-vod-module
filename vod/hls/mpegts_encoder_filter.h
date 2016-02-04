@@ -3,7 +3,7 @@
 
 // includes
 #include "hls_encryption.h"
-#include "../mp4/mp4_parser.h"
+#include "../media_format.h"
 #include "../write_buffer_queue.h"
 #include "media_filter.h"
 

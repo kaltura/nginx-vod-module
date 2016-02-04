@@ -7,7 +7,7 @@
 #include "mpegts_encoder_filter.h"
 #include "buffer_filter.h"
 #include "aes_cbc_encrypt.h"
-#include "../mp4/mp4_parser.h"
+#include "../media_format.h"
 #include "../segmenter.h"
 
 // typedefs

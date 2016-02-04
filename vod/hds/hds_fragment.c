@@ -1,6 +1,7 @@
 #include "hds_fragment.h"
 #include "hds_amf0_encoder.h"
 #include "../write_buffer.h"
+#include "../mp4/mp4_defs.h"
 
 // adobe mux packet definitions
 #define TAG_TYPE_AUDIO (8)
@@ -379,7 +380,7 @@ hds_muxer_reinit_tracks(hds_muxer_state_t* state)
 
 		state->codec_config_size += 
 			tag_size_by_media_type[cur_track->media_info.media_type] +
-			cur_track->media_info.extra_data_size + 
+			cur_track->media_info.extra_data.len + 
 			sizeof(uint32_t);
 	}
 	state->cur_clip++;
@@ -602,7 +603,7 @@ hds_muxer_init_state(
 		// update the codec config size
 		state->codec_config_size +=
 			tag_size_by_media_type[cur_track->media_info.media_type] +
-			cur_track->media_info.extra_data_size +
+			cur_track->media_info.extra_data.len +
 			sizeof(uint32_t);
 	}
 
@@ -628,7 +629,7 @@ hds_muxer_write_codec_config(u_char* p, hds_muxer_state_t* state, uint64_t cur_f
 		case MEDIA_TYPE_VIDEO:
 			p = hds_write_video_tag_header(
 				p,
-				cur_track->media_info.extra_data_size,
+				cur_track->media_info.extra_data.len,
 				cur_frame_dts,
 				FRAME_TYPE_KEY_FRAME,
 				AVC_PACKET_TYPE_SEQUENCE_HEADER,
@@ -638,13 +639,13 @@ hds_muxer_write_codec_config(u_char* p, hds_muxer_state_t* state, uint64_t cur_f
 		case MEDIA_TYPE_AUDIO:
 			p = hds_write_audio_tag_header(
 				p,
-				cur_track->media_info.extra_data_size,
+				cur_track->media_info.extra_data.len,
 				cur_frame_dts,
 				cur_stream->sound_info,
 				AAC_PACKET_TYPE_SEQUENCE_HEADER);
 			break;
 		}
-		p = vod_copy(p, cur_track->media_info.extra_data, cur_track->media_info.extra_data_size);
+		p = vod_copy(p, cur_track->media_info.extra_data.data, cur_track->media_info.extra_data.len);
 		packet_size = p - packet_start;
 		write_be32(p, packet_size);
 	}
@@ -708,7 +709,7 @@ hds_muxer_init_fragment(
 		for (cur_track = cur_clip->first_track; cur_track < cur_clip->last_track; cur_track++)
 		{
 			frame_metadata_size = tag_size_by_media_type[cur_track->media_info.media_type] + sizeof(uint32_t);
-			codec_config_size += frame_metadata_size + cur_track->media_info.extra_data_size;
+			codec_config_size += frame_metadata_size + cur_track->media_info.extra_data.len;
 
 			mdat_atom_size += cur_track->total_frames_size + cur_track->frame_count * frame_metadata_size;
 

@@ -1,4 +1,5 @@
 #include "mss_packager.h"
+#include "../mp4/mp4_defs.h"
 
 // constants
 #define MSS_TIMESCALE (10000000)
@@ -332,13 +333,13 @@ mss_packager_build_manifest(
 		{
 		case MEDIA_TYPE_VIDEO:
 			result_size +=
-				sizeof(MSS_VIDEO_QUALITY_LEVEL_HEADER) - 1 + 4 * VOD_INT32_LEN + cur_track->media_info.extra_data_size * 2 +
+				sizeof(MSS_VIDEO_QUALITY_LEVEL_HEADER) - 1 + 4 * VOD_INT32_LEN + cur_track->media_info.extra_data.len * 2 +
 				sizeof(MSS_QUALITY_LEVEL_FOOTER) - 1;
 			break;
 
 		case MEDIA_TYPE_AUDIO:
 			result_size +=
-				sizeof(MSS_AUDIO_QUALITY_LEVEL_HEADER) - 1 + 6 * VOD_INT32_LEN + cur_track->media_info.extra_data_size * 2 +
+				sizeof(MSS_AUDIO_QUALITY_LEVEL_HEADER) - 1 + 6 * VOD_INT32_LEN + cur_track->media_info.extra_data.len * 2 +
 				sizeof(MSS_QUALITY_LEVEL_FOOTER) - 1;
 			break;
 		}
@@ -401,7 +402,7 @@ mss_packager_build_manifest(
 					(uint32_t)cur_track->media_info.u.video.width,
 					(uint32_t)cur_track->media_info.u.video.height);
 
-				p = mss_append_hex_string(p, cur_track->media_info.extra_data, cur_track->media_info.extra_data_size);
+				p = mss_append_hex_string(p, cur_track->media_info.extra_data.data, cur_track->media_info.extra_data.len);
 
 				p = vod_copy(p, MSS_QUALITY_LEVEL_FOOTER, sizeof(MSS_QUALITY_LEVEL_FOOTER) - 1);
 			}
@@ -450,7 +451,7 @@ mss_packager_build_manifest(
 					(uint32_t)cur_track->media_info.u.audio.bits_per_sample,
 					(uint32_t)cur_track->media_info.u.audio.packet_size);
 
-				p = mss_append_hex_string(p, cur_track->media_info.extra_data, cur_track->media_info.extra_data_size);
+				p = mss_append_hex_string(p, cur_track->media_info.extra_data.data, cur_track->media_info.extra_data.len);
 
 				p = vod_copy(p, MSS_QUALITY_LEVEL_FOOTER, sizeof(MSS_QUALITY_LEVEL_FOOTER) - 1);
 			}

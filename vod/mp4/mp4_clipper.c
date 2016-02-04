@@ -1,5 +1,6 @@
 #include "mp4_clipper.h"
 #include "mp4_parser_base.h"
+#include "mp4_format.h"
 #include "mp4_builder.h"
 #include "mp4_defs.h"
 #include "../read_stream.h"
@@ -262,6 +263,7 @@ static const relevant_atom_t relevant_atoms_trak[] = {
 	{ ATOM_NAME_NULL, 0, NULL }
 };
 
+static ngx_str_t mp4_content_type = ngx_string("video/mp4");
 
 static void
 mp4_clipper_write_tail(void* ctx, int index, void* buffer, uint32_t size)
@@ -1539,14 +1541,14 @@ mp4_clipper_process_moov_atom_callback(void* ctx, atom_info_t* atom_info)
 		return rc;
 	}
 
-	if (first_offset < context->result.min_first_offset)
+	if (first_offset < context->result.base.first_offset)
 	{
-		context->result.min_first_offset = first_offset;
+		context->result.base.first_offset = first_offset;
 	}
 
-	if (last_offset > context->result.max_last_offset)
+	if (last_offset > context->result.base.last_offset)
 	{
-		context->result.max_last_offset = last_offset;
+		context->result.base.last_offset = last_offset;
 	}
 
 	parsed_trak->stbl_atom_size = parse_context.stbl_atom_size;
@@ -1652,12 +1654,13 @@ vod_status_t
 mp4_clipper_parse_moov(
 	request_context_t* request_context,
 	media_parse_params_t* parse_params,
+	vod_str_t* metadata_parts,
+	size_t metadata_part_count,
 	bool_t copy_data,
-	u_char* buffer,
-	size_t size,
-	mp4_clipper_parse_result_t* result)
+	media_clipper_parse_result_t** result)
 {
 	process_moov_context_t process_moov_context;
+	mp4_clipper_parse_result_t* parse_result;
 	vod_status_t rc;
 
 	vod_memzero(&process_moov_context, sizeof(process_moov_context));
@@ -1673,9 +1676,15 @@ mp4_clipper_parse_moov(
 	process_moov_context.result.copy_data = copy_data;
 	process_moov_context.result.moov_atom_size = ATOM_HEADER_SIZE;
 	process_moov_context.result.alloc_size = ATOM_HEADER_SIZE;		// moov
-	process_moov_context.result.min_first_offset = ULLONG_MAX;
+	process_moov_context.result.base.first_offset = ULLONG_MAX;
 
-	rc = mp4_parser_parse_atoms(request_context, buffer, size, TRUE, &mp4_clipper_process_moov_atom_callback, &process_moov_context);
+	rc = mp4_parser_parse_atoms(
+		request_context, 
+		metadata_parts[MP4_METADATA_PART_MOOV].data, 
+		metadata_parts[MP4_METADATA_PART_MOOV].len,
+		TRUE, 
+		&mp4_clipper_process_moov_atom_callback, 
+		&process_moov_context);
 	if (rc != VOD_OK)
 	{
 		return rc;
@@ -1686,7 +1695,17 @@ mp4_clipper_parse_moov(
 		process_moov_context.result.alloc_size = process_moov_context.result.moov_atom_size;
 	}
 
-	*result = process_moov_context.result;
+	parse_result = vod_alloc(request_context->pool, sizeof(process_moov_context.result));
+	if (parse_result == NULL)
+	{
+		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
+			"mp4_clipper_parse_moov: vod_alloc failed");
+		return VOD_ALLOC_FAILED;
+	}
+
+	*parse_result = process_moov_context.result;
+
+	*result = &parse_result->base;
 
 	return VOD_OK;
 }
@@ -1694,12 +1713,14 @@ mp4_clipper_parse_moov(
 vod_status_t
 mp4_clipper_build_header(
 	request_context_t* request_context,
-	u_char* ftyp_buffer,
-	size_t ftyp_size,
-	mp4_clipper_parse_result_t* parse_result,
+	vod_str_t* metadata_parts,
+	size_t metadata_part_count,
+	media_clipper_parse_result_t* parse_result,
 	vod_chain_t** result,
-	size_t* response_size)
+	size_t* response_size,
+	vod_str_t* content_type)
 {
+	mp4_clipper_parse_result_t* mp4_parse_result = vod_container_of(parse_result, mp4_clipper_parse_result_t, base);
 	mp4_clipper_write_context write_context;
 	vod_chain_buf_t* write_elts;
 	parsed_trak_t** cur_trak;
@@ -1708,6 +1729,7 @@ mp4_clipper_build_header(
 	int64_t chunk_pos_diff;
 	size_t ftyp_header_size;
 	size_t ftyp_atom_size;
+	size_t ftyp_size = metadata_parts[MP4_METADATA_PART_FTYP].len;
 	size_t mdat_header_size;
 	size_t buffer_count;
 	size_t alloc_size;
@@ -1715,13 +1737,13 @@ mp4_clipper_build_header(
 	u_char* p;
 
 	// init the buffers and chains
-	if (parse_result->copy_data)
+	if (mp4_parse_result->copy_data)
 	{
 		buffer_count = 1;
 	}
 	else
 	{
-		buffer_count = MP4_CLIPPER_INDEX_COUNT + MP4_CLIPPER_TRAK_INDEX_COUNT * parse_result->parsed_traks.nelts;
+		buffer_count = MP4_CLIPPER_INDEX_COUNT + MP4_CLIPPER_TRAK_INDEX_COUNT * mp4_parse_result->parsed_traks.nelts;
 	}
 	alloc_size = buffer_count * sizeof(write_elts[0]);
 	write_elts = vod_alloc(request_context->pool, alloc_size);
@@ -1741,7 +1763,7 @@ mp4_clipper_build_header(
 	ftyp_atom_size = ftyp_header_size + ftyp_size;
 
 	// calculate the mdat size and chunk offset
-	mdat_atom_size = ATOM_HEADER_SIZE + parse_result->max_last_offset - parse_result->min_first_offset;
+	mdat_atom_size = ATOM_HEADER_SIZE + parse_result->last_offset - parse_result->first_offset;
 	if (mdat_atom_size > (uint64_t)0xffffffff)
 	{
 		mdat_header_size = ATOM_HEADER64_SIZE;
@@ -1751,16 +1773,16 @@ mp4_clipper_build_header(
 	{
 		mdat_header_size = ATOM_HEADER_SIZE;
 	}
-	chunk_pos_diff = parse_result->min_first_offset - (ftyp_atom_size + parse_result->moov_atom_size + mdat_header_size);
+	chunk_pos_diff = parse_result->first_offset - (ftyp_atom_size + mp4_parse_result->moov_atom_size + mdat_header_size);
 
 	// allocate the data buffer
-	parse_result->alloc_size += ftyp_header_size + mdat_header_size;
-	if (parse_result->copy_data)
+	mp4_parse_result->alloc_size += ftyp_header_size + mdat_header_size;
+	if (mp4_parse_result->copy_data)
 	{
-		parse_result->alloc_size += ftyp_size;
+		mp4_parse_result->alloc_size += ftyp_size;
 	}
 
-	output = vod_alloc(request_context->pool, parse_result->alloc_size);
+	output = vod_alloc(request_context->pool, mp4_parse_result->alloc_size);
 	if (output == NULL)
 	{
 		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
@@ -1774,40 +1796,40 @@ mp4_clipper_build_header(
 	if (ftyp_size > 0)
 	{
 		write_atom_header(p, ftyp_atom_size, 'f', 't', 'y', 'p');
-		if (parse_result->copy_data)
+		if (mp4_parse_result->copy_data)
 		{
-			p = vod_copy(p, ftyp_buffer, ftyp_size);
+			p = vod_copy(p, metadata_parts[MP4_METADATA_PART_FTYP].data, ftyp_size);
 		}
 		else
 		{
 			mp4_clipper_write_tail(&write_context, MP4_CLIPPER_INDEX_FTYP_HEADER, p - ATOM_HEADER_SIZE, ATOM_HEADER_SIZE);
-			mp4_clipper_write_tail(&write_context, MP4_CLIPPER_INDEX_FTYP_DATA, ftyp_buffer, ftyp_size);
+			mp4_clipper_write_tail(&write_context, MP4_CLIPPER_INDEX_FTYP_DATA, metadata_parts[MP4_METADATA_PART_FTYP].data, ftyp_size);
 		}
 	}
 
 	// moov
-	write_atom_header(p, parse_result->moov_atom_size, 'm', 'o', 'o', 'v');
+	write_atom_header(p, mp4_parse_result->moov_atom_size, 'm', 'o', 'o', 'v');
 
 	// moov.mvhd
-	if (parse_result->copy_data)
+	if (mp4_parse_result->copy_data)
 	{
-		copy_full_atom(p, parse_result->mvhd.atom);
-		mp4_clipper_mvhd_update_atom(p - parse_result->mvhd.atom.size, &parse_result->mvhd);
+		copy_full_atom(p, mp4_parse_result->mvhd.atom);
+		mp4_clipper_mvhd_update_atom(p - mp4_parse_result->mvhd.atom.size, &mp4_parse_result->mvhd);
 	}
 	else
 	{
 		mp4_clipper_write_tail(&write_context, MP4_CLIPPER_INDEX_MOOV_HEADER, p - ATOM_HEADER_SIZE, ATOM_HEADER_SIZE);
-		mp4_clipper_mvhd_update_atom((u_char*)parse_result->mvhd.atom.ptr, &parse_result->mvhd);
-		write_full_atom(&write_context, MP4_CLIPPER_INDEX_MVHD_ATOM, parse_result->mvhd.atom);
+		mp4_clipper_mvhd_update_atom((u_char*)mp4_parse_result->mvhd.atom.ptr, &mp4_parse_result->mvhd);
+		write_full_atom(&write_context, MP4_CLIPPER_INDEX_MVHD_ATOM, mp4_parse_result->mvhd.atom);
 	}
 
 	// moov.trak
 	write_context.elts += MP4_CLIPPER_INDEX_COUNT;
-	cur_trak = parse_result->parsed_traks.elts;
-	last_trak = cur_trak + parse_result->parsed_traks.nelts;
+	cur_trak = mp4_parse_result->parsed_traks.elts;
+	last_trak = cur_trak + mp4_parse_result->parsed_traks.nelts;
 	for (; cur_trak < last_trak; cur_trak++)
 	{
-		p = mp4_clipper_trak_write_atom(p, &write_context, *cur_trak, parse_result->copy_data, chunk_pos_diff);
+		p = mp4_clipper_trak_write_atom(p, &write_context, *cur_trak, mp4_parse_result->copy_data, chunk_pos_diff);
 		write_context.elts += MP4_CLIPPER_TRAK_INDEX_COUNT;
 	}
 	write_context.elts = write_elts;
@@ -1822,21 +1844,21 @@ mp4_clipper_build_header(
 		write_atom_header64(p, mdat_atom_size, 'm', 'd', 'a', 't');
 	}
 
-	if (!parse_result->copy_data)
+	if (!mp4_parse_result->copy_data)
 	{
 		mp4_clipper_write_tail(&write_context, MP4_CLIPPER_INDEX_MDAT_HEADER, p - mdat_header_size, mdat_header_size);
 	}
 
 	// write the whole moov in case of copy
-	if (parse_result->copy_data)
+	if (mp4_parse_result->copy_data)
 	{
 		mp4_clipper_write_tail(&write_context, 0, output, p - output);
 	}
 
-	if (p - output != (ssize_t)parse_result->alloc_size)
+	if (p - output != (ssize_t)mp4_parse_result->alloc_size)
 	{
 		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-			"mp4_clipper_build_header: alloc size %uz different than used size %O", parse_result->alloc_size, (off_t)(p - output));
+			"mp4_clipper_build_header: alloc size %uz different than used size %O", mp4_parse_result->alloc_size, (off_t)(p - output));
 		return VOD_UNEXPECTED;
 	}
 
@@ -1844,7 +1866,8 @@ mp4_clipper_build_header(
 	*write_context.last = NULL;
 
 	// return the response size
-	*response_size = ftyp_atom_size + parse_result->moov_atom_size + mdat_atom_size;
+	*response_size = ftyp_atom_size + mp4_parse_result->moov_atom_size + mdat_atom_size;
+	*content_type = mp4_content_type;
 
 	return VOD_OK;
 }

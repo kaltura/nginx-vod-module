@@ -49,7 +49,6 @@ rate_filter_scale_track_timestamps(
 	track->total_frames_duration *= speed_denom;
 
 	track->media_info.min_frame_duration *= speed_denom;
-	track->media_info.max_frame_duration *= speed_denom;
 
 	if (track->media_info.media_type == MEDIA_TYPE_AUDIO)
 	{
@@ -74,7 +73,6 @@ rate_filter_scale_track_timestamps(
 		cur_frame->duration *= speed_denom;
 		cur_frame->pts_delay *= speed_denom;
 	}
-
 }
 
 static uint32_t

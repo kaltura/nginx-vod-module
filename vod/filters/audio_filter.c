@@ -207,8 +207,8 @@ audio_filter_init_source(
 	decoder->time_base.num = 1;
 	decoder->time_base.den = media_info->frames_timescale;
 	decoder->pkt_timebase = decoder->time_base;
-	decoder->extradata = (u_char*)media_info->extra_data;
-	decoder->extradata_size = media_info->extra_data_size;
+	decoder->extradata = media_info->extra_data.data;
+	decoder->extradata_size = media_info->extra_data.len;
 	decoder->channels = media_info->u.audio.channels;
 	decoder->bits_per_coded_sample = media_info->u.audio.bits_per_sample;
 	decoder->sample_rate = media_info->u.audio.sample_rate;
@@ -930,7 +930,6 @@ audio_filter_update_track(audio_filter_state_t* state)
 
 	// calculate the total frames size and duration
 	output->media_info.min_frame_duration = 0;
-	output->media_info.max_frame_duration = 0;
 	
 	for (cur_frame = output->frames.first_frame; cur_frame < last_frame; cur_frame++)
 	{
@@ -941,11 +940,6 @@ audio_filter_update_track(audio_filter_state_t* state)
 			(output->media_info.min_frame_duration == 0 || cur_frame->duration < output->media_info.min_frame_duration))
 		{
 			output->media_info.min_frame_duration = cur_frame->duration;
-		}
-
-		if (cur_frame->duration > output->media_info.max_frame_duration)
-		{
-			output->media_info.max_frame_duration = cur_frame->duration;
 		}
 	}
 	
@@ -973,8 +967,8 @@ audio_filter_update_track(audio_filter_state_t* state)
 	}
 	vod_memcpy(new_extra_data, state->sink.encoder->extradata, state->sink.encoder->extradata_size);
 	
-	output->media_info.extra_data = new_extra_data;
-	output->media_info.extra_data_size = state->sink.encoder->extradata_size;
+	output->media_info.extra_data.data = new_extra_data;
+	output->media_info.extra_data.len = state->sink.encoder->extradata_size;
 
 	if (output->media_info.codec_name.data != NULL)
 	{

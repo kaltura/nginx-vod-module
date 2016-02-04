@@ -1,4 +1,5 @@
 #include "dash_packager.h"
+#include "../mp4/mp4_defs.h"
 
 // macros
 #define vod_copy_atom(p, raw_atom) vod_copy(p, (raw_atom).ptr, (raw_atom).size)

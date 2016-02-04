@@ -7,8 +7,10 @@
 
 // enums
 enum {
+	CONCAT_PARAM_BASE_PATH,
 	CONCAT_PARAM_PATHS,
 	CONCAT_PARAM_DURATIONS,
+	CONCAT_PARAM_OFFSET,
 	CONCAT_PARAM_TRACKS,
 
 	CONCAT_PARAM_COUNT
@@ -21,9 +23,11 @@ typedef struct {
 
 // constants
 static json_object_key_def_t concat_filter_params[] = {
+	{ vod_string("basePath"),	VOD_JSON_STRING,	CONCAT_PARAM_BASE_PATH },
 	{ vod_string("paths"),		VOD_JSON_ARRAY,		CONCAT_PARAM_PATHS },
 	{ vod_string("durations"),	VOD_JSON_ARRAY,		CONCAT_PARAM_DURATIONS },
-	{ vod_string("tracks"),		VOD_JSON_STRING,	CONCAT_PARAM_TRACKS },
+	{ vod_string("offset"),		VOD_JSON_INT,		CONCAT_PARAM_OFFSET },
+	{ vod_string("tracks"),		VOD_JSON_STRING,	CONCAT_PARAM_TRACKS },	
 	{ vod_null_string, 0, 0 }
 };
 
@@ -47,6 +51,7 @@ concat_filter_parse(
 	vod_array_t* array;
 	vod_str_t* src_str;
 	u_char* end_pos;
+	vod_str_t base_path;
 	vod_str_t dest_str;
 	uint64_t start;
 	uint64_t end;
@@ -55,9 +60,9 @@ concat_filter_parse(
 	uint32_t max_index;
 	uint32_t clip_count;
 	uint32_t cur_duration;
-	uint32_t start_offset = 0;
-	uint32_t next_offset;
-	uint32_t offset;
+	int32_t start_offset = 0;
+	int32_t next_offset;
+	int32_t offset;
 	uint32_t i;
 	vod_status_t rc;
 
@@ -65,6 +70,7 @@ concat_filter_parse(
 		"concat_filter_parse: started");
 
 	// get the required fields
+	vod_memzero(params, sizeof(params));
 	vod_json_get_object_values(
 		element,
 		&concat_filter_hash,
@@ -118,7 +124,28 @@ concat_filter_parse(
 		start = context->range->start;
 		end = context->range->end;
 
-		offset = 0;
+		if (params[CONCAT_PARAM_OFFSET] != NULL)
+		{
+			if (params[CONCAT_PARAM_OFFSET]->v.num.nom < INT_MIN)
+			{
+				vod_log_error(VOD_LOG_ERR, context->request_context->log, 0,
+					"concat_filter_parse: offset %L too small", params[CONCAT_PARAM_OFFSET]->v.num.nom);
+				return VOD_BAD_MAPPING;
+			}
+
+			offset = params[CONCAT_PARAM_OFFSET]->v.num.nom;
+			if ((int64_t)end <= offset)
+			{
+				vod_log_error(VOD_LOG_ERR, context->request_context->log, 0,
+					"concat_filter_parse: concat offset %D larger than end offset %uL", offset, end);
+				return VOD_BAD_REQUEST;
+			}
+		}
+		else
+		{
+			offset = 0;
+		}
+
 		min_index = UINT_MAX;
 		max_index = array->nelts - 1;
 		for (i = 0; i < array->nelts; i++, offset = next_offset)
@@ -132,7 +159,7 @@ concat_filter_parse(
 				return VOD_BAD_MAPPING;
 			}
 
-			if (array_elts[i].v.num.nom > INT_MAX - offset)
+			if (array_elts[i].v.num.nom > INT_MAX - vod_max(offset, 0))
 			{
 				vod_log_error(VOD_LOG_ERR, context->request_context->log, 0,
 					"concat_filter_parse: duration value %uL too big",
@@ -144,7 +171,7 @@ concat_filter_parse(
 
 			// update the min/max indexes
 			next_offset = offset + cur_duration;
-			if (next_offset <= start)
+			if (next_offset <= (int64_t)start)
 			{
 				continue;
 			}
@@ -155,7 +182,7 @@ concat_filter_parse(
 				start_offset = offset;
 			}
 
-			if (next_offset >= end)
+			if (next_offset >= (int64_t)end)
 			{
 				max_index = i;
 				break;
@@ -188,8 +215,15 @@ concat_filter_parse(
 			range[i].timescale = 1000;
 		}
 
-		range[0].start = start - start_offset;
-		range[clip_count - 1].end = end - offset;
+		if ((int64_t)start > start_offset)
+		{
+			range[0].start = start - start_offset;
+		}
+
+		if (range[clip_count - 1].end > end - offset)
+		{
+			range[clip_count - 1].end = end - offset;
+		}
 	}
 
 	// initialize the tracks mask
@@ -210,6 +244,16 @@ concat_filter_parse(
 	{
 		tracks_mask[MEDIA_TYPE_AUDIO] = 0xffffffff;
 		tracks_mask[MEDIA_TYPE_VIDEO] = 0xffffffff;
+	}
+
+	// get the base path
+	if (params[CONCAT_PARAM_BASE_PATH] != NULL)
+	{
+		base_path = params[CONCAT_PARAM_BASE_PATH]->v.str;
+	}
+	else
+	{
+		base_path.len = 0;
 	}
 
 	// allocate the sources and source pointers
@@ -247,12 +291,24 @@ concat_filter_parse(
 
 		src_str = &array_elts[i].v.str;
 
-		dest_str.data = vod_alloc(context->request_context->pool, src_str->len + 1);
+		dest_str.data = vod_alloc(context->request_context->pool, base_path.len + src_str->len + 1);
 		if (dest_str.data == NULL)
 		{
 			vod_log_debug0(VOD_LOG_DEBUG_LEVEL, context->request_context->log, 0,
 				"concat_filter_parse: vod_alloc failed (3)");
 			return VOD_ALLOC_FAILED;
+		}
+		dest_str.len = 0;
+
+		if (base_path.len != 0)
+		{
+			rc = vod_json_decode_string(&dest_str, &base_path);
+			if (rc != VOD_JSON_OK)
+			{
+				vod_log_error(VOD_LOG_ERR, context->request_context->log, 0,
+					"concat_filter_parse: vod_json_decode_string failed %i", rc);
+				return VOD_BAD_MAPPING;
+			}
 		}
 
 		rc = vod_json_decode_string(&dest_str, src_str);

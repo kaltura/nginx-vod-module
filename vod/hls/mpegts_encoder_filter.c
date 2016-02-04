@@ -406,7 +406,7 @@ mpegts_encoder_write_sample_aes_aac_pmt_entry(
 	*p++ =				// descriptor length
 		member_size(registration_descriptor_t, format_identifier) +
 		sizeof(audio_setup_information_t)+
-		track->media_info.extra_data_size;
+		track->media_info.extra_data.len;
 	*p++ = 'a';		*p++ = 'p';		*p++ = 'a';		*p++ = 'd';			// apad
 
 	// audio_setup_information
@@ -427,8 +427,8 @@ mpegts_encoder_write_sample_aes_aac_pmt_entry(
 
 	*p++ = 0;	*p++ = 0;		// priming
 	*p++ = 1;					// version
-	*p++ = track->media_info.extra_data_size;
-	vod_memcpy(p, track->media_info.extra_data, track->media_info.extra_data_size);
+	*p++ = track->media_info.extra_data.len;
+	vod_memcpy(p, track->media_info.extra_data.data, track->media_info.extra_data.len);
 }
 
 static vod_status_t 
@@ -459,10 +459,9 @@ mpegts_encoder_add_stream(
 		}
 		else
 		{
-			switch (track->media_info.format)
+			switch (track->media_info.codec_id)
 			{
-			case FORMAT_HEV1:
-			case FORMAT_HVC1:
+			case VOD_CODEC_ID_HEVC:
 				pmt_entry = pmt_entry_template_hevc;
 				pmt_entry_size = sizeof(pmt_entry_template_hevc);
 				break;
@@ -483,7 +482,7 @@ mpegts_encoder_add_stream(
 			pmt_entry_size = sizeof(pmt_entry_template_sample_aes_aac) + 
 				sizeof(registration_descriptor_t) + 
 				sizeof(audio_setup_information_t) + 
-				track->media_info.extra_data_size;
+				track->media_info.extra_data.len;
 
 		}
 		else

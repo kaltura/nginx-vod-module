@@ -430,7 +430,7 @@ vod_json_decode_string(vod_str_t* dest, vod_str_t* src)
 {
 	u_char* end_pos;
 	u_char* cur_pos;
-	u_char* p = dest->data;
+	u_char* p = dest->data + dest->len;
 
 	cur_pos = src->data;
 	end_pos = cur_pos + src->len;
