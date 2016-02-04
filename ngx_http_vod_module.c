@@ -1336,6 +1336,10 @@ ngx_http_vod_state_machine_parse_metadata(ngx_http_vod_ctx_t *ctx)
 					ctx->state = STATE_READ_METADATA_OPEN_FILE;
 				}
 			}
+			else
+			{
+				ctx->state = STATE_READ_METADATA_OPEN_FILE;
+			}
 
 			// open the file
 			rc = ctx->open_file(r, &cur_source->mapped_uri, &cur_source->reader_context);
