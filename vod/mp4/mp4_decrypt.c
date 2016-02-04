@@ -92,12 +92,12 @@ mp4_decrypt_set_cache_slot_id(void* ctx, int cache_slot_id)
 }
 
 static vod_status_t
-mp4_decrypt_start_frame(void* ctx, input_frame_t* frame, uint64_t frame_offset)
+mp4_decrypt_start_frame(void* ctx, input_frame_t* frame)
 {
 	mp4_decrypt_state_t* state = ctx;
 	vod_status_t rc;
 
-	rc = state->frames_source->start_frame(state->frames_source_context, frame, frame_offset);
+	rc = state->frames_source->start_frame(state->frames_source_context, frame);
 	if (rc != VOD_OK)
 	{
 		return rc;

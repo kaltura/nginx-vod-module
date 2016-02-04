@@ -1505,7 +1505,7 @@ dash_packager_get_earliest_pres_time(media_set_t* media_set, media_track_t* trac
 
 	if (track->frame_count > 0)
 	{
-		result += track->first_frame[0].pts_delay;
+		result += track->frames.first_frame[0].pts_delay;
 	}
 	return result;
 }

@@ -26,13 +26,11 @@ typedef struct {
 typedef struct {
 	int media_type;
 	uint32_t timescale;
-	frames_source_t* frames_source;
-	void* frames_source_context;
 	
 	// input frames
-	input_frame_t* first_frame;
+	frame_list_part_t* first_frame_part;
+	frame_list_part_t cur_frame_part;
 	input_frame_t* cur_frame;
-	input_frame_t* last_frame;
 
 	// time offsets
 	uint64_t clip_start_time;
@@ -47,10 +45,6 @@ typedef struct {
 	uint32_t prev_key_frame;
 	uint64_t prev_frame_pts;
 
-	// frame offsets
-	uint64_t* first_frame_offset;
-	uint64_t* cur_frame_offset;
-		
 	// top filter
 	const media_filter_t* top_filter;
 	void* top_filter_context;

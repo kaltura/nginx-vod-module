@@ -411,6 +411,7 @@ Mandatory fields:
 	* rateFilter
 	* mixFilter
 	* gainFilter
+	* concat
 	
 #### Source clip
 
@@ -448,6 +449,18 @@ Mandatory fields:
 * `type` - a string with the value `mixFilter`
 * `sources` - an array of Clip objects to mix. This array must contain at least one clip and
 	up to 32 clips.
+
+#### Concat filter clip
+
+Mandatory fields:
+* `type` - a string with the value `concat`
+* `paths` - an array of strings, containings the paths of the MP4 files
+* `durations` - an array of integers representing MP4 durations in milliseconds,
+	this array must match the `paths` array in count and order.
+
+Optional fields:
+* `tracks` - a string that specifies the tracks that should be used, the default is "v1-a1",
+	which means the first video track and the first audio track
 
 ### DRM
 

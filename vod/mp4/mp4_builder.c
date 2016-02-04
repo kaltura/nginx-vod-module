@@ -29,6 +29,7 @@ static u_char*
 mp4_builder_write_video_trun_atom(u_char* p, media_sequence_t* sequence, uint32_t first_frame_offset)
 {
 	media_clip_filtered_t* cur_clip;
+	frame_list_part_t* part;
 	input_frame_t* cur_frame;
 	input_frame_t* last_frame;
 	size_t atom_size;
@@ -42,10 +43,21 @@ mp4_builder_write_video_trun_atom(u_char* p, media_sequence_t* sequence, uint32_
 
 	for (cur_clip = sequence->filtered_clips; cur_clip < sequence->filtered_clips_end; cur_clip++)
 	{
-		cur_frame = cur_clip->first_track->first_frame;
-		last_frame = cur_clip->first_track->last_frame;
-		for (; cur_frame < last_frame; cur_frame++)
+		part = &cur_clip->first_track->frames;
+		last_frame = part->last_frame;
+		for (cur_frame = part->first_frame;; cur_frame++)
 		{
+			if (cur_frame >= last_frame)
+			{
+				if (part->next == NULL)
+				{
+					break;
+				}
+				part = part->next;
+				cur_frame = part->first_frame;
+				last_frame = part->last_frame;
+			}
+
 			write_be32(p, cur_frame->duration);
 			write_be32(p, cur_frame->size);
 			if (cur_frame->key_frame)
@@ -66,6 +78,7 @@ static u_char*
 mp4_builder_write_audio_trun_atom(u_char* p, media_sequence_t* sequence, uint32_t first_frame_offset)
 {
 	media_clip_filtered_t* cur_clip;
+	frame_list_part_t* part;
 	input_frame_t* cur_frame;
 	input_frame_t* last_frame;
 	size_t atom_size;
@@ -79,10 +92,21 @@ mp4_builder_write_audio_trun_atom(u_char* p, media_sequence_t* sequence, uint32_
 
 	for (cur_clip = sequence->filtered_clips; cur_clip < sequence->filtered_clips_end; cur_clip++)
 	{
-		cur_frame = cur_clip->first_track->first_frame;
-		last_frame = cur_clip->first_track->last_frame;
-		for (; cur_frame < last_frame; cur_frame++)
+		part = &cur_clip->first_track->frames;
+		last_frame = part->last_frame;
+		for (cur_frame = part->first_frame;; cur_frame++)
 		{
+			if (cur_frame >= last_frame)
+			{
+				if (part->next == NULL)
+				{
+					break;
+				}
+				part = part->next;
+				cur_frame = part->first_frame;
+				last_frame = part->last_frame;
+			}
+
 			write_be32(p, cur_frame->duration);
 			write_be32(p, cur_frame->size);
 		}
@@ -113,15 +137,14 @@ static void
 mp4_builder_init_track(fragment_writer_state_t* state, media_track_t* track)
 {
 	state->first_time = TRUE;
-	state->frames_source = track->frames_source;
-	state->frames_source_context = track->frames_source_context;
-	state->cur_frame = track->first_frame;
-	state->last_frame = track->last_frame;
-	state->cur_frame_offset = track->frame_offsets;
+	state->first_frame_part = &track->frames;
+	state->cur_frame_part = track->frames;
+	state->cur_frame = track->frames.first_frame;
 
 	if (!state->reuse_buffers)
 	{
-		state->frames_source->disable_buffer_reuse(state->frames_source_context);
+		state->cur_frame_part.frames_source->disable_buffer_reuse(
+			state->cur_frame_part.frames_source_context);
 	}
 }
 
@@ -170,8 +193,16 @@ mp4_builder_frame_writer_process(fragment_writer_state_t* state)
 
 	if (!state->frame_started)
 	{
-		while (state->cur_frame >= state->last_frame)
+		while (state->cur_frame >= state->cur_frame_part.last_frame)
 		{
+			if (state->cur_frame_part.next != NULL)
+			{
+				state->cur_frame_part = *state->cur_frame_part.next;
+				state->cur_frame = state->cur_frame_part.first_frame;
+				state->first_time = TRUE;
+				break;
+			}
+
 			state->cur_clip++;
 			if (state->cur_clip >= state->sequence->filtered_clips_end)
 			{
@@ -181,7 +212,7 @@ mp4_builder_frame_writer_process(fragment_writer_state_t* state)
 			mp4_builder_init_track(state, state->cur_clip->first_track);
 		}
 
-		rc = state->frames_source->start_frame(state->frames_source_context, state->cur_frame, *state->cur_frame_offset);
+		rc = state->cur_frame_part.frames_source->start_frame(state->cur_frame_part.frames_source_context, state->cur_frame);
 		if (rc != VOD_OK)
 		{
 			return rc;
@@ -194,7 +225,7 @@ mp4_builder_frame_writer_process(fragment_writer_state_t* state)
 	for (;;)
 	{
 		// read some data from the frame
-		rc = state->frames_source->read(state->frames_source_context, &read_buffer, &read_size, &frame_done);
+		rc = state->cur_frame_part.frames_source->read(state->cur_frame_part.frames_source_context, &read_buffer, &read_size, &frame_done);
 		if (rc != VOD_OK)
 		{
 			if (rc != VOD_AGAIN)
@@ -257,9 +288,8 @@ mp4_builder_frame_writer_process(fragment_writer_state_t* state)
 
 		// move to the next frame
 		state->cur_frame++;
-		state->cur_frame_offset++;
 
-		while (state->cur_frame >= state->last_frame)
+		while (state->cur_frame >= state->cur_frame_part.last_frame)
 		{
 			if (write_buffer != NULL)
 			{
@@ -273,6 +303,14 @@ mp4_builder_frame_writer_process(fragment_writer_state_t* state)
 				write_buffer = NULL;
 			}
 
+			if (state->cur_frame_part.next != NULL)
+			{
+				state->cur_frame_part = *state->cur_frame_part.next;
+				state->cur_frame = state->cur_frame_part.first_frame;
+				state->first_time = TRUE;
+				break;
+			}
+
 			state->cur_clip++;
 			if (state->cur_clip >= state->sequence->filtered_clips_end)
 			{
@@ -282,7 +320,7 @@ mp4_builder_frame_writer_process(fragment_writer_state_t* state)
 			mp4_builder_init_track(state, state->cur_clip->first_track);
 		}
 
-		rc = state->frames_source->start_frame(state->frames_source_context, state->cur_frame, *state->cur_frame_offset);
+		rc = state->cur_frame_part.frames_source->start_frame(state->cur_frame_part.frames_source_context, state->cur_frame);
 		if (rc != VOD_OK)
 		{
 			return rc;

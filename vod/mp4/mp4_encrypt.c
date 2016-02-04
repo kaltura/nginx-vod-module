@@ -37,8 +37,9 @@ static void
 mp4_encrypt_init_track(mp4_encrypt_state_t* state, media_track_t* track)
 {
 	// frame state
-	state->cur_frame = track->first_frame;
-	state->last_frame = track->last_frame;
+	state->cur_frame_part = &track->frames;
+	state->cur_frame = track->frames.first_frame;
+	state->last_frame = track->frames.last_frame;
 	state->frame_size_left = 0;
 }
 
@@ -104,6 +105,14 @@ mp4_encrypt_move_to_next_frame(mp4_encrypt_state_t* state, bool_t* init_track)
 	*init_track = FALSE;
 	while (state->cur_frame >= state->last_frame)
 	{
+		if (state->cur_frame_part->next != NULL)
+		{
+			state->cur_frame_part = state->cur_frame_part->next;
+			state->cur_frame = state->cur_frame_part->first_frame;
+			state->last_frame = state->cur_frame_part->last_frame;
+			break;
+		}
+
 		state->cur_clip++;
 		if (state->cur_clip >= state->sequence->filtered_clips_end)
 		{

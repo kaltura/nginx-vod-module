@@ -57,6 +57,8 @@ typedef struct {
 
 	// frame state
 	media_clip_filtered_t* cur_clip;
+
+	frame_list_part_t* cur_frame_part;
 	input_frame_t* cur_frame;
 	input_frame_t* last_frame;
 	uint32_t frame_size_left;
