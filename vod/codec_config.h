@@ -9,12 +9,10 @@ struct media_info_s;
 
 typedef vod_status_t (*codec_config_get_nal_units_t)(
 	request_context_t* request_context,
-	const u_char* extra_data,
-	uint32_t extra_data_size,
+	vod_str_t* extra_data,
 	bool_t size_only,
 	uint32_t* nal_packet_size_length,
-	u_char** result,
-	uint32_t* result_size);
+	vod_str_t* result);
 
 typedef struct
 {
@@ -72,22 +70,18 @@ typedef struct {
 vod_status_t
 codec_config_hevc_get_nal_units(
 	request_context_t* request_context,
-	const u_char* extra_data,
-	uint32_t extra_data_size,
+	vod_str_t* extra_data,
 	bool_t size_only,
 	uint32_t* nal_packet_size_length,
-	u_char** result,
-	uint32_t* result_size);
+	vod_str_t* result);
 
 vod_status_t
 codec_config_avcc_get_nal_units(
 	request_context_t* request_context,
-	const u_char* extra_data,
-	uint32_t extra_data_size,
+	vod_str_t* extra_data,
 	bool_t size_only,
 	uint32_t* nal_packet_size_length,
-	u_char** result,
-	uint32_t* result_size);
+	vod_str_t* result);
 
 // get codec name according to http://tools.ietf.org/html/rfc6381
 vod_status_t codec_config_get_video_codec_name(request_context_t* request_context, struct media_info_s* media_info);
@@ -95,8 +89,7 @@ vod_status_t codec_config_get_audio_codec_name(request_context_t* request_contex
 
 vod_status_t codec_config_mp4a_config_parse(
 	request_context_t* request_context,
-	const u_char* buffer,
-	int size,
+	vod_str_t* extra_data, 
 	mp4a_config_t* result);
 
 #endif // __CODEC_CONFIG_H__

@@ -32,10 +32,11 @@ struct ngx_http_vod_loc_conf_s {
 	ngx_str_t https_header_name;
 	ngx_str_t segments_base_url;
 	ngx_flag_t segments_base_url_has_scheme;
-	ngx_buffer_cache_t* moov_cache;
+	ngx_buffer_cache_t* metadata_cache;
 	ngx_buffer_cache_t* response_cache[CACHE_TYPE_COUNT];
 	size_t initial_read_size;
-	size_t max_moov_size;
+	size_t max_metadata_size;
+	size_t max_frames_size;
 	size_t cache_buffer_size;
 	buffer_pool_t* output_buffer_pool;
 	size_t max_upstream_headers_size;

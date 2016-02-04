@@ -94,7 +94,8 @@ ngx_http_vod_create_loc_conf(ngx_conf_t *cf)
 	conf->segmenter.get_segment_count = NGX_CONF_UNSET_PTR;
 	conf->segmenter.get_segment_durations = NGX_CONF_UNSET_PTR;
 	conf->initial_read_size = NGX_CONF_UNSET_SIZE;
-	conf->max_moov_size = NGX_CONF_UNSET_SIZE;
+	conf->max_metadata_size = NGX_CONF_UNSET_SIZE;
+	conf->max_frames_size = NGX_CONF_UNSET_SIZE;
 	conf->cache_buffer_size = NGX_CONF_UNSET_SIZE;
 	conf->max_upstream_headers_size = NGX_CONF_UNSET_SIZE;
 	conf->ignore_edit_list = NGX_CONF_UNSET;
@@ -164,9 +165,9 @@ ngx_http_vod_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child)
 		ngx_strncasecmp(conf->segments_base_url.data, (u_char *) "https://", 8) == 0);
 
 
-	if (conf->moov_cache == NULL)
+	if (conf->metadata_cache == NULL)
 	{
-		conf->moov_cache = prev->moov_cache;
+		conf->metadata_cache = prev->metadata_cache;
 	}
 
 	for (cache_type = 0; cache_type < CACHE_TYPE_COUNT; cache_type++)
@@ -183,7 +184,8 @@ ngx_http_vod_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child)
 	}
 
 	ngx_conf_merge_size_value(conf->initial_read_size, prev->initial_read_size, 4096);
-	ngx_conf_merge_size_value(conf->max_moov_size, prev->max_moov_size, 128 * 1024 * 1024);
+	ngx_conf_merge_size_value(conf->max_metadata_size, prev->max_metadata_size, 128 * 1024 * 1024);
+	ngx_conf_merge_size_value(conf->max_frames_size, prev->max_frames_size, 16 * 1024 * 1024);
 	ngx_conf_merge_size_value(conf->cache_buffer_size, prev->cache_buffer_size, 256 * 1024);
 	ngx_conf_merge_size_value(conf->max_upstream_headers_size, prev->max_upstream_headers_size, 4 * 1024);
 	
@@ -805,11 +807,11 @@ ngx_command_t ngx_http_vod_commands[] = {
 	NULL },
 	
 	// mp4 reading parameters
-	{ ngx_string("vod_moov_cache"),
+	{ ngx_string("vod_metadata_cache"),
 	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE123,
 	ngx_http_vod_cache_command,
 	NGX_HTTP_LOC_CONF_OFFSET,
-	offsetof(ngx_http_vod_loc_conf_t, moov_cache),
+	offsetof(ngx_http_vod_loc_conf_t, metadata_cache),
 	NULL },
 
 	{ ngx_string("vod_response_cache"),
@@ -833,11 +835,18 @@ ngx_command_t ngx_http_vod_commands[] = {
 	offsetof(ngx_http_vod_loc_conf_t, initial_read_size),
 	NULL },
 
-	{ ngx_string("vod_max_moov_size"),
+	{ ngx_string("vod_max_metadata_size"),
 	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1,
 	ngx_conf_set_size_slot,
 	NGX_HTTP_LOC_CONF_OFFSET,
-	offsetof(ngx_http_vod_loc_conf_t, max_moov_size),
+	offsetof(ngx_http_vod_loc_conf_t, max_metadata_size),
+	NULL },
+
+	{ ngx_string("vod_max_frames_size"),
+	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1,
+	ngx_conf_set_size_slot,
+	NGX_HTTP_LOC_CONF_OFFSET,
+	offsetof(ngx_http_vod_loc_conf_t, max_frames_size),
 	NULL },
 
 	{ ngx_string("vod_cache_buffer_size"),

@@ -1,4 +1,5 @@
 #include "mp4_builder.h"
+#include "mp4_defs.h"
 
 u_char*
 mp4_builder_write_mfhd_atom(u_char* p, uint32_t segment_index)

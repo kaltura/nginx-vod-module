@@ -215,6 +215,7 @@ media_set_parse_null_term_string(
 			"media_set_parse_null_term_string: vod_alloc failed");
 		return VOD_ALLOC_FAILED;
 	}
+	result.len = 0;
 
 	rc = vod_json_decode_string(&result, &value->v.str);
 	if (rc != VOD_JSON_OK)

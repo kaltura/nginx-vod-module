@@ -3,6 +3,12 @@
 Note: the list of changes below may not include all changes, it will include mostly "breaking" changes.
 	Usually, these are changes that require some update to nginx.conf in order to retain the existing behavior.
 
+## 2016/02/03 - added support for Matroska container
+
+The following configuration settings were removed:
+* vod_moov_cache - replaced by vod_metadata_cache
+* vod_max_moov_size - replaced by vod_max_metadata_size
+	
 ## 2015/12/15 - removed the upstream module implementation
 	
 nginx-vod is now built to make use of standard nginx upstream modules (e.g. proxy)

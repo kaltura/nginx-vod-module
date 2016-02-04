@@ -96,6 +96,7 @@ void vod_log_error(vod_uint_t level, vod_log_t *log, int err,
 
 // errors codes
 #define  VOD_OK         NGX_OK
+#define  VOD_DONE       NGX_DONE
 #define  VOD_AGAIN      NGX_AGAIN
 
 #define vod_inline ngx_inline

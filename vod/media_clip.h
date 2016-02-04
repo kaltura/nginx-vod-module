@@ -2,7 +2,7 @@
 #define __MEDIA_CLIP_H__
 
 // includes
-#include "mp4/mp4_parser.h"
+#include "media_format.h"
 
 // constants
 #define MEDIA_CLIP_KEY_SIZE (16)

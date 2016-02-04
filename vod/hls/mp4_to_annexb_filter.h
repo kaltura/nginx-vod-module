@@ -4,7 +4,7 @@
 // includes
 #include "hls_encryption.h"
 #include "media_filter.h"
-#include "../mp4/mp4_parser.h"
+#include "../media_format.h"
 
 // typedefs
 typedef struct {

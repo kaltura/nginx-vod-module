@@ -1,6 +1,7 @@
 #include "hds_manifest.h"
 #include "hds_fragment.h"
 #include "hds_amf0_encoder.h"
+#include "../mp4/mp4_defs.h"
 
 // manifest constants
 #define HDS_MANIFEST_HEADER								\
