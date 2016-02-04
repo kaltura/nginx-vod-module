@@ -98,7 +98,7 @@ mp4_metadata_reader_read(
 		if (buffer->len < moov_size)
 		{
 			ngx_log_error(NGX_LOG_ERR, state->request_context->log, 0,
-				"mp4_metadata_reader_read: buffer size %uz smaller than moov size %uz", 
+				"mp4_metadata_reader_read: buffer size %uz is smaller than moov size %uz", 
 				buffer->len, moov_size);
 			return VOD_BAD_DATA;
 		}
@@ -167,7 +167,7 @@ mp4_metadata_reader_read(
 			vod_log_error(VOD_LOG_ERR, state->request_context->log, 0,
 				"mp4_metadata_reader_read: moov start offset %O is smaller than the buffer size %uz",
 				moov_offset, buffer->len);
-			return VOD_UNEXPECTED;
+			return VOD_BAD_DATA;
 		}
 
 		if (state->moov_start_reads <= 0)
