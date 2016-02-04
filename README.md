@@ -463,6 +463,7 @@ Optional fields:
 	which means the first video track and the first audio track
 * `offset` - an integer in milliseconds that indicates the timestamp offset of the 
 	first frame in the concatenated stream relative to the clip start time
+* `basePath` - a string that should be added as a prefix to all the paths
 
 ### DRM
 

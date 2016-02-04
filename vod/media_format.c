@@ -18,7 +18,7 @@ media_format_finalize_track(
 	media_info_t* media_info)
 {
 	codec_config_get_nal_units_t get_nal_units = NULL;
-	vod_status_t rc;
+	vod_status_t rc = VOD_OK;
 	u_char* new_extra_data;
 	uint8_t channel_config;
 
