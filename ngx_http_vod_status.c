@@ -57,9 +57,9 @@ static ngx_http_vod_stat_def_t buffer_cache_stat_defs[] = {
 
 static ngx_http_vod_cache_info_t cache_infos[] = {
 	{
-		offsetof(ngx_http_vod_loc_conf_t, moov_cache),
-		ngx_string("<moov_cache>\r\n"),
-		ngx_string("</moov_cache>\r\n"),
+		offsetof(ngx_http_vod_loc_conf_t, metadata_cache),
+		ngx_string("<metadata_cache>\r\n"),
+		ngx_string("</metadata_cache>\r\n"),
 	},
 	{
 		offsetof(ngx_http_vod_loc_conf_t, response_cache[CACHE_TYPE_VOD]),

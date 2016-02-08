@@ -411,6 +411,7 @@ Mandatory fields:
 	* rateFilter
 	* mixFilter
 	* gainFilter
+	* concat
 	
 #### Source clip
 
@@ -449,6 +450,21 @@ Mandatory fields:
 * `sources` - an array of Clip objects to mix. This array must contain at least one clip and
 	up to 32 clips.
 
+#### Concat filter clip
+
+Mandatory fields:
+* `type` - a string with the value `concat`
+* `paths` - an array of strings, containings the paths of the MP4 files
+* `durations` - an array of integers representing MP4 durations in milliseconds,
+	this array must match the `paths` array in count and order.
+
+Optional fields:
+* `tracks` - a string that specifies the tracks that should be used, the default is "v1-a1",
+	which means the first video track and the first audio track
+* `offset` - an integer in milliseconds that indicates the timestamp offset of the 
+	first frame in the concatenated stream relative to the clip start time
+* `basePath` - a string that should be added as a prefix to all the paths
+
 ### DRM
 
 Nginx-vod-module has the ability to perform on-the-fly encryption for MPEG DASH (CENC) and MSS Play Ready.
@@ -480,7 +496,7 @@ The response of the DRM server is a JSON, with the following format:
 	In general, it's best to have nginx vod as close as possible to where the mp4 files are stored, 
 	and have the caching proxies as close as possible to the end users.
 2. Enable nginx-vod-module caches:
-	* vod_moov_cache - saves the need to re-read the video metadata for each segment. This cache should be rather large, in the order of GBs.
+	* vod_metadata_cache - saves the need to re-read the video metadata for each segment. This cache should be rather large, in the order of GBs.
 	* vod_response_cache - saves the responses of manifest requests. This cache may not be required when using a second layer of caching servers before nginx vod. 
 		No need to allocate a large buffer for this cache, 128M is probably more than enough for most deployments.
 	* vod_path_mapping_cache - for mapped mode only, few MBs is usually enough.
@@ -643,12 +659,12 @@ The thread pool must be defined with a thread_pool directive, if no pool name is
 This directive is supported only on nginx 1.7.11 or newer when compiling with --add-threads.
 Note: this directive currently disables the use of nginx's open_file_cache by nginx-vod-module
 
-#### vod_moov_cache
-* **syntax**: `vod_moov_cache zone_name zone_size [expiration]`
+#### vod_metadata_cache
+* **syntax**: `vod_metadata_cache zone_name zone_size [expiration]`
 * **default**: `off`
 * **context**: `http`, `server`, `location`
 
-Configures the size and shared memory object name of the moov atom cache
+Configures the size and shared memory object name of the video metadata cache. For MP4 files, this cache holds the moov atom.
 
 #### vod_response_cache
 * **syntax**: `vod_response_cache zone_name zone_size [expiration]`
@@ -673,12 +689,19 @@ This cache holds the following types of responses for live: DASH MPD, HLS index 
 
 Sets the size of the initial read operation of the MP4 file.
 
-#### vod_max_moov_size
-* **syntax**: `vod_max_moov_size size`
+#### vod_max_metadata_size
+* **syntax**: `vod_max_metadata_size size`
 * **default**: `128MB`
 * **context**: `http`, `server`, `location`
 
-Sets the maximum supported MP4 moov atom size.
+Sets the maximum supported video metadata size (for MP4 - moov atom size)
+
+#### vod_max_frames_size
+* **syntax**: `vod_max_frames_size size`
+* **default**: `16MB`
+* **context**: `http`, `server`, `location`
+
+Sets the limit on the total size of the frames of a single segment
 
 #### vod_cache_buffer_size
 * **syntax**: `vod_cache_buffer_size size`
@@ -1061,7 +1084,7 @@ Note: Configuration directives that can accept variables are explicitly marked a
 			vod_last_modified_types *;
 
 			# vod caches
-			vod_moov_cache moov_cache 512m;
+			vod_metadata_cache metadata_cache 512m;
 			vod_response_cache response_cache 128m;
 			
 			# gzip manifests
@@ -1115,7 +1138,7 @@ Note: Configuration directives that can accept variables are explicitly marked a
 			vod_last_modified_types *;
 
 			# vod caches
-			vod_moov_cache moov_cache 512m;
+			vod_metadata_cache metadata_cache 512m;
 			vod_response_cache response_cache 128m;
 			vod_path_mapping_cache mapping_cache 5m;
 			
@@ -1172,7 +1195,7 @@ Note: Configuration directives that can accept variables are explicitly marked a
 			vod_last_modified_types *;
 
 			# vod caches
-			vod_moov_cache moov_cache 512m;
+			vod_metadata_cache metadata_cache 512m;
 			vod_response_cache response_cache 128m;
 			
 			# gzip manifests

@@ -10,6 +10,7 @@
 // these constants can be generated with python - 'moov'[::-1].encode('hex')
 #define ATOM_NAME_FTYP (0x70797466)		// file type
 #define ATOM_NAME_MOOV (0x766f6f6d)		// movie header
+#define ATOM_NAME_MDAT (0x7461646d)		// movie data
 #define ATOM_NAME_TRAK (0x6b617274)		// track header
 #define ATOM_NAME_EDTS (0x73746465)		// edit box
 #define ATOM_NAME_ELST (0x74736c65)		// edit list box
@@ -52,6 +53,18 @@
 #define DCOM_TYPE_ZLIB (0x62696c7a)
 
 #define FTYP_TYPE_MP42 (0x3234706d)
+
+// h264 4cc tags
+#define FORMAT_AVC1	   (0x31637661)
+#define FORMAT_h264	   (0x34363268)
+#define FORMAT_H264	   (0x34363248)
+
+// h265 4cc tags
+#define FORMAT_HEV1	   (0x31766568)
+#define FORMAT_HVC1	   (0x31637668)
+
+// aac 4cc tag
+#define FORMAT_MP4A    (0x6134706d)
 
 // MP4 constants from ffmpeg
 #define MP4ODescrTag				0x01

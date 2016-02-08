@@ -3,7 +3,7 @@
 
 // includes
 #include "mss_packager.h"
-#include "../mp4/mp4_parser.h"
+#include "../media_format.h"
 #include "../segmenter.h"
 
 // functions

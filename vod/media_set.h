@@ -3,7 +3,7 @@
 
 // includes
 #include "mp4/mp4_aes_ctr.h"
-#include "mp4/mp4_parser.h"
+#include "media_format.h"
 #include "media_clip.h"
 #include "json_parser.h"
 

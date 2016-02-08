@@ -23,9 +23,9 @@ mp4_encrypt_passthrough_init(mp4_encrypt_passthrough_context_t* context, media_s
 		cur_track = cur_clip->first_track;
 
 		// can only passthrough if the content is encrypted with the required key
-		if (cur_track->frames_source != &mp4_decrypt_frames_source ||
+		if (cur_track->frames.frames_source != &mp4_decrypt_frames_source ||
 			vod_memcmp(
-				mp4_decrypt_get_key(cur_track->frames_source_context), 
+				mp4_decrypt_get_key(cur_track->frames.frames_source_context), 
 				((mp4_encrypt_info_t*)sequence->drm_info)->key, 
 				MP4_ENCRYPT_KEY_SIZE) != 0)
 		{
@@ -57,9 +57,9 @@ mp4_encrypt_passthrough_init(mp4_encrypt_passthrough_context_t* context, media_s
 	{
 		cur_track = cur_clip->first_track;
 		mp4_decrypt_get_original_source(
-			cur_track->frames_source_context,
-			&cur_track->frames_source,
-			&cur_track->frames_source_context);
+			cur_track->frames.frames_source_context,
+			&cur_track->frames.frames_source,
+			&cur_track->frames.frames_source_context);
 	}
 
 	return TRUE;

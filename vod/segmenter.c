@@ -923,9 +923,10 @@ segmenter_get_segment_durations_accurate(
 	result->timescale = main_track->media_info.timescale;
 	result->discontinuities = 0;
 
+	// Note: assuming a single frame list part
 	cur_item = result->items - 1;
-	last_frame = main_track->last_frame;
-	cur_frame = main_track->first_frame;
+	last_frame = main_track->frames.last_frame;
+	cur_frame = main_track->frames.first_frame;
 
 	align_to_key_frames = conf->align_to_key_frames && main_track->media_info.media_type == MEDIA_TYPE_VIDEO;
 

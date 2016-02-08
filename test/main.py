@@ -10,7 +10,7 @@ import random
 import time
 import os
 
-# note: debug logs must be enabled as well as moov cache
+# note: debug logs must be enabled as well as metadata cache
 
 # environment specific parameters
 from main_params import *
@@ -924,18 +924,18 @@ class FileServeTestSuite(TestSuite):
         assertRequestFails(self.getServeUrl(HLS_PREFIX, TEST_FOLDER) + HLS_PLAYLIST_FILE, 403)
         self.logTracker.assertContains('"%s" is not a file' % (TEST_FILES_ROOT + TEST_FOLDER))
 
-    def testMoovAtomCache(self):
+    def testMetadataCache(self):
         for curPrefix, curRequest, _ in VOD_REQUESTS:
             linkPath = createRandomSymLink(TEST_FILES_ROOT + TEST_FLAVOR_FILE)
             url = self.getServeUrl(curPrefix, linkPath) + curRequest
 
             logTracker = LogTracker()
             uncachedResponse = urllib2.urlopen(url).read()
-            logTracker.assertContains('moov atom cache miss')
+            logTracker.assertContains('metadata cache miss')
             
             logTracker = LogTracker()
             cachedResponse = urllib2.urlopen(url).read()
-            logTracker.assertContains(['moov atom cache hit', 'response cache hit'])
+            logTracker.assertContains(['metadata cache hit', 'response cache hit'])
 
             assert(cachedResponse == uncachedResponse)
 
@@ -1058,23 +1058,23 @@ class RemoteTestSuite(ModeTestSuite):
         MemoryUpstreamTestSuite(self.baseUrl + HLS_PREFIX + TEST_FLAVOR_URI, HLS_PLAYLIST_FILE, API_SERVER_PORT, requestHandler).run()
         DumpUpstreamTestSuite(self.getBaseUrl('') + TEST_FLAVOR_URI, '', API_SERVER_PORT).run()      # non HLS URL will just dump to upstream
         
-    def testMoovAtomCache(self):
+    def testMetadataCache(self):
         TcpServer(API_SERVER_PORT, lambda s: serveFile(s, TEST_FILES_ROOT + TEST_FLAVOR_FILE, TEST_FILE_TYPE))
         for curPrefix, curRequest, _ in VOD_REQUESTS:
             url = self.getUrl(curPrefix, curRequest)
 
             logTracker = LogTracker()
             uncachedResponse = urllib2.urlopen(url).read()
-            logTracker.assertContains('moov atom cache miss')
+            logTracker.assertContains('metadata cache miss')
             
             logTracker = LogTracker()
             cachedResponse = urllib2.urlopen(url).read()
-            logTracker.assertContains(['moov atom cache hit', 'response cache hit'])
+            logTracker.assertContains(['metadata cache hit', 'response cache hit'])
 
             assert(cachedResponse == uncachedResponse)
 
     def testErrorWhileProcessingFrames(self):
-        # get the moov atom into cache
+        # get the metadata into cache
         TcpServer(API_SERVER_PORT, lambda s: serveFile(s, TEST_FILES_ROOT + TEST_FLAVOR_FILE, TEST_FILE_TYPE))
         url = self.getUrl(HLS_PREFIX, HLS_SEGMENT_FILE)
         urllib2.urlopen(url).read()

@@ -1,10 +1,8 @@
 #ifndef __MP4_PARSER_BASE_H__
 #define __MP4_PARSER_BASE_H__
 
+#include "../media_format.h"
 #include "mp4_defs.h"
-
-// constants
-#define MAX_FRAME_SIZE (10 * 1024 * 1024)
 
 // atom parsing types
 typedef uint32_t atom_name_t;
@@ -17,23 +15,6 @@ typedef struct {
 } atom_info_t;
 
 typedef vod_status_t(*parse_atoms_callback_t)(void* context, atom_info_t* atom_info);
-
-// parse params
-typedef struct {
-	uint64_t start;			// relative to clip_from
-	uint64_t end;			// relative to clip_from
-	uint32_t timescale;
-} media_range_t;
-
-typedef struct {
-	uint32_t* required_tracks_mask;
-	uint64_t clip_start_time;
-	uint32_t clip_from;
-	uint32_t clip_to;
-	media_range_t* range;
-	uint32_t max_frame_count;
-	int parse_type;
-} media_parse_params_t;
 
 // relevant atoms finder
 typedef struct relevant_atom_s {

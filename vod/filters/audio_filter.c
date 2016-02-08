@@ -38,11 +38,8 @@
 // typedefs
 typedef struct
 {
-	frames_source_t* frames_source;
-	void* frames_source_context;
+	frame_list_part_t cur_frame_part;
 	input_frame_t* cur_frame;
-	input_frame_t* last_frame;
-	uint64_t* cur_frame_offset;
 
 	AVCodecContext *decoder;
 	AVFilterContext *buffer_src;
@@ -71,7 +68,6 @@ typedef struct {
 	media_sequence_t* sequence;
 	media_track_t* output;
 	vod_array_t frames_array;
-	vod_array_t frame_offsets_array;
 	uint64_t dts;
 
 	// processing state
@@ -211,8 +207,8 @@ audio_filter_init_source(
 	decoder->time_base.num = 1;
 	decoder->time_base.den = media_info->frames_timescale;
 	decoder->pkt_timebase = decoder->time_base;
-	decoder->extradata = (u_char*)media_info->extra_data;
-	decoder->extradata_size = media_info->extra_data_size;
+	decoder->extradata = media_info->extra_data.data;
+	decoder->extradata_size = media_info->extra_data.len;
 	decoder->channels = media_info->u.audio.channels;
 	decoder->bits_per_coded_sample = media_info->u.audio.bits_per_sample;
 	decoder->sample_rate = media_info->u.audio.sample_rate;
@@ -515,11 +511,15 @@ audio_filter_walk_filters_prepare_init(
 		return VOD_OK;
 
 	case 1:
-		if (clip->type == MEDIA_CLIP_MIX_FILTER)
+		switch (clip->type)
 		{
-			// in case of mixing a single clip, skip the filter
+		case MEDIA_CLIP_MIX_FILTER:
+		case MEDIA_CLIP_CONCAT_FILTER:
+			// in case of mixing a single clip or concat, skip the filter
 			*clip_ptr = last_source;
 			return VOD_OK;
+
+		default:;
 		}
 		break;
 	}
@@ -534,6 +534,7 @@ static vod_status_t
 audio_filter_init_sources_and_graph_desc(audio_filter_init_context_t* state, media_clip_t* clip)
 {
 	audio_filter_source_t* cur_source;
+	frame_list_part_t* part;
 	media_clip_t** sources_end;
 	media_clip_t** sources_cur;
 	media_clip_source_t* source;
@@ -560,9 +561,21 @@ audio_filter_init_sources_and_graph_desc(audio_filter_init_context_t* state, med
 		}
 
 		// update the max frame size
-		last_frame = audio_track->last_frame;
-		for (cur_frame = audio_track->first_frame; cur_frame < last_frame; cur_frame++)
+		part = &audio_track->frames;
+		last_frame = part->last_frame;
+		for (cur_frame = part->first_frame;; cur_frame++)
 		{
+			if (cur_frame >= last_frame)
+			{
+				if (part->next == NULL)
+				{
+					break;
+				}
+				part = part->next;
+				cur_frame = part->first_frame;
+				last_frame = part->last_frame;
+			}
+
 			if (cur_frame->size > state->max_frame_size)
 			{
 				state->max_frame_size = cur_frame->size;
@@ -573,14 +586,11 @@ audio_filter_init_sources_and_graph_desc(audio_filter_init_context_t* state, med
 		cur_source = state->cur_source;
 		state->cur_source++;
 
-		cur_source->cur_frame = audio_track->first_frame;
-		cur_source->last_frame = last_frame;
-		cur_source->cur_frame_offset = audio_track->frame_offsets;
-		cur_source->frames_source = audio_track->frames_source;
-		cur_source->frames_source_context = audio_track->frames_source_context;
+		cur_source->cur_frame_part = audio_track->frames;
+		cur_source->cur_frame = audio_track->frames.first_frame;
 
-		cur_source->frames_source->set_cache_slot_id(
-			cur_source->frames_source_context, 
+		cur_source->cur_frame_part.frames_source->set_cache_slot_id(
+			cur_source->cur_frame_part.frames_source_context,
 			state->cache_slot_id++);
 
 		vod_sprintf(filter_name, "%uD%Z", clip->id);
@@ -817,13 +827,6 @@ audio_filter_alloc_state(
 		return VOD_ALLOC_FAILED;
 	}
 
-	if (vod_array_init(&state->frame_offsets_array, request_context->pool, initial_alloc_size, sizeof(uint64_t)) != VOD_OK)
-	{
-		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
-			"audio_filter_alloc_state: vod_array_init failed (2)");
-		return VOD_ALLOC_FAILED;
-	}
-
 	state->request_context = request_context;
 	state->sequence = sequence;
 	state->output = output_track;
@@ -888,15 +891,18 @@ audio_filter_update_track(audio_filter_state_t* state)
 	output->total_frames_duration = 0;
 
 	// update frames
-	output->first_frame = state->frames_array.elts;
 	output->frame_count = state->frames_array.nelts;
-	output->last_frame = output->first_frame + output->frame_count;
-	output->frame_offsets = state->frame_offsets_array.elts;
+
+	output->frames.first_frame = state->frames_array.elts;
+	output->frames.last_frame = output->frames.first_frame + output->frame_count;
+	output->frames.next = NULL;
 
 	// check whether there are any frames with duration
 	has_frames = FALSE;
-	last_frame = output->last_frame;
-	for (cur_frame = output->first_frame; cur_frame < last_frame; cur_frame++)
+	
+	// Note: always a single part here
+	last_frame = output->frames.last_frame;
+	for (cur_frame = output->frames.first_frame; cur_frame < last_frame; cur_frame++)
 	{
 		if (cur_frame->duration != 0)
 		{
@@ -907,27 +913,25 @@ audio_filter_update_track(audio_filter_state_t* state)
 
 	if (!has_frames)
 	{
-		output->first_frame = NULL;
-		output->last_frame = NULL;
+		output->frames.first_frame = NULL;
+		output->frames.last_frame = NULL;
 		output->frame_count = 0;
-		output->frame_offsets = NULL;
 		return VOD_OK;
 	}
 	
 	// update the frames source to memory
-	rc = frames_source_memory_init(state->request_context, &output->frames_source_context);
+	rc = frames_source_memory_init(state->request_context, &output->frames.frames_source_context);
 	if (rc != VOD_OK)
 	{
 		return rc;
 	}
 
-	output->frames_source = &frames_source_memory;
+	output->frames.frames_source = &frames_source_memory;
 
 	// calculate the total frames size and duration
 	output->media_info.min_frame_duration = 0;
-	output->media_info.max_frame_duration = 0;
 	
-	for (cur_frame = output->first_frame; cur_frame < last_frame; cur_frame++)
+	for (cur_frame = output->frames.first_frame; cur_frame < last_frame; cur_frame++)
 	{
 		output->total_frames_size += cur_frame->size;
 		output->total_frames_duration += cur_frame->duration;
@@ -936,11 +940,6 @@ audio_filter_update_track(audio_filter_state_t* state)
 			(output->media_info.min_frame_duration == 0 || cur_frame->duration < output->media_info.min_frame_duration))
 		{
 			output->media_info.min_frame_duration = cur_frame->duration;
-		}
-
-		if (cur_frame->duration > output->media_info.max_frame_duration)
-		{
-			output->media_info.max_frame_duration = cur_frame->duration;
 		}
 	}
 	
@@ -968,8 +967,8 @@ audio_filter_update_track(audio_filter_state_t* state)
 	}
 	vod_memcpy(new_extra_data, state->sink.encoder->extradata, state->sink.encoder->extradata_size);
 	
-	output->media_info.extra_data = new_extra_data;
-	output->media_info.extra_data_size = state->sink.encoder->extradata_size;
+	output->media_info.extra_data.data = new_extra_data;
+	output->media_info.extra_data.len = state->sink.encoder->extradata_size;
 
 	if (output->media_info.codec_name.data != NULL)
 	{
@@ -993,27 +992,13 @@ static vod_status_t
 audio_filter_write_frame(audio_filter_state_t* state, AVPacket* output_packet)
 {
 	input_frame_t* cur_frame;
-	uint64_t* cur_offset;
 	u_char* new_data;
 
 	cur_frame = vod_array_push(&state->frames_array);
 	if (cur_frame == NULL)
 	{
 		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, state->request_context->log, 0,
-			"audio_filter_write_frame: vod_array_push failed (1)");
-		return VOD_ALLOC_FAILED;
-	}
-
-	cur_frame->duration = output_packet->duration;
-	cur_frame->size = output_packet->size;
-	cur_frame->key_frame = 0;
-	cur_frame->pts_delay = output_packet->pts - output_packet->dts;
-
-	cur_offset = vod_array_push(&state->frame_offsets_array);
-	if (cur_offset == NULL)
-	{
-		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, state->request_context->log, 0,
-			"audio_filter_write_frame: vod_array_push failed (2)");
+			"audio_filter_write_frame: vod_array_push failed");
 		return VOD_ALLOC_FAILED;
 	}
 
@@ -1024,8 +1009,14 @@ audio_filter_write_frame(audio_filter_state_t* state, AVPacket* output_packet)
 			"audio_filter_write_frame: vod_alloc failed");
 		return VOD_ALLOC_FAILED;
 	}
+
 	vod_memcpy(new_data, output_packet->data, output_packet->size);
-	*cur_offset = (uintptr_t)new_data;
+
+	cur_frame->duration = output_packet->duration;
+	cur_frame->size = output_packet->size;
+	cur_frame->key_frame = 0;
+	cur_frame->pts_delay = output_packet->pts - output_packet->dts;
+	cur_frame->offset = (uintptr_t)new_data;
 
 	return VOD_OK;
 }
@@ -1256,9 +1247,15 @@ audio_filter_choose_source(audio_filter_state_t* state, audio_filter_source_t** 
 	best_source = NULL;
 	for (sources_cur = state->sources; sources_cur < state->sources_end; sources_cur++)
 	{
-		if (sources_cur->cur_frame >= sources_cur->last_frame)
+		if (sources_cur->cur_frame >= sources_cur->cur_frame_part.last_frame)
 		{
-			continue;
+			if (sources_cur->cur_frame_part.next == NULL)
+			{
+				continue;
+			}
+
+			sources_cur->cur_frame_part = *sources_cur->cur_frame_part.next;
+			sources_cur->cur_frame = sources_cur->cur_frame_part.first_frame;
 		}
 
 		failed_requests = av_buffersrc_get_nb_failed_requests(sources_cur->buffer_src);
@@ -1305,7 +1302,9 @@ audio_filter_process(void* context)
 			state->cur_source = source;
 
 			// start the frame
-			rc = source->frames_source->start_frame(source->frames_source_context, source->cur_frame, *source->cur_frame_offset);
+			rc = source->cur_frame_part.frames_source->start_frame(
+				source->cur_frame_part.frames_source_context, 
+				source->cur_frame);
 			if (rc != VOD_OK)
 			{
 				return rc;
@@ -1317,8 +1316,8 @@ audio_filter_process(void* context)
 		}
 
 		// read some data from the frame
-		rc = source->frames_source->read(
-			source->frames_source_context,
+		rc = source->cur_frame_part.frames_source->read(
+			source->cur_frame_part.frames_source_context,
 			&read_buffer,
 			&read_size,
 			&frame_done);
@@ -1367,7 +1366,6 @@ audio_filter_process(void* context)
 
 		// move to the next frame
 		source->cur_frame++;
-		source->cur_frame_offset++;
 		state->cur_source = NULL;
 	}
 }

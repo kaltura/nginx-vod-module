@@ -4,6 +4,7 @@
 #include "filters/gain_filter.h"
 #include "filters/rate_filter.h"
 #include "filters/mix_filter.h"
+#include "filters/concat_filter.h"
 #include "parse_utils.h"
 
 #define MAX_CLIP_DURATION (86400000)		// 1 day
@@ -28,7 +29,6 @@ typedef struct {
 	media_filter_parse_context_t base;
 	get_clip_ranges_result_t clip_ranges;
 	media_set_t* media_set;
-	vod_array_t sources;
 	uint32_t clip_id;
 	uint32_t expected_clip_count;
 } media_set_parse_context_t;
@@ -54,6 +54,7 @@ static json_parser_union_type_def_t media_clip_union_types[] = {
 	{ vod_string("gainFilter"), gain_filter_parse },
 	{ vod_string("mixFilter"), mix_filter_parse },
 	{ vod_string("rateFilter"), rate_filter_parse },
+	{ vod_string("concat"), concat_filter_parse },
 	{ vod_string("source"), media_set_parse_source },
 	{ vod_null_string, NULL }
 };
@@ -214,6 +215,7 @@ media_set_parse_null_term_string(
 			"media_set_parse_null_term_string: vod_alloc failed");
 		return VOD_ALLOC_FAILED;
 	}
+	result.len = 0;
 
 	rc = vod_json_decode_string(&result, &value->v.str);
 	if (rc != VOD_JSON_OK)
@@ -271,7 +273,7 @@ media_set_parse_source(
 		return VOD_ALLOC_FAILED;
 	}
 
-	source_ptr = vod_array_push(&context->sources);
+	source_ptr = vod_array_push(&context->base.sources);
 	if (source_ptr == NULL)
 	{
 		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, context->base.request_context->log, 0,
@@ -518,7 +520,7 @@ media_set_parse_sequences(
 	}
 
 	rc = vod_array_init(
-		&context->sources, 
+		&context->base.sources, 
 		context->base.request_context->pool, 
 		required_sequences_num * context->media_set->clip_count,		// usually there is a single source per clip
 		sizeof(context->media_set->sources[0]));
@@ -579,8 +581,8 @@ media_set_parse_sequences(
 	context->media_set->sequences_end = cur_output;
 	context->media_set->sequence_count = cur_output - context->media_set->sequences;
 
-	context->media_set->sources = context->sources.elts;
-	context->media_set->sources_end = context->media_set->sources + context->sources.nelts;
+	context->media_set->sources = context->base.sources.elts;
+	context->media_set->sources_end = context->media_set->sources + context->base.sources.nelts;
 
 	return VOD_OK;
 }
@@ -653,6 +655,12 @@ media_set_parser_init(
 	}
 
 	rc = rate_filter_parser_init(pool, temp_pool);
+	if (rc != VOD_OK)
+	{
+		return rc;
+	}
+
+	rc = concat_filter_parser_init(pool, temp_pool);
 	if (rc != VOD_OK)
 	{
 		return rc;
@@ -1013,6 +1021,7 @@ media_set_parse_json(
 		result->clip_count = 1;
 		result->durations = NULL;
 		result->use_discontinuity = FALSE;
+		result->type = MEDIA_SET_VOD;
 
 		// parse the sequences
 		context.clip_ranges.clip_ranges = NULL;
@@ -1024,6 +1033,7 @@ media_set_parse_json(
 		context.media_set = result;
 		context.base.request_context = request_context;
 		context.clip_id = 1;
+		context.expected_clip_count = 1;
 
 		return media_set_parse_sequences(&context, &params[MEDIA_SET_PARAM_SEQUENCES]->v.arr, request_params);
 	}

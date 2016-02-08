@@ -31,6 +31,7 @@ rate_filter_scale_track_timestamps(
 {
 	input_frame_t* last_frame;
 	input_frame_t* cur_frame;
+	frame_list_part_t* part;
 
 	// TODO: remove this (added temporarily in order to avoid changing existing responses)
 	if (speed_nom % 10 == 0 && speed_denom % 10 == 0)
@@ -48,7 +49,6 @@ rate_filter_scale_track_timestamps(
 	track->total_frames_duration *= speed_denom;
 
 	track->media_info.min_frame_duration *= speed_denom;
-	track->media_info.max_frame_duration *= speed_denom;
 
 	if (track->media_info.media_type == MEDIA_TYPE_AUDIO)
 	{
@@ -57,9 +57,19 @@ rate_filter_scale_track_timestamps(
 
 	track->media_info.bitrate = (uint32_t)((track->total_frames_size * track->media_info.timescale * 8) / track->media_info.full_duration);
 
-	last_frame = track->last_frame;
-	for (cur_frame = track->first_frame; cur_frame < last_frame; cur_frame++)
+	part = &track->frames;
+	last_frame = part->last_frame;
+	for (cur_frame = part->first_frame;; cur_frame++)
 	{
+		if (cur_frame >= last_frame)
+		{
+			if (part->next == NULL)
+				break;
+			part = part->next;
+			cur_frame = part->first_frame;
+			last_frame = part->last_frame;
+		}
+
 		cur_frame->duration *= speed_denom;
 		cur_frame->pts_delay *= speed_denom;
 	}

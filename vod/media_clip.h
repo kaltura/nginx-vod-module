@@ -2,7 +2,7 @@
 #define __MEDIA_CLIP_H__
 
 // includes
-#include "mp4/mp4_parser.h"
+#include "media_format.h"
 
 // constants
 #define MEDIA_CLIP_KEY_SIZE (16)
@@ -17,6 +17,7 @@ typedef enum {
 	MEDIA_CLIP_RATE_FILTER,
 	MEDIA_CLIP_MIX_FILTER,
 	MEDIA_CLIP_GAIN_FILTER,
+	MEDIA_CLIP_CONCAT_FILTER,
 } media_clip_type_t;
 
 typedef struct media_clip_s {

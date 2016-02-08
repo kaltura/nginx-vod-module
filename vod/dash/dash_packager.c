@@ -1,4 +1,5 @@
 #include "dash_packager.h"
+#include "../mp4/mp4_defs.h"
 
 // macros
 #define vod_copy_atom(p, raw_atom) vod_copy(p, (raw_atom).ptr, (raw_atom).size)
@@ -1505,7 +1506,7 @@ dash_packager_get_earliest_pres_time(media_set_t* media_set, media_track_t* trac
 
 	if (track->frame_count > 0)
 	{
-		result += track->first_frame[0].pts_delay;
+		result += track->frames.first_frame[0].pts_delay;
 	}
 	return result;
 }

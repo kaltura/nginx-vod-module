@@ -1,5 +1,5 @@
 #include "frames_source_memory.h"
-#include "../mp4/mp4_parser.h"
+#include "../media_format.h"
 
 // typedefs
 typedef struct {
@@ -33,11 +33,11 @@ frames_source_memory_set_cache_slot_id(void* ctx, int cache_slot_id)
 }
 
 static vod_status_t
-frames_source_memory_start_frame(void* ctx, input_frame_t* frame, uint64_t frame_offset)
+frames_source_memory_start_frame(void* ctx, input_frame_t* frame)
 {
 	frames_source_memory_state_t* state = ctx;
 
-	state->buffer = (u_char*)(uintptr_t)frame_offset;
+	state->buffer = (u_char*)(uintptr_t)frame->offset;
 	state->size = frame->size;
 
 	return VOD_OK;

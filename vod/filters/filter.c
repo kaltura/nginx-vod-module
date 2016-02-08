@@ -1,10 +1,12 @@
 #include "filter.h"
 #include "audio_filter.h"
 #include "rate_filter.h"
+#include "concat_filter.h"
 #include "../media_set.h"
 
 // typedefs
 typedef struct {
+	request_context_t* request_context;
 	media_sequence_t* sequence;
 	media_clip_filtered_t* output_clip;
 	media_track_t* output_track;
@@ -46,7 +48,15 @@ filter_get_clip_track_count(media_clip_t* clip, uint32_t* track_count)
 	}
 
 	// recursively count child sources
-	sources_end = clip->sources + clip->source_count;
+	if (clip->type == MEDIA_CLIP_CONCAT_FILTER)
+	{
+		sources_end = clip->sources + 1;
+	}
+	else
+	{
+		sources_end = clip->sources + clip->source_count;
+	}
+
 	for (cur_source = clip->sources; cur_source < sources_end; cur_source++)
 	{
 		filter_get_clip_track_count(*cur_source, track_count);
@@ -110,7 +120,7 @@ filter_init_filtered_clip_from_source(
 	}
 }
 
-static void
+static vod_status_t
 filter_scale_video_tracks(filters_init_state_t* state, media_clip_t* clip, uint32_t speed_nom, uint32_t speed_denom)
 {
 	media_clip_rate_filter_t* rate_filter;
@@ -119,6 +129,7 @@ filter_scale_video_tracks(filters_init_state_t* state, media_clip_t* clip, uint3
 	media_track_t* cur_track;
 	media_clip_t** cur_source;
 	media_clip_t** sources_end;
+	vod_status_t rc;
 
 	if (clip->type == MEDIA_CLIP_SOURCE)
 	{
@@ -159,7 +170,7 @@ filter_scale_video_tracks(filters_init_state_t* state, media_clip_t* clip, uint3
 		}
 
 		state->source_count++;
-		return;
+		return VOD_OK;
 	}
 
 	// recursively filter sources
@@ -173,11 +184,26 @@ filter_scale_video_tracks(filters_init_state_t* state, media_clip_t* clip, uint3
 	default:;
 	}
 
+	if (clip->type == MEDIA_CLIP_CONCAT_FILTER && clip->source_count > 1)
+	{
+		rc = concat_filter_concat(state->request_context, clip);
+		if (rc != VOD_OK)
+		{
+			return rc;
+		}
+	}
+
 	sources_end = clip->sources + clip->source_count;
 	for (cur_source = clip->sources; cur_source < sources_end; cur_source++)
 	{
-		filter_scale_video_tracks(state, *cur_source, speed_nom, speed_denom);
+		rc = filter_scale_video_tracks(state, *cur_source, speed_nom, speed_denom);
+		if (rc != VOD_OK)
+		{
+			return rc;
+		}
 	}
+
+	return VOD_OK;
 }
 
 vod_status_t
@@ -195,6 +221,7 @@ filter_init_filtered_clips(
 	uint32_t track_count[MEDIA_TYPE_COUNT];
 	uint32_t max_duration = 0;
 	uint32_t clip_index;
+	vod_status_t rc;
 
 	media_set->audio_filtering_needed = FALSE;
 	media_set->track_count[MEDIA_TYPE_VIDEO] = 0;
@@ -284,6 +311,8 @@ filter_init_filtered_clips(
 			"filter_init_filtered_clips: vod_alloc failed (2)");
 		return VOD_ALLOC_FAILED;
 	}
+	init_state.request_context = request_context;
+
 	media_set->filtered_tracks = init_state.output_track;
 
 	for (clip_index = 0; clip_index < media_set->clip_count; clip_index++)
@@ -315,7 +344,11 @@ filter_init_filtered_clips(
 				init_state.has_audio_frames = FALSE;
 				init_state.source_count = 0;
 
-				filter_scale_video_tracks(&init_state, input_clip, 100, 100);
+				rc = filter_scale_video_tracks(&init_state, input_clip, 100, 100);
+				if (rc != VOD_OK)
+				{
+					return rc;
+				}
 
 				if (init_state.source_count != 1)
 				{

@@ -81,10 +81,9 @@ mp4_to_annexb_set_media_info(
 		return VOD_BAD_DATA;
 	}
 
-	switch (media_info->format)
+	switch (media_info->codec_id)
 	{
-	case FORMAT_HEV1:
-	case FORMAT_HVC1:
+	case VOD_CODEC_ID_HEVC:
 		if (state->sample_aes_context != NULL)
 		{
 			vod_log_error(VOD_LOG_ERR, state->request_context->log, 0,
@@ -106,8 +105,8 @@ mp4_to_annexb_set_media_info(
 		break;
 	}
 
-	state->extra_data = media_info->extra_data;
-	state->extra_data_size = media_info->extra_data_size;
+	state->extra_data = media_info->extra_data.data;
+	state->extra_data_size = media_info->extra_data.len;
 
 	return VOD_OK;
 }

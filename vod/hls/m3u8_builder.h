@@ -2,7 +2,7 @@
 #define __M3U8_BUILDER_H__
 
 // includes
-#include "../mp4/mp4_parser.h"
+#include "../media_format.h"
 #include "../segmenter.h"
 #include "hls_muxer.h"
 
