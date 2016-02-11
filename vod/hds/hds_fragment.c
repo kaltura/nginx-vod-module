@@ -78,6 +78,10 @@ typedef struct {
 
 typedef struct {
 	u_char sound_info[1];		// 4 bits format, 2 bits rate, 1 bit size, 1 bit type
+} audio_tag_header;
+
+typedef struct {
+	u_char sound_info[1];		// 4 bits format, 2 bits rate, 1 bit size, 1 bit type
 	u_char aac_packet_type[1];
 } audio_tag_header_aac;
 
@@ -89,6 +93,7 @@ typedef struct {
 	uint32_t timescale;
 	uint32_t frame_count;
 	uint32_t index;
+	uint32_t tag_size;
 
 	uint64_t clip_start_time;
 	uint64_t first_frame_time_offset;
@@ -128,12 +133,6 @@ struct hds_muxer_state_s {
 	uint32_t frame_header_size;
 };
 
-// constants
-static const uint32_t tag_size_by_media_type[MEDIA_TYPE_COUNT] = {
-	sizeof(adobe_mux_packet_header_t) + sizeof(video_tag_header_avc),
-	sizeof(adobe_mux_packet_header_t) + sizeof(audio_tag_header_aac),
-};
-
 static vod_status_t hds_muxer_start_frame(hds_muxer_state_t* state);
 
 static vod_status_t
@@ -142,6 +141,7 @@ hds_get_sound_info(request_context_t* request_context, media_info_t* media_info,
 	int sound_rate;
 	int sound_size;
 	int sound_type;
+	int sound_format;
 
 	if (media_info->u.audio.sample_rate <= 8000)
 	{
@@ -180,7 +180,18 @@ hds_get_sound_info(request_context_t* request_context, media_info_t* media_info,
 		break;
 	}
 
-	*result = (SOUND_FORMAT_AAC << 4) | (sound_rate << 2) | (sound_size << 1) | (sound_type);
+	switch (media_info->codec_id)
+	{
+	case VOD_CODEC_ID_MP3:
+		sound_format = SOUND_FORMAT_MP3;
+		break;
+
+	default:
+		sound_format = SOUND_FORMAT_AAC;
+		break;
+	}
+
+	*result = (sound_format << 4) | (sound_rate << 2) | (sound_size << 1) | (sound_type);
 
 	return VOD_OK;
 }
@@ -223,11 +234,23 @@ hds_write_audio_tag_header(
 	u_char* p,
 	uint32_t data_size,
 	uint32_t timestamp,
+	uint8_t sound_info)
+{
+	data_size += sizeof(audio_tag_header);
+	p = hds_write_adobe_mux_packet_header(p, TAG_TYPE_AUDIO, data_size, timestamp);
+	*p++ = sound_info;
+	return p;
+}
+
+static u_char*
+hds_write_audio_tag_header_aac(
+	u_char* p,
+	uint32_t data_size,
+	uint32_t timestamp,
 	uint8_t sound_info,
 	uint8_t aac_packet_type)
 {
 	data_size += sizeof(audio_tag_header_aac);
-
 	p = hds_write_adobe_mux_packet_header(p, TAG_TYPE_AUDIO, data_size, timestamp);
 	*p++ = sound_info;
 	*p++ = aac_packet_type;
@@ -325,6 +348,22 @@ hds_get_traf_atom_size(hds_muxer_stream_state_t* cur_stream)
 	return result;
 }
 
+static uint32_t
+hds_muxer_get_tag_size(media_track_t* cur_track)
+{
+	switch (cur_track->media_info.codec_id)
+	{
+	case VOD_CODEC_ID_MP3:
+		return sizeof(adobe_mux_packet_header_t) + sizeof(audio_tag_header);
+
+	case VOD_CODEC_ID_AAC:
+		return sizeof(adobe_mux_packet_header_t) + sizeof(audio_tag_header_aac);
+
+	default: // VOD_CODEC_ID_AVC
+		return sizeof(adobe_mux_packet_header_t) + sizeof(video_tag_header_avc);
+	}
+}
+
 static vod_status_t
 hds_muxer_init_track(
 	hds_muxer_state_t* state,
@@ -355,6 +394,8 @@ hds_muxer_init_track(
 			return rc;
 		}
 	}
+	
+	cur_stream->tag_size = hds_muxer_get_tag_size(cur_track);
 
 	return VOD_OK;
 }
@@ -378,10 +419,13 @@ hds_muxer_reinit_tracks(hds_muxer_state_t* state)
 			return rc;
 		}
 
-		state->codec_config_size += 
-			tag_size_by_media_type[cur_track->media_info.media_type] +
-			cur_track->media_info.extra_data.len + 
-			sizeof(uint32_t);
+		if (cur_track->media_info.codec_id != VOD_CODEC_ID_MP3)
+		{
+			state->codec_config_size +=
+				cur_stream->tag_size +
+				cur_track->media_info.extra_data.len +
+				sizeof(uint32_t);
+		}
 	}
 	state->cur_clip++;
 
@@ -474,7 +518,7 @@ hds_calculate_output_offsets_and_write_afra_entries(
 		}
 
 		// skip the tag size
-		cur_offset += tag_size_by_media_type[selected_stream->media_type];
+		cur_offset += selected_stream->tag_size;
 
 		// set the offset (points to the beginning of the actual data)
 		*selected_stream->cur_frame_output_offset = cur_offset;
@@ -601,10 +645,13 @@ hds_muxer_init_state(
 		}
 
 		// update the codec config size
-		state->codec_config_size +=
-			tag_size_by_media_type[cur_track->media_info.media_type] +
-			cur_track->media_info.extra_data.len +
-			sizeof(uint32_t);
+		if (cur_track->media_info.codec_id != VOD_CODEC_ID_MP3)
+		{
+			state->codec_config_size +=
+				cur_stream->tag_size +
+				cur_track->media_info.extra_data.len +
+				sizeof(uint32_t);
+		}
 	}
 
 	*result = state;
@@ -622,6 +669,11 @@ hds_muxer_write_codec_config(u_char* p, hds_muxer_state_t* state, uint64_t cur_f
 
 	for (cur_stream = state->first_stream; cur_stream < state->last_stream; cur_stream++)
 	{
+		if ((cur_stream->sound_info >> 4) == SOUND_FORMAT_MP3)
+		{
+			continue;
+		}
+
 		cur_track = cur_stream->track;
 		packet_start = p;
 		switch (cur_track->media_info.media_type)
@@ -637,7 +689,7 @@ hds_muxer_write_codec_config(u_char* p, hds_muxer_state_t* state, uint64_t cur_f
 			break;
 
 		case MEDIA_TYPE_AUDIO:
-			p = hds_write_audio_tag_header(
+			p = hds_write_audio_tag_header_aac(
 				p,
 				cur_track->media_info.extra_data.len,
 				cur_frame_dts,
@@ -708,8 +760,12 @@ hds_muxer_init_fragment(
 
 		for (cur_track = cur_clip->first_track; cur_track < cur_clip->last_track; cur_track++)
 		{
-			frame_metadata_size = tag_size_by_media_type[cur_track->media_info.media_type] + sizeof(uint32_t);
-			codec_config_size += frame_metadata_size + cur_track->media_info.extra_data.len;
+			frame_metadata_size = hds_muxer_get_tag_size(cur_track) + sizeof(uint32_t);
+
+			if (cur_track->media_info.codec_id != VOD_CODEC_ID_MP3)
+			{
+				codec_config_size += frame_metadata_size + cur_track->media_info.extra_data.len;
+			}
 
 			mdat_atom_size += cur_track->total_frames_size + cur_track->frame_count * frame_metadata_size;
 
@@ -936,7 +992,7 @@ hds_muxer_start_frame(hds_muxer_state_t* state)
 	state->cache_slot_id = selected_stream->media_type;
 
 	// allocate room for the mux packet header
-	state->frame_header_size = tag_size_by_media_type[selected_stream->media_type];
+	state->frame_header_size = selected_stream->tag_size;
 
 	alloc_size = state->frame_header_size;
 	if (selected_stream->media_type == MEDIA_TYPE_VIDEO && state->cur_frame->key_frame)
@@ -971,12 +1027,23 @@ hds_muxer_start_frame(hds_muxer_state_t* state)
 		break;
 
 	case MEDIA_TYPE_AUDIO:
-		hds_write_audio_tag_header(
-			p,
-			state->cur_frame->size,
-			cur_frame_dts,
-			selected_stream->sound_info,
-			AAC_PACKET_TYPE_RAW);
+		if ((selected_stream->sound_info >> 4) == SOUND_FORMAT_AAC)
+		{
+			hds_write_audio_tag_header_aac(
+				p,
+				state->cur_frame->size,
+				cur_frame_dts,
+				selected_stream->sound_info,
+				AAC_PACKET_TYPE_RAW);
+		}
+		else
+		{
+			hds_write_audio_tag_header(
+				p,
+				state->cur_frame->size,
+				cur_frame_dts,
+				selected_stream->sound_info);
+		}
 	}
 
 	rc = state->frames_source->start_frame(state->frames_source_context, state->cur_frame);

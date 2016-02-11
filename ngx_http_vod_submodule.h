@@ -63,6 +63,7 @@ struct ngx_http_vod_request_s {
 	int flags;
 	int parse_type;
 	int request_class;
+	int codecs_mask;
 	
 	ngx_int_t (*handle_metadata_request)(
 		// in

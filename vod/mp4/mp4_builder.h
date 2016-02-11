@@ -2,37 +2,10 @@
 #define __MP4_BUILDER_H__
 
 // includes
+#include "../write_stream.h"
 #include "../media_set.h"
 
 // macros
-#define write_le32(p, dw)			\
-	{								\
-	*(p)++ = (dw) & 0xFF;			\
-	*(p)++ = ((dw) >> 8) & 0xFF;	\
-	*(p)++ = ((dw) >> 16) & 0xFF;	\
-	*(p)++ = ((dw) >> 24) & 0xFF;	\
-	}
-
-#define write_be16(p, w)			\
-	{								\
-	*(p)++ = ((w) >> 8) & 0xFF;		\
-	*(p)++ = (w) & 0xFF;			\
-	}
-
-#define write_be32(p, dw)			\
-	{								\
-	*(p)++ = ((dw) >> 24) & 0xFF;	\
-	*(p)++ = ((dw) >> 16) & 0xFF;	\
-	*(p)++ = ((dw) >> 8) & 0xFF;	\
-	*(p)++ = (dw) & 0xFF;			\
-	}
-
-#define write_be64(p, qw)			\
-	{								\
-	write_be32(p, (qw) >> 32);		\
-	write_be32(p, (qw));			\
-	}
-
 #define write_atom_name(p, c1, c2, c3, c4) \
 	{ *(p)++ = (c1); *(p)++ = (c2); *(p)++ = (c3); *(p)++ = (c4); }
 

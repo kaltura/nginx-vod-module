@@ -46,14 +46,27 @@
 #define PARSE_FLAG_DURATION_LIMITS_AND_TOTAL_SIZE (PARSE_FLAG_DURATION_LIMITS | PARSE_FLAG_TOTAL_SIZE_ESTIMATE)
 #define PARSE_BASIC_METADATA_ONLY (0)
 
+#define VOD_CODEC_FLAG(name) (1 << (VOD_CODEC_ID_##name - 1))
+
+#define vod_codec_in_mask(codec_id, mask) (((mask) & (1 << ((codec_id) - 1))) != 0)
+
 // enums
 enum {
+	VOD_CODEC_ID_INVALID,
+
 	// video
 	VOD_CODEC_ID_AVC,
 	VOD_CODEC_ID_HEVC,
+	VOD_CODEC_ID_VP8,
+	VOD_CODEC_ID_VP9,
 
 	// audio
 	VOD_CODEC_ID_AAC,
+	VOD_CODEC_ID_MP3,
+	VOD_CODEC_ID_VORBIS,
+	VOD_CODEC_ID_OPUS,
+
+	VOD_CODEC_ID_COUNT
 };
 
 enum {
@@ -87,6 +100,7 @@ typedef struct {
 	uint32_t max_frame_count;
 	size_t max_frames_size;
 	int parse_type;
+	int codecs_mask;
 } media_parse_params_t;
 
 // typedefs
@@ -129,6 +143,7 @@ typedef struct media_info_s {
 	vod_str_t extra_data;
 	int64_t empty_duration;
 	int64_t start_time;
+	uint64_t codec_delay;
 	union {
 		video_media_info_t video;
 		audio_media_info_t audio;

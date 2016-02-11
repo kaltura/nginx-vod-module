@@ -3,6 +3,9 @@
 #include "ngx_http_vod_utils.h"
 #include "vod/hls/hls_muxer.h"
 
+// constants
+#define SUPPORTED_CODECS (VOD_CODEC_FLAG(AVC) | VOD_CODEC_FLAG(HEVC) | VOD_CODEC_FLAG(AAC) | VOD_CODEC_FLAG(MP3))
+
 // content types
 static u_char mpeg_ts_content_type[] = "video/MP2T";
 static u_char m3u8_content_type[] = "application/vnd.apple.mpegurl";
@@ -262,6 +265,7 @@ static const ngx_http_vod_request_t hls_master_request = {
 	0,
 	PARSE_FLAG_TOTAL_SIZE_ESTIMATE | PARSE_FLAG_CODEC_NAME,
 	REQUEST_CLASS_OTHER,
+	SUPPORTED_CODECS,
 	ngx_http_vod_hls_handle_master_playlist,
 	NULL,
 };
@@ -270,6 +274,7 @@ static const ngx_http_vod_request_t hls_index_request = {
 	REQUEST_FLAG_SINGLE_TRACK_PER_MEDIA_TYPE | REQUEST_FLAG_TIME_DEPENDENT_ON_LIVE,
 	PARSE_BASIC_METADATA_ONLY,
 	REQUEST_CLASS_MANIFEST,
+	SUPPORTED_CODECS,
 	ngx_http_vod_hls_handle_index_playlist,
 	NULL,
 };
@@ -278,6 +283,7 @@ static const ngx_http_vod_request_t hls_iframes_request = {
 	REQUEST_FLAG_SINGLE_TRACK_PER_MEDIA_TYPE,
 	PARSE_FLAG_FRAMES_ALL_EXCEPT_OFFSETS | PARSE_FLAG_PARSED_EXTRA_DATA_SIZE | PARSE_FLAG_ALL_CLIPS,
 	REQUEST_CLASS_OTHER,
+	SUPPORTED_CODECS,
 	ngx_http_vod_hls_handle_iframe_playlist,
 	NULL,
 };
@@ -286,6 +292,7 @@ static const ngx_http_vod_request_t hls_enc_key_request = {
 	REQUEST_FLAG_SINGLE_TRACK_PER_MEDIA_TYPE,
 	PARSE_BASIC_METADATA_ONLY,
 	REQUEST_CLASS_OTHER,
+	SUPPORTED_CODECS,
 	ngx_http_vod_hls_handle_encryption_key,
 	NULL,
 };
@@ -294,6 +301,7 @@ static const ngx_http_vod_request_t hls_segment_request = {
 	REQUEST_FLAG_SINGLE_TRACK_PER_MEDIA_TYPE,
 	PARSE_FLAG_FRAMES_ALL | PARSE_FLAG_PARSED_EXTRA_DATA,
 	REQUEST_CLASS_SEGMENT,
+	SUPPORTED_CODECS,
 	NULL,
 	ngx_http_vod_hls_init_frame_processor,
 };

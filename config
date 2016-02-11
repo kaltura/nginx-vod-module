@@ -138,6 +138,7 @@ NGX_ADDON_DEPS="$NGX_ADDON_DEPS                                     \
                 $ngx_addon_dir/vod/media_set.h                      \
                 $ngx_addon_dir/vod/media_set_parser.h               \
                 $ngx_addon_dir/vod/mkv/ebml.h                       \
+                $ngx_addon_dir/vod/mkv/mkv_builder.h                \
                 $ngx_addon_dir/vod/mkv/mkv_defs.h                   \
                 $ngx_addon_dir/vod/mkv/mkv_format.h                 \
                 $ngx_addon_dir/vod/mp4/mp4_aes_ctr.h                \
@@ -157,6 +158,7 @@ NGX_ADDON_DEPS="$NGX_ADDON_DEPS                                     \
                 $ngx_addon_dir/vod/segmenter.h                      \
                 $ngx_addon_dir/vod/write_buffer.h                   \
                 $ngx_addon_dir/vod/write_buffer_queue.h             \
+                $ngx_addon_dir/vod/write_stream.h                   \
                 "
 
 NGX_ADDON_SRCS="$NGX_ADDON_SRCS                                     \
@@ -208,6 +210,8 @@ NGX_ADDON_SRCS="$NGX_ADDON_SRCS                                     \
                 $ngx_addon_dir/vod/media_format.c                   \
                 $ngx_addon_dir/vod/media_set_parser.c               \
                 $ngx_addon_dir/vod/mkv/ebml.c                       \
+                $ngx_addon_dir/vod/mkv/mkv_builder.c                \
+                $ngx_addon_dir/vod/mkv/mkv_defs.c                   \
                 $ngx_addon_dir/vod/mkv/mkv_format.c                 \
                 $ngx_addon_dir/vod/mp4/mp4_aes_ctr.c                \
                 $ngx_addon_dir/vod/mp4/mp4_builder.c                \

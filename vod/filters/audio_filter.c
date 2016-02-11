@@ -191,6 +191,13 @@ audio_filter_init_source(
 	uint8_t channel_config;
 	int avrc;
 
+	if (media_info->codec_id != VOD_CODEC_ID_AAC)
+	{
+		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+			"audio_filter_init_source: codec id %uD not supported", media_info->codec_id);
+		return VOD_BAD_REQUEST;
+	}
+
 	// init the decoder	
 	decoder = avcodec_alloc_context3(decoder_codec);
 	if (decoder == NULL)

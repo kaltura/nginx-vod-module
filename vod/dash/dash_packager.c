@@ -54,7 +54,7 @@
 #define VOD_DASH_MANIFEST_VIDEO_PREFIX											\
 	"      <Representation\n"													\
     "          id=\"%V\"\n"														\
-    "          mimeType=\"video/mp4\"\n"										\
+    "          mimeType=\"%V\"\n"										\
     "          codecs=\"%V\"\n"													\
     "          width=\"%uD\"\n"													\
     "          height=\"%uD\"\n"												\
@@ -82,7 +82,7 @@
 #define VOD_DASH_MANIFEST_AUDIO_PREFIX											\
 	"      <Representation\n"													\
 	"          id=\"%V\"\n"														\
-    "          mimeType=\"audio/mp4\"\n"										\
+    "          mimeType=\"%V\"\n"										\
     "          codecs=\"%V\"\n"													\
     "          audioSamplingRate=\"%uD\"\n"										\
     "          startWithSAP=\"1\"\n"											\
@@ -98,8 +98,8 @@
 #define VOD_DASH_MANIFEST_SEGMENT_TEMPLATE_FIXED								\
 	"        <SegmentTemplate\n"												\
 	"            timescale=\"1000\"\n"											\
-	"            media=\"%V%V-$Number$-$RepresentationID$.m4s\"\n"				\
-	"            initialization=\"%V%V-$RepresentationID$.mp4\"\n"				\
+	"            media=\"%V%V-$Number$-$RepresentationID$.%V\"\n"				\
+	"            initialization=\"%V%V-$RepresentationID$.%V\"\n"				\
 	"            duration=\"%ui\"\n"											\
 	"            startNumber=\"%uD\">\n"										\
 	"        </SegmentTemplate>\n"
@@ -107,8 +107,8 @@
 #define VOD_DASH_MANIFEST_SEGMENT_TEMPLATE_HEADER								\
 	"        <SegmentTemplate\n"												\
 	"            timescale=\"1000\"\n"											\
-	"            media=\"%V%V-$Number$-$RepresentationID$.m4s\"\n"				\
-	"            initialization=\"%V%V-$RepresentationID$.mp4\"\n"				\
+	"            media=\"%V%V-$Number$-$RepresentationID$.%V\"\n"				\
+	"            initialization=\"%V%V-$RepresentationID$.%V\"\n"				\
 	"            startNumber=\"%uD\">\n"										\
 	"            <SegmentTimeline>\n"
 
@@ -131,10 +131,10 @@
 // SegmentList
 #define VOD_DASH_MANIFEST_SEGMENT_LIST_HEADER									\
 	"        <SegmentList timescale=\"1000\" duration=\"%ui\">\n"				\
-	"          <Initialization sourceURL=\"%V%V-%V.mp4\"/>\n"
+	"          <Initialization sourceURL=\"%V%V-%V.%V\"/>\n"
 
 #define VOD_DASH_MANIFEST_SEGMENT_URL											\
-	"          <SegmentURL media=\"%V%V-%uD-%V.m4s\"/>\n"
+	"          <SegmentURL media=\"%V%V-%uD-%V.%V\"/>\n"
 
 #define VOD_DASH_MANIFEST_SEGMENT_LIST_FOOTER									\
 	"        </SegmentList>\n"
@@ -146,6 +146,15 @@
     "</MPD>\n"
 
 #define MAX_TRACK_SPEC_LENGTH (sizeof("c-f-v") + 3 * VOD_INT32_LEN)
+#define MAX_MIME_TYPE_SIZE (sizeof("video/webm") - 1)
+#define MAX_FILE_EXT_SIZE (sizeof("webm") - 1)
+
+//typedefs
+typedef struct {
+	vod_str_t mime_type;
+	vod_str_t init_file_ext;
+	vod_str_t frag_file_ext;
+} dash_codec_info_t;
 
 // init mp4 atoms
 typedef struct {
@@ -286,6 +295,20 @@ static const u_char styp_atom[] = {
 	0x64, 0x61, 0x73, 0x68,		// compatible brand
 };
 
+static dash_codec_info_t dash_codecs[VOD_CODEC_ID_COUNT] = {
+	{ vod_null_string, vod_null_string, vod_null_string },		// invalid
+
+	{ vod_string("video/mp4"),	vod_string("mp4"),	vod_string("m4s")	},		// avc
+	{ vod_string("video/mp4"),	vod_string("mp4"),	vod_string("m4s")	},		// hevc
+	{ vod_string("video/webm"),	vod_string("webm"), vod_string("webm")	},		// vp8
+	{ vod_string("video/webm"),	vod_string("webm"), vod_string("webm")	},		// vp9
+
+	{ vod_string("audio/mp4"),	vod_string("mp4"),	vod_string("m4s")	},		// aac
+	{ vod_string("audio/mp4"),	vod_string("mp4"),	vod_string("m4s")	},		// mp3
+	{ vod_string("audio/webm"),	vod_string("webm"), vod_string("webm")	},		// vorbis
+	{ vod_string("audio/webm"),	vod_string("webm"), vod_string("webm")	},		// opus
+};
+
 // mpd writing code
 static bool_t
 dash_packager_compare_tracks(uintptr_t bitrate_threshold, const media_info_t* mi1, const media_info_t* mi2)
@@ -373,14 +396,19 @@ dash_packager_write_segment_template(
 	dash_manifest_config_t* conf,
 	uint32_t start_number,
 	media_set_t* media_set,
+	media_track_t* reference_track,
 	vod_str_t* base_url)
 {
+	// Note: SegmentTemplate is currently printed in the adaptation set level, so it is not possible
+	//		to mix mp4 and webm representations for the same media type
 	p = vod_sprintf(p,
 		VOD_DASH_MANIFEST_SEGMENT_TEMPLATE_FIXED,
 		base_url,
 		&conf->fragment_file_name_prefix,
+		&dash_codecs[reference_track->media_info.codec_id].frag_file_ext,
 		base_url,
 		&conf->init_file_name_prefix,
+		&dash_codecs[reference_track->media_info.codec_id].init_file_ext,
 		media_set->segmenter_conf->segment_duration,
 		start_number + 1);
 
@@ -393,6 +421,7 @@ dash_packager_write_segment_timeline(
 	dash_manifest_config_t* conf,
 	uint32_t start_number,
 	uint64_t clip_start_offset,
+	media_track_t* reference_track,
 	segment_durations_t* segment_durations,
 	segment_duration_item_t** cur_item_ptr,
 	vod_str_t* base_url)
@@ -405,12 +434,16 @@ dash_packager_write_segment_timeline(
 
 	start_time = segment_durations->start_time + clip_start_offset;
 
+	// Note: SegmentTemplate is currently printed in the adaptation set level, so it is not possible
+	//		to mix mp4 and webm representations for the same media type
 	p = vod_sprintf(p,
 		VOD_DASH_MANIFEST_SEGMENT_TEMPLATE_HEADER,
 		base_url,
 		&conf->fragment_file_name_prefix,
+		&dash_codecs[reference_track->media_info.codec_id].frag_file_ext,
 		base_url,
 		&conf->init_file_name_prefix,
+		&dash_codecs[reference_track->media_info.codec_id].init_file_ext,
 		start_number + 1);
 
 	for (cur_item = *cur_item_ptr; cur_item < last_item; cur_item++)
@@ -518,7 +551,8 @@ dash_packager_write_segment_list(
 		media_set->segmenter_conf->segment_duration,
 		&cur_base_url,
 		&conf->init_file_name_prefix,
-		&track_spec);
+		&track_spec, 
+		&dash_codecs[cur_track->media_info.codec_id].init_file_ext);
 
 	// write the urls
 	for (i = 0; i < segment_count; i++)
@@ -528,7 +562,8 @@ dash_packager_write_segment_list(
 			&cur_base_url,
 			&conf->fragment_file_name_prefix,
 			start_number + i + 1,
-			&track_spec);
+			&track_spec,
+			&dash_codecs[cur_track->media_info.codec_id].frag_file_ext);
 	}
 
 	p = vod_copy(p, VOD_DASH_MANIFEST_SEGMENT_LIST_FOOTER, sizeof(VOD_DASH_MANIFEST_SEGMENT_LIST_FOOTER) - 1);
@@ -552,6 +587,7 @@ dash_packager_write_mpd_period(
 {
 	media_clip_filtered_t* cur_clip;
 	media_sequence_t* cur_sequence;
+	media_track_t* reference_track;
 	media_track_t* last_track;
 	media_track_t* cur_track;
 	vod_str_t representation_id;
@@ -634,6 +670,8 @@ dash_packager_write_mpd_period(
 				max_framerate_duration = cur_track->media_info.min_frame_duration;
 				max_framerate_timescale = cur_track->media_info.timescale;
 			}
+
+			reference_track = cur_track;
 		}
 
 		// print the header
@@ -663,6 +701,7 @@ dash_packager_write_mpd_period(
 				conf,
 				start_number,
 				media_set,
+				reference_track,
 				base_url);
 			break;
 
@@ -672,6 +711,7 @@ dash_packager_write_mpd_period(
 				conf,
 				start_number,
 				clip_start_offset,
+				reference_track,
 				&segment_durations[MEDIA_TYPE_VIDEO],
 				&cur_duration_items[MEDIA_TYPE_VIDEO],
 				base_url);
@@ -709,6 +749,7 @@ dash_packager_write_mpd_period(
 				p = vod_sprintf(p,
 					VOD_DASH_MANIFEST_VIDEO_PREFIX,
 					&representation_id,
+					&dash_codecs[cur_track->media_info.codec_id].mime_type,
 					&cur_track->media_info.codec_name,
 					(uint32_t)cur_track->media_info.u.video.width,
 					(uint32_t)cur_track->media_info.u.video.height,
@@ -749,6 +790,20 @@ dash_packager_write_mpd_period(
 	// audio adaptation set
 	if (media_set->track_count[MEDIA_TYPE_AUDIO] != 0)
 	{
+		// find some reference audio track
+		cur_track = media_set->filtered_tracks + filtered_clip_index * media_set->total_track_count;
+		last_track = cur_track + media_set->total_track_count;
+		for (; cur_track < last_track; cur_track++)
+		{
+			if (cur_track->media_info.media_type != MEDIA_TYPE_AUDIO)
+			{
+				continue;
+			}
+
+			reference_track = cur_track;
+			break;
+		}
+
 		// print the header
 		p = vod_copy(p, VOD_DASH_MANIFEST_AUDIO_HEADER, sizeof(VOD_DASH_MANIFEST_AUDIO_HEADER) - 1);
 
@@ -771,6 +826,7 @@ dash_packager_write_mpd_period(
 				conf,
 				start_number,
 				media_set,
+				reference_track,
 				base_url);
 			break;
 
@@ -780,6 +836,7 @@ dash_packager_write_mpd_period(
 				conf,
 				start_number,
 				clip_start_offset,
+				reference_track,
 				&segment_durations[MEDIA_TYPE_AUDIO],
 				&cur_duration_items[MEDIA_TYPE_AUDIO],
 				base_url);
@@ -817,6 +874,7 @@ dash_packager_write_mpd_period(
 				p = vod_sprintf(p,
 					VOD_DASH_MANIFEST_AUDIO_PREFIX,
 					&representation_id,
+					&dash_codecs[cur_track->media_info.codec_id].mime_type,
 					&cur_track->media_info.codec_name,
 					cur_track->media_info.u.audio.sample_rate,
 					cur_track->media_info.bitrate);
@@ -930,8 +988,8 @@ dash_packager_get_segment_list_total_size(
 				}
 
 				result += 
-					sizeof(VOD_DASH_MANIFEST_SEGMENT_LIST_HEADER) - 1 + VOD_INT64_LEN + base_url_len + conf->init_file_name_prefix.len + MAX_TRACK_SPEC_LENGTH + 
-					(sizeof(VOD_DASH_MANIFEST_SEGMENT_URL) - 1 + base_url_len + conf->fragment_file_name_prefix.len + VOD_INT32_LEN + MAX_TRACK_SPEC_LENGTH) * segment_count + 
+					sizeof(VOD_DASH_MANIFEST_SEGMENT_LIST_HEADER) - 1 + VOD_INT64_LEN + base_url_len + conf->init_file_name_prefix.len + MAX_TRACK_SPEC_LENGTH + MAX_FILE_EXT_SIZE + 
+					(sizeof(VOD_DASH_MANIFEST_SEGMENT_URL) - 1 + base_url_len + conf->fragment_file_name_prefix.len + VOD_INT32_LEN + MAX_TRACK_SPEC_LENGTH + MAX_FILE_EXT_SIZE) * segment_count + 
 					sizeof(VOD_DASH_MANIFEST_SEGMENT_LIST_FOOTER) - 1;
 			}
 		}
@@ -1036,18 +1094,18 @@ dash_packager_build_mpd(
 		media_set);
 
 	// calculate the total size
-	urls_length = 2 * base_url->len + conf->init_file_name_prefix.len + conf->fragment_file_name_prefix.len;
+	urls_length = 2 * base_url->len + conf->init_file_name_prefix.len + conf->fragment_file_name_prefix.len + MAX_FILE_EXT_SIZE;
 
 	base_period_size =
 		sizeof(VOD_DASH_MANIFEST_PERIOD_HEADER_DURATION) - 1 + 3 * VOD_INT32_LEN +
 			sizeof(VOD_DASH_MANIFEST_VIDEO_HEADER) - 1 + 4 * VOD_INT32_LEN + 
 				media_set->track_count[MEDIA_TYPE_VIDEO] * (
-				sizeof(VOD_DASH_MANIFEST_VIDEO_PREFIX) - 1 + MAX_TRACK_SPEC_LENGTH + MAX_CODEC_NAME_SIZE + 5 * VOD_INT32_LEN +
+				sizeof(VOD_DASH_MANIFEST_VIDEO_PREFIX) - 1 + MAX_TRACK_SPEC_LENGTH + MAX_MIME_TYPE_SIZE + MAX_CODEC_NAME_SIZE + 5 * VOD_INT32_LEN +
 				sizeof(VOD_DASH_MANIFEST_VIDEO_SUFFIX) - 1) +
 			sizeof(VOD_DASH_MANIFEST_VIDEO_FOOTER) - 1 +
 			sizeof(VOD_DASH_MANIFEST_AUDIO_HEADER) - 1 + 
 				media_set->track_count[MEDIA_TYPE_AUDIO] * (
-				sizeof(VOD_DASH_MANIFEST_AUDIO_PREFIX) - 1 + MAX_TRACK_SPEC_LENGTH + MAX_CODEC_NAME_SIZE + 2 * VOD_INT32_LEN +
+				sizeof(VOD_DASH_MANIFEST_AUDIO_PREFIX) - 1 + MAX_TRACK_SPEC_LENGTH + MAX_MIME_TYPE_SIZE + MAX_CODEC_NAME_SIZE + 2 * VOD_INT32_LEN +
 				sizeof(VOD_DASH_MANIFEST_AUDIO_SUFFIX) - 1) +
 			sizeof(VOD_DASH_MANIFEST_AUDIO_FOOTER) - 1 +
 		sizeof(VOD_DASH_MANIFEST_PERIOD_FOOTER) - 1 +

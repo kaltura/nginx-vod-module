@@ -4,6 +4,9 @@
 #include "vod/hds/hds_manifest.h"
 #include "vod/hds/hds_fragment.h"
 
+// constants
+#define SUPPORTED_CODECS (VOD_CODEC_FLAG(AVC) | VOD_CODEC_FLAG(AAC) | VOD_CODEC_FLAG(MP3))
+
 // content types
 static u_char f4m_content_type[] = "video/f4m";
 static u_char f4f_content_type[] = "video/f4f";
@@ -110,6 +113,7 @@ static const ngx_http_vod_request_t hds_manifest_request = {
 	0,
 	PARSE_FLAG_DURATION_LIMITS_AND_TOTAL_SIZE,
 	REQUEST_CLASS_MANIFEST,
+	SUPPORTED_CODECS,
 	ngx_http_vod_hds_handle_manifest,
 	NULL,
 };
@@ -118,6 +122,7 @@ static const ngx_http_vod_request_t hds_bootstrap_request = {
 	REQUEST_FLAG_SINGLE_TRACK_PER_MEDIA_TYPE | REQUEST_FLAG_TIME_DEPENDENT_ON_LIVE,
 	0,
 	REQUEST_CLASS_MANIFEST,
+	SUPPORTED_CODECS,
 	ngx_http_vod_hds_handle_bootstrap,
 	NULL,
 };
@@ -126,6 +131,7 @@ static const ngx_http_vod_request_t hds_fragment_request = {
 	REQUEST_FLAG_SINGLE_TRACK_PER_MEDIA_TYPE,
 	PARSE_FLAG_FRAMES_ALL | PARSE_FLAG_EXTRA_DATA,
 	REQUEST_CLASS_SEGMENT,
+	SUPPORTED_CODECS,
 	NULL,
 	ngx_http_vod_hds_init_frame_processor,
 };

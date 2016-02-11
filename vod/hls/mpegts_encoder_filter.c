@@ -61,7 +61,7 @@ static const u_char pmt_header_template[] = {
 };
 
 static const u_char pmt_entry_template_hevc[] = {
-	0x06, 0xe1, 0x2d, 0xf0, 0x06,
+	0x06, 0xe0, 0x00, 0xf0, 0x06,
 	0x05, 0x04, 0x48, 0x45, 0x56, 0x43		// registration_descriptor('HEVC')
 };
 
@@ -71,6 +71,11 @@ static const u_char pmt_entry_template_avc[] = {
 
 static const u_char pmt_entry_template_aac[] = {
 	0x0f, 0xe0, 0x00, 0xf0, 0x00,
+};
+
+static const u_char pmt_entry_template_mp3[] = {
+	0x03, 0xe0, 0x00, 0xf0, 0x06,
+	0x0a, 0x04, 0x75, 0x6e, 0x64, 0x00
 };
 
 static const u_char pmt_entry_template_sample_aes_avc[] = {
@@ -487,8 +492,18 @@ mpegts_encoder_add_stream(
 		}
 		else
 		{
-			pmt_entry = pmt_entry_template_aac;
-			pmt_entry_size = sizeof(pmt_entry_template_aac);
+			switch (track->media_info.codec_id)
+			{
+			case VOD_CODEC_ID_MP3:
+				pmt_entry = pmt_entry_template_mp3;
+				pmt_entry_size = sizeof(pmt_entry_template_mp3);
+				break;
+
+			default:
+				pmt_entry = pmt_entry_template_aac;
+				pmt_entry_size = sizeof(pmt_entry_template_aac);
+				break;
+			}
 		}
 		break;
 

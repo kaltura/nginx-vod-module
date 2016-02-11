@@ -152,7 +152,7 @@ static ngx_str_t options_content_type = ngx_string("text/plain");
 
 static media_format_t* media_formats[] = {
 	&mp4_format,
-	// XXXXX add &mkv_format,
+	&mkv_format,
 	NULL
 };
 
@@ -822,6 +822,7 @@ ngx_http_vod_parse_metadata(
 	{
 		parse_params.parse_type |= PARSE_FLAG_EDIT_LIST;
 	}
+	parse_params.codecs_mask = request->codecs_mask;
 
 	tracks_mask[MEDIA_TYPE_VIDEO] = cur_source->tracks_mask[MEDIA_TYPE_VIDEO] & ctx->submodule_context.request_params.tracks_mask[MEDIA_TYPE_VIDEO];
 	tracks_mask[MEDIA_TYPE_AUDIO] = cur_source->tracks_mask[MEDIA_TYPE_AUDIO] & ctx->submodule_context.request_params.tracks_mask[MEDIA_TYPE_AUDIO];

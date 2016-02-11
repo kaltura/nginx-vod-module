@@ -1,6 +1,11 @@
 #ifndef __MKV_DEFS_H__
 #define __MKV_DEFS_H__
 
+#include "../common.h"
+
+// constants
+#define NANOS_PER_SEC (1000000000)
+
 // Matroska elements
 
 // seek
@@ -12,6 +17,8 @@
 // info
 #define MKV_ID_TIMECODESCALE		(0x2AD7B1)
 #define MKV_ID_DURATION				(0x4489)
+#define MKV_ID_WRITINGAPP			(0x5741)
+#define MKV_ID_MUXINGAPP			(0x4D80)
 
 // track
 #define MKV_ID_VIDEOPIXELWIDTH		(0xB0)
@@ -30,6 +37,7 @@
 #define MKV_ID_TRACKCODECPRIVATE	(0x63A2)
 #define MKV_ID_TRACKDEFAULTDURATION	(0x23E383)
 #define MKV_ID_TRACKENTRY			(0xAE)
+#define MKV_ID_CODECDELAY			(0x56AA)
 
 // index
 #define MKV_ID_CUETIME				(0xB3)
@@ -50,10 +58,23 @@
 #define MKV_ID_TRACKS				(0x1654AE6B)
 #define MKV_ID_CUES					(0x1C53BB6B)
 
+#define MKV_MAX_CODEC_SIZE (50)		// must be greater than all mkv_codec_types values
+
 // enums
 enum {
 	MKV_TRACK_TYPE_VIDEO = 0x1,
 	MKV_TRACK_TYPE_AUDIO = 0x2,
 };
+
+// typedefs
+typedef struct {
+	vod_str_t mkv_codec_id;
+	uint32_t codec_id;
+	uint32_t format;
+	bool_t extra_data_required;
+} mkv_codec_type_t;
+
+// constants
+extern mkv_codec_type_t mkv_codec_types[];
 
 #endif // __MKV_DEFS_H__
