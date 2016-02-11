@@ -152,7 +152,7 @@ static ngx_str_t options_content_type = ngx_string("text/plain");
 
 static media_format_t* media_formats[] = {
 	&mp4_format,
-	&mkv_format,
+	// XXXXX add &mkv_format,
 	NULL
 };
 

@@ -587,7 +587,7 @@ dash_packager_write_mpd_period(
 {
 	media_clip_filtered_t* cur_clip;
 	media_sequence_t* cur_sequence;
-	media_track_t* reference_track;
+	media_track_t* reference_track = NULL;
 	media_track_t* last_track;
 	media_track_t* cur_track;
 	vod_str_t representation_id;
