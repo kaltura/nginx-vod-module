@@ -5,6 +5,9 @@
 #include "vod/mss/mss_packager.h"
 #include "vod/mss/mss_playready.h"
 
+// constants
+#define SUPPORTED_CODECS (VOD_CODEC_FLAG(AVC) | VOD_CODEC_FLAG(AAC) | VOD_CODEC_FLAG(MP3))
+
 // typedefs
 typedef struct {
 	uint64_t bitrate;
@@ -169,6 +172,7 @@ static const ngx_http_vod_request_t mss_manifest_request = {
 	REQUEST_FLAG_TIME_DEPENDENT_ON_LIVE,
 	PARSE_FLAG_TOTAL_SIZE_ESTIMATE | PARSE_FLAG_PARSED_EXTRA_DATA,
 	REQUEST_CLASS_MANIFEST,
+	SUPPORTED_CODECS,
 	ngx_http_vod_mss_handle_manifest,
 	NULL,
 };
@@ -177,6 +181,7 @@ static const ngx_http_vod_request_t mss_fragment_request = {
 	REQUEST_FLAG_SINGLE_TRACK,
 	PARSE_FLAG_FRAMES_ALL,
 	REQUEST_CLASS_SEGMENT,
+	SUPPORTED_CODECS,
 	NULL,
 	ngx_http_vod_mss_init_frame_processor,
 };
@@ -185,6 +190,7 @@ static const ngx_http_vod_request_t mss_playready_fragment_request = {
 	REQUEST_FLAG_SINGLE_TRACK,
 	PARSE_FLAG_FRAMES_ALL | PARSE_FLAG_PARSED_EXTRA_DATA,
 	REQUEST_CLASS_SEGMENT,
+	SUPPORTED_CODECS,
 	NULL,
 	ngx_http_vod_mss_init_frame_processor,
 };

@@ -2127,6 +2127,7 @@ mp4_parser_process_moov_atom_callback(void* ctx, atom_info_t* atom_info)
 	trak_atom_infos_t trak_atom_infos;
 	uint32_t duration_millis;
 	uint32_t track_index;
+	bool_t extra_data_required;
 	bool_t format_supported;
 	vod_status_t rc;
 	int parse_type;
@@ -2172,6 +2173,7 @@ mp4_parser_process_moov_atom_callback(void* ctx, atom_info_t* atom_info)
 	}
 
 	// make sure the codec is supported
+	extra_data_required = TRUE;
 	format_supported = FALSE;
 	switch (metadata_parse_context.media_info.media_type)
 	{
@@ -2205,6 +2207,13 @@ mp4_parser_process_moov_atom_callback(void* ctx, atom_info_t* atom_info)
 				metadata_parse_context.media_info.codec_id = VOD_CODEC_ID_AAC;
 				format_supported = TRUE;
 				break;
+
+			case 0x69:
+			case 0x6B:
+				metadata_parse_context.media_info.codec_id = VOD_CODEC_ID_MP3;
+				format_supported = TRUE;
+				extra_data_required = FALSE;
+				break;
 			}
 		}
 		break;
@@ -2218,8 +2227,16 @@ mp4_parser_process_moov_atom_callback(void* ctx, atom_info_t* atom_info)
 		return VOD_OK;
 	}
 
+	if (!vod_codec_in_mask(metadata_parse_context.media_info.codec_id, metadata_parse_context.parse_params.codecs_mask))
+	{
+		vod_log_debug2(VOD_LOG_DEBUG_LEVEL, context->request_context->log, 0,
+			"mp4_parser_process_moov_atom_callback: codec %uD not supported for this request mask 0x%xd",
+			metadata_parse_context.media_info.codec_id, metadata_parse_context.parse_params.codecs_mask);
+		return VOD_OK;
+	}
+
 	// make sure we got the extra data
-	if (metadata_parse_context.media_info.extra_data.data == NULL)
+	if (extra_data_required && metadata_parse_context.media_info.extra_data.data == NULL)
 	{
 		vod_log_error(VOD_LOG_ERR, context->request_context->log, 0,
 			"mp4_parser_process_moov_atom_callback: no extra data was parsed for track");

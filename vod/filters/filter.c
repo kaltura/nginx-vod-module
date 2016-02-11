@@ -206,6 +206,31 @@ filter_scale_video_tracks(filters_init_state_t* state, media_clip_t* clip, uint3
 	return VOD_OK;
 }
 
+static vod_status_t
+filter_validate_consistent_codecs(
+	request_context_t* request_context,
+	media_clip_filtered_t* first_clip, 
+	media_clip_filtered_t* cur_clip)
+{
+	media_track_t* first_clip_track;
+	media_track_t* cur_clip_track;
+
+	for (first_clip_track = first_clip->first_track, cur_clip_track = cur_clip->first_track;
+		first_clip_track < first_clip->last_track;
+		first_clip_track++, cur_clip_track++)
+	{
+		if (first_clip_track->media_info.codec_id != cur_clip_track->media_info.codec_id)
+		{
+			vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+				"filter_validate_consistent_codecs: track codec changed, current=%uD initial=%uD",
+				cur_clip_track->media_info.codec_id, first_clip_track->media_info.codec_id);
+			return VOD_BAD_REQUEST;
+		}
+	}
+
+	return VOD_OK;
+}
+
 vod_status_t
 filter_init_filtered_clips(
 	request_context_t* request_context,
@@ -377,6 +402,19 @@ filter_init_filtered_clips(
 			}
 
 			output_clip->last_track = init_state.output_track;
+
+			// make sure all clips have the same codecs
+			if (clip_index > 0)
+			{
+				rc = filter_validate_consistent_codecs(
+					request_context,
+					sequence->filtered_clips,
+					output_clip);
+				if (rc != VOD_OK)
+				{
+					return rc;
+				}
+			}
 
 			// calculate the max duration, only relevant in case of single clip
 			if (output_clip->longest_track[MEDIA_TYPE_VIDEO] != NULL &&

@@ -6,6 +6,7 @@
 
 // codecs
 #define CODEC_ID_AVC 		(0x7)
+#define SOUND_FORMAT_MP3 	(0x2)
 #define SOUND_FORMAT_AAC 	(0xA)
 
 // buffer size limit

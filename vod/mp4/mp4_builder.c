@@ -182,6 +182,31 @@ mp4_builder_frame_writer_init(
 	return VOD_OK;
 }
 
+static bool_t
+mp4_builder_move_to_next_frame(fragment_writer_state_t* state)
+{
+	while (state->cur_frame >= state->cur_frame_part.last_frame)
+	{
+		if (state->cur_frame_part.next != NULL)
+		{
+			state->cur_frame_part = *state->cur_frame_part.next;
+			state->cur_frame = state->cur_frame_part.first_frame;
+			state->first_time = TRUE;
+			break;
+		}
+
+		state->cur_clip++;
+		if (state->cur_clip >= state->sequence->filtered_clips_end)
+		{
+			return FALSE;
+		}
+
+		mp4_builder_init_track(state, state->cur_clip->first_track);
+	}
+
+	return TRUE;
+}
+
 vod_status_t
 mp4_builder_frame_writer_process(fragment_writer_state_t* state)
 {
@@ -194,23 +219,9 @@ mp4_builder_frame_writer_process(fragment_writer_state_t* state)
 
 	if (!state->frame_started)
 	{
-		while (state->cur_frame >= state->cur_frame_part.last_frame)
+		if (!mp4_builder_move_to_next_frame(state))
 		{
-			if (state->cur_frame_part.next != NULL)
-			{
-				state->cur_frame_part = *state->cur_frame_part.next;
-				state->cur_frame = state->cur_frame_part.first_frame;
-				state->first_time = TRUE;
-				break;
-			}
-
-			state->cur_clip++;
-			if (state->cur_clip >= state->sequence->filtered_clips_end)
-			{
-				return VOD_OK;
-			}
-
-			mp4_builder_init_track(state, state->cur_clip->first_track);
+			return VOD_OK;
 		}
 
 		rc = state->cur_frame_part.frames_source->start_frame(state->cur_frame_part.frames_source_context, state->cur_frame);
@@ -221,7 +232,6 @@ mp4_builder_frame_writer_process(fragment_writer_state_t* state)
 
 		state->frame_started = TRUE;
 	}
-
 
 	for (;;)
 	{
@@ -290,7 +300,7 @@ mp4_builder_frame_writer_process(fragment_writer_state_t* state)
 		// move to the next frame
 		state->cur_frame++;
 
-		while (state->cur_frame >= state->cur_frame_part.last_frame)
+		if (state->cur_frame >= state->cur_frame_part.last_frame)
 		{
 			if (write_buffer != NULL)
 			{
@@ -304,21 +314,10 @@ mp4_builder_frame_writer_process(fragment_writer_state_t* state)
 				write_buffer = NULL;
 			}
 
-			if (state->cur_frame_part.next != NULL)
-			{
-				state->cur_frame_part = *state->cur_frame_part.next;
-				state->cur_frame = state->cur_frame_part.first_frame;
-				state->first_time = TRUE;
-				break;
-			}
-
-			state->cur_clip++;
-			if (state->cur_clip >= state->sequence->filtered_clips_end)
+			if (!mp4_builder_move_to_next_frame(state))
 			{
 				return VOD_OK;
 			}
-
-			mp4_builder_init_track(state, state->cur_clip->first_track);
 		}
 
 		rc = state->cur_frame_part.frames_source->start_frame(state->cur_frame_part.frames_source_context, state->cur_frame);

@@ -6,6 +6,9 @@
 #define MSS_LOOK_AHEAD_COUNT (2)
 #define TFRF_ATOM_SIZE (ATOM_HEADER_SIZE + sizeof(uuid_tfrf_atom_t) + sizeof(uuid_tfrf_entry_t) * MSS_LOOK_AHEAD_COUNT)
 
+#define MSS_AUDIO_TAG_AAC (255)
+#define MSS_AUDIO_TAG_MP3 (85)
+
 // manifest constants
 #define MSS_MANIFEST_HEADER_PREFIX \
 	"<?xml version=\"1.0\" encoding=\"utf-8\"?>\n"	\
@@ -25,8 +28,8 @@
 	"CodecPrivateData=\""
 
 #define MSS_AUDIO_QUALITY_LEVEL_HEADER \
-	"    <QualityLevel Index=\"%uD\" Bitrate=\"%uD\" FourCC=\"AACL\" SamplingRate=\"%uD\"" \
-	" Channels=\"%uD\" BitsPerSample=\"%uD\" PacketSize=\"%uD\" AudioTag=\"255\" CodecPrivateData=\""
+	"    <QualityLevel Index=\"%uD\" Bitrate=\"%uD\" FourCC=\"%V\" SamplingRate=\"%uD\"" \
+	" Channels=\"%uD\" BitsPerSample=\"%uD\" PacketSize=\"%uD\" AudioTag=\"%uD\" CodecPrivateData=\""
 
 #define MSS_QUALITY_LEVEL_FOOTER "\"></QualityLevel>\n"
 
@@ -90,6 +93,9 @@ static const uint8_t tfrf_uuid[] = {
 	0xD4, 0x80, 0x7E, 0xF2, 0xCA, 0x39, 0x46, 0x95,
 	0x8E, 0x54, 0x26, 0xCB, 0x9E, 0x46, 0xA7, 0x9F,
 };
+
+static vod_str_t mss_fourcc_aac = vod_string("AACL");
+static vod_str_t mss_fourcc_mp3 = vod_string("WMAP");
 
 static u_char*
 mss_append_hex_string(u_char* p, const u_char* buffer, uint32_t buffer_size)
@@ -262,10 +268,12 @@ mss_packager_build_manifest(
 	media_track_t* last_track;
 	media_track_t* cur_track;
 	segment_durations_t segment_durations[MEDIA_TYPE_COUNT];
+	vod_str_t* fourcc;
 	uint64_t duration_100ns;
 	uint32_t media_type;
 	uint32_t stream_index;
 	uint32_t bitrate;
+	uint32_t audio_tag;
 	vod_status_t rc;
 	size_t result_size;
 	u_char* p;
@@ -339,7 +347,7 @@ mss_packager_build_manifest(
 
 		case MEDIA_TYPE_AUDIO:
 			result_size +=
-				sizeof(MSS_AUDIO_QUALITY_LEVEL_HEADER) - 1 + 6 * VOD_INT32_LEN + cur_track->media_info.extra_data.len * 2 +
+				sizeof(MSS_AUDIO_QUALITY_LEVEL_HEADER) - 1 + 7 * VOD_INT32_LEN + mss_fourcc_aac.len + cur_track->media_info.extra_data.len * 2 +
 				sizeof(MSS_QUALITY_LEVEL_FOOTER) - 1;
 			break;
 		}
@@ -441,15 +449,30 @@ mss_packager_build_manifest(
 					continue;
 				}
 
+				switch (cur_track->media_info.codec_id)
+				{
+				case VOD_CODEC_ID_MP3:
+					fourcc = &mss_fourcc_mp3;
+					audio_tag = MSS_AUDIO_TAG_MP3;
+					break;
+
+				default:
+					fourcc = &mss_fourcc_aac;
+					audio_tag = MSS_AUDIO_TAG_AAC;
+					break;
+				}
+
 				bitrate = cur_track->media_info.bitrate;
 				bitrate = mss_encode_indexes(bitrate, cur_sequence->index, cur_track->index);
 				p = vod_sprintf(p, MSS_AUDIO_QUALITY_LEVEL_HEADER,
 					stream_index++,
 					bitrate,
+					fourcc,
 					cur_track->media_info.u.audio.sample_rate,
 					(uint32_t)cur_track->media_info.u.audio.channels,
 					(uint32_t)cur_track->media_info.u.audio.bits_per_sample,
-					(uint32_t)cur_track->media_info.u.audio.packet_size);
+					(uint32_t)cur_track->media_info.u.audio.packet_size,
+					audio_tag);
 
 				p = mss_append_hex_string(p, cur_track->media_info.extra_data.data, cur_track->media_info.extra_data.len);
 

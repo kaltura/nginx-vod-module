@@ -2,6 +2,12 @@
 #include "media_format.h"
 #include "bit_read_stream.h"
 
+#define codec_config_copy_string(target, str)	\
+	{											\
+	vod_memcpy(target.data, str, sizeof(str));	\
+	target.len = sizeof(str) - 1;				\
+	}
+
 #define AOT_ESCAPE (31)
 
 vod_status_t 
@@ -409,17 +415,24 @@ codec_config_get_video_codec_name(request_context_t* request_context, media_info
 	case VOD_CODEC_ID_HEVC:
 		return codec_config_get_hevc_codec_name(request_context, media_info);
 
+	case VOD_CODEC_ID_VP8:
+		codec_config_copy_string(media_info->codec_name, "vp8");
+		return VOD_OK;
+
+	case VOD_CODEC_ID_VP9:
+		codec_config_copy_string(media_info->codec_name, "vp9");
+		return VOD_OK;
+
 	default:
 		return VOD_UNEXPECTED;
 	}
 }
 
 vod_status_t
-codec_config_get_audio_codec_name(request_context_t* request_context, media_info_t* media_info)
+codec_config_get_mp4a_codec_name(request_context_t* request_context, media_info_t* media_info)
 {
 	u_char* p;
 
-	// Note: currently only mp4a is supported
 	if (media_info->extra_data.len > 0)
 	{
 		p = vod_sprintf(media_info->codec_name.data, "%*s.%02uxD.%01uD",
@@ -439,6 +452,24 @@ codec_config_get_audio_codec_name(request_context_t* request_context, media_info
 	media_info->codec_name.len = p - media_info->codec_name.data;
 
 	return VOD_OK;
+}
+
+vod_status_t
+codec_config_get_audio_codec_name(request_context_t* request_context, media_info_t* media_info)
+{
+	switch (media_info->codec_id)
+	{
+	case VOD_CODEC_ID_VORBIS:
+		codec_config_copy_string(media_info->codec_name, "vorbis");
+		return VOD_OK;
+
+	case VOD_CODEC_ID_OPUS:
+		codec_config_copy_string(media_info->codec_name, "opus");
+		return VOD_OK;
+
+	default:
+		return codec_config_get_mp4a_codec_name(request_context, media_info);
+	}
 }
 
 vod_status_t

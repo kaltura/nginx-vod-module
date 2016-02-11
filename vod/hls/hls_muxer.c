@@ -44,12 +44,15 @@ hls_muxer_init_track(
 		break;
 
 	case MEDIA_TYPE_AUDIO:
-		rc = adts_encoder_set_media_info(
-			cur_stream->top_filter_context,
-			&track->media_info);
-		if (rc != VOD_OK)
+		if (track->media_info.codec_id == VOD_CODEC_ID_AAC)
 		{
-			return rc;
+			rc = adts_encoder_set_media_info(
+				cur_stream->top_filter_context,
+				&track->media_info);
+			if (rc != VOD_OK)
+			{
+				return rc;
+			}
 		}
 		break;
 	}
@@ -265,26 +268,41 @@ hls_muxer_init_base(
 				next_filter_context = cur_stream->buffer_state;
 			}
 
-			cur_stream->top_filter_context = vod_alloc(request_context->pool, sizeof(adts_encoder_state_t));
-			if (cur_stream->top_filter_context == NULL)
+			if (track->media_info.codec_id == VOD_CODEC_ID_AAC)
 			{
-				vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
-					"hls_muxer_init_base: vod_alloc failed (5)");
-				return VOD_ALLOC_FAILED;
-			}
+				cur_stream->top_filter_context = vod_alloc(request_context->pool, sizeof(adts_encoder_state_t));
+				if (cur_stream->top_filter_context == NULL)
+				{
+					vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
+						"hls_muxer_init_base: vod_alloc failed (5)");
+					return VOD_ALLOC_FAILED;
+				}
 
-			rc = adts_encoder_init(
-				cur_stream->top_filter_context,
-				request_context,
-				encryption_params,
-				next_filter,
-				next_filter_context);
-			if (rc != VOD_OK)
+				rc = adts_encoder_init(
+					cur_stream->top_filter_context,
+					request_context,
+					encryption_params,
+					next_filter,
+					next_filter_context);
+				if (rc != VOD_OK)
+				{
+					return rc;
+				}
+
+				cur_stream->top_filter = &adts_encoder;
+			}
+			else
 			{
-				return rc;
-			}
+				if (encryption_params->type == HLS_ENC_SAMPLE_AES)
+				{
+					vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+						"hls_muxer_init_base: sample aes encryption is supported only for aac");
+					return VOD_BAD_REQUEST;
+				}
 
-			cur_stream->top_filter = &adts_encoder;
+				cur_stream->top_filter = next_filter;
+				cur_stream->top_filter_context = next_filter_context;
+			}
 			break;
 		}
 

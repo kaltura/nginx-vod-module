@@ -128,7 +128,7 @@ hds_amf0_write_metadata(u_char* p, media_set_t* media_set, media_track_t** track
 	uint32_t timescale;
 	uint32_t count;
 	uint32_t bitrate = 0;
-
+	uint8_t sound_format;
 
 	count = AMF0_COMMON_FIELDS_COUNT;
 	if (tracks[MEDIA_TYPE_VIDEO] != NULL)
@@ -171,7 +171,17 @@ hds_amf0_write_metadata(u_char* p, media_set_t* media_set, media_track_t** track
 		p = hds_amf0_append_array_number_value(p, &amf0_audiosamplerate, media_info->u.audio.sample_rate);
 		p = hds_amf0_append_array_number_value(p, &amf0_audiosamplesize, media_info->u.audio.bits_per_sample);
 		p = hds_amf0_append_array_boolean_value(p, &amf0_stereo, media_info->u.audio.channels > 1);
-		p = hds_amf0_append_array_number_value(p, &amf0_audiocodecid, SOUND_FORMAT_AAC);
+		switch (media_info->codec_id)
+		{
+		case VOD_CODEC_ID_MP3:
+			sound_format = SOUND_FORMAT_MP3;
+			break;
+
+		default:
+			sound_format = SOUND_FORMAT_AAC;
+			break;
+		}
+		p = hds_amf0_append_array_number_value(p, &amf0_audiocodecid, sound_format);
 		file_size += tracks[MEDIA_TYPE_AUDIO]->total_frames_size;
 	}
 	p = hds_amf0_append_array_number_value(p, &amf0_filesize, file_size);
