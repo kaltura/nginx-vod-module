@@ -6,10 +6,10 @@
 #include "ngx_http_vod_status.h"
 #include "ngx_perf_counters.h"
 #include "ngx_buffer_cache.h"
-#include "ngx_http_vod_udrm.h"
 #include "vod/media_set_parser.h"
 #include "vod/buffer_pool.h"
 #include "vod/common.h"
+#include "vod/udrm.h"
 
 static ngx_str_t  ngx_http_vod_last_modified_default_types[] = {
 	ngx_null_string
@@ -57,7 +57,7 @@ ngx_http_vod_init_parsers(ngx_conf_t *cf)
 		return NGX_ERROR;
 	}
 
-	rc = ngx_http_vod_udrm_init_parser(cf);
+	rc = udrm_init_parser(cf);
 	if (rc != NGX_OK)
 	{
 		ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,

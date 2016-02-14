@@ -5,6 +5,7 @@
 #include "mp4_decrypt.h"
 #include "mp4_builder.h"
 #include "../read_stream.h"
+#include "../udrm.h"
 
 #define MAX_FRAME_RATE (60)
 #define MIN_ALLOC_SIZE (16)
@@ -53,7 +54,7 @@ mp4_encrypt_init_state(
 	const u_char* iv)
 {
 	media_sequence_t* sequence = &media_set->sequences[0];
-	mp4_encrypt_info_t* drm_info = (mp4_encrypt_info_t*)sequence->drm_info;
+	drm_info_t* drm_info = (drm_info_t*)sequence->drm_info;
 	vod_status_t rc;
 	uint64_t iv_int;
 	u_char* p;

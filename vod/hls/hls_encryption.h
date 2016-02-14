@@ -15,6 +15,7 @@ typedef struct {
 	hls_encryption_type_t type;
 	u_char* key;
 	u_char* iv;
+	ngx_str_t key_uri;
 } hls_encryption_params_t;
 
 #endif // __HLS_ENCRYPTION_H__

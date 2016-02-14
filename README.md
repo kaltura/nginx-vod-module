@@ -467,7 +467,7 @@ Optional fields:
 
 ### DRM
 
-Nginx-vod-module has the ability to perform on-the-fly encryption for MPEG DASH (CENC) and MSS Play Ready.
+Nginx-vod-module has the ability to perform on-the-fly encryption for MPEG DASH (CENC), MSS Play Ready and FairPlay HLS.
 The encryption is performed while serving a video/audio segment to the client, therefore, when working with DRM 
 it is highly recommended not to serve the content directly from nginx-vod-module to end-users.
 A more scalable architecture would be to use proxy servers or a CDN in order to cache the encrypted segments.
@@ -484,6 +484,31 @@ The response of the DRM server is a JSON, with the following format:
 * `pssh.uuid` - the drm system UUID, in this case, edef8ba9-79d6-4ace-a3c8-27dcd51d21ed stands for Widevine
 * `key` - base64 encoded encryption key (128 bit)
 * `key_id` - base64 encoded key identifier (128 bit)
+* `iv` - optional base64 encoded initialization vector (128 bit). The IV is currently used only in HLS (FairPlay), 
+	in the other protocols an IV is generated automatically by nginx-vod-module.
+
+#### Sample configuration
+
+Below is a sample configuration for Apple FairPlay HLS:
+```
+location ~ ^/fpshls/p/\d+/(sp/\d+/)?serveFlavor/entryId/([^/]+)/(.*) {
+	vod hls;
+	vod_hls_encryption_method sample-aes;
+	vod_hls_encryption_key_uri "skd://entry-$2";
+	vod_hls_encryption_key_format "com.apple.streamingkeydelivery";
+	vod_hls_encryption_key_format_versions "1";
+
+	vod_drm_enabled on;
+	vod_drm_request_uri "/udrm/system/ovp/$vod_suburi";
+
+	vod_last_modified_types *;
+	add_header Access-Control-Allow-Headers '*';
+	add_header Access-Control-Expose-Headers 'Server,range,Content-Length,Content-Range';
+	add_header Access-Control-Allow-Methods 'GET, HEAD, OPTIONS';
+	add_header Access-Control-Allow-Origin '*';
+	expires 100d;
+}
+```
 
 ### Performance recommendations
 
@@ -1029,7 +1054,29 @@ The prefix of segment file names, the actual file name is `seg-<index>-v<video-t
 * **default**: `encryption.key`
 * **context**: `http`, `server`, `location`
 
-The name of the encryption key file name (only relevant when vod_secret_key is used).
+The name of the encryption key file name, only relevant when encryption method is not `none`.
+
+#### vod_hls_encryption_key_uri
+* **syntax**: `vod_hls_encryption_key_uri uri`
+* **default**: `a url pointing to encryption.key`
+* **context**: `http`, `server`, `location`
+
+Sets the value of the URI attribute of EXT-X-KEY, only relevant when encryption method is not `none`.
+The parameter value can contain variables.
+
+#### vod_hls_encryption_key_format
+* **syntax**: `vod_hls_encryption_key_format format`
+* **default**: `none`
+* **context**: `http`, `server`, `location`
+
+Sets the value of the KEYFORMAT attribute of EXT-X-KEY, only relevant when encryption method is not `none`.
+
+#### vod_hls_encryption_key_format_versions
+* **syntax**: `vod_hls_encryption_key_format_versions versions`
+* **default**: `none`
+* **context**: `http`, `server`, `location`
+
+Sets the value of the KEYFORMATVERSIONS attribute of EXT-X-KEY, only relevant when encryption method is not `none`.
 
 #### vod_hls_interleave_frames
 * **syntax**: `vod_hls_interleave_frames on/off`
