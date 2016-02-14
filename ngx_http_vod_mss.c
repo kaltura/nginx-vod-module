@@ -1,9 +1,9 @@
 #include <ngx_http.h>
 #include "ngx_http_vod_submodule.h"
 #include "ngx_http_vod_utils.h"
-#include "ngx_http_vod_udrm.h"
 #include "vod/mss/mss_packager.h"
 #include "vod/mss/mss_playready.h"
+#include "vod/udrm.h"
 
 // constants
 #define SUPPORTED_CODECS (VOD_CODEC_FLAG(AVC) | VOD_CODEC_FLAG(AAC) | VOD_CODEC_FLAG(MP3))
@@ -317,7 +317,7 @@ ngx_http_vod_mss_parse_drm_info(
 	ngx_str_t* drm_info,
 	void** output)
 {
-	return ngx_http_vod_udrm_parse_response(
+	return udrm_parse_response(
 		&submodule_context->request_context,
 		drm_info,
 		output);

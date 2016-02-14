@@ -8,10 +8,6 @@
 #include "mp4_aes_ctr.h"
 
 // constants
-#define MP4_ENCRYPT_KEY_SIZE (16)
-#define MP4_ENCRYPT_KID_SIZE (16)
-#define MP4_ENCRYPT_SYSTEM_ID_SIZE (16)
-
 #define VOD_GUID_LENGTH (sizeof("00000000-0000-0000-0000-000000000000") - 1)
 
 // typedef
@@ -19,23 +15,6 @@ struct mp4_encrypt_video_state_s;
 typedef struct mp4_encrypt_video_state_s mp4_encrypt_video_state_t;
 
 typedef vod_status_t (*mp4_encrypt_video_write_fragment_header_t)(mp4_encrypt_video_state_t* state);
-
-typedef struct {
-	u_char system_id[MP4_ENCRYPT_SYSTEM_ID_SIZE];
-	vod_str_t data;
-} mp4_encrypt_system_info_t;
-
-typedef struct {
-	uint32_t count;
-	mp4_encrypt_system_info_t* first;
-	mp4_encrypt_system_info_t* last;
-} mp4_encrypt_system_info_array_t;
-
-typedef struct {
-	u_char key_id[MP4_ENCRYPT_KID_SIZE];
-	u_char key[MP4_ENCRYPT_KEY_SIZE];
-	mp4_encrypt_system_info_array_t pssh_array;
-} mp4_encrypt_info_t;
 
 typedef struct {
 	segment_writer_t segment_writer;

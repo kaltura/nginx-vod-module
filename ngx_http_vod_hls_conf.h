@@ -15,6 +15,7 @@ typedef struct
 	ngx_str_t iframes_file_name_prefix;
 	hls_muxer_conf_t muxer_config;
 	vod_uint_t encryption_method;
+	ngx_http_complex_value_t* encryption_key_uri;
 
 	// derived fields
 	m3u8_config_t m3u8_config;

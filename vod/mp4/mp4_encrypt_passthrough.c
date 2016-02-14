@@ -5,6 +5,7 @@
 #include "mp4_decrypt.h"
 #include "mp4_encrypt.h"
 #include "mp4_builder.h"
+#include "../udrm.h"
 
 bool_t
 mp4_encrypt_passthrough_init(mp4_encrypt_passthrough_context_t* context, media_sequence_t* sequence)
@@ -26,8 +27,8 @@ mp4_encrypt_passthrough_init(mp4_encrypt_passthrough_context_t* context, media_s
 		if (cur_track->frames.frames_source != &mp4_decrypt_frames_source ||
 			vod_memcmp(
 				mp4_decrypt_get_key(cur_track->frames.frames_source_context), 
-				((mp4_encrypt_info_t*)sequence->drm_info)->key, 
-				MP4_ENCRYPT_KEY_SIZE) != 0)
+				((drm_info_t*)sequence->drm_info)->key, 
+				DRM_KEY_SIZE) != 0)
 		{
 			return FALSE;
 		}

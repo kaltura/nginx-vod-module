@@ -18,9 +18,11 @@ static const u_char m3u8_discontinuity[] = "#EXT-X-DISCONTINUITY\n";
 static const char byte_range_tag_format[] = "#EXT-X-BYTERANGE:%uD@%uD\n";
 static const u_char m3u8_url_suffix[] = ".m3u8\n";
 
-static const char encryption_key_tag_part1[] = "#EXT-X-KEY:METHOD=";
-static const char encryption_key_tag_part2[] = ",URI=\"";
-static const char encryption_key_tag_part3[] = ".key\"\n";
+static const char encryption_key_tag_method[] = "#EXT-X-KEY:METHOD=";
+static const char encryption_key_tag_uri[] = ",URI=\"";
+static const char encryption_key_tag_key_format[] = ",KEYFORMAT=\"";
+static const char encryption_key_tag_key_format_versions[] = ",KEYFORMATVERSIONS=\"";
+static const char encryption_key_extension[] = ".key";
 static const char encryption_type_aes_128[] = "AES-128";
 static const char encryption_type_sample_aes[] = "SAMPLE-AES";
 
@@ -394,13 +396,36 @@ m3u8_builder_build_index_playlist(
 	if (encryption_params->type != HLS_ENC_NONE)
 	{
 		result_size +=
-			sizeof(encryption_key_tag_part1) - 1 +
+			sizeof(encryption_key_tag_method) - 1 +
 			sizeof(encryption_type_sample_aes) - 1 +
-			sizeof(encryption_key_tag_part2) - 1 +
-			base_url->len +
-			conf->encryption_key_file_name.len +
-			sizeof("-f") - 1 + VOD_INT32_LEN +
-			sizeof(encryption_key_tag_part3) - 1;
+			sizeof(encryption_key_tag_uri) - 1 + 
+			2;			// '"', '\n'
+
+		if (encryption_params->key_uri.len != 0)
+		{
+			result_size += encryption_params->key_uri.len;
+		}
+		else
+		{
+			result_size += base_url->len +
+				conf->encryption_key_file_name.len +
+				sizeof("-f") - 1 + VOD_INT32_LEN +
+				sizeof(encryption_key_extension) - 1;
+		}
+
+		if (conf->encryption_key_format.len != 0)
+		{
+			result_size +=
+				sizeof(encryption_key_tag_key_format) +				// '"'
+				conf->encryption_key_format.len;
+		}
+
+		if (conf->encryption_key_format_versions.len != 0)
+		{
+			result_size +=
+				sizeof(encryption_key_tag_key_format_versions) +	// '"'
+				conf->encryption_key_format_versions.len;
+		}
 	}
 
 	// allocate the buffer
@@ -425,7 +450,7 @@ m3u8_builder_build_index_playlist(
 
 	if (encryption_params->type != HLS_ENC_NONE)
 	{
-		p = vod_copy(p, encryption_key_tag_part1, sizeof(encryption_key_tag_part1) - 1);
+		p = vod_copy(p, encryption_key_tag_method, sizeof(encryption_key_tag_method) - 1);
 		switch (encryption_params->type)
 		{
 		case HLS_ENC_SAMPLE_AES:
@@ -436,14 +461,42 @@ m3u8_builder_build_index_playlist(
 			p = vod_copy(p, encryption_type_aes_128, sizeof(encryption_type_aes_128) - 1);
 			break;
 		}
-		p = vod_copy(p, encryption_key_tag_part2, sizeof(encryption_key_tag_part2) - 1);
-		p = vod_copy(p, base_url->data, base_url->len);
-		p = vod_copy(p, conf->encryption_key_file_name.data, conf->encryption_key_file_name.len);
-		if (sequence_index != INVALID_SEQUENCE_INDEX)
+
+		// uri
+		p = vod_copy(p, encryption_key_tag_uri, sizeof(encryption_key_tag_uri) - 1);
+		if (encryption_params->key_uri.len != 0)
 		{
-			p = vod_sprintf(p, "-f%uD", sequence_index + 1);
+			p = vod_copy(p, encryption_params->key_uri.data, encryption_params->key_uri.len);
 		}
-		p = vod_copy(p, encryption_key_tag_part3, sizeof(encryption_key_tag_part3) - 1);
+		else
+		{
+			p = vod_copy(p, base_url->data, base_url->len);
+			p = vod_copy(p, conf->encryption_key_file_name.data, conf->encryption_key_file_name.len);
+			if (sequence_index != INVALID_SEQUENCE_INDEX)
+			{
+				p = vod_sprintf(p, "-f%uD", sequence_index + 1);
+			}
+			p = vod_copy(p, encryption_key_extension, sizeof(encryption_key_extension) - 1);
+		}
+		*p++ = '"';
+
+		// keyformat
+		if (conf->encryption_key_format.len != 0)
+		{
+			p = vod_copy(p, encryption_key_tag_key_format, sizeof(encryption_key_tag_key_format) - 1);
+			p = vod_copy(p, conf->encryption_key_format.data, conf->encryption_key_format.len);
+			*p++ = '"';
+		}
+
+		// keyformatversions
+		if (conf->encryption_key_format_versions.len != 0)
+		{
+			p = vod_copy(p, encryption_key_tag_key_format_versions, sizeof(encryption_key_tag_key_format_versions) - 1);
+			p = vod_copy(p, conf->encryption_key_format_versions.data, conf->encryption_key_format_versions.len);
+			*p++ = '"';
+		}
+
+		*p++ = '\n';
 	}
 
 	p = vod_sprintf(
@@ -661,7 +714,9 @@ m3u8_builder_init_config(
 	uint32_t max_segment_duration, 
 	hls_encryption_type_t encryption_method)
 {
-	if (encryption_method == HLS_ENC_SAMPLE_AES)
+	if (encryption_method == HLS_ENC_SAMPLE_AES ||
+		conf->encryption_key_format.len != 0 ||
+		conf->encryption_key_format_versions.len != 0)
 	{
 		conf->m3u8_version = 5;
 	}

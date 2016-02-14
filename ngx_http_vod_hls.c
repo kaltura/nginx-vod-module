@@ -2,6 +2,7 @@
 #include "ngx_http_vod_submodule.h"
 #include "ngx_http_vod_utils.h"
 #include "vod/hls/hls_muxer.h"
+#include "vod/udrm.h"
 
 // constants
 #define SUPPORTED_CODECS (VOD_CODEC_FLAG(AVC) | VOD_CODEC_FLAG(HEVC) | VOD_CODEC_FLAG(AAC) | VOD_CODEC_FLAG(MP3))
@@ -46,15 +47,35 @@ ngx_http_vod_hls_init_encryption_params(
 	ngx_http_vod_submodule_context_t* submodule_context,
 	u_char* iv)
 {
+	drm_info_t* drm_info;
+
 	encryption_params->type = submodule_context->conf->hls.encryption_method;
 	if (encryption_params->type == HLS_ENC_NONE)
 	{
 		return;
 	}
 
-	ngx_http_vod_hls_init_encryption_iv(iv, submodule_context->request_params.segment_index);
-	encryption_params->key = submodule_context->media_set.sequences[0].encryption_key;
 	encryption_params->iv = iv;
+
+	if (submodule_context->conf->drm_enabled)
+	{
+		drm_info = submodule_context->media_set.sequences[0].drm_info;
+		encryption_params->key = drm_info->key;
+
+		if (drm_info->iv_set)
+		{
+			encryption_params->iv = drm_info->iv;
+		}
+	}
+	else
+	{
+		encryption_params->key = submodule_context->media_set.sequences[0].encryption_key;
+	}
+
+	if (encryption_params->iv == iv)
+	{
+		ngx_http_vod_hls_init_encryption_iv(iv, submodule_context->request_params.segment_index);
+	}
 }
 
 static ngx_int_t
@@ -117,6 +138,26 @@ ngx_http_vod_hls_handle_index_playlist(
 	}
 
 	ngx_http_vod_hls_init_encryption_params(&encryption_params, submodule_context, iv);
+
+	if (encryption_params.type != HLS_ENC_NONE)
+	{
+		if (conf->hls.encryption_key_uri != NULL)
+		{
+			if (ngx_http_complex_value(
+				submodule_context->r,
+				conf->hls.encryption_key_uri,
+				&encryption_params.key_uri) != NGX_OK)
+			{
+				ngx_log_debug0(NGX_LOG_DEBUG_HTTP, submodule_context->request_context.log, 0,
+					"ngx_http_vod_hls_init_encryption_params: ngx_http_complex_value failed");
+				return NGX_ERROR;
+			}
+		}
+		else
+		{
+			encryption_params.key_uri.len = 0;
+		}
+	}
 
 	rc = m3u8_builder_build_index_playlist(
 		&submodule_context->request_context,
@@ -334,7 +375,14 @@ ngx_http_vod_hls_merge_loc_conf(
 	ngx_conf_merge_str_value(conf->m3u8_config.index_file_name_prefix, prev->m3u8_config.index_file_name_prefix, "index");	
 	ngx_conf_merge_str_value(conf->iframes_file_name_prefix, prev->iframes_file_name_prefix, "iframes");
 	ngx_conf_merge_str_value(conf->m3u8_config.segment_file_name_prefix, prev->m3u8_config.segment_file_name_prefix, "seg");
+
 	ngx_conf_merge_str_value(conf->m3u8_config.encryption_key_file_name, prev->m3u8_config.encryption_key_file_name, "encryption");
+	ngx_conf_merge_str_value(conf->m3u8_config.encryption_key_format, prev->m3u8_config.encryption_key_format, "");
+	ngx_conf_merge_str_value(conf->m3u8_config.encryption_key_format_versions, prev->m3u8_config.encryption_key_format_versions, "");
+	if (conf->encryption_key_uri == NULL)
+	{
+		conf->encryption_key_uri = prev->encryption_key_uri;
+	}
 
 	ngx_conf_merge_value(conf->muxer_config.interleave_frames, prev->muxer_config.interleave_frames, 0);
 	ngx_conf_merge_value(conf->muxer_config.align_frames, prev->muxer_config.align_frames, 1);
@@ -414,7 +462,8 @@ ngx_http_vod_hls_parse_uri_file_name(
 		expect_segment_index = FALSE;
 	}
 	// encryption key
-	else if (ngx_http_vod_match_prefix_postfix(start_pos, end_pos, &conf->hls.m3u8_config.encryption_key_file_name, key_file_ext))
+	else if (ngx_http_vod_match_prefix_postfix(start_pos, end_pos, &conf->hls.m3u8_config.encryption_key_file_name, key_file_ext) &&
+		!conf->drm_enabled)
 	{
 		start_pos += conf->hls.m3u8_config.encryption_key_file_name.len;
 		end_pos -= (sizeof(key_file_ext) - 1);
@@ -446,9 +495,10 @@ ngx_http_vod_hls_parse_drm_info(
 	ngx_str_t* drm_info,
 	void** output)
 {
-	ngx_log_error(NGX_LOG_ERR, submodule_context->request_context.log, 0,
-		"ngx_http_vod_hls_parse_drm_info: drm support for hls not implemented");
-	return VOD_UNEXPECTED;
+	return udrm_parse_response(
+		&submodule_context->request_context,
+		drm_info,
+		output);
 }
 
 DEFINE_SUBMODULE(hls);

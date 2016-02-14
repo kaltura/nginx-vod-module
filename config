@@ -92,7 +92,6 @@ NGX_ADDON_DEPS="$NGX_ADDON_DEPS                                     \
                 $ngx_addon_dir/ngx_http_vod_request_parse.h         \
                 $ngx_addon_dir/ngx_http_vod_status.h                \
                 $ngx_addon_dir/ngx_http_vod_submodule.h             \
-                $ngx_addon_dir/ngx_http_vod_udrm.h                  \
                 $ngx_addon_dir/ngx_http_vod_utils.h                 \
                 $ngx_addon_dir/ngx_perf_counters.h                  \
                 $ngx_addon_dir/ngx_perf_counters_x.h                \
@@ -156,6 +155,7 @@ NGX_ADDON_DEPS="$NGX_ADDON_DEPS                                     \
                 $ngx_addon_dir/vod/parse_utils.h                    \
                 $ngx_addon_dir/vod/read_stream.h                    \
                 $ngx_addon_dir/vod/segmenter.h                      \
+                $ngx_addon_dir/vod/udrm.h                           \
                 $ngx_addon_dir/vod/write_buffer.h                   \
                 $ngx_addon_dir/vod/write_buffer_queue.h             \
                 $ngx_addon_dir/vod/write_stream.h                   \
@@ -175,7 +175,6 @@ NGX_ADDON_SRCS="$NGX_ADDON_SRCS                                     \
                 $ngx_addon_dir/ngx_http_vod_request_parse.c         \
                 $ngx_addon_dir/ngx_http_vod_status.c                \
                 $ngx_addon_dir/ngx_http_vod_submodule.c             \
-                $ngx_addon_dir/ngx_http_vod_udrm.c                  \
                 $ngx_addon_dir/ngx_http_vod_utils.c                 \
                 $ngx_addon_dir/ngx_perf_counters.c                  \
                 $ngx_addon_dir/vod/buffer_pool.c                    \
@@ -226,6 +225,7 @@ NGX_ADDON_SRCS="$NGX_ADDON_SRCS                                     \
                 $ngx_addon_dir/vod/mss/mss_playready.c              \
                 $ngx_addon_dir/vod/parse_utils.c                    \
                 $ngx_addon_dir/vod/segmenter.c                      \
+                $ngx_addon_dir/vod/udrm.c                           \
                 $ngx_addon_dir/vod/write_buffer.c                   \
                 $ngx_addon_dir/vod/write_buffer_queue.c             \
                 "

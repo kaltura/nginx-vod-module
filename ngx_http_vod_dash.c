@@ -2,10 +2,10 @@
 #include <ngx_md5.h>
 #include "ngx_http_vod_submodule.h"
 #include "ngx_http_vod_utils.h"
-#include "ngx_http_vod_udrm.h"
 #include "vod/dash/dash_packager.h"
 #include "vod/dash/edash_packager.h"
 #include "vod/mkv/mkv_builder.h"
+#include "vod/udrm.h"
 
 // constants
 #define SUPPORTED_CODECS_MP4 (VOD_CODEC_FLAG(AVC) | VOD_CODEC_FLAG(HEVC) | VOD_CODEC_FLAG(AAC))
@@ -499,7 +499,7 @@ ngx_http_vod_dash_parse_drm_info(
 	ngx_str_t* drm_info,
 	void** output)
 {
-	return ngx_http_vod_udrm_parse_response(
+	return udrm_parse_response(
 		&submodule_context->request_context,
 		drm_info,
 		output);

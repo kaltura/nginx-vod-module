@@ -2,6 +2,7 @@
 #include "../mp4/mp4_encrypt_passthrough.h"
 #include "../mp4/mp4_encrypt.h"
 #include "../mp4/mp4_defs.h"
+#include "../udrm.h"
 
 // manifest constants
 #define VOD_MSS_PLAYREADY_PROTECTION_PREFIX						\
@@ -49,8 +50,8 @@ static u_char*
 mss_playready_write_protection_tag(void* context, u_char* p, media_set_t* media_set)
 {
 	// Note: taking only the first sequence, in mss all renditions must have the same key
-	mp4_encrypt_info_t* drm_info = (mp4_encrypt_info_t*)media_set->sequences[0].drm_info;
-	mp4_encrypt_system_info_t* cur_info;
+	drm_info_t* drm_info = (drm_info_t*)media_set->sequences[0].drm_info;
+	drm_system_info_t* cur_info;
 	vod_str_t base64;
 
 	p = vod_copy(p, VOD_MSS_PLAYREADY_PROTECTION_PREFIX, sizeof(VOD_MSS_PLAYREADY_PROTECTION_PREFIX) - 1);
@@ -76,8 +77,8 @@ mss_playready_build_manifest(
 	vod_str_t* result)
 {
 	// Note: taking only the first sequence, in mss all renditions must have the same key
-	mp4_encrypt_info_t* drm_info = (mp4_encrypt_info_t*)media_set->sequences[0].drm_info;
-	mp4_encrypt_system_info_t* cur_info;
+	drm_info_t* drm_info = (drm_info_t*)media_set->sequences[0].drm_info;
+	drm_system_info_t* cur_info;
 	size_t extra_tags_size;
 
 	extra_tags_size = sizeof(VOD_MSS_PLAYREADY_PROTECTION_PREFIX) - 1 + sizeof(VOD_MSS_PLAYREADY_PROTECTION_SUFFIX) - 1;

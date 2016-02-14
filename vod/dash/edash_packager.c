@@ -5,6 +5,7 @@
 #include "../mp4/mp4_builder.h"
 #include "../mp4/mp4_encrypt.h"
 #include "../mp4/mp4_defs.h"
+#include "../udrm.h"
 #include "../common.h"
 
 // manifest constants
@@ -34,13 +35,13 @@ typedef struct {
 	u_char flags[3];
 	u_char default_is_encrypted[3];
 	u_char default_iv_size;
-	u_char default_kid[MP4_ENCRYPT_KID_SIZE];
+	u_char default_kid[DRM_KID_SIZE];
 } tenc_atom_t;
 
 typedef struct {
 	u_char version[1];
 	u_char flags[3];
-	u_char system_id[MP4_ENCRYPT_SYSTEM_ID_SIZE];
+	u_char system_id[DRM_SYSTEM_ID_SIZE];
 	u_char data_size[4];
 } pssh_atom_t;
 
@@ -65,8 +66,8 @@ typedef struct {
 static u_char* 
 edash_packager_write_content_protection(void* context, u_char* p, media_track_t* track)
 {
-	mp4_encrypt_info_t* drm_info = (mp4_encrypt_info_t*)track->file_info.drm_info;
-	mp4_encrypt_system_info_t* cur_info;
+	drm_info_t* drm_info = (drm_info_t*)track->file_info.drm_info;
+	drm_system_info_t* cur_info;
 
 	p = vod_copy(p, VOD_EDASH_MANIFEST_CONTENT_PROTECTION_CENC, sizeof(VOD_EDASH_MANIFEST_CONTENT_PROTECTION_CENC) - 1);
 	for (cur_info = drm_info->pssh_array.first; cur_info < drm_info->pssh_array.last; cur_info++)
@@ -87,7 +88,7 @@ edash_packager_build_mpd(
 	vod_str_t* result)
 {
 	media_sequence_t* cur_sequence;
-	mp4_encrypt_info_t* drm_info;
+	drm_info_t* drm_info;
 	size_t representation_tags_size;
 	size_t cur_drm_tags_size;
 	vod_status_t rc;
@@ -96,7 +97,7 @@ edash_packager_build_mpd(
 
 	for (cur_sequence = media_set->sequences; cur_sequence < media_set->sequences_end; cur_sequence++)
 	{
-		drm_info = (mp4_encrypt_info_t*)cur_sequence->drm_info;
+		drm_info = (drm_info_t*)cur_sequence->drm_info;
 
 		cur_drm_tags_size = 
 			sizeof(VOD_EDASH_MANIFEST_CONTENT_PROTECTION_CENC) - 1 + 
@@ -212,7 +213,7 @@ edash_packager_write_stsd(void* ctx, u_char* p)
 	write_atom_header(p, context->tenc_atom_size, 't', 'e', 'n', 'c');
 	write_be32(p, 0);							// version + flags
 	write_be32(p, 0x108);						// default is encrypted (1) + iv size (8)
-	p = vod_copy(p, context->default_kid, MP4_ENCRYPT_KID_SIZE);			// default key id
+	p = vod_copy(p, context->default_kid, DRM_KID_SIZE);			// default key id
 
 	// clear entry
 	if (context->has_clear_lead)
@@ -226,8 +227,8 @@ edash_packager_write_stsd(void* ctx, u_char* p)
 static u_char*
 edash_packager_write_pssh(void* context, u_char* p)
 {
-	mp4_encrypt_system_info_array_t* pssh_array = (mp4_encrypt_system_info_array_t*)context;
-	mp4_encrypt_system_info_t* cur_info;
+	drm_system_info_array_t* pssh_array = (drm_system_info_array_t*)context;
+	drm_system_info_t* cur_info;
 	size_t pssh_atom_size;
 
 	for (cur_info = pssh_array->first; cur_info < pssh_array->last; cur_info++)
@@ -236,7 +237,7 @@ edash_packager_write_pssh(void* context, u_char* p)
 
 		write_atom_header(p, pssh_atom_size, 'p', 's', 's', 'h');
 		write_be32(p, 0);						// version + flags
-		p = vod_copy(p, cur_info->system_id, MP4_ENCRYPT_SYSTEM_ID_SIZE);	// system id
+		p = vod_copy(p, cur_info->system_id, DRM_SYSTEM_ID_SIZE);	// system id
 		write_be32(p, cur_info->data.len);		// data size
 		p = vod_copy(p, cur_info->data.data, cur_info->data.len);
 	}
@@ -253,11 +254,11 @@ edash_packager_build_init_mp4(
 	vod_str_t* result)
 {
 	media_track_t* first_track = media_set->sequences[0].filtered_clips[0].first_track;
-	mp4_encrypt_info_t* drm_info = (mp4_encrypt_info_t*)media_set->sequences[0].drm_info;
+	drm_info_t* drm_info = (drm_info_t*)media_set->sequences[0].drm_info;
 	stsd_writer_context_t stsd_writer_context;
 	atom_writer_t pssh_atom_writer;
 	atom_writer_t stsd_atom_writer;
-	mp4_encrypt_system_info_t* cur_info;
+	drm_system_info_t* cur_info;
 	vod_status_t rc;
 
 	rc = edash_packager_init_stsd_writer_context(
