@@ -260,7 +260,7 @@ ngx_http_vod_dash_webm_handle_init_segment(
 	ngx_md5_init(&md5);
 	ngx_md5_update(&md5, uri->data, uri->len);
 	ngx_md5_final(uri_key, &md5);
-	track_uid = *(uint64_t*)uri_key;
+	ngx_memcpy(&track_uid, uri_key, sizeof(track_uid));
 
 	rc = mkv_build_init_segment(
 		&submodule_context->request_context,
