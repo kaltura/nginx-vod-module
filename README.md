@@ -465,11 +465,80 @@ Optional fields:
 	first frame in the concatenated stream relative to the clip start time
 * `basePath` - a string that should be added as a prefix to all the paths
 
-### DRM
+### Security
+
+#### Authorization
+
+##### CDN-based delivery
+
+Media packaged by nginx-vod-module can be protected using CDN tokens, this works as follows:
+* Some application authenticates the user and decides whether the user should be allowed 
+	to watch a specific video. If the user is allowed, the application generates a tokenized
+	URL for the manifest of the video.
+* The CDN validates the token and if valid forwards the request to the nginx-vod-module 
+	on the origin. 
+* The nginx server builds the manifest response and generates tokens for the segment URLs
+	contained inside it. The module https://github.com/kaltura/nginx-secure-token-module can
+	be used to accomplish this task, currently support Akamai tokens and CloudFront tokens.
+	See the readme of this module for more details.
+* The CDN validates the token on each segment that is requested.
+
+In this setup it also highly recommended to block direct access to the origin server by
+authenticating the CDN requests. Without this protection, a user who somehow gets the address
+of the origin will be able to bypass the CDN token enforcement. If using Akamai, this can
+be accomplished using https://github.com/refractalize/nginx_mod_akamai_g2o.
+For other CDNs it may be possible to configure the CDN to send a secret header to the origin
+and then simply enforce the header using nginx if statement:
+```
+		if ($http_x_secret_origin_header != "secret value") {
+			return 403;
+		}
+```
+
+In addition to the both, most CDNs support other access control settings, such as geo-location.
+These restrictions are completely transparent to the origin and should work well. 
+
+##### Direct delivery
+
+Deployments in which the media is pulled directly from nginx-vod-module can protect the media
+using nginx access control directives, such `allow`, `deny` or `access_by_lua` for more complex
+scenarios.
+In addition, it is possible to build a token based solution (as detailed in the previous section) 
+without a CDN. The module https://github.com/kaltura/nginx-akamai-token-validate-module can be used
+to validate Akamai tokens. Locations on which the module is enabled will return 403 unless the 
+request contains a valid Akamai token. See the readme of this module for more details.
+
+#### URL encryption
+
+As an alternative to tokenization, URL encryption can be used to prevent an attacker from being
+able to craft a playable URL. URL encryption can be implemented with 
+https://github.com/kaltura/nginx-secure-token-module, and is supported for HLS and DASH with a 
+manifest format of segmentlist. 
+In terms of security, the main advantage of CDN tokens over URL encryption is that CDN tokens
+usually expire, while with encrypted URL someone who obtains a playable URL will be able to
+use it indefinitely.
+
+#### Media encryption
+
+Nginx-vod-module supports AES-128 and SAMPLE-AES HLS encryption schemes. The main difference between
+media encryption and DRM (detailed below) is the mechanism used to transfer the encryption key to 
+the client. With media encryption the key is fetched by the client by performing a simple GET request
+to nginx-vod-module, while with DRM the key is returned inside a vendor specific license response.
+Media encryption basically reduces the problem of securing the media to the need to secure the 
+encryption key. The media segment URLs (which compose the vast majority of the traffic) can be 
+completely unprotected, and easily cacheable by any proxies between the client and servers
+(unlike tokenization). 
+The encryption key request can then be protected using one of the methods mentioned above (CDN tokens,
+nginx access rules etc.). 
+In addition, it is possible to configure nginx-vod-module to return the encryption key over HTTPS
+while having the segments delivered over HTTP. The way to configure this is to set `vod_segments_base_url`
+to `http://nginx-vod-host` and set `vod_https_header_name` to `host`.
+
+#### DRM
 
 Nginx-vod-module has the ability to perform on-the-fly encryption for MPEG DASH (CENC), MSS Play Ready and FairPlay HLS.
-The encryption is performed while serving a video/audio segment to the client, therefore, when working with DRM 
-it is highly recommended not to serve the content directly from nginx-vod-module to end-users.
+As in the case of media encryption, the encryption is performed while serving a video/audio segment to the client, 
+therefore, when working with DRM it is recommended not to serve the content directly from nginx-vod-module to end-users.
 A more scalable architecture would be to use proxy servers or a CDN in order to cache the encrypted segments.
 
 In order to perform the encryption, this module needs several parameters, including key & key_id, these parameters
@@ -487,7 +556,7 @@ The response of the DRM server is a JSON, with the following format:
 * `iv` - optional base64 encoded initialization vector (128 bit). The IV is currently used only in HLS (FairPlay), 
 	in the other protocols an IV is generated automatically by nginx-vod-module.
 
-#### Sample configuration
+##### Sample configuration
 
 Below is a sample configuration for Apple FairPlay HLS:
 ```
