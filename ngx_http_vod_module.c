@@ -244,7 +244,7 @@ ngx_buffer_cache_fetch_perf(
 	return result;
 }
 
-static ngx_flag_t
+static int
 ngx_buffer_cache_fetch_copy_perf(
 	ngx_http_request_t* r,
 	ngx_perf_counters_t* perf_counters,
@@ -255,19 +255,18 @@ ngx_buffer_cache_fetch_copy_perf(
 	size_t* buffer_size)
 {
 	ngx_perf_counter_context(pcctx);
-	ngx_buffer_cache_t** caches_end = caches + cache_count;
-	ngx_buffer_cache_t** cache_ptr;
 	ngx_buffer_cache_t* cache;
 	ngx_flag_t result;
 	u_char* original_buffer;
 	u_char* buffer_copy;
 	size_t original_size;
+	uint32_t cache_index;
 
 	ngx_perf_counter_start(pcctx);
 
-	for (cache_ptr = caches; cache_ptr < caches_end; cache_ptr++)
+	for (cache_index = 0; cache_index < cache_count; cache_index++)
 	{
-		cache = *cache_ptr;
+		cache = caches[cache_index];
 		if (cache == NULL)
 		{
 			continue;
@@ -286,7 +285,7 @@ ngx_buffer_cache_fetch_copy_perf(
 		{
 			ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
 				"ngx_buffer_cache_fetch_copy_perf: ngx_palloc failed");
-			return 0;
+			return -1;
 		}
 
 		ngx_memcpy(buffer_copy, original_buffer, original_size);
@@ -295,12 +294,12 @@ ngx_buffer_cache_fetch_copy_perf(
 		*buffer = buffer_copy;
 		*buffer_size = original_size;
 
-		return 1;
+		return cache_index;
 	}
 
 	ngx_perf_counter_end(perf_counters, pcctx, PC_FETCH_CACHE);
 
-	return 0;
+	return -1;
 }
 
 static ngx_flag_t
@@ -478,10 +477,17 @@ ngx_buffer_cache_fetch_multipart_perf(
 ////// Utility functions
 
 static ngx_int_t
-ngx_http_vod_send_header(ngx_http_request_t* r, off_t content_length_n, ngx_str_t* content_type, time_t last_modified_time)
+ngx_http_vod_send_header(
+	ngx_http_request_t* r, 
+	off_t content_length_n, 
+	ngx_str_t* content_type, 
+	int cache_type)
 {
 	ngx_http_vod_loc_conf_t* conf;
 	ngx_int_t rc;
+	time_t expires;
+
+	conf = ngx_http_get_module_loc_conf(r, ngx_http_vod_module);
 
 	if (content_type != NULL)
 	{
@@ -492,17 +498,32 @@ ngx_http_vod_send_header(ngx_http_request_t* r, off_t content_length_n, ngx_str_
 	r->headers_out.status = NGX_HTTP_OK;
 	r->headers_out.content_length_n = content_length_n;
 
-	if (last_modified_time > 0)
+	// last modified
+	switch (cache_type)
 	{
-		r->headers_out.last_modified_time = last_modified_time;
-	}
-	else
-	{
-		conf = ngx_http_get_module_loc_conf(r, ngx_http_vod_module);
+	case CACHE_TYPE_VOD:
 		if (conf->last_modified_time != -1 &&
 			ngx_http_test_content_type(r, &conf->last_modified_types) != NULL)
 		{
 			r->headers_out.last_modified_time = conf->last_modified_time;
+		}
+		break;
+
+	case CACHE_TYPE_LIVE:
+		r->headers_out.last_modified_time = ngx_time();
+		break;
+	}
+
+	// expires
+	expires = conf->expires[cache_type];
+	if (expires >= 0)
+	{
+		rc = ngx_http_vod_set_expires(r, expires);
+		if (rc != NGX_OK)
+		{
+			ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+				"ngx_http_vod_send_header: ngx_http_vod_set_expires failed %i", rc);
+			return rc;
 		}
 	}
 
@@ -687,7 +708,7 @@ ngx_http_vod_state_machine_get_drm_info(ngx_http_vod_ctx_t *ctx)
 				1, 
 				ctx->submodule_context.cur_sequence->uri_key, 
 				&drm_info.data, 
-				&drm_info.len))
+				&drm_info.len) >= 0)
 			{
 				ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
 					"ngx_http_vod_state_machine_get_drm_info: drm info cache hit, size is %uz", drm_info.len);
@@ -1558,7 +1579,7 @@ ngx_http_vod_handle_metadata_request(ngx_http_vod_ctx_t *ctx)
 	ngx_str_t content_type;
 	ngx_str_t response = ngx_null_string;
 	ngx_int_t rc;
-	time_t last_modified;
+	int cache_type;
 
 	ngx_perf_counter_start(ctx->perf_counter_context);
 
@@ -1579,15 +1600,14 @@ ngx_http_vod_handle_metadata_request(ngx_http_vod_ctx_t *ctx)
 	if (ctx->submodule_context.media_set.type != MEDIA_SET_LIVE ||
 		(ctx->submodule_context.request->flags & REQUEST_FLAG_TIME_DEPENDENT_ON_LIVE) == 0)
 	{
-		cache = conf->response_cache[CACHE_TYPE_VOD];
-		last_modified = -1;
+		cache_type = CACHE_TYPE_VOD;
 	}
 	else
 	{
-		cache = conf->response_cache[CACHE_TYPE_LIVE];
-		last_modified = ngx_time();
+		cache_type = CACHE_TYPE_LIVE;
 	}
 
+	cache = conf->response_cache[cache_type];
 	if (cache != NULL && response.data != NULL)
 	{
 		cache_buffers[0].data = (u_char*)&content_type.len;
@@ -1607,7 +1627,7 @@ ngx_http_vod_handle_metadata_request(ngx_http_vod_ctx_t *ctx)
 		}
 	}
 
-	rc = ngx_http_vod_send_header(ctx->submodule_context.r, response.len, &content_type, last_modified);
+	rc = ngx_http_vod_send_header(ctx->submodule_context.r, response.len, &content_type, cache_type);
 	if (rc != NGX_OK)
 	{
 		return rc;
@@ -1839,7 +1859,7 @@ ngx_http_vod_init_frame_processing(ngx_http_vod_ctx_t *ctx)
 	if (ctx->content_length != 0)
 	{
 		// send the response header
-		rc = ngx_http_vod_send_header(r, ctx->content_length, NULL, -1);
+		rc = ngx_http_vod_send_header(r, ctx->content_length, NULL, CACHE_TYPE_VOD);
 		if (rc != NGX_OK)
 		{
 			return rc;
@@ -1972,7 +1992,7 @@ ngx_http_vod_finalize_segment_response(ngx_http_vod_ctx_t *ctx)
 	ctx->write_segment_buffer_context.chain_end->buf->last_buf = 1;
 
 	// send the response header
-	rc = ngx_http_vod_send_header(r, ctx->write_segment_buffer_context.total_size, NULL, -1);
+	rc = ngx_http_vod_send_header(r, ctx->write_segment_buffer_context.total_size, NULL, CACHE_TYPE_VOD);
 	if (rc != NGX_OK)
 	{
 		return rc;
@@ -2036,7 +2056,7 @@ ngx_http_vod_send_clip_header(ngx_http_vod_ctx_t *ctx)
 	}
 
 	// send the response header
-	rc = ngx_http_vod_send_header(r, response_size, &content_type, -1);
+	rc = ngx_http_vod_send_header(r, response_size, &content_type, CACHE_TYPE_VOD);
 	if (rc != NGX_OK)
 	{
 		return rc;
@@ -2788,7 +2808,7 @@ ngx_http_vod_dump_file(ngx_http_vod_ctx_t* ctx)
 	}
 
 	// send the response header
-	rc = ngx_http_vod_send_header(r, state->file_size, NULL, -1);
+	rc = ngx_http_vod_send_header(r, state->file_size, NULL, CACHE_TYPE_VOD);
 	if (rc != NGX_OK)
 	{
 		return rc;
@@ -3030,7 +3050,7 @@ ngx_http_vod_run_mapped_mode_state_machine(ngx_http_request_t *r)
 			CACHE_TYPE_COUNT,
 			cur_source->file_key,
 			&mapping.data,
-			&mapping.len))
+			&mapping.len) >= 0)
 		{
 			mapping.len--;		// remove the null
 
@@ -3431,6 +3451,7 @@ ngx_http_vod_handler(ngx_http_request_t *r)
 	ngx_str_t content_type;
 	ngx_str_t response;
 	ngx_int_t rc;
+	int cache_type;
 
 	ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0, "ngx_http_vod_handler: started");
 
@@ -3443,7 +3464,7 @@ ngx_http_vod_handler(ngx_http_request_t *r)
 		response.data = NULL;
 		response.len = 0;
 
-		rc = ngx_http_vod_send_header(r, response.len, &options_content_type, -1);
+		rc = ngx_http_vod_send_header(r, response.len, &options_content_type, CACHE_TYPE_VOD);
 		if (rc != NGX_OK)
 		{
 			return rc;
@@ -3541,14 +3562,15 @@ ngx_http_vod_handler(ngx_http_request_t *r)
 		ngx_md5_final(request_key, &md5);
 
 		// try to fetch from cache
-		if (ngx_buffer_cache_fetch_copy_perf(
-			r, 
-			perf_counters, 
-			conf->response_cache, 
+		cache_type = ngx_buffer_cache_fetch_copy_perf(
+			r,
+			perf_counters,
+			conf->response_cache,
 			CACHE_TYPE_COUNT,
-			request_key, 
-			&cache_buffer, 
-			&cache_buffer_size) &&
+			request_key,
+			&cache_buffer,
+			&cache_buffer_size);
+		if (cache_type >= 0 &&
 			cache_buffer_size > sizeof(size_t))
 		{
 			ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
@@ -3571,7 +3593,7 @@ ngx_http_vod_handler(ngx_http_request_t *r)
 				r->allow_ranges = 1;
 
 				// return the response
-				rc = ngx_http_vod_send_header(r, response.len, &content_type, -1);
+				rc = ngx_http_vod_send_header(r, response.len, &content_type, cache_type);
 				if (rc != NGX_OK)
 				{
 					return rc;

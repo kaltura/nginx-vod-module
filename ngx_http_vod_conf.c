@@ -101,6 +101,8 @@ ngx_http_vod_create_loc_conf(ngx_conf_t *cf)
 	conf->ignore_edit_list = NGX_CONF_UNSET;
 	conf->max_mapping_response_size = NGX_CONF_UNSET_SIZE;
 
+	conf->expires[CACHE_TYPE_VOD] = NGX_CONF_UNSET;
+	conf->expires[CACHE_TYPE_LIVE] = NGX_CONF_UNSET;
 	conf->last_modified_time = NGX_CONF_UNSET;
 
 	conf->drm_enabled = NGX_CONF_UNSET;
@@ -181,6 +183,8 @@ ngx_http_vod_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child)
 		{
 			conf->path_mapping_cache[cache_type] = prev->path_mapping_cache[cache_type];
 		}
+
+		ngx_conf_merge_value(conf->expires[cache_type], prev->expires[cache_type], -1);
 	}
 
 	ngx_conf_merge_size_value(conf->initial_read_size, prev->initial_read_size, 4096);
@@ -948,6 +952,21 @@ ngx_command_t ngx_http_vod_commands[] = {
 	ngx_conf_set_str_slot,
 	NGX_HTTP_LOC_CONF_OFFSET,
 	offsetof(ngx_http_vod_loc_conf_t, proxy_header.value),
+	NULL },
+
+	// expires
+	{ ngx_string("vod_expires"),
+	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1,
+	ngx_conf_set_sec_slot,
+	NGX_HTTP_LOC_CONF_OFFSET,
+	offsetof(ngx_http_vod_loc_conf_t, expires[CACHE_TYPE_VOD]),
+	NULL },
+
+	{ ngx_string("vod_expires_live"),
+	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1,
+	ngx_conf_set_sec_slot,
+	NGX_HTTP_LOC_CONF_OFFSET,
+	offsetof(ngx_http_vod_loc_conf_t, expires[CACHE_TYPE_LIVE]),
 	NULL },
 
 	// last modified

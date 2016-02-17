@@ -34,4 +34,8 @@ ngx_int_t ngx_http_vod_range_parse(
 	off_t* out_start, 
 	off_t* out_end);
 
+ngx_int_t ngx_http_vod_set_expires(
+	ngx_http_request_t *r,
+	time_t expires_time);
+
 #endif // _NGX_HTTP_VOD_UTILS_H_INCLUDED_

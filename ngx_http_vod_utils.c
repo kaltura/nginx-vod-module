@@ -358,3 +358,100 @@ found:
 
     return NGX_OK;
 }
+
+// A run down version of ngx_http_set_expires
+ngx_int_t
+ngx_http_vod_set_expires(ngx_http_request_t *r, time_t expires_time)
+{
+	size_t               len;
+	time_t               now, max_age;
+	ngx_uint_t           i;
+	ngx_table_elt_t     *e, *cc, **ccp;
+
+	e = r->headers_out.expires;
+
+	if (e == NULL) {
+
+		e = ngx_list_push(&r->headers_out.headers);
+		if (e == NULL) {
+			return NGX_ERROR;
+		}
+
+		r->headers_out.expires = e;
+
+		e->hash = 1;
+		ngx_str_set(&e->key, "Expires");
+	}
+
+	len = sizeof("Mon, 28 Sep 1970 06:00:00 GMT");
+	e->value.len = len - 1;
+
+	ccp = r->headers_out.cache_control.elts;
+
+	if (ccp == NULL) {
+
+		if (ngx_array_init(&r->headers_out.cache_control, r->pool,
+			1, sizeof(ngx_table_elt_t *))
+			!= NGX_OK)
+		{
+			return NGX_ERROR;
+		}
+
+		ccp = ngx_array_push(&r->headers_out.cache_control);
+		if (ccp == NULL) {
+			return NGX_ERROR;
+		}
+
+		cc = ngx_list_push(&r->headers_out.headers);
+		if (cc == NULL) {
+			return NGX_ERROR;
+		}
+
+		cc->hash = 1;
+		ngx_str_set(&cc->key, "Cache-Control");
+		*ccp = cc;
+
+	}
+	else {
+		for (i = 1; i < r->headers_out.cache_control.nelts; i++) {
+			ccp[i]->hash = 0;
+		}
+
+		cc = ccp[0];
+	}
+
+	e->value.data = ngx_pnalloc(r->pool, len);
+	if (e->value.data == NULL) {
+		return NGX_ERROR;
+	}
+
+	if (expires_time == 0) {
+		ngx_memcpy(e->value.data, ngx_cached_http_time.data,
+			ngx_cached_http_time.len + 1);
+		ngx_str_set(&cc->value, "max-age=0");
+		return NGX_OK;
+	}
+
+	now = ngx_time();
+
+	max_age = expires_time;
+	expires_time += now;
+
+	ngx_http_time(e->value.data, expires_time);
+
+	if (max_age < 0) {
+		ngx_str_set(&cc->value, "no-cache");
+		return NGX_OK;
+	}
+
+	cc->value.data = ngx_pnalloc(r->pool,
+		sizeof("max-age=") + NGX_TIME_T_LEN + 1);
+	if (cc->value.data == NULL) {
+		return NGX_ERROR;
+	}
+
+	cc->value.len = ngx_sprintf(cc->value.data, "max-age=%T", max_age)
+		- cc->value.data;
+
+	return NGX_OK;
+}
