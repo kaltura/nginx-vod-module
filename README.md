@@ -937,6 +937,25 @@ The name of the speed request parameter.
 
 Configures the shared memory object name of the performance counters
 
+#### vod_expires
+* **syntax**: `vod_expires time`
+* **default**: `none`
+* **context**: `http`, `server`, `location`
+
+Sets the value of the "Expires" and "Cache-Control" response headers for successful requests.
+This directive is similar to nginx's built-in `expires` directive, except that it only supports the expiration interval scenario
+(epoch, max, off, day time are not supported)
+Main motivation for using this directive instead of the built-in `expires` is to have different expiration for VOD and dynamic live content.
+If this directive is not specified, nginx-vod-module will not set the "Expires" / "Cache-Control" headers.
+
+#### vod_expires_live
+* **syntax**: `vod_expires_live time`
+* **default**: `none`
+* **context**: `http`, `server`, `location`
+
+Same as `vod_expires` (above) for dynamic live content.
+In DASH, for example, the expiration of the video fragments is determined by `vod_expires`, while `vod_expires_live` determines the expiration of the MPD.
+
 #### vod_last_modified
 * **syntax**: `vod_last_modified time`
 * **default**: `none`

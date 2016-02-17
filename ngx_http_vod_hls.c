@@ -149,7 +149,7 @@ ngx_http_vod_hls_handle_index_playlist(
 				&encryption_params.key_uri) != NGX_OK)
 			{
 				ngx_log_debug0(NGX_LOG_DEBUG_HTTP, submodule_context->request_context.log, 0,
-					"ngx_http_vod_hls_init_encryption_params: ngx_http_complex_value failed");
+					"ngx_http_vod_hls_handle_index_playlist: ngx_http_complex_value failed");
 				return NGX_ERROR;
 			}
 		}
@@ -395,7 +395,8 @@ ngx_http_vod_hls_merge_loc_conf(
 		conf->encryption_method);
 
 	if (conf->encryption_method != HLS_ENC_NONE &&
-		base->secret_key == NULL)
+		base->secret_key == NULL &&
+		!base->drm_enabled)
 	{
 		ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
 			"\"vod_secret_key\" must be set when \"vod_hls_encryption_method\" is not none");
