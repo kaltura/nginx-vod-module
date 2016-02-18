@@ -28,13 +28,14 @@ typedef struct {
 } drm_info_t;
 
 // functions
-ngx_int_t udrm_parse_response(
+vod_status_t udrm_parse_response(
 	request_context_t* request_context,
-	ngx_str_t* drm_info, 
+	vod_str_t* drm_info, 
 	bool_t base64_decode_pssh,
 	void** output);
 
-ngx_int_t udrm_init_parser(
-	ngx_conf_t* cf);
+vod_status_t udrm_init_parser(
+	vod_pool_t* pool,
+	vod_pool_t* temp_pool);
 
 #endif // __UDRM_H__

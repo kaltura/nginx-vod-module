@@ -38,10 +38,10 @@ static json_object_key_def_t pssh_keys_def[] = {
 static vod_hash_t drm_info_keys_hash;
 static vod_hash_t pssh_keys_hash;
 
-ngx_int_t
+vod_status_t
 udrm_parse_response(
 	request_context_t* request_context,
-	ngx_str_t* drm_info, 
+	vod_str_t* drm_info, 
 	bool_t base64_decode_pssh,
 	void** output)
 {
@@ -52,63 +52,63 @@ udrm_parse_response(
 	vod_json_value_t* element;
 	vod_json_value_t* drm_info_values[DRM_INFO_PARAM_COUNT];
 	vod_json_value_t* pssh_values[PSSH_PARAM_COUNT];
-	ngx_array_t *pssh_array;
-	ngx_int_t rc;
-	ngx_uint_t i;
+	vod_array_t *pssh_array;
+	vod_int_t rc;
+	vod_uint_t i;
 	u_char error[128];
 	
 	// note: drm_info is guaranteed to be null terminated
 	rc = vod_json_parse(request_context->pool, drm_info->data, &parsed_info, error, sizeof(error));
 	if (rc != VOD_JSON_OK)
 	{
-		ngx_log_error(NGX_LOG_ERR, request_context->log, 0,
-			"udrm_parse_response: ngx_json_parse failed %i: %s", rc, error);
-		return NGX_ERROR;
+		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+			"udrm_parse_response: vod_json_parse failed %i: %s", rc, error);
+		return VOD_BAD_DATA;
 	}
 
 	if (parsed_info.type != VOD_JSON_ARRAY || parsed_info.v.arr.nelts != 1)
 	{
-		ngx_log_error(NGX_LOG_ERR, request_context->log, 0,
+		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
 			"udrm_parse_response: expected a single element array");
-		return NGX_ERROR;
+		return VOD_BAD_DATA;
 	}
 
 	element = (vod_json_value_t*)parsed_info.v.arr.elts;
 
-	ngx_memzero(drm_info_values, sizeof(drm_info_values));
+	vod_memzero(drm_info_values, sizeof(drm_info_values));
 	
 	vod_json_get_object_values(element, &drm_info_keys_hash, drm_info_values);
 
 	if (drm_info_values[DRM_INFO_PARAM_KEY] == NULL ||
 		drm_info_values[DRM_INFO_PARAM_KEY_ID] == NULL)
 	{
-		ngx_log_error(NGX_LOG_ERR, request_context->log, 0,
+		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
 			"udrm_parse_response: missing fields, \"key\", \"key_id\" are mandatory");
-		return NGX_ERROR;
+		return VOD_BAD_DATA;
 	}
 
-	result = ngx_palloc(request_context->pool, sizeof(*result));
+	result = vod_alloc(request_context->pool, sizeof(*result));
 	if (result == NULL)
 	{
-		ngx_log_debug0(NGX_LOG_DEBUG_HTTP, request_context->log, 0,
-			"udrm_parse_response: ngx_palloc failed (1)");
-		return NGX_ERROR;
+		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
+			"udrm_parse_response: vod_alloc failed (1)");
+		return VOD_ALLOC_FAILED;
 	}
 
 	rc = parse_utils_parse_fixed_base64_string(&drm_info_values[DRM_INFO_PARAM_KEY]->v.str, result->key, sizeof(result->key));
 	if (rc != VOD_JSON_OK)
 	{
-		ngx_log_error(NGX_LOG_ERR, request_context->log, 0,
+		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
 			"udrm_parse_response: parse_utils_parse_fixed_base64_string(key) failed %i", rc);
-		return NGX_ERROR;
+		return VOD_BAD_DATA;
 	}
 
 	rc = parse_utils_parse_fixed_base64_string(&drm_info_values[DRM_INFO_PARAM_KEY_ID]->v.str, result->key_id, sizeof(result->key_id));
 	if (rc != VOD_JSON_OK)
 	{
-		ngx_log_error(NGX_LOG_ERR, request_context->log, 0,
+		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
 			"udrm_parse_response: parse_utils_parse_fixed_base64_string(key_id) failed %i", rc);
-		return NGX_ERROR;
+		return VOD_BAD_DATA;
 	}
 
 	if (drm_info_values[DRM_INFO_PARAM_IV] != NULL)
@@ -116,9 +116,9 @@ udrm_parse_response(
 		rc = parse_utils_parse_fixed_base64_string(&drm_info_values[DRM_INFO_PARAM_IV]->v.str, result->iv, sizeof(result->iv));
 		if (rc != VOD_JSON_OK)
 		{
-			ngx_log_error(NGX_LOG_ERR, request_context->log, 0,
+			vod_log_error(VOD_LOG_ERR, request_context->log, 0,
 				"udrm_parse_response: parse_utils_parse_fixed_base64_string(iv) failed %i", rc);
-			return NGX_ERROR;
+			return VOD_BAD_DATA;
 		}
 
 		result->iv_set = TRUE;
@@ -134,20 +134,20 @@ udrm_parse_response(
 		result->pssh_array.first = NULL;
 		result->pssh_array.last = NULL;
 		*output = result;
-		return NGX_OK;
+		return VOD_OK;
 	}
 
 	pssh_array = &drm_info_values[DRM_INFO_PARAM_PSSH]->v.arr;
 
 	result->pssh_array.count = pssh_array->nelts;
-	result->pssh_array.first = ngx_palloc(
+	result->pssh_array.first = vod_alloc(
 		request_context->pool, 
 		sizeof(*result->pssh_array.first) * result->pssh_array.count);
 	if (result->pssh_array.first == NULL)
 	{
-		ngx_log_debug0(NGX_LOG_DEBUG_HTTP, request_context->log, 0,
-			"udrm_parse_response: ngx_palloc failed (2)");
-		return NGX_ERROR;
+		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
+			"udrm_parse_response: vod_alloc failed (2)");
+		return VOD_ALLOC_FAILED;
 	}
 	result->pssh_array.last = result->pssh_array.first + result->pssh_array.count;
 
@@ -156,24 +156,24 @@ udrm_parse_response(
 		cur_input_pssh = (vod_json_value_t*)pssh_array->elts + i;
 		cur_output_pssh = result->pssh_array.first + i;
 
-		ngx_memzero(pssh_values, sizeof(pssh_values));
+		vod_memzero(pssh_values, sizeof(pssh_values));
 		
 		vod_json_get_object_values(cur_input_pssh, &pssh_keys_hash, pssh_values);
 		
 		if (pssh_values[PSSH_PARAM_SYSTEM_ID] == NULL ||
 			pssh_values[PSSH_PARAM_DATA] == NULL)
 		{
-			ngx_log_error(NGX_LOG_ERR, request_context->log, 0,
+			vod_log_error(VOD_LOG_ERR, request_context->log, 0,
 				"udrm_parse_response: missing pssh fields, \"uuid\", \"data\" are mandatory");
-			return NGX_ERROR;
+			return VOD_BAD_DATA;
 		}
 
 		rc = parse_utils_parse_guid_string(&pssh_values[PSSH_PARAM_SYSTEM_ID]->v.str, cur_output_pssh->system_id);
 		if (rc != VOD_JSON_OK)
 		{
-			ngx_log_error(NGX_LOG_ERR, request_context->log, 0,
+			vod_log_error(VOD_LOG_ERR, request_context->log, 0,
 				"udrm_parse_response: parse_utils_parse_guid_string(uuid) failed %i", rc);
-			return NGX_ERROR;
+			return VOD_BAD_DATA;
 		}
 
 		if (base64_decode_pssh)
@@ -181,9 +181,9 @@ udrm_parse_response(
 			rc = parse_utils_parse_variable_base64_string(request_context->pool, &pssh_values[PSSH_PARAM_DATA]->v.str, &cur_output_pssh->data);
 			if (rc != VOD_JSON_OK)
 			{
-				ngx_log_error(NGX_LOG_ERR, request_context->log, 0,
+				vod_log_error(VOD_LOG_ERR, request_context->log, 0,
 					"udrm_parse_response: parse_utils_parse_variable_base64_string(data) failed %i", rc);
-				return NGX_ERROR;
+				return VOD_BAD_DATA;
 			}
 		}
 		else
@@ -191,9 +191,9 @@ udrm_parse_response(
 			cur_output_pssh->data.data = vod_pstrdup(request_context->pool, &pssh_values[PSSH_PARAM_DATA]->v.str);
 			if (cur_output_pssh->data.data == NULL)
 			{
-				ngx_log_debug0(NGX_LOG_DEBUG_HTTP, request_context->log, 0,
+				vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
 					"udrm_parse_response: vod_pstrdup failed");
-				return NGX_ERROR;
+				return VOD_ALLOC_FAILED;
 			}
 			cur_output_pssh->data.len = pssh_values[PSSH_PARAM_DATA]->v.str.len;
 		}
@@ -201,37 +201,37 @@ udrm_parse_response(
 
 	*output = result;
 
-	return NGX_OK;
+	return VOD_OK;
 }
 
-ngx_int_t
-udrm_init_parser(ngx_conf_t* cf)
+vod_status_t
+udrm_init_parser(vod_pool_t* pool, vod_pool_t* temp_pool)
 {
 	vod_status_t rc;
 	
 	rc = vod_json_init_hash(
-		cf->pool,
-		cf->temp_pool,
+		pool,
+		temp_pool,
 		"drm_info_keys_hash",
 		drm_info_keys_def,
 		sizeof(drm_info_keys_def[0]),
 		&drm_info_keys_hash);
 	if (rc != VOD_OK)
 	{
-		return NGX_ERROR;
+		return rc;
 	}
 
 	rc = vod_json_init_hash(
-		cf->pool,
-		cf->temp_pool,
+		pool,
+		temp_pool,
 		"pssh_keys_hash",
 		pssh_keys_def,
 		sizeof(pssh_keys_def[0]),
 		&pssh_keys_hash);
 	if (rc != VOD_OK)
 	{
-		return NGX_ERROR;
+		return rc;
 	}
 
-	return NGX_OK;
+	return VOD_OK;
 }

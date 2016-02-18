@@ -263,7 +263,7 @@ static const relevant_atom_t relevant_atoms_trak[] = {
 	{ ATOM_NAME_NULL, 0, NULL }
 };
 
-static ngx_str_t mp4_content_type = ngx_string("video/mp4");
+static vod_str_t mp4_content_type = vod_string("video/mp4");
 
 static void
 mp4_clipper_write_tail(void* ctx, int index, void* buffer, uint32_t size)

@@ -499,11 +499,19 @@ ngx_http_vod_dash_parse_drm_info(
 	ngx_str_t* drm_info,
 	void** output)
 {
-	return udrm_parse_response(
+	vod_status_t rc;
+
+	rc = udrm_parse_response(
 		&submodule_context->request_context,
 		drm_info,
 		TRUE,
 		output);
+	if (rc != VOD_OK)
+	{
+		return NGX_ERROR;
+	}
+
+	return NGX_OK;
 }
 
 DEFINE_SUBMODULE(dash);

@@ -97,7 +97,7 @@ mp4_metadata_reader_read(
 		moov_size = state->parts[MP4_METADATA_PART_MOOV].len;
 		if (buffer->len < moov_size)
 		{
-			ngx_log_error(NGX_LOG_ERR, state->request_context->log, 0,
+			vod_log_error(VOD_LOG_ERR, state->request_context->log, 0,
 				"mp4_metadata_reader_read: buffer size %uz is smaller than moov size %uz", 
 				buffer->len, moov_size);
 			return VOD_BAD_DATA;
@@ -229,7 +229,7 @@ done:
 		&moov_size);
 	if (rc != VOD_OK)
 	{
-		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, state->request_context->log, 0,
+		vod_log_debug1(VOD_LOG_DEBUG_LEVEL, state->request_context->log, 0,
 			"mp4_metadata_reader_read: mp4_parser_uncompress_moov failed %i", rc);
 		return rc;
 	}

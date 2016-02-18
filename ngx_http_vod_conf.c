@@ -57,8 +57,8 @@ ngx_http_vod_init_parsers(ngx_conf_t *cf)
 		return NGX_ERROR;
 	}
 
-	rc = udrm_init_parser(cf);
-	if (rc != NGX_OK)
+	rc = udrm_init_parser(cf->pool, cf->temp_pool);
+	if (rc != VOD_OK)
 	{
 		ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
 			"failed to initialize udrm parser %i", rc);

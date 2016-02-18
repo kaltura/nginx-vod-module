@@ -270,9 +270,9 @@ ngx_http_vod_hds_parse_drm_info(
 		drm_info,
 		FALSE,
 		(void**)&result);
-	if (rc != NGX_OK)
+	if (rc != VOD_OK)
 	{
-		return rc;
+		return NGX_ERROR;
 	}
 
 	if (result->pssh_array.count != 1)
