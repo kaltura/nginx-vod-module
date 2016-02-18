@@ -949,7 +949,7 @@ hds_muxer_init_fragment(
 	size_t afra_atom_size;
 	size_t moof_atom_size;
 	size_t traf_atom_size;
-	size_t mdat_atom_size;
+	size_t mdat_atom_size = 0;
 	size_t result_size;
 	u_char* p;
 
