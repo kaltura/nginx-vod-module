@@ -3,6 +3,7 @@
 #include "ngx_http_vod_utils.h"
 #include "vod/hds/hds_manifest.h"
 #include "vod/hds/hds_fragment.h"
+#include "vod/udrm.h"
 
 // constants
 #define SUPPORTED_CODECS (VOD_CODEC_FLAG(AVC) | VOD_CODEC_FLAG(AAC) | VOD_CODEC_FLAG(MP3))
@@ -29,6 +30,7 @@ ngx_http_vod_hds_handle_manifest(
 		&submodule_context->conf->hds.manifest_config,
 		&submodule_context->r->uri,
 		&submodule_context->media_set,
+		submodule_context->conf->drm_enabled,
 		response);
 	if (rc != VOD_OK)
 	{
@@ -79,11 +81,27 @@ ngx_http_vod_hds_init_frame_processor(
 	ngx_str_t* content_type)
 {
 	hds_muxer_state_t* state;
-	vod_status_t rc;	
-	
+	hds_encryption_params_t encryption_params;
+	vod_status_t rc;
+	drm_info_t* drm_info;
+
+	if (submodule_context->conf->drm_enabled)
+	{
+		drm_info = submodule_context->media_set.sequences[0].drm_info;
+
+		encryption_params.type = HDS_ENC_SELECTIVE;
+		encryption_params.key = drm_info->key;
+		encryption_params.iv = submodule_context->media_set.sequences[0].encryption_key;
+	}
+	else
+	{
+		encryption_params.type = HDS_ENC_NONE;
+	}
+
 	rc = hds_muxer_init_fragment(
 		&submodule_context->request_context,
 		&submodule_context->conf->hds.fragment_config,
+		&encryption_params,
 		submodule_context->request_params.segment_index,
 		submodule_context->media_set.sequences,
 		segment_writer->write_tail,
@@ -244,9 +262,29 @@ ngx_http_vod_hds_parse_drm_info(
 	ngx_str_t* drm_info,
 	void** output)
 {
-	ngx_log_error(NGX_LOG_ERR, submodule_context->request_context.log, 0,
-		"ngx_http_vod_hds_parse_drm_info: drm support for hds not implemented");
-	return VOD_UNEXPECTED;
+	drm_info_t* result;
+	ngx_int_t rc;
+	
+	rc = udrm_parse_response(
+		&submodule_context->request_context,
+		drm_info,
+		FALSE,
+		(void**)&result);
+	if (rc != NGX_OK)
+	{
+		return rc;
+	}
+
+	if (result->pssh_array.count != 1)
+	{
+		ngx_log_error(NGX_LOG_ERR, submodule_context->request_context.log, 0,
+			"ngx_http_vod_hds_parse_drm_info: pssh array must contain a single element");
+		return NGX_ERROR;
+	}
+
+	*output = result;
+
+	return NGX_OK;
 }
 
 DEFINE_SUBMODULE(hds);

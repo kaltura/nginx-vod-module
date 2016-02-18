@@ -2,6 +2,7 @@
 #include "hds_fragment.h"
 #include "hds_amf0_encoder.h"
 #include "../mp4/mp4_defs.h"
+#include "../udrm.h"
 
 // manifest constants
 #define HDS_MANIFEST_HEADER								\
@@ -34,6 +35,13 @@
 #define HDS_BOOTSTRAP_VOD_FOOTER						\
 	"</bootstrapInfo>\n"
 
+#define HDS_DRM_ADDITIONAL_HEADER_PREFIX				\
+	"  <drmAdditionalHeader\n"							\
+	"    id=\"drmMetadata%uD\">\n      "
+
+#define HDS_DRM_ADDITIONAL_HEADER_SUFFIX				\
+	"\n  </drmAdditionalHeader>\n"
+
 #define HDS_MEDIA_HEADER_PREFIX_VIDEO					\
 	"  <media\n"										\
 	"    bitrate=\"%uD\"\n"								\
@@ -51,6 +59,11 @@
 	"    bootstrapInfoId=\"bootstrap%uD\">\n"			\
 	"    <metadata>"
 
+#define HDS_MEDIA_HEADER_SUFFIX_DRM						\
+	"\"\n"												\
+	"    bootstrapInfoId=\"bootstrap%uD\"\n"			\
+	"    drmAdditionalHeaderId=\"drmMetadata%uD\">\n"	\
+	"    <metadata>"
 
 #define HDS_MEDIA_FOOTER								\
 	"</metadata>\n"										\
@@ -58,6 +71,7 @@
 
 #define HDS_MANIFEST_FOOTER								\
 	"</manifest>\n"
+
 
 #define AFRT_BASE_ATOM_SIZE (ATOM_HEADER_SIZE + sizeof(afrt_atom_t))
 #define ASRT_ATOM_SIZE (ATOM_HEADER_SIZE + sizeof(asrt_atom_t) + sizeof(asrt_entry_t))
@@ -277,6 +291,7 @@ hds_packager_build_manifest(
 	hds_manifest_config_t* conf,
 	vod_str_t* manifest_id,
 	media_set_t* media_set,
+	bool_t drm_enabled,
 	vod_str_t* result)
 {
 	segmenter_conf_t* segmenter_conf = media_set->segmenter_conf;
@@ -284,6 +299,7 @@ hds_packager_build_manifest(
 	media_sequence_t* cur_sequence;
 	media_track_t* track;
 	segment_durations_t* segment_durations;
+	vod_str_t* drm_metadata;
 	uint32_t bitrate;
 	uint32_t index;
 	uint32_t abst_atom_size;
@@ -359,12 +375,22 @@ hds_packager_build_manifest(
 				sizeof(HDS_BOOTSTRAP_LIVE_SUFFIX) - 1;
 			break;
 		}
-		
+
+		if (drm_enabled)
+		{
+			drm_metadata = &((drm_info_t*)cur_sequence->drm_info)->pssh_array.first->data;
+
+			result_size += 
+				sizeof(HDS_DRM_ADDITIONAL_HEADER_PREFIX) - 1 + VOD_INT32_LEN +
+				drm_metadata->len +
+				sizeof(HDS_DRM_ADDITIONAL_HEADER_SUFFIX) - 1;
+		}
+
 		result_size += 
 			sizeof(HDS_MEDIA_HEADER_PREFIX_VIDEO) - 1 + 3 * VOD_INT32_LEN +
 				conf->fragment_file_name_prefix.len + 
 				sizeof("-f-v-a-") - 1 + 3 * VOD_INT32_LEN + 
-			sizeof(HDS_MEDIA_HEADER_SUFFIX) - 1 + VOD_INT32_LEN + 
+			sizeof(HDS_MEDIA_HEADER_SUFFIX_DRM) - 1 + 2 * VOD_INT32_LEN + 
 				vod_base64_encoded_length(amf0_max_total_size) +
 			sizeof(HDS_MEDIA_FOOTER) - 1;
 	}
@@ -438,7 +464,21 @@ hds_packager_build_manifest(
 		}
 
 		index++;
+	}
 
+	if (drm_enabled)
+	{
+		index = 0;
+		for (cur_sequence = media_set->sequences; cur_sequence < media_set->sequences_end; cur_sequence++)
+		{
+			drm_metadata = &((drm_info_t*)cur_sequence->drm_info)->pssh_array.first->data;
+
+			p = vod_sprintf(p, HDS_DRM_ADDITIONAL_HEADER_PREFIX, index);
+			p = vod_copy(p, drm_metadata->data, drm_metadata->len);
+			p = vod_copy(p, HDS_DRM_ADDITIONAL_HEADER_SUFFIX, sizeof(HDS_DRM_ADDITIONAL_HEADER_SUFFIX) - 1);
+
+			index++;
+		}
 	}
 
 	// media tags
@@ -486,7 +526,15 @@ hds_packager_build_manifest(
 		}
 		*p++ = '-';
 
-		p = vod_sprintf(p, HDS_MEDIA_HEADER_SUFFIX, index++);
+		if (drm_enabled)
+		{
+			p = vod_sprintf(p, HDS_MEDIA_HEADER_SUFFIX_DRM, index, index);
+		}
+		else
+		{
+			p = vod_sprintf(p, HDS_MEDIA_HEADER_SUFFIX, index);
+		}
+		index++;
 
 		p = hds_amf0_write_base64_metadata(p, temp_buffer, media_set, cur_sequence_tracks);
 

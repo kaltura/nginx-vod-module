@@ -1050,7 +1050,7 @@ hls_muxer_simulate_get_segment_size(hls_muxer_state_t* state, size_t* result)
 	segment_size = state->queue.cur_offset;
 	if (state->encrypted_write_context != NULL)
 	{
-		segment_size = aes_round_to_block(segment_size);
+		segment_size = aes_round_up_to_block(segment_size);
 	}
 
 	*result = segment_size;

@@ -42,6 +42,7 @@ ngx_int_t
 udrm_parse_response(
 	request_context_t* request_context,
 	ngx_str_t* drm_info, 
+	bool_t base64_decode_pssh,
 	void** output)
 {
 	drm_info_t* result;
@@ -175,12 +176,26 @@ udrm_parse_response(
 			return NGX_ERROR;
 		}
 
-		rc = parse_utils_parse_variable_base64_string(request_context->pool, &pssh_values[PSSH_PARAM_DATA]->v.str, &cur_output_pssh->data);
-		if (rc != VOD_JSON_OK)
+		if (base64_decode_pssh)
 		{
-			ngx_log_error(NGX_LOG_ERR, request_context->log, 0,
-				"udrm_parse_response: parse_utils_parse_variable_base64_string(data) failed %i", rc);
-			return NGX_ERROR;
+			rc = parse_utils_parse_variable_base64_string(request_context->pool, &pssh_values[PSSH_PARAM_DATA]->v.str, &cur_output_pssh->data);
+			if (rc != VOD_JSON_OK)
+			{
+				ngx_log_error(NGX_LOG_ERR, request_context->log, 0,
+					"udrm_parse_response: parse_utils_parse_variable_base64_string(data) failed %i", rc);
+				return NGX_ERROR;
+			}
+		}
+		else
+		{
+			cur_output_pssh->data.data = vod_pstrdup(request_context->pool, &pssh_values[PSSH_PARAM_DATA]->v.str);
+			if (cur_output_pssh->data.data == NULL)
+			{
+				ngx_log_debug0(NGX_LOG_DEBUG_HTTP, request_context->log, 0,
+					"udrm_parse_response: vod_pstrdup failed");
+				return NGX_ERROR;
+			}
+			cur_output_pssh->data.len = pssh_values[PSSH_PARAM_DATA]->v.str.len;
 		}
 	}
 

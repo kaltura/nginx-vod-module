@@ -95,6 +95,7 @@ NGX_ADDON_DEPS="$NGX_ADDON_DEPS                                     \
                 $ngx_addon_dir/ngx_http_vod_utils.h                 \
                 $ngx_addon_dir/ngx_perf_counters.h                  \
                 $ngx_addon_dir/ngx_perf_counters_x.h                \
+                $ngx_addon_dir/vod/aes_defs.h                       \
                 $ngx_addon_dir/vod/avc_defs.h                       \
                 $ngx_addon_dir/vod/bit_read_stream.h                \
                 $ngx_addon_dir/vod/buffer_pool.h                    \
@@ -111,6 +112,7 @@ NGX_ADDON_DEPS="$NGX_ADDON_DEPS                                     \
                 $ngx_addon_dir/vod/filters/rate_filter.h            \
                 $ngx_addon_dir/vod/hds/hds_amf0_encoder.h           \
                 $ngx_addon_dir/vod/hds/hds_amf0_fields_x.h          \
+                $ngx_addon_dir/vod/hds/hds_encryption.h             \
                 $ngx_addon_dir/vod/hds/hds_fragment.h               \
                 $ngx_addon_dir/vod/hds/hds_manifest.h               \
                 $ngx_addon_dir/vod/hls/adts_encoder_filter.h        \

@@ -24,6 +24,7 @@ vod_status_t hds_packager_build_manifest(
 	hds_manifest_config_t* conf,
 	vod_str_t* manifest_id,
 	media_set_t* media_set,
+	bool_t drm_enabled,
 	vod_str_t* result);
 
 #endif // __HDS_MANIFEST_H__

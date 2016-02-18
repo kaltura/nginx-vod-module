@@ -69,7 +69,7 @@ aes_cbc_encrypt(
 	u_char* output;
 	int out_size;
 
-	output = vod_alloc(state->request_context->pool, aes_round_to_block(src->len) + AES_BLOCK_SIZE);
+	output = vod_alloc(state->request_context->pool, aes_round_up_to_block(src->len) + AES_BLOCK_SIZE);
 	if (output == NULL)
 	{
 		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, state->request_context->log, 0,
@@ -109,7 +109,7 @@ aes_cbc_encrypt_write(
 	uint32_t size)
 {
 	u_char* encrypted_buffer;
-	size_t required_size = aes_round_to_block(size);
+	size_t required_size = aes_round_up_to_block(size);
 	size_t buffer_size = required_size;
 	int out_size;
 
