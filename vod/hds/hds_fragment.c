@@ -572,6 +572,10 @@ hds_muxer_init_track(
 			return rc;
 		}
 	}
+	else
+	{
+		cur_stream->sound_info = 0;
+	}
 	
 	cur_stream->tag_size = hds_muxer_get_tag_size(cur_track);
 
@@ -943,8 +947,6 @@ hds_muxer_init_fragment(
 	vod_status_t rc;
 	uint32_t track_id = 1;
 	uint32_t* output_offset;
-	uint32_t frame_metadata_size;
-	uint32_t codec_config_size;
 	uint32_t mdat_header_size;
 	size_t afra_atom_size;
 	size_t moof_atom_size;
@@ -966,22 +968,6 @@ hds_muxer_init_fragment(
 		vod_log_debug1(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
 			"hds_muxer_init_fragment: hds_muxer_init_state failed %i", rc);
 		return rc;
-	}
-
-	// get moof atom size
-	for (cur_clip = sequence->filtered_clips; cur_clip < sequence->filtered_clips_end; cur_clip++)
-	{
-		codec_config_size = 0;
-
-		for (cur_track = cur_clip->first_track; cur_track < cur_clip->last_track; cur_track++)
-		{
-			frame_metadata_size = hds_muxer_get_tag_size(cur_track) + sizeof(uint32_t);
-
-			if (cur_track->media_info.codec_id != VOD_CODEC_ID_MP3)
-			{
-				codec_config_size += frame_metadata_size + cur_track->media_info.extra_data.len;
-			}
-		}
 	}
 
 	// get the mdat header size
