@@ -253,12 +253,12 @@ ngx_http_vod_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child)
 #endif
 
 	// validate vod_upstream / vod_upstream_host_header used when needed
-	if (conf->request_handler == ngx_http_vod_remote_request_handler || conf->request_handler == ngx_http_vod_mapped_request_handler)
+	if (conf->request_handler == ngx_http_vod_remote_request_handler)
 	{
 		if (conf->upstream_location.len == 0)
 		{
 			ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
-				"\"vod_upstream_location\" is mandatory for remote/mapped modes");
+				"\"vod_upstream_location\" is mandatory for remote mode");
 			return NGX_CONF_ERROR;
 		}
 	}
