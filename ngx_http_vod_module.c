@@ -22,14 +22,13 @@
 #include "vod/filters/filter.h"
 #include "vod/media_set_parser.h"
 
-// enums
 enum {
+	// mapping state machine
 	STATE_MAP_INITIAL,
 	STATE_MAP_OPEN,
 	STATE_MAP_READ,
-};
 
-enum {
+	// main state machine
 	STATE_READ_DRM_INFO,
 	STATE_READ_METADATA_INITIAL,
 	STATE_READ_METADATA_OPEN_FILE,
@@ -2388,7 +2387,7 @@ ngx_http_vod_handle_read_completed(void* context, ngx_int_t rc, ngx_buf_t* buf, 
 			goto finalize_request;
 		}
 	}
-	else if (bytes_read <= 0)
+	else if (bytes_read <= 0 && ctx->state != STATE_MAP_READ)		// Note: the mapping state machine handles the case of empty mapping
 	{
 		ngx_log_error(NGX_LOG_ERR, ctx->submodule_context.request_context.log, 0,
 			"ngx_http_vod_handle_read_completed: bytes read is zero");
