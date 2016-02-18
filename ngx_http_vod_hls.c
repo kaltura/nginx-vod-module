@@ -499,6 +499,7 @@ ngx_http_vod_hls_parse_drm_info(
 	return udrm_parse_response(
 		&submodule_context->request_context,
 		drm_info,
+		TRUE,
 		output);
 }
 

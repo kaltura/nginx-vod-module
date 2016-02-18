@@ -2,16 +2,7 @@
 #define __AES_CBC_ENCRYPT_H__
 
 // includes
-#include "../common.h"
-#if (VOD_HAVE_OPENSSL_EVP)
-#include <openssl/evp.h>
-#endif // (VOD_HAVE_OPENSSL_EVP)
-
-// macros
-#ifndef AES_BLOCK_SIZE
-#define AES_BLOCK_SIZE (16)
-#endif // AES_BLOCK_SIZE
-#define aes_round_to_block(n) (((n) + 0x10) & ~0xf)
+#include "../aes_defs.h"
 
 // typedefs
 typedef struct {

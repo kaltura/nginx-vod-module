@@ -122,6 +122,7 @@ void vod_log_error(vod_uint_t level, vod_log_t *log, int err,
 #define vod_strncasecmp(s1, s2, n) ngx_strncasecmp(s1, s2, n)
 #define vod_atoi(str, len) ngx_atoi(str, len)
 #define vod_atofp(str, len, point) ngx_atofp(str, len, point)
+#define vod_pstrdup(pool, src) ngx_pstrdup(pool, src)
 
 // array functions
 #define vod_array_init(array, pool, n, size) ngx_array_init(array, pool, n, size)
