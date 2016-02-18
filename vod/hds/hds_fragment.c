@@ -179,7 +179,7 @@ hds_muxer_encrypt_init(
 	if (cln == NULL)
 	{
 		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, state->request_context->log, 0,
-			"sample_aes_aac_filter_init: vod_pool_cleanup_add failed");
+			"hds_muxer_encrypt_init: vod_pool_cleanup_add failed");
 		return VOD_ALLOC_FAILED;
 	}
 
@@ -216,7 +216,7 @@ hds_muxer_encrypt_start_frame(hds_muxer_state_t* state)
 	if (1 != EVP_EncryptInit_ex(&state->cipher, EVP_aes_128_cbc(), NULL, state->enc_key, state->enc_iv))
 	{
 		vod_log_error(VOD_LOG_ERR, state->request_context->log, 0,
-			"sample_aes_aac_start_frame: EVP_EncryptInit_ex failed");
+			"hds_muxer_encrypt_start_frame: EVP_EncryptInit_ex failed");
 		return VOD_ALLOC_FAILED;
 	}
 
@@ -257,7 +257,7 @@ hds_muxer_encrypt_write(
 		if (1 != EVP_EncryptUpdate(&state->cipher, out_buffer, &out_size, buffer, cur_size))
 		{
 			vod_log_error(VOD_LOG_ERR, state->request_context->log, 0,
-				"hds_muxer_write_encrypted: EVP_EncryptUpdate failed");
+				"hds_muxer_encrypt_write: EVP_EncryptUpdate failed");
 			return VOD_UNEXPECTED;
 		}
 
@@ -280,7 +280,7 @@ hds_muxer_encrypt_write(
 		if (1 != EVP_EncryptFinal_ex(&state->cipher, out_buffer, &out_size))
 		{
 			vod_log_error(VOD_LOG_ERR, state->request_context->log, 0,
-				"sample_aes_aac_filter_write_frame_body: EVP_EncryptFinal_ex failed");
+				"hds_muxer_encrypt_write: EVP_EncryptFinal_ex failed");
 			return VOD_UNEXPECTED;
 		}
 

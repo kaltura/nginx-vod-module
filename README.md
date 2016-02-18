@@ -8,7 +8,7 @@
 * Working modes:
   1. Local - serve locally accessible files (local disk/NFS mounted)
   2. Remote - serve files accessible via HTTP using range requests
-  3. Mapped - perform an HTTP request to map the input URI to a locally accessible file
+  3. Mapped - serve files according to a specification encoded in JSON format. The JSON can pulled from a remote server, or read from a local file
 
 * Adaptive bitrate support
 
@@ -124,7 +124,7 @@ Where:
 * location - the location specified in the nginx conf
 * fileuri - a URI to the mp4 file:
   * local mode - the full file path is determined according to the root / alias nginx.conf directives
-  * mapped mode - the full file path is determined according to the response from the upstream
+  * mapped mode - the full file path is determined according to the JSON received from the upstream / local file
   * remote mode - the mp4 file is read from upstream in chunks
   * Note: in mapped & remote modes, the URL of the upstream request is `http://<upstream>/<location>/<fileuri>?<extraargs>`
   (extraargs is determined by the vod_upstream_extra_args parameter)
