@@ -2503,10 +2503,12 @@ ngx_http_vod_start_processing_media_file(ngx_http_request_t *r)
 	// update request flags
 	r->root_tested = !r->error_page;
 	r->allow_ranges = 1;
+
+	// set the state machine
+	ctx = ngx_http_get_module_ctx(r, ngx_http_vod_module);
 	ctx->state_machine = ngx_http_vod_run_state_machine;
 
 	// handle serve requests
-	ctx = ngx_http_get_module_ctx(r, ngx_http_vod_module);
 	if (ctx->submodule_context.request == NULL &&
 		ctx->submodule_context.media_set.sources[0]->clip_from == 0 &&
 		ctx->submodule_context.media_set.sources[0]->clip_to == UINT_MAX)
