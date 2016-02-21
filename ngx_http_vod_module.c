@@ -2503,6 +2503,7 @@ ngx_http_vod_start_processing_media_file(ngx_http_request_t *r)
 	// update request flags
 	r->root_tested = !r->error_page;
 	r->allow_ranges = 1;
+	ctx->state_machine = ngx_http_vod_run_state_machine;
 
 	// handle serve requests
 	ctx = ngx_http_get_module_ctx(r, ngx_http_vod_module);
@@ -2570,8 +2571,6 @@ ngx_http_vod_start_processing_media_file(ngx_http_request_t *r)
 	{
 		ctx->state = STATE_READ_METADATA_INITIAL;
 	}
-
-	ctx->state_machine = ngx_http_vod_run_state_machine;
 
 	return ngx_http_vod_run_state_machine(ctx);
 }
