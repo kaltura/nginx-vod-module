@@ -2004,6 +2004,13 @@ ngx_http_vod_finalize_segment_response(ngx_http_vod_ctx_t *ctx)
 	}
 
 	// mark the current buffer as last
+	if (ctx->write_segment_buffer_context.chain_end->buf == NULL)
+	{
+		ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
+			"ngx_http_vod_finalize_segment_response: no buffers were written");
+		return NGX_HTTP_INTERNAL_SERVER_ERROR;
+	}
+
 	ctx->write_segment_buffer_context.chain_end->next = NULL;
 	ctx->write_segment_buffer_context.chain_end->buf->last_buf = 1;
 
@@ -2357,7 +2364,7 @@ ngx_http_vod_run_state_machine(ngx_http_vod_ctx_t *ctx)
 		return NGX_OK;
 	}
 
-	ngx_log_debug1(NGX_LOG_DEBUG_HTTP, ctx->submodule_context.request_context.log, 0,
+	ngx_log_error(NGX_LOG_ERR, ctx->submodule_context.request_context.log, 0,
 		"ngx_http_vod_run_state_machine: invalid state %d", ctx->state);
 	return NGX_HTTP_INTERNAL_SERVER_ERROR;
 }
@@ -3304,6 +3311,11 @@ ngx_http_vod_run_mapped_mode_state_machine(ngx_http_vod_ctx_t *ctx)
 			ctx->state = STATE_MAP_INITIAL;
 			ctx->submodule_context.cur_source++;
 			break;
+
+		default:
+			ngx_log_error(NGX_LOG_ERR, ctx->submodule_context.request_context.log, 0,
+				"ngx_http_vod_run_mapped_mode_state_machine: invalid state %d", ctx->state);
+			return NGX_HTTP_INTERNAL_SERVER_ERROR;
 		}
 	}
 

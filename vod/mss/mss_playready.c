@@ -192,17 +192,17 @@ mss_playready_audio_build_fragment_header(
 }
 
 static vod_status_t
-mss_playready_video_write_fragment_header(mp4_encrypt_video_state_t* state)
+mss_playready_video_build_fragment_header(
+	mp4_encrypt_video_state_t* state,
+	vod_str_t* fragment_header)
 {
 	mss_playready_video_extra_traf_atoms_context writer_context;
-	vod_str_t fragment_header;
 	size_t total_fragment_size;
-	vod_status_t rc;
 
 	writer_context.uuid_piff_atom_size = ATOM_HEADER_SIZE + sizeof(uuid_piff_atom_t) + state->auxiliary_data.pos - state->auxiliary_data.start;
 	writer_context.state = state;
 
-	rc = mss_packager_build_fragment_header(
+	return mss_packager_build_fragment_header(
 		state->base.request_context,
 		state->base.media_set,
 		state->base.segment_index,
@@ -210,27 +210,8 @@ mss_playready_video_write_fragment_header(mp4_encrypt_video_state_t* state)
 		mss_playready_video_write_extra_traf_atoms,
 		&writer_context,
 		FALSE,
-		&fragment_header,
+		fragment_header,
 		&total_fragment_size);
-	if (rc != VOD_OK)
-	{
-		vod_log_debug1(VOD_LOG_DEBUG_LEVEL, state->base.request_context->log, 0,
-			"mss_playready_video_write_fragment_header: mss_packager_build_fragment_header failed %i", rc);
-		return rc;
-	}
-
-	rc = state->base.segment_writer.write_head(
-		state->base.segment_writer.context,
-		fragment_header.data,
-		fragment_header.len);
-	if (rc != VOD_OK)
-	{
-		vod_log_debug1(VOD_LOG_DEBUG_LEVEL, state->base.request_context->log, 0,
-			"mss_playready_video_write_fragment_header: write_head failed %i", rc);
-		return rc;
-	}
-
-	return VOD_OK;
 }
 
 static u_char*
@@ -323,9 +304,11 @@ mss_playready_get_fragment_writer(
 			request_context,
 			media_set,
 			segment_index,
-			mss_playready_video_write_fragment_header,
+			mss_playready_video_build_fragment_header,
 			segment_writer,
-			iv);
+			iv, 
+			fragment_header,
+			total_fragment_size);
 
 	case MEDIA_TYPE_AUDIO:
 		rc = mp4_encrypt_audio_get_fragment_writer(
