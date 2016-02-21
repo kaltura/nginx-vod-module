@@ -191,10 +191,6 @@ TEST_CASES = [
         ('/hls', 'index.m3u8', 200, None),
         ('', 'clipTo/10000/a.mp4', 200, None),
     ]),
-    ('NON_AAC_AUDIO', lambda: convertWithFfmpeg('-vcodec copy -codec:a libmp3lame'), [
-        ('/hls', 'index.m3u8', 200, 'unsupported format - media type 1'),
-        ('', 'clipTo/10000/a.mp4', 200, None),
-    ]),
     ('NON_H264_VIDEO', lambda: convertWithFfmpeg('-acodec copy -c:v mpeg4'), [
         ('/hls', 'index.m3u8', 200, 'unsupported format - media type 0'),
         ('', 'clipTo/10000/a.mp4', 200, None),
