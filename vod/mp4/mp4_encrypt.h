@@ -14,7 +14,9 @@
 struct mp4_encrypt_video_state_s;
 typedef struct mp4_encrypt_video_state_s mp4_encrypt_video_state_t;
 
-typedef vod_status_t (*mp4_encrypt_video_write_fragment_header_t)(mp4_encrypt_video_state_t* state);
+typedef vod_status_t (*mp4_encrypt_video_build_fragment_header_t)(
+	mp4_encrypt_video_state_t* state, 
+	vod_str_t* header);
 
 typedef struct {
 	segment_writer_t segment_writer;
@@ -51,7 +53,7 @@ struct mp4_encrypt_video_state_s {
 	mp4_encrypt_state_t base;
 
 	// fixed
-	mp4_encrypt_video_write_fragment_header_t write_fragment_header;
+	mp4_encrypt_video_build_fragment_header_t build_fragment_header;
 	uint32_t nal_packet_size_length;
 
 	// auxiliary data state
@@ -78,9 +80,11 @@ vod_status_t mp4_encrypt_video_get_fragment_writer(
 	request_context_t* request_context,
 	media_set_t* media_set,
 	uint32_t segment_index,
-	mp4_encrypt_video_write_fragment_header_t write_fragment_header,
+	mp4_encrypt_video_build_fragment_header_t build_fragment_header,
 	segment_writer_t* segment_writer,
-	const u_char* iv);
+	const u_char* iv, 
+	vod_str_t* fragment_header,
+	size_t* total_fragment_size);
 
 vod_status_t mp4_encrypt_audio_get_fragment_writer(
 	segment_writer_t* result,

@@ -328,11 +328,11 @@ edash_packager_video_write_encryption_atoms(void* context, u_char* p, size_t mda
 }
 
 static vod_status_t
-edash_packager_video_write_fragment_header(mp4_encrypt_video_state_t* state)
+edash_packager_video_build_fragment_header(
+	mp4_encrypt_video_state_t* state,
+	vod_str_t* fragment_header)
 {
 	dash_fragment_header_extensions_t header_extensions;
-	vod_str_t fragment_header;
-	vod_status_t rc;
 	size_t total_fragment_size;
 
 	// get the header extensions
@@ -344,34 +344,15 @@ edash_packager_video_write_fragment_header(mp4_encrypt_video_state_t* state)
 	header_extensions.write_extra_traf_atoms_context = state;
 
 	// build the fragment header
-	rc = dash_packager_build_fragment_header(
+	return dash_packager_build_fragment_header(
 		state->base.request_context,
 		state->base.media_set,
 		state->base.segment_index,
 		0,
 		&header_extensions,
 		FALSE,
-		&fragment_header,
+		fragment_header,
 		&total_fragment_size);
-	if (rc != VOD_OK)
-	{
-		vod_log_debug1(VOD_LOG_DEBUG_LEVEL, state->base.request_context->log, 0,
-			"edash_packager_video_write_fragment_header: dash_packager_build_fragment_header failed %i", rc);
-		return rc;
-	}
-
-	rc = state->base.segment_writer.write_head(
-		state->base.segment_writer.context,
-		fragment_header.data, 
-		fragment_header.len);
-	if (rc != VOD_OK)
-	{
-		vod_log_debug1(VOD_LOG_DEBUG_LEVEL, state->base.request_context->log, 0,
-			"edash_packager_video_write_fragment_header: write_head failed %i", rc);
-		return rc;
-	}
-
-	return VOD_OK;
 }
 
 ////// audio fragment functions
@@ -523,9 +504,11 @@ edash_packager_get_fragment_writer(
 			request_context, 
 			media_set, 
 			segment_index, 
-			edash_packager_video_write_fragment_header,
+			edash_packager_video_build_fragment_header,
 			segment_writer, 
-			iv);
+			iv, 
+			fragment_header,
+			total_fragment_size);
 
 	case MEDIA_TYPE_AUDIO:
 		rc = mp4_encrypt_audio_get_fragment_writer(

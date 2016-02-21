@@ -298,6 +298,7 @@ static vod_status_t
 mp4_encrypt_video_write_buffer(void* context, u_char* buffer, uint32_t size)
 {
 	mp4_encrypt_video_state_t* state = (mp4_encrypt_video_state_t*)context;
+	vod_str_t fragment_header;
 	u_char* buffer_end = buffer + size;
 	u_char* cur_pos = buffer;
 	u_char* write_end;
@@ -457,11 +458,23 @@ mp4_encrypt_video_write_buffer(void* context, u_char* buffer, uint32_t size)
 
 			mp4_encrypt_video_prepare_saiz_saio(state);
 
-			rc = state->write_fragment_header(state);
+			rc = state->build_fragment_header(state, &fragment_header);
 			if (rc != VOD_OK)
 			{
 				return rc;
 			}
+
+			rc = state->base.segment_writer.write_head(
+				state->base.segment_writer.context,
+				fragment_header.data,
+				fragment_header.len);
+			if (rc != VOD_OK)
+			{
+				vod_log_debug1(VOD_LOG_DEBUG_LEVEL, state->base.request_context->log, 0,
+					"mp4_encrypt_video_write_buffer: write_head failed %i", rc);
+				return rc;
+			}
+
 			break;
 		}
 	}
@@ -475,9 +488,11 @@ mp4_encrypt_video_get_fragment_writer(
 	request_context_t* request_context,
 	media_set_t* media_set,
 	uint32_t segment_index,
-	mp4_encrypt_video_write_fragment_header_t write_fragment_header,
+	mp4_encrypt_video_build_fragment_header_t build_fragment_header,
 	segment_writer_t* segment_writer,
-	const u_char* iv)
+	const u_char* iv, 
+	vod_str_t* fragment_header, 
+	size_t* total_fragment_size)
 {
 	media_sequence_t* sequence = &media_set->sequences[0];
 	mp4_encrypt_video_state_t* state;
@@ -503,7 +518,7 @@ mp4_encrypt_video_get_fragment_writer(
 	}
 
 	// fixed members
-	state->write_fragment_header = write_fragment_header;
+	state->build_fragment_header = build_fragment_header;
 
 	// for progressive AVC a frame usually contains a single nalu, except the first frame which may contain codec copyright info
 	initial_size = 
@@ -531,13 +546,15 @@ mp4_encrypt_video_get_fragment_writer(
 		// an empty segment - write won't be called so we need to write the header here
 		mp4_encrypt_video_prepare_saiz_saio(state);
 
-		rc = state->write_fragment_header(state);
+		rc = state->build_fragment_header(state, fragment_header);
 		if (rc != VOD_OK)
 		{
 			vod_log_debug1(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
 				"mp4_encrypt_video_get_fragment_writer: write_fragment_header failed %i", rc);
 			return rc;
 		}
+
+		*total_fragment_size = fragment_header->len;
 
 		return VOD_OK;
 	}
