@@ -235,6 +235,42 @@ ngx_http_vod_set_suburi_var(ngx_http_request_t *r, ngx_http_variable_value_t *v,
 	return NGX_OK;
 }
 
+ngx_int_t
+ngx_http_vod_set_sequence_id_var(ngx_http_request_t *r, ngx_http_variable_value_t *v, uintptr_t data)
+{
+	ngx_http_vod_ctx_t *ctx;
+	ngx_str_t* value;
+
+	ctx = ngx_http_get_module_ctx(r, ngx_http_vod_module);
+
+	if (ctx == NULL ||
+		ctx->submodule_context.cur_sequence < ctx->submodule_context.media_set.sequences ||
+		ctx->submodule_context.cur_sequence >= ctx->submodule_context.media_set.sequences_end)
+	{
+		v->not_found = 1;
+		return NGX_OK;
+	}
+
+	value = &ctx->submodule_context.cur_sequence->id;
+	if (value->len == 0)
+	{
+		value = &ctx->submodule_context.cur_sequence->stripped_uri;
+		if (value->len == 0)
+		{
+			v->not_found = 1;
+			return NGX_OK;
+		}
+	}
+
+	v->valid = 1;
+	v->no_cacheable = 1;
+	v->not_found = 0;
+	v->len = value->len;
+	v->data = value->data;
+
+	return NGX_OK;
+}
+
 ////// Perf counter wrappers
 
 static ngx_flag_t

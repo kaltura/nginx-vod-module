@@ -60,6 +60,7 @@ static json_parser_union_type_def_t media_clip_union_types[] = {
 };
 
 static json_object_value_def_t media_sequence_params[] = {
+	{ vod_string("id"), VOD_JSON_STRING, offsetof(media_sequence_t, id), media_set_parse_null_term_string },
 	{ vod_string("clips"), VOD_JSON_ARRAY, offsetof(media_sequence_t, clips), media_set_parse_sequence_clips },
 	{ vod_null_string, 0, 0, NULL }
 };
@@ -553,6 +554,7 @@ media_set_parse_sequences(
 
 		context->base.sequence = cur_output;
 
+		cur_output->id.len = 0;
 		cur_output->clips = NULL;
 
 		rc = vod_json_parse_object_values(
