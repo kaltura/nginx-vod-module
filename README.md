@@ -403,6 +403,9 @@ Mandatory fields:
 	the durations array specified on the set. If the durations array is not specified,
 	the clips array must contain a single element.
 	
+Optional fields:
+* `id` - a string that identifies the sequence. The id can be retrieved by `$vod_sequence_id`.
+
 #### Clip (abstract)
 
 Mandatory fields:
@@ -1212,6 +1215,7 @@ The module adds the following nginx variables:
   `$vod_suburi` will have the value `http://<domain>/<location>/<prefix><middle1><postfix>/<filename>` 
   when processing the first uri.
 * `$vod_filepath` - in local / mapped modes, the file path of current sub uri. In remote mode, has the same value as `$vod_suburi`.
+* `$vod_sequence_id` - contains the id of the current sequence, if no id was specified in the mapping json this variable will be the same as `$vod_suburi`.
 
 Note: Configuration directives that can accept variables are explicitly marked as such.
 

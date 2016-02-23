@@ -717,6 +717,7 @@ ngx_http_vod_parse_uri_path(
 		cur_sequence->index = i;
 		cur_sequence->stripped_uri = cur_source->stripped_uri;
 		cur_sequence->mapped_uri = cur_source->stripped_uri;
+		cur_sequence->id.len = 0;
 
 		cur_source++;
 		cur_source_ptr++;

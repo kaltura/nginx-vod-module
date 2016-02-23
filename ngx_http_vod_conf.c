@@ -11,12 +11,13 @@
 #include "vod/common.h"
 #include "vod/udrm.h"
 
-static ngx_str_t  ngx_http_vod_last_modified_default_types[] = {
+static ngx_str_t ngx_http_vod_last_modified_default_types[] = {
 	ngx_null_string
 };
 
-static ngx_str_t  ngx_http_vod_filepath = ngx_string("vod_filepath");
-static ngx_str_t  ngx_http_vod_suburi = ngx_string("vod_suburi");
+static ngx_str_t ngx_http_vod_filepath = ngx_string("vod_filepath");
+static ngx_str_t ngx_http_vod_suburi = ngx_string("vod_suburi");
+static ngx_str_t ngx_http_vod_sequence_id = ngx_string("vod_sequence_id");
 
 static ngx_int_t
 ngx_http_vod_add_variables(ngx_conf_t *cf)
@@ -40,6 +41,15 @@ ngx_http_vod_add_variables(ngx_conf_t *cf)
 	}
 
 	var->get_handler = ngx_http_vod_set_suburi_var;
+
+	// sequence id
+	var = ngx_http_add_variable(cf, &ngx_http_vod_sequence_id, NGX_HTTP_VAR_NOCACHEABLE);
+	if (var == NULL)
+	{
+		return NGX_ERROR;
+	}
+
+	var->get_handler = ngx_http_vod_set_sequence_id_var;
 
 	return NGX_OK;
 }

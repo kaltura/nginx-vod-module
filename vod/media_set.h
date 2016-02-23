@@ -47,6 +47,7 @@ struct media_sequence_s {
 	uint32_t index;
 	media_clip_t** clips;						// [clip_count]
 	vod_str_t stripped_uri;
+	vod_str_t id;
 
 	// initialized after mapping
 	vod_str_t mapped_uri;
