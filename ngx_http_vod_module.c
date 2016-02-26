@@ -3145,7 +3145,8 @@ ngx_http_vod_apply_mapping(ngx_http_vod_ctx_t *ctx, ngx_str_t* mapping)
 
 	if (mapped_media_set.sequence_count == 1 &&
 		mapped_media_set.durations == NULL &&
-		mapped_media_set.sequences[0].clips[0]->type == MEDIA_CLIP_SOURCE)
+		mapped_media_set.sequences[0].clips[0]->type == MEDIA_CLIP_SOURCE && 
+		!mapped_media_set.has_multi_sequences)
 	{
 		mapped_source = (media_clip_source_t*)*mapped_media_set.sequences[0].clips;
 
