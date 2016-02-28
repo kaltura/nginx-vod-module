@@ -184,6 +184,16 @@ aes_cbc_encrypt_init(
 }
 
 vod_status_t 
+aes_cbc_encrypt(
+	aes_cbc_encrypt_context_t* state,
+	vod_str_t* dest,
+	vod_str_t* src,
+	bool_t flush)
+{
+	return VOD_UNEXPECTED;
+}
+
+vod_status_t 
 aes_cbc_encrypt_write(
 	aes_cbc_encrypt_context_t* ctx,
 	u_char* buffer,

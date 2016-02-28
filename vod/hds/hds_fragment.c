@@ -143,9 +143,11 @@ struct hds_muxer_state_s {
 
 	// encryption state
 	hds_encryption_type_t enc_type;
+#if (VOD_HAVE_OPENSSL_EVP)
 	u_char enc_key[HDS_AES_KEY_SIZE];
 	u_char enc_iv[AES_BLOCK_SIZE];
 	EVP_CIPHER_CTX cipher;
+#endif //(VOD_HAVE_OPENSSL_EVP)
 };
 
 typedef struct {
@@ -161,6 +163,7 @@ static u_char hds_encryption_tag_header[] = {
 
 static vod_status_t hds_muxer_start_frame(hds_muxer_state_t* state);
 
+#if (VOD_HAVE_OPENSSL_EVP)
 ////// encryption functions
 static void
 hds_muxer_encrypt_cleanup(hds_muxer_state_t* state)
@@ -289,6 +292,39 @@ hds_muxer_encrypt_write(
 
 	return VOD_OK;
 }
+#else
+
+// empty stubs
+static vod_status_t
+hds_muxer_encrypt_init(
+	hds_muxer_state_t* state,
+	hds_encryption_params_t* encryption_params)
+{
+	return VOD_UNEXPECTED;
+}
+
+static u_char*
+hds_muxer_encrypt_write_header(hds_muxer_state_t* state, u_char* p)
+{
+	return p;
+}
+
+static vod_status_t
+hds_muxer_encrypt_start_frame(hds_muxer_state_t* state)
+{
+	return VOD_UNEXPECTED;
+}
+
+static vod_status_t
+hds_muxer_encrypt_write(
+	hds_muxer_state_t* state, 
+	u_char* buffer, 
+	uint32_t size, 
+	bool_t frame_done)
+{
+	return VOD_UNEXPECTED;
+}
+#endif //(VOD_HAVE_OPENSSL_EVP)
 
 ////// Stateless write functions
 
