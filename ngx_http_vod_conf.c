@@ -18,6 +18,9 @@ static ngx_str_t ngx_http_vod_last_modified_default_types[] = {
 static ngx_str_t ngx_http_vod_filepath = ngx_string("vod_filepath");
 static ngx_str_t ngx_http_vod_suburi = ngx_string("vod_suburi");
 static ngx_str_t ngx_http_vod_sequence_id = ngx_string("vod_sequence_id");
+static ngx_str_t ngx_http_vod_clip_id = ngx_string("vod_clip_id");
+static ngx_str_t ngx_http_vod_dynamic_mapping = ngx_string("vod_dynamic_mapping");
+static ngx_str_t ngx_http_vod_request_params = ngx_string("vod_request_params");
 
 static ngx_int_t
 ngx_http_vod_add_variables(ngx_conf_t *cf)
@@ -50,6 +53,33 @@ ngx_http_vod_add_variables(ngx_conf_t *cf)
 	}
 
 	var->get_handler = ngx_http_vod_set_sequence_id_var;
+
+	// clip id
+	var = ngx_http_add_variable(cf, &ngx_http_vod_clip_id, NGX_HTTP_VAR_NOCACHEABLE);
+	if (var == NULL)
+	{
+		return NGX_ERROR;
+	}
+
+	var->get_handler = ngx_http_vod_set_clip_id_var;
+
+	// dynamic mapping
+	var = ngx_http_add_variable(cf, &ngx_http_vod_dynamic_mapping, NGX_HTTP_VAR_NOCACHEABLE);
+	if (var == NULL)
+	{
+		return NGX_ERROR;
+	}
+
+	var->get_handler = ngx_http_vod_set_dynamic_mapping_var;
+
+	// request params
+	var = ngx_http_add_variable(cf, &ngx_http_vod_request_params, NGX_HTTP_VAR_NOCACHEABLE);
+	if (var == NULL)
+	{
+		return NGX_ERROR;
+	}
+
+	var->get_handler = ngx_http_vod_set_request_params_var;
 
 	return NGX_OK;
 }
@@ -182,6 +212,11 @@ ngx_http_vod_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child)
 		conf->metadata_cache = prev->metadata_cache;
 	}
 
+	if (conf->dynamic_mapping_cache == NULL)
+	{
+		conf->dynamic_mapping_cache = prev->dynamic_mapping_cache;
+	}
+
 	for (cache_type = 0; cache_type < CACHE_TYPE_COUNT; cache_type++)
 	{
 		if (conf->response_cache[cache_type] == NULL)
@@ -189,9 +224,9 @@ ngx_http_vod_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child)
 			conf->response_cache[cache_type] = prev->response_cache[cache_type];
 		}
 
-		if (conf->path_mapping_cache[cache_type] == NULL)
+		if (conf->mapping_cache[cache_type] == NULL)
 		{
-			conf->path_mapping_cache[cache_type] = prev->path_mapping_cache[cache_type];
+			conf->mapping_cache[cache_type] = prev->mapping_cache[cache_type];
 		}
 
 		ngx_conf_merge_value(conf->expires[cache_type], prev->expires[cache_type], -1);
@@ -218,6 +253,26 @@ ngx_http_vod_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child)
 	ngx_conf_merge_str_value(conf->path_response_prefix, prev->path_response_prefix, "{\"sequences\":[{\"clips\":[{\"type\":\"source\",\"path\":\"");
 	ngx_conf_merge_str_value(conf->path_response_postfix, prev->path_response_postfix, "\"}]}]}");
 	ngx_conf_merge_size_value(conf->max_mapping_response_size, prev->max_mapping_response_size, 1024);
+	if (conf->dynamic_clip_map_uri == NULL)
+	{
+		conf->dynamic_clip_map_uri = prev->dynamic_clip_map_uri;
+	}
+	if (conf->source_clip_map_uri == NULL)
+	{
+		conf->source_clip_map_uri = prev->source_clip_map_uri;
+	}
+	if (conf->redirect_segments_url == NULL)
+	{
+		conf->redirect_segments_url = prev->redirect_segments_url;
+	}
+	if (conf->media_set_map_uri == NULL)
+	{
+		conf->media_set_map_uri = prev->media_set_map_uri;
+	}
+	if (conf->apply_dynamic_mapping == NULL)
+	{
+		conf->apply_dynamic_mapping = prev->apply_dynamic_mapping;
+	}
 
 	ngx_conf_merge_str_value(conf->fallback_upstream_location, prev->fallback_upstream_location, "");
 	ngx_conf_merge_str_value(conf->proxy_header.key, prev->proxy_header.key, "X-Kaltura-Proxy");
@@ -907,18 +962,25 @@ ngx_command_t ngx_http_vod_commands[] = {
 	NULL },
 
 	// path request parameters - mapped mode only
-	{ ngx_string("vod_path_mapping_cache"),
+	{ ngx_string("vod_mapping_cache"),
 	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE123,
 	ngx_http_vod_cache_command,
 	NGX_HTTP_LOC_CONF_OFFSET,
-	offsetof(ngx_http_vod_loc_conf_t, path_mapping_cache[CACHE_TYPE_VOD]),
+	offsetof(ngx_http_vod_loc_conf_t, mapping_cache[CACHE_TYPE_VOD]),
 	NULL },
 
-	{ ngx_string("vod_live_path_mapping_cache"),
+	{ ngx_string("vod_live_mapping_cache"),
 	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE123,
 	ngx_http_vod_cache_command,
 	NGX_HTTP_LOC_CONF_OFFSET,
-	offsetof(ngx_http_vod_loc_conf_t, path_mapping_cache[CACHE_TYPE_LIVE]),
+	offsetof(ngx_http_vod_loc_conf_t, mapping_cache[CACHE_TYPE_LIVE]),
+	NULL },
+
+	{ ngx_string("vod_dynamic_mapping_cache"),
+	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE123,
+	ngx_http_vod_cache_command,
+	NGX_HTTP_LOC_CONF_OFFSET,
+	offsetof(ngx_http_vod_loc_conf_t, dynamic_mapping_cache),
 	NULL },
 
 	{ ngx_string("vod_path_response_prefix"),
@@ -940,6 +1002,41 @@ ngx_command_t ngx_http_vod_commands[] = {
 	ngx_conf_set_size_slot,
 	NGX_HTTP_LOC_CONF_OFFSET,
 	offsetof(ngx_http_vod_loc_conf_t, max_mapping_response_size),
+	NULL },
+
+	{ ngx_string("vod_dynamic_clip_map_uri"),
+	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1,
+	ngx_http_set_complex_value_slot,
+	NGX_HTTP_LOC_CONF_OFFSET,
+	offsetof(ngx_http_vod_loc_conf_t, dynamic_clip_map_uri),
+	NULL },
+
+	{ ngx_string("vod_source_clip_map_uri"),
+	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1,
+	ngx_http_set_complex_value_slot,
+	NGX_HTTP_LOC_CONF_OFFSET,
+	offsetof(ngx_http_vod_loc_conf_t, source_clip_map_uri),
+	NULL },
+
+	{ ngx_string("vod_redirect_segments_url"),
+	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1,
+	ngx_http_set_complex_value_slot,
+	NGX_HTTP_LOC_CONF_OFFSET,
+	offsetof(ngx_http_vod_loc_conf_t, redirect_segments_url),
+	NULL },
+
+	{ ngx_string("vod_media_set_map_uri"),
+	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1,
+	ngx_http_set_complex_value_slot,
+	NGX_HTTP_LOC_CONF_OFFSET,
+	offsetof(ngx_http_vod_loc_conf_t, media_set_map_uri),
+	NULL },
+
+	{ ngx_string("vod_apply_dynamic_mapping"),
+	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1,
+	ngx_http_set_complex_value_slot,
+	NGX_HTTP_LOC_CONF_OFFSET,
+	offsetof(ngx_http_vod_loc_conf_t, apply_dynamic_mapping),
 	NULL },
 
 	// fallback upstream - only for local/mapped modes

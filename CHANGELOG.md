@@ -3,6 +3,12 @@
 Note: the list of changes below may not include all changes, it will include mostly "breaking" changes.
 	Usually, these are changes that require some update to nginx.conf in order to retain the existing behavior.
 
+## 2016/03/06 - ad stitching supporting features
+
+The following configuration settings were removed:
+* vod_path_mapping_cache - replaced by vod_mapping_cache
+* vod_live_path_mapping_cache - replaced by vod_live_mapping_cache
+	
 ## 2016/02/03 - added support for Matroska container
 
 The following configuration settings were removed:

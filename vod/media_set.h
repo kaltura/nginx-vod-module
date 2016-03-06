@@ -80,8 +80,9 @@ typedef struct {
 	media_sequence_t* sequences;			// [sequence_count]
 	media_sequence_t* sequences_end;
 	bool_t has_multi_sequences;
-	media_clip_source_t** sources;
-	media_clip_source_t** sources_end;
+	media_clip_source_t* sources_head;
+	media_clip_source_t* mapped_sources_head;
+	struct media_clip_dynamic_s* dynamic_clips_head;
 	bool_t use_discontinuity;
 	uint32_t initial_segment_index;			// the index of the first segment in the playlist
 	uint32_t initial_clip_segment_index;	// the index of the first segment of the first playlist clip (can be less than initial_segment_index when the beginning of the clip is outside the live window)

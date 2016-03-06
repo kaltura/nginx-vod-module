@@ -618,7 +618,6 @@ ngx_http_vod_parse_uri_path(
 	media_set_t* media_set)
 {
 	media_sequence_t* cur_sequence;
-	media_clip_source_t** cur_source_ptr;
 	media_clip_source_t* cur_source;
 	ngx_http_vod_multi_uri_t multi_uri;
 	media_clip_t** cur_clip_ptr;
@@ -661,7 +660,7 @@ ngx_http_vod_parse_uri_path(
 	}
 
 	cur_sequence = ngx_palloc(r->pool,
-		(sizeof(*cur_sequence) + sizeof(*cur_source_ptr) + sizeof(*cur_source) + sizeof(*cur_clip_ptr)) * uri_count);
+		(sizeof(*cur_sequence) + sizeof(*cur_source) + sizeof(*cur_clip_ptr)) * uri_count);
 	if (cur_sequence == NULL)
 	{
 		ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
@@ -670,10 +669,7 @@ ngx_http_vod_parse_uri_path(
 	}
 	media_set->sequences = cur_sequence;
 
-	cur_source_ptr = (void*)(cur_sequence + uri_count);
-	media_set->sources = cur_source_ptr;
-
-	cur_source = (void*)(cur_source_ptr + uri_count);
+	cur_source = (void*)(cur_sequence + uri_count);
 
 	cur_clip_ptr = (void*)(cur_source + uri_count);
 
@@ -711,7 +707,9 @@ ngx_http_vod_parse_uri_path(
 		}
 		
 		*cur_clip_ptr = cur_clip;
-		*cur_source_ptr = cur_source;
+
+		cur_source->next = media_set->sources_head;
+		media_set->sources_head = cur_source;
 
 		cur_sequence->clips = cur_clip_ptr;
 		cur_sequence->index = i;
@@ -720,7 +718,6 @@ ngx_http_vod_parse_uri_path(
 		cur_sequence->id.len = 0;
 
 		cur_source++;
-		cur_source_ptr++;
 		cur_sequence++;
 		cur_clip_ptr++;
 	}
@@ -736,10 +733,8 @@ ngx_http_vod_parse_uri_path(
 
 	media_set->sequences_end = cur_sequence;
 	media_set->has_multi_sequences = (multi_uri.parts_count > 1);
-	media_set->sources_end = cur_source_ptr;
 	media_set->total_clip_count = 1;
 	media_set->clip_count = 1;
-	media_set->durations = NULL;
 
 	return NGX_OK;
 }

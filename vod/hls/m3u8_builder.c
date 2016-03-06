@@ -1,5 +1,5 @@
 #include "m3u8_builder.h"
-#include "../common.h"
+#include "../manifest_utils.h"
 
 // macros
 #define MAX_SEGMENT_COUNT (10 * 1024)			// more than 1 day when using 10 sec segments
@@ -65,99 +65,6 @@ m3u8_builder_format_double(u_char* p, uint32_t n, uint32_t scale)
 		fraction -= cur_digit * scale;
 	}
 	return p;
-}
-
-static vod_status_t
-m3u8_builder_build_required_tracks_string(
-	request_context_t* request_context, 
-	media_set_t* media_set,
-	uint32_t sequence_index,
-	request_params_t* request_params,
-	vod_str_t* tracks_spec)
-{
-	u_char* p;
-	size_t result_size;
-	uint32_t i;
-
-	result_size = 0;
-	if (request_params->tracks_mask[MEDIA_TYPE_VIDEO] != 0xffffffff)
-	{
-		result_size += vod_get_number_of_set_bits(request_params->tracks_mask[MEDIA_TYPE_VIDEO]) * (sizeof("-v32") - 1);
-	}
-	if (request_params->tracks_mask[MEDIA_TYPE_AUDIO] != 0xffffffff)
-	{
-		result_size += vod_get_number_of_set_bits(request_params->tracks_mask[MEDIA_TYPE_AUDIO]) * (sizeof("-a32") - 1);
-	}
-	if (sequence_index != INVALID_SEQUENCE_INDEX)
-	{
-		result_size += sizeof("-f") - 1 + vod_get_int_print_len(sequence_index + 1);
-	}
-
-	p = vod_alloc(request_context->pool, result_size + 1);
-	if (p == NULL)
-	{
-		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
-			"m3u8_builder_build_required_tracks_string: vod_alloc failed");
-		return VOD_ALLOC_FAILED;
-	}
-	tracks_spec->data = p;
-
-	if (sequence_index != INVALID_SEQUENCE_INDEX)
-	{
-		p = vod_sprintf(p, "-f%uD", sequence_index + 1);
-	}
-
-	if (media_set->track_count[MEDIA_TYPE_VIDEO] != 0)
-	{
-		if (request_params->tracks_mask[MEDIA_TYPE_VIDEO] == 0xffffffff)
-		{
-			p = vod_copy(p, "-v0", sizeof("-v0") - 1);
-		}
-		else
-		{
-			for (i = 0; i < 32; i++)
-			{
-				if ((request_params->tracks_mask[MEDIA_TYPE_VIDEO] & (1 << i)) == 0)
-				{
-					continue;
-				}
-
-				p = vod_sprintf(p, "-v%uD", i + 1);
-			}
-		}
-	}
-	
-	if (media_set->track_count[MEDIA_TYPE_AUDIO] != 0)
-	{
-		if (request_params->tracks_mask[MEDIA_TYPE_AUDIO] == 0xffffffff)
-		{
-			p = vod_copy(p, "-a0", sizeof("-a0") - 1);
-		}
-		else
-		{
-			for (i = 0; i < 32; i++)
-			{
-				if ((request_params->tracks_mask[MEDIA_TYPE_AUDIO] & (1 << i)) == 0)
-				{
-					continue;
-				}
-
-				p = vod_sprintf(p, "-a%uD", i + 1);
-			}
-		}
-	}
-
-	tracks_spec->len = p - tracks_spec->data;
-
-	if (tracks_spec->len > result_size)
-	{
-		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-			"m3u8_builder_build_required_tracks_string: result length %uz exceeded allocated length %uz", 
-			tracks_spec->len, result_size);
-		return VOD_UNEXPECTED;
-	}
-	
-	return VOD_OK;
 }
 
 static u_char*
@@ -232,11 +139,12 @@ m3u8_builder_build_iframe_playlist(
 	encryption_params.iv = NULL;
 
 	// build the required tracks string
-	rc = m3u8_builder_build_required_tracks_string(
+	rc = manifest_utils_build_request_params_string(
 		request_context, 
-		media_set,
+		media_set->track_count,
+		INVALID_SEGMENT_INDEX,
 		sequence_index,
-		request_params,
+		request_params->tracks_mask,
 		&ctx.tracks_spec);
 	if (rc != VOD_OK)
 	{
@@ -355,11 +263,12 @@ m3u8_builder_build_index_playlist(
 	sequence_index = media_set->has_multi_sequences ? media_set->sequences[0].index : INVALID_SEQUENCE_INDEX;
 
 	// build the required tracks string
-	rc = m3u8_builder_build_required_tracks_string(
+	rc = manifest_utils_build_request_params_string(
 		request_context,
-		media_set,
+		media_set->track_count,
+		INVALID_SEGMENT_INDEX,
 		sequence_index,
-		request_params,
+		request_params->tracks_mask,
 		&tracks_spec);
 	if (rc != VOD_OK)
 	{

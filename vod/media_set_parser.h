@@ -9,9 +9,11 @@ typedef struct {
 	request_context_t* request_context;
 	media_sequence_t* sequence;
 	media_range_t* range;
-	uint64_t sequence_offset;
+	int64_t sequence_offset;
 	uint32_t duration;
-	vod_array_t sources;
+	media_clip_source_t* sources_head;
+	media_clip_source_t* mapped_sources_head;
+	struct media_clip_dynamic_s* dynamic_clips_head;
 } media_filter_parse_context_t;
 
 // main functions
@@ -28,7 +30,17 @@ vod_status_t media_set_parse_json(
 	bool_t parse_all_clips,
 	media_set_t* result);
 
+vod_status_t media_set_map_source(
+	request_context_t* request_context,
+	u_char* string,
+	media_clip_source_t* source);
+
 // filter utility functions
+vod_status_t media_set_parse_null_term_string(
+	void* ctx, 
+	vod_json_value_t* value, 
+	void* dest);
+
 vod_status_t media_set_parse_filter_sources(
 	void* ctx,
 	vod_json_value_t* value,

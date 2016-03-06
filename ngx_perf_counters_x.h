@@ -1,6 +1,7 @@
 PC(FETCH_CACHE,				fetch_cache)
 PC(STORE_CACHE,				store_cache)
 PC(MAP_PATH,				map_path)
+PC(PARSE_MEDIA_SET,			parse_media_set)
 PC(GET_DRM_INFO,			get_drm_info)
 PC(OPEN_FILE,				open_file)
 PC(ASYNC_OPEN_FILE,			async_open_file)

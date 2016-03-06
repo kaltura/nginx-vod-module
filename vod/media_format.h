@@ -93,7 +93,7 @@ typedef struct {
 
 typedef struct {
 	uint32_t* required_tracks_mask;
-	uint64_t clip_start_time;
+	int64_t clip_start_time;
 	uint32_t clip_from;
 	uint32_t clip_to;
 	media_range_t* range;
@@ -193,7 +193,7 @@ typedef struct {
 	uint64_t total_frames_duration;
 	uint32_t first_frame_index;
 	uint64_t first_frame_time_offset;
-	uint64_t clip_start_time;
+	int64_t clip_start_time;
 	int32_t clip_from_frame_offset;
 	raw_atom_t raw_atoms[RTA_COUNT];		// mp4 only
 	void* source_clip;

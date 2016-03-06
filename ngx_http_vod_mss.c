@@ -31,6 +31,9 @@ static u_char mp4_audio_content_type[] = "audio/mp4";
 static u_char mp4_video_content_type[] = "video/mp4";
 static u_char manifest_content_type[] = "text/xml";		// TODO: consider moving to application/vnd.ms-sstr+xml
 
+// extensions
+static const u_char m4s_file_ext[] = ".m4s";
+
 static ngx_int_t 
 ngx_http_vod_mss_handle_manifest(
 	ngx_http_vod_submodule_context_t* submodule_context,
@@ -288,27 +291,37 @@ ngx_http_vod_mss_parse_uri_file_name(
 
 		return NGX_OK;
 	}
-
 	// manifest
-	if (!ngx_http_vod_starts_with(start_pos, end_pos, &conf->mss.manifest_file_name_prefix))
+	else if (ngx_http_vod_starts_with(start_pos, end_pos, &conf->mss.manifest_file_name_prefix))
+	{
+		*request = &mss_manifest_request;
+		start_pos += conf->mss.manifest_file_name_prefix.len;
+
+		rc = ngx_http_vod_parse_uri_file_name(r, start_pos, end_pos, FALSE, request_params);
+		if (rc != NGX_OK)
+		{
+			ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+				"ngx_http_vod_mss_parse_uri_file_name: ngx_http_vod_parse_uri_file_name failed %i", rc);
+			return rc;
+		}
+
+		return NGX_OK;
+	}
+	// fragment with non-standard format (used with redirect)
+	else if (ngx_http_vod_match_prefix_postfix(start_pos, end_pos, &conf->hls.m3u8_config.segment_file_name_prefix, m4s_file_ext))
+	{
+		start_pos += conf->hls.m3u8_config.segment_file_name_prefix.len;
+		end_pos -= (sizeof(m4s_file_ext) - 1);
+		*request = conf->drm_enabled ? &mss_playready_fragment_request : &mss_fragment_request;
+
+		return ngx_http_vod_parse_uri_file_name(r, start_pos, end_pos, TRUE, request_params);
+	}
+	else
 	{
 		ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
 			"ngx_http_vod_mss_parse_uri_file_name: unidentified request");
 		return NGX_HTTP_BAD_REQUEST;
 	}
-
-	*request = &mss_manifest_request;
-	start_pos += conf->mss.manifest_file_name_prefix.len;
-
-	rc = ngx_http_vod_parse_uri_file_name(r, start_pos, end_pos, FALSE, request_params);
-	if (rc != NGX_OK)
-	{
-		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
-			"ngx_http_vod_mss_parse_uri_file_name: ngx_http_vod_parse_uri_file_name failed %i", rc);
-		return rc;
-	}
-
-	return NGX_OK;
 }
 
 ngx_int_t
