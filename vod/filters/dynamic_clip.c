@@ -280,7 +280,7 @@ dynamic_clip_apply_mapping_string_clip(
 	media_range_t* range;
 	media_clip_t** cur_source_ptr;
 	vod_str_t clip_id;
-	uint32_t last_offset;
+	uint32_t last_offset = 0;
 	uint32_t offset;
 	u_char* p = *cur;
 	uint64_t range_start;
