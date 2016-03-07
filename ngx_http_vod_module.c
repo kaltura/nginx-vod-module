@@ -301,7 +301,6 @@ ngx_http_vod_set_clip_id_var(ngx_http_request_t *r, ngx_http_variable_value_t *v
 	ngx_str_t* value;
 
 	ctx = ngx_http_get_module_ctx(r, ngx_http_vod_module);
-
 	if (ctx == NULL)
 	{
 		goto not_found;
@@ -846,7 +845,8 @@ ngx_http_vod_drm_info_request_finished(void* context, ngx_int_t rc, ngx_buf_t* r
 	drm_info.len = content_length;
 	*response->last = '\0';
 
-	ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0, "ngx_http_vod_drm_info_request_finished: result %V", &drm_info);
+	ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0, 
+		"ngx_http_vod_drm_info_request_finished: result %V", &drm_info);
 
 	// parse the drm info
 	rc = conf->submodule.parse_drm_info(&ctx->submodule_context, &drm_info, &ctx->cur_sequence->drm_info);
@@ -1021,7 +1021,7 @@ ngx_http_vod_parse_metadata(
 		{
 			ngx_log_error(NGX_LOG_ERR, ctx->submodule_context.request_context.log, 0,
 				"ngx_http_vod_parse_metadata: clipping not supported for %V", &ctx->format->name);
-			return ngx_http_vod_status_to_ngx_error(VOD_BAD_REQUEST);
+			return NGX_HTTP_BAD_REQUEST;
 		}
 
 		rc = ctx->format->clipper_parse(
@@ -1190,7 +1190,7 @@ ngx_http_vod_parse_metadata(
 	if (rc != VOD_OK && rc != VOD_AGAIN)
 	{
 		ngx_log_debug2(NGX_LOG_DEBUG_HTTP, request_context->log, 0,
-			"ngx_http_vod_parse_metadata: parse_frames(%V) failed %i", &ctx->format->name, rc);
+			"ngx_http_vod_parse_metadata: read_frames(%V) failed %i", &ctx->format->name, rc);
 		return ngx_http_vod_status_to_ngx_error(rc);
 	}
 
@@ -1232,8 +1232,8 @@ ngx_http_vod_identify_format(ngx_http_vod_ctx_t* ctx)
 
 		if (rc != VOD_OK)
 		{
-			ngx_log_debug1(NGX_LOG_DEBUG_HTTP, ctx->submodule_context.request_context.log, 0,
-				"ngx_http_vod_identify_format: identify failed %i", rc);
+			ngx_log_debug2(NGX_LOG_DEBUG_HTTP, ctx->submodule_context.request_context.log, 0,
+				"ngx_http_vod_identify_format: init_metadata_reader(%V) failed %i", &cur_format->name, rc);
 			return ngx_http_vod_status_to_ngx_error(rc);
 		}
 
@@ -1257,7 +1257,7 @@ ngx_http_vod_init_format(ngx_http_vod_ctx_t* ctx, uint32_t format_id)
 		{
 			ngx_log_error(NGX_LOG_ERR, ctx->submodule_context.request_context.log, 0,
 				"ngx_http_vod_init_format: format id %uD not found", format_id);
-			return ngx_http_vod_status_to_ngx_error(VOD_UNEXPECTED);
+			return NGX_HTTP_INTERNAL_SERVER_ERROR;
 		}
 
 		if (cur_format->id != format_id)
@@ -1914,7 +1914,7 @@ ngx_http_vod_write_segment_header_buffer(void* ctx, u_char* buffer, uint32_t siz
 	if (b == NULL)
 	{
 		ngx_log_debug0(NGX_LOG_DEBUG_HTTP, context->r->connection->log, 0,
-			"ngx_http_vod_write_segment_header_buffer: ngx_pcalloc failed (1)");
+			"ngx_http_vod_write_segment_header_buffer: ngx_calloc_buf failed");
 		return VOD_ALLOC_FAILED;
 	}
 
@@ -1926,7 +1926,7 @@ ngx_http_vod_write_segment_header_buffer(void* ctx, u_char* buffer, uint32_t siz
 	if (chain == NULL)
 	{
 		ngx_log_debug0(NGX_LOG_DEBUG_HTTP, context->r->connection->log, 0,
-			"ngx_http_vod_write_segment_header_buffer: ngx_pcalloc failed (2)");
+			"ngx_http_vod_write_segment_header_buffer: ngx_alloc_chain_link failed");
 		return VOD_ALLOC_FAILED;
 	}
 
@@ -1962,7 +1962,7 @@ ngx_http_vod_write_segment_buffer(void* ctx, u_char* buffer, uint32_t size)
 	if (b == NULL) 
 	{
 		ngx_log_debug0(NGX_LOG_DEBUG_HTTP, context->r->connection->log, 0,
-			"ngx_http_vod_write_segment_buffer: ngx_pcalloc failed (1)");
+			"ngx_http_vod_write_segment_buffer: ngx_calloc_buf failed");
 		return VOD_ALLOC_FAILED;
 	}
 
@@ -1995,7 +1995,7 @@ ngx_http_vod_write_segment_buffer(void* ctx, u_char* buffer, uint32_t size)
 			if (chain == NULL) 
 			{
 				ngx_log_debug0(NGX_LOG_DEBUG_HTTP, context->r->connection->log, 0,
-					"ngx_http_vod_write_segment_buffer: ngx_pcalloc failed (2)");
+					"ngx_http_vod_write_segment_buffer: ngx_alloc_chain_link failed");
 				return VOD_ALLOC_FAILED;
 			}
 
@@ -2086,7 +2086,7 @@ ngx_http_vod_init_frame_processing(ngx_http_vod_ctx_t *ctx)
 		if (rc != VOD_OK)
 		{
 			ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
-				"ngx_http_vod_init_frame_processing: write_callback failed %i", rc);
+				"ngx_http_vod_init_frame_processing: write_tail failed %i", rc);
 			return ngx_http_vod_status_to_ngx_error(rc);
 		}
 	}
@@ -2817,7 +2817,6 @@ ngx_http_vod_dump_request_to_fallback(ngx_http_request_t *r)
 {
 	ngx_http_vod_loc_conf_t* conf;
 	ngx_child_request_params_t child_params;
-	ngx_int_t rc;
 
 	conf = ngx_http_get_module_loc_conf(r, ngx_http_vod_module);
 
@@ -2844,14 +2843,13 @@ ngx_http_vod_dump_request_to_fallback(ngx_http_request_t *r)
 	child_params.proxy_range = 1;
 	child_params.proxy_accept_encoding = 1;
 
-	rc = ngx_child_request_start(
+	return ngx_child_request_start(
 		r,
 		NULL,
 		NULL,
 		&conf->fallback_upstream_location,
 		&child_params,
 		NULL);
-	return rc;
 }
 
 #if (NGX_THREADS)
@@ -2895,13 +2893,13 @@ finalize_request:
 static void
 ngx_http_vod_file_open_completed(void* context, ngx_int_t rc)
 {
-	return ngx_http_vod_file_open_completed_internal(context, rc, 0);
+	ngx_http_vod_file_open_completed_internal(context, rc, 0);
 }
 
 static void
 ngx_http_vod_file_open_completed_with_fallback(void* context, ngx_int_t rc)
 {
-	return ngx_http_vod_file_open_completed_internal(context, rc, 1);
+	ngx_http_vod_file_open_completed_internal(context, rc, 1);
 }
 #endif // NGX_THREADS
 
@@ -3525,7 +3523,7 @@ ngx_http_vod_map_dynamic_clip_get_uri(ngx_http_vod_ctx_t *ctx, ngx_str_t* uri)
 		uri) != NGX_OK)
 	{
 		ngx_log_debug0(NGX_LOG_DEBUG_HTTP, ctx->submodule_context.request_context.log, 0,
-			"ngx_http_vod_map_dynamic_clip_get_uri: ngx_http_complex_value failed (1)");
+			"ngx_http_vod_map_dynamic_clip_get_uri: ngx_http_complex_value failed");
 		return NGX_ERROR;
 	}
 
@@ -3642,7 +3640,7 @@ ngx_http_vod_map_media_set_get_uri(ngx_http_vod_ctx_t *ctx, ngx_str_t* uri)
 			uri) != NGX_OK)
 		{
 			ngx_log_debug0(NGX_LOG_DEBUG_HTTP, ctx->submodule_context.request_context.log, 0,
-				"ngx_http_vod_map_media_set_get_uri: ngx_http_complex_value failed (1)");
+				"ngx_http_vod_map_media_set_get_uri: ngx_http_complex_value failed");
 			return NGX_ERROR;
 		}
 	}

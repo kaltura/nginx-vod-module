@@ -619,6 +619,7 @@ ngx_http_vod_parse_uri_path(
 {
 	media_sequence_t* cur_sequence;
 	media_clip_source_t* cur_source;
+	media_clip_source_t* sources_head;
 	ngx_http_vod_multi_uri_t multi_uri;
 	media_clip_t** cur_clip_ptr;
 	media_clip_t* cur_clip;
@@ -673,6 +674,8 @@ ngx_http_vod_parse_uri_path(
 
 	cur_clip_ptr = (void*)(cur_source + uri_count);
 
+	sources_head = NULL;
+
 	parts[0] = multi_uri.prefix;
 	parts[2] = multi_uri.postfix;
 
@@ -708,8 +711,8 @@ ngx_http_vod_parse_uri_path(
 		
 		*cur_clip_ptr = cur_clip;
 
-		cur_source->next = media_set->sources_head;
-		media_set->sources_head = cur_source;
+		cur_source->next = sources_head;
+		sources_head = cur_source;
 
 		cur_sequence->clips = cur_clip_ptr;
 		cur_sequence->index = i;
@@ -731,6 +734,7 @@ ngx_http_vod_parse_uri_path(
 		return NGX_HTTP_BAD_REQUEST;
 	}
 
+	media_set->sources_head = sources_head;
 	media_set->sequences_end = cur_sequence;
 	media_set->has_multi_sequences = (multi_uri.parts_count > 1);
 	media_set->total_clip_count = 1;

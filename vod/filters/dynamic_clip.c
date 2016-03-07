@@ -3,9 +3,9 @@
 #include "../media_set_parser.h"
 #include "../parse_utils.h"
 
+// constants
 #define MAX_DYNAMIC_CLIP_SOURCE_COUNT (128)
 
-// constants
 static json_object_value_def_t dynamic_clip_params[] = {
 	{ vod_string("id"), VOD_JSON_STRING, offsetof(media_clip_dynamic_t, id), media_set_parse_null_term_string },
 	{ vod_null_string, 0, 0, NULL }
