@@ -1011,7 +1011,7 @@ class MappedTestSuite(ModeTestSuite):
     def testEmptyPathMappingResponse(self):
         TcpServer(API_SERVER_PORT, lambda s: socketSendAndShutdown(s, getHttpResponse('')))
         assertRequestFails(self.getUrl(HLS_PREFIX, HLS_PLAYLIST_FILE), 404)
-        self.logTracker.assertContains('empty path mapping response')
+        self.logTracker.assertContains('empty mapping response')
 
     def testUnexpectedPathResponse(self):
         TcpServer(API_SERVER_PORT, lambda s: socketSendAndShutdown(s, getHttpResponse('abcde')))
@@ -1038,14 +1038,14 @@ class MappedTestSuite(ModeTestSuite):
             response = urllib2.urlopen(url)            
             assertEquals(response.info().getheader('Content-Type'), contentType)            
             uncachedResponse = response.read()
-            logTracker.assertContains('path mapping cache miss')
+            logTracker.assertContains('mapping cache miss')
 
             #cached
             logTracker = LogTracker()
             response = urllib2.urlopen(url)
             assertEquals(response.info().getheader('Content-Type'), contentType)            
             cachedResponse = response.read()
-            logTracker.assertContains(['path mapping cache hit', 'response cache hit'])
+            logTracker.assertContains(['mapping cache hit', 'response cache hit'])
 
             assert(cachedResponse == uncachedResponse)
                    

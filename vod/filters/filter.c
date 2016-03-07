@@ -1,7 +1,7 @@
 #include "filter.h"
 #include "audio_filter.h"
 #include "rate_filter.h"
-#include "concat_filter.h"
+#include "concat_clip.h"
 #include "../media_set.h"
 
 // typedefs
@@ -48,7 +48,7 @@ filter_get_clip_track_count(media_clip_t* clip, uint32_t* track_count)
 	}
 
 	// recursively count child sources
-	if (clip->type == MEDIA_CLIP_CONCAT_FILTER)
+	if (clip->type == MEDIA_CLIP_CONCAT)
 	{
 		sources_end = clip->sources + 1;
 	}
@@ -184,9 +184,9 @@ filter_scale_video_tracks(filters_init_state_t* state, media_clip_t* clip, uint3
 	default:;
 	}
 
-	if (clip->type == MEDIA_CLIP_CONCAT_FILTER && clip->source_count > 1)
+	if (clip->type == MEDIA_CLIP_CONCAT && clip->source_count > 1)
 	{
-		rc = concat_filter_concat(state->request_context, clip);
+		rc = concat_clip_concat(state->request_context, clip);
 		if (rc != VOD_OK)
 		{
 			return rc;

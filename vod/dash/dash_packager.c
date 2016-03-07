@@ -1559,7 +1559,7 @@ dash_packager_get_earliest_pres_time(media_set_t* media_set, media_track_t* trac
 	
 	if (!media_set->use_discontinuity)
 	{
-		result += rescale_time(track->clip_start_time, 1000, track->media_info.timescale);
+		result += rescale_time_neg(track->clip_start_time, 1000, track->media_info.timescale);
 	}
 
 	if (track->frame_count > 0)

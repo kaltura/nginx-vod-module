@@ -42,10 +42,16 @@ struct ngx_http_vod_loc_conf_s {
 	size_t max_upstream_headers_size;
 	ngx_flag_t ignore_edit_list;
 	ngx_http_complex_value_t *upstream_extra_args;
-	ngx_buffer_cache_t* path_mapping_cache[CACHE_TYPE_COUNT];
+	ngx_buffer_cache_t* mapping_cache[CACHE_TYPE_COUNT];
+	ngx_buffer_cache_t* dynamic_mapping_cache;
 	ngx_str_t path_response_prefix;
 	ngx_str_t path_response_postfix;
 	size_t max_mapping_response_size;
+	ngx_http_complex_value_t* dynamic_clip_map_uri;
+	ngx_http_complex_value_t* source_clip_map_uri;
+	ngx_http_complex_value_t* redirect_segments_url;
+	ngx_http_complex_value_t* media_set_map_uri;
+	ngx_http_complex_value_t* apply_dynamic_mapping;
 	ngx_str_t fallback_upstream_location;
 	ngx_table_elt_t proxy_header;
 

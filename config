@@ -105,7 +105,8 @@ NGX_ADDON_DEPS="$NGX_ADDON_DEPS                                     \
                 $ngx_addon_dir/vod/dash/edash_packager.h            \
                 $ngx_addon_dir/vod/dynamic_buffer.h                 \
                 $ngx_addon_dir/vod/filters/audio_filter.h           \
-                $ngx_addon_dir/vod/filters/concat_filter.h          \
+                $ngx_addon_dir/vod/filters/concat_clip.h            \
+                $ngx_addon_dir/vod/filters/dynamic_clip.h           \
                 $ngx_addon_dir/vod/filters/filter.h                 \
                 $ngx_addon_dir/vod/filters/gain_filter.h            \
                 $ngx_addon_dir/vod/filters/mix_filter.h             \
@@ -134,6 +135,7 @@ NGX_ADDON_DEPS="$NGX_ADDON_DEPS                                     \
                 $ngx_addon_dir/vod/input/read_cache.h               \
                 $ngx_addon_dir/vod/json_parser.h                    \
                 $ngx_addon_dir/vod/list_entry.h                     \
+                $ngx_addon_dir/vod/manifest_utils.h                 \
                 $ngx_addon_dir/vod/media_clip.h                     \
                 $ngx_addon_dir/vod/media_format.h                   \
                 $ngx_addon_dir/vod/media_set.h                      \
@@ -186,7 +188,8 @@ NGX_ADDON_SRCS="$NGX_ADDON_SRCS                                     \
                 $ngx_addon_dir/vod/dash/edash_packager.c            \
                 $ngx_addon_dir/vod/dynamic_buffer.c                 \
                 $ngx_addon_dir/vod/filters/audio_filter.c           \
-                $ngx_addon_dir/vod/filters/concat_filter.c          \
+                $ngx_addon_dir/vod/filters/concat_clip.c            \
+                $ngx_addon_dir/vod/filters/dynamic_clip.c           \
                 $ngx_addon_dir/vod/filters/filter.c                 \
                 $ngx_addon_dir/vod/filters/gain_filter.c            \
                 $ngx_addon_dir/vod/filters/mix_filter.c             \
@@ -208,6 +211,7 @@ NGX_ADDON_SRCS="$NGX_ADDON_SRCS                                     \
                 $ngx_addon_dir/vod/input/frames_source_memory.c     \
                 $ngx_addon_dir/vod/input/read_cache.c               \
                 $ngx_addon_dir/vod/json_parser.c                    \
+                $ngx_addon_dir/vod/manifest_utils.c                 \
                 $ngx_addon_dir/vod/media_format.c                   \
                 $ngx_addon_dir/vod/media_set_parser.c               \
                 $ngx_addon_dir/vod/mkv/ebml.c                       \

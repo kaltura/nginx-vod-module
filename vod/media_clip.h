@@ -17,7 +17,8 @@ typedef enum {
 	MEDIA_CLIP_RATE_FILTER,
 	MEDIA_CLIP_MIX_FILTER,
 	MEDIA_CLIP_GAIN_FILTER,
-	MEDIA_CLIP_CONCAT_FILTER,
+	MEDIA_CLIP_CONCAT,
+	MEDIA_CLIP_DYNAMIC,
 } media_clip_type_t;
 
 typedef struct media_clip_s {
@@ -29,6 +30,9 @@ typedef struct media_clip_s {
 	uint32_t id;
 } media_clip_t;
 
+struct media_clip_source_s;
+typedef struct media_clip_source_s media_clip_source_t;
+
 struct media_clip_source_s {
 	// input params
 	media_clip_t base;
@@ -36,7 +40,7 @@ struct media_clip_source_s {
 	uint32_t clip_to;
 	uint32_t clip_from;
 	uint32_t tracks_mask[MEDIA_TYPE_COUNT];
-	uint64_t sequence_offset;
+	int64_t sequence_offset;
 	u_char* encryption_key;
 
 	// derived params
@@ -49,8 +53,7 @@ struct media_clip_source_s {
 	media_range_t* range;
 	media_track_array_t track_array;
 	struct media_sequence_s* sequence;
+	media_clip_source_t* next;
 };
-
-typedef struct media_clip_source_s media_clip_source_t;
 
 #endif //__MEDIA_CLIP_H__

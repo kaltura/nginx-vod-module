@@ -521,7 +521,7 @@ audio_filter_walk_filters_prepare_init(
 		switch (clip->type)
 		{
 		case MEDIA_CLIP_MIX_FILTER:
-		case MEDIA_CLIP_CONCAT_FILTER:
+		case MEDIA_CLIP_CONCAT:
 			// in case of mixing a single clip or concat, skip the filter
 			*clip_ptr = last_source;
 			return VOD_OK;

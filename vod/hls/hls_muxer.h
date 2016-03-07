@@ -33,7 +33,7 @@ typedef struct {
 	input_frame_t* cur_frame;
 
 	// time offsets
-	uint64_t clip_start_time;
+	int64_t clip_start_time;
 	uint64_t first_frame_time_offset;
 	uint64_t next_frame_time_offset;
 	uint64_t next_frame_dts;

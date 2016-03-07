@@ -190,8 +190,9 @@ But first, a couple of definitions:
   * audio volume change
   * mix - can be used to merge several audio tracks together, or to merge the audio of source A with the video of source B
 2. `Clip` - the result of applying zero or more filters on a set of source clips
-3. `Sequence` - a set of clips that should be played one after the other. 
-4. `Set` - several sequences that play together as an adaptive set, each sequence must have the same number of clips.
+3. `Dynamic Clip` - a clip whose contents is not known in advance, e.g. targeted ad content
+4. `Sequence` - a set of clips that should be played one after the other. 
+5. `Set` - several sequences that play together as an adaptive set, each sequence must have the same number of clips.
 
 #### Simple mapping
 
@@ -415,6 +416,7 @@ Mandatory fields:
 	* mixFilter
 	* gainFilter
 	* concat
+	* dynamic
 	
 #### Source clip
 
@@ -453,20 +455,29 @@ Mandatory fields:
 * `sources` - an array of Clip objects to mix. This array must contain at least one clip and
 	up to 32 clips.
 
-#### Concat filter clip
+#### Concat clip
 
 Mandatory fields:
 * `type` - a string with the value `concat`
-* `paths` - an array of strings, containings the paths of the MP4 files
 * `durations` - an array of integers representing MP4 durations in milliseconds,
 	this array must match the `paths` array in count and order.
 
 Optional fields:
+* `paths` - an array of strings, containings the paths of the MP4 files. Either `paths` or `clipIds` must be specified.
+* `clipIds` - an array of strings, containings the ids of source clips. 
+	The ids are translated to paths by issuing a request to the uri specified in `vod_source_clip_map_uri`.
+	Either `paths` or `clipIds` must be specified.
 * `tracks` - a string that specifies the tracks that should be used, the default is "v1-a1",
 	which means the first video track and the first audio track
 * `offset` - an integer in milliseconds that indicates the timestamp offset of the 
 	first frame in the concatenated stream relative to the clip start time
 * `basePath` - a string that should be added as a prefix to all the paths
+
+#### Dynamic clip
+
+Mandatory fields:
+* `type` - a string with the value `dynamic`
+* `id` - a string that uniquely identfies the dynamic clip, used for mapping the clip to its content
 
 ### Security
 
@@ -609,7 +620,7 @@ location ~ ^/fpshls/p/\d+/(sp/\d+/)?serveFlavor/entryId/([^/]+)/(.*) {
 	* vod_metadata_cache - saves the need to re-read the video metadata for each segment. This cache should be rather large, in the order of GBs.
 	* vod_response_cache - saves the responses of manifest requests. This cache may not be required when using a second layer of caching servers before nginx vod. 
 		No need to allocate a large buffer for this cache, 128M is probably more than enough for most deployments.
-	* vod_path_mapping_cache - for mapped mode only, few MBs is usually enough.
+	* vod_mapping_cache - for mapped mode only, few MBs is usually enough.
 	* nginx's open_file_cache - caches open file handles.
 
 	The hit/miss ratios of these caches can be tracked by enabling performance counters (vod_performance_counters) 
@@ -849,19 +860,27 @@ Sets the size that is allocated for holding the response headers when issuing up
 Extra query string arguments that should be added to the upstream request (remote/mapped modes only).
 The parameter value can contain variables.
 
-#### vod_path_mapping_cache
-* **syntax**: `vod_path_mapping_cache zone_name zone_size [expiration]`
+#### vod_mapping_cache
+* **syntax**: `vod_mapping_cache zone_name zone_size [expiration]`
 * **default**: `off`
 * **context**: `http`, `server`, `location`
 
-Configures the size and shared memory object name of the path mapping cache for vod (mapped mode only).
+Configures the size and shared memory object name of the mapping cache for vod (mapped mode only).
 
-#### vod_live_path_mapping_cache
-* **syntax**: `vod_live_path_mapping_cache zone_name zone_size [expiration]`
+#### vod_live_mapping_cache
+* **syntax**: `vod_live_mapping_cache zone_name zone_size [expiration]`
 * **default**: `off`
 * **context**: `http`, `server`, `location`
 
-Configures the size and shared memory object name of the path mapping cache for live (mapped mode only).
+Configures the size and shared memory object name of the mapping cache for live (mapped mode only).
+
+#### vod_media_set_map_uri
+* **syntax**: `vod_media_set_map_uri uri`
+* **default**: `$vod_suburi`
+* **context**: `http`, `server`, `location`
+
+Sets the uri of media set mapping requests, the parameter value can contain variables.
+In case of multi url, $vod_suburi will be the current sub uri (a separate request is issued per sub URL)
 
 #### vod_path_response_prefix
 * **syntax**: `vod_path_response_prefix prefix`
@@ -977,6 +996,49 @@ For changing live content (e.g. live DASH MPD), Last-Modified is set to the curr
 
 Sets the MIME types for which the Last-Modified header should be set.
 The special value "*" matches any MIME type.
+
+### Configuration directives - ad stitching (mapped mode only)
+
+#### vod_dynamic_mapping_cache
+* **syntax**: `vod_dynamic_mapping_cache zone_name zone_size [expiration]`
+* **default**: `off`
+* **context**: `http`, `server`, `location`
+
+Configures the size and shared memory object name of the cache that stores the mapping of dynamic clips.
+
+#### vod_dynamic_clip_map_uri
+* **syntax**: `vod_dynamic_clip_map_uri uri`
+* **default**: `none`
+* **context**: `http`, `server`, `location`
+
+Sets the uri that should be used to map dynamic clips. 
+The parameter value can contain variables, specifically, `$vod_clip_id` contains the id of the clip that should be mapped.
+The expected response from this uri is a JSON containing a concat clip object.
+
+#### vod_source_clip_map_uri
+* **syntax**: `vod_source_clip_map_uri uri`
+* **default**: `none`
+* **context**: `http`, `server`, `location`
+
+Sets the uri that should be used to map source clips defined using the clipIds property of concat. 
+The parameter value can contain variables, specifically, `$vod_clip_id` contains the id of the clip that should be mapped.
+The expected response from this uri is a JSON containing a source clip object.
+
+#### vod_redirect_segments_url
+* **syntax**: `vod_redirect_segments_url url`
+* **default**: `none`
+* **context**: `http`, `server`, `location`
+
+Sets a url to which requests for segments should be redirected.
+The parameter value can contain variables, specifically, `$vod_dynamic_mapping` contains a serialized representation of the mapping of dynamic clips.
+
+#### vod_apply_dynamic_mapping
+* **syntax**: `vod_apply_dynamic_mapping mapping`
+* **default**: `none`
+* **context**: `http`, `server`, `location`
+
+Maps dynamic clips to concat clips using the given expression, previously generated by `$vod_dynamic_mapping`.
+The parameter value can contain variables.
 
 ### Configuration directives - DRM
 
@@ -1216,6 +1278,14 @@ The module adds the following nginx variables:
   when processing the first uri.
 * `$vod_filepath` - in local / mapped modes, the file path of current sub uri. In remote mode, has the same value as `$vod_suburi`.
 * `$vod_sequence_id` - contains the id of the current sequence, if no id was specified in the mapping json this variable will be the same as `$vod_suburi`.
+* `$vod_clip_id` - the id of the current clip, this variable has a value during these phases:
+  1. Mapping of dynamic clips to concat clips
+  2. Mapping of source clip to paths
+* `$vod_dynamic_mapping` - a serialized representation of the mapping of dynamic clips to concat clips.
+* `$vod_request_params` - a serialized representation of the request params, e.g. 12-f2-v1-a1. The variable contains:
+  1. The segment index (for a segment request)
+  2. The sequence index
+  3. A selection of audio/video tracks
 
 Note: Configuration directives that can accept variables are explicitly marked as such.
 
@@ -1292,7 +1362,7 @@ Note: Configuration directives that can accept variables are explicitly marked a
 			# vod caches
 			vod_metadata_cache metadata_cache 512m;
 			vod_response_cache response_cache 128m;
-			vod_path_mapping_cache mapping_cache 5m;
+			vod_mapping_cache mapping_cache 5m;
 			
 			# gzip manifests
 			gzip on;

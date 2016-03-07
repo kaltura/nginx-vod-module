@@ -49,7 +49,7 @@ http {
 
 	# shared memory zones
 	vod_metadata_cache metadata_cache 512m;
-	vod_path_mapping_cache mapping_cache 64m;
+	vod_mapping_cache mapping_cache 64m;
 	vod_response_cache response_cache 64m;
 	vod_performance_counters perf_counters;
 
