@@ -95,7 +95,6 @@ typedef struct {
 	media_track_t* track;
 	int media_type;
 	uint8_t sound_info;
-	uint32_t timescale;
 	uint32_t frame_count;
 	uint32_t index;
 	uint32_t tag_size;
@@ -103,7 +102,6 @@ typedef struct {
 	int64_t clip_start_time;
 	uint64_t first_frame_time_offset;
 	uint64_t next_frame_time_offset;
-	uint64_t next_frame_dts;
 
 	// input frames
 	frame_list_part_t* first_frame_part;
@@ -588,7 +586,6 @@ hds_muxer_init_track(
 
 	cur_stream->track = cur_track;
 	cur_stream->media_type = cur_track->media_info.media_type;
-	cur_stream->timescale = cur_track->media_info.timescale;
 	cur_stream->first_frame_part = &cur_track->frames;
 	cur_stream->cur_frame_part = cur_track->frames;
 	cur_stream->cur_frame = cur_track->frames.first_frame;
@@ -596,7 +593,6 @@ hds_muxer_init_track(
 	cur_stream->clip_start_time = hds_rescale_millis(cur_track->clip_start_time);
 	cur_stream->first_frame_time_offset = cur_track->first_frame_time_offset;
 	cur_stream->next_frame_time_offset = cur_stream->first_frame_time_offset;
-	cur_stream->next_frame_dts = rescale_time(cur_stream->next_frame_time_offset, cur_stream->timescale, HDS_TIMESCALE);
 
 	if (cur_track->media_info.media_type == MEDIA_TYPE_AUDIO)
 	{
@@ -673,7 +669,7 @@ hds_muxer_choose_stream(hds_muxer_state_t* state, hds_muxer_stream_state_t** res
 				state->first_time = TRUE;
 			}
 
-			if (min_dts == NULL || cur_stream->next_frame_dts < min_dts->next_frame_dts)
+			if (min_dts == NULL || cur_stream->next_frame_time_offset < min_dts->next_frame_time_offset)
 			{
 				min_dts = cur_stream;
 			}
@@ -733,7 +729,7 @@ hds_calculate_output_offsets_and_write_afra_entries(
 			{
 				*p = hds_write_afra_atom_entry(
 					*p,
-					selected_stream->next_frame_dts + selected_stream->clip_start_time,
+					selected_stream->next_frame_time_offset + selected_stream->clip_start_time,
 					cur_offset + afra_entries_base);
 			}
 			cur_offset += state->codec_config_size;
@@ -765,7 +761,6 @@ hds_calculate_output_offsets_and_write_afra_entries(
 
 		// move to the next frame
 		selected_stream->next_frame_time_offset += selected_stream->cur_frame->duration;
-		selected_stream->next_frame_dts = rescale_time(selected_stream->next_frame_time_offset, selected_stream->timescale, HDS_TIMESCALE);
 		selected_stream->cur_frame++;
 	}
 
@@ -794,7 +789,6 @@ hds_calculate_output_offsets_and_write_afra_entries(
 			cur_stream->cur_frame = cur_stream->cur_frame_part.first_frame;
 			cur_stream->cur_frame_output_offset = cur_stream->first_frame_output_offset;
 			cur_stream->next_frame_time_offset = cur_stream->first_frame_time_offset;
-			cur_stream->next_frame_dts = rescale_time(cur_stream->next_frame_time_offset, cur_stream->timescale, HDS_TIMESCALE);
 		}
 	}
 
@@ -1168,7 +1162,7 @@ hds_muxer_init_fragment(
 		p = hds_muxer_write_codec_config(
 			p, 
 			state, 
-			state->first_stream->next_frame_dts + state->first_stream->clip_start_time);
+			state->first_stream->next_frame_time_offset + state->first_stream->clip_start_time);
 	}
 
 	header->len = p - header->data;
@@ -1222,9 +1216,8 @@ hds_muxer_start_frame(hds_muxer_state_t* state)
 	selected_stream->cur_frame++;
 	selected_stream->cur_frame_output_offset++;
 
+	cur_frame_dts = selected_stream->next_frame_time_offset + selected_stream->clip_start_time;
 	selected_stream->next_frame_time_offset += state->cur_frame->duration;
-	cur_frame_dts = selected_stream->next_frame_dts + selected_stream->clip_start_time;
-	selected_stream->next_frame_dts = rescale_time(selected_stream->next_frame_time_offset, selected_stream->timescale, HDS_TIMESCALE);
 
 	state->cache_slot_id = selected_stream->media_type;
 
@@ -1272,7 +1265,7 @@ hds_muxer_start_frame(hds_muxer_state_t* state)
 			cur_frame_dts,
 			state->cur_frame->key_frame ? FRAME_TYPE_KEY_FRAME : FRAME_TYPE_INTER_FRAME,
 			AVC_PACKET_TYPE_NALU,
-			rescale_time(state->cur_frame->pts_delay, selected_stream->timescale, HDS_TIMESCALE));
+			state->cur_frame->pts_delay);
 		break;
 
 	case MEDIA_TYPE_AUDIO:

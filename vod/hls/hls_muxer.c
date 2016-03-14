@@ -21,7 +21,6 @@ hls_muxer_init_track(
 	vod_status_t rc;
 
 	cur_stream->media_type = track->media_info.media_type;
-	cur_stream->timescale = track->media_info.timescale;
 	cur_stream->first_frame_part = &track->frames;
 	cur_stream->cur_frame_part = track->frames;
 	cur_stream->cur_frame = track->frames.first_frame;
@@ -29,7 +28,6 @@ hls_muxer_init_track(
 	cur_stream->first_frame_time_offset = track->first_frame_time_offset;
 	cur_stream->clip_from_frame_offset = track->clip_from_frame_offset;
 	cur_stream->next_frame_time_offset = cur_stream->first_frame_time_offset;
-	cur_stream->next_frame_dts = rescale_time(cur_stream->next_frame_time_offset, cur_stream->timescale, HLS_TIMESCALE);
 
 	switch (track->media_info.media_type)
 	{
@@ -458,7 +456,7 @@ hls_muxer_choose_stream(hls_muxer_state_t* state, hls_muxer_stream_state_t** res
 				continue;
 			}
 
-			if (min_dts == NULL || cur_stream->next_frame_dts < min_dts->next_frame_dts)
+			if (min_dts == NULL || cur_stream->next_frame_time_offset < min_dts->next_frame_time_offset)
 			{
 				min_dts = cur_stream;
 			}
@@ -513,9 +511,8 @@ hls_muxer_start_frame(hls_muxer_state_t* state)
 	state->frames_source = selected_stream->cur_frame_part.frames_source;
 	state->frames_source_context = selected_stream->cur_frame_part.frames_source_context;
 	cur_frame_time_offset = selected_stream->next_frame_time_offset;
+	cur_frame_dts = selected_stream->next_frame_time_offset;
 	selected_stream->next_frame_time_offset += state->cur_frame->duration;
-	cur_frame_dts = selected_stream->next_frame_dts;
-	selected_stream->next_frame_dts = rescale_time(selected_stream->next_frame_time_offset, selected_stream->timescale, HLS_TIMESCALE);
 
 	// TODO: in the case of multi clip without discontinuity, the test below is not sufficient
 	state->last_stream_frame = selected_stream->cur_frame >= selected_stream->cur_frame_part.last_frame && 
@@ -545,8 +542,7 @@ hls_muxer_start_frame(hls_muxer_state_t* state)
 	state->cur_writer_context = selected_stream->top_filter_context;
 
 	// initialize the mpeg ts frame info
-	output_frame.pts = rescale_time(cur_frame_time_offset + state->cur_frame->pts_delay, selected_stream->timescale, HLS_TIMESCALE) + 
-		selected_stream->clip_start_time;
+	output_frame.pts = cur_frame_time_offset + state->cur_frame->pts_delay + selected_stream->clip_start_time;
 	output_frame.dts = cur_frame_dts + selected_stream->clip_start_time;
 	output_frame.key = state->cur_frame->key_frame;
 	output_frame.size = state->cur_frame->size;
@@ -732,7 +728,7 @@ hls_muxer_simulation_set_segment_limit(
 
 	for (cur_stream = state->first_stream; cur_stream < state->last_stream; cur_stream++)
 	{
-		cur_stream->segment_limit = (segment_end * cur_stream->timescale) / timescale - cur_stream->clip_from_frame_offset;
+		cur_stream->segment_limit = (segment_end * HLS_TIMESCALE) / timescale - cur_stream->clip_from_frame_offset;
 		cur_stream->is_first_segment_frame = TRUE;
 	}
 }
@@ -880,9 +876,8 @@ hls_muxer_simulate_get_iframes(
 		cur_frame = selected_stream->cur_frame;
 		selected_stream->cur_frame++;
 		cur_frame_time_offset = selected_stream->next_frame_time_offset;
+		cur_frame_dts = selected_stream->next_frame_time_offset;
 		selected_stream->next_frame_time_offset += cur_frame->duration;
-		cur_frame_dts = selected_stream->next_frame_dts;
-		selected_stream->next_frame_dts = rescale_time(selected_stream->next_frame_time_offset, selected_stream->timescale, HLS_TIMESCALE);
 		
 		// flush any buffered frames if their delay becomes too big
 		hls_muxer_simulation_flush_delayed_streams(&state, selected_stream, cur_frame_dts);
@@ -924,7 +919,7 @@ hls_muxer_simulate_get_iframes(
 		if (!selected_stream->is_first_segment_frame && selected_stream->prev_key_frame)
 		{
 			// get the frame time
-			cur_frame_time = rescale_time(selected_stream->prev_frame_pts, selected_stream->timescale, 1000);		// in millis
+			cur_frame_time = rescale_time(selected_stream->prev_frame_pts, HLS_TIMESCALE, 1000);		// in millis
 			if (frame_size != 0)
 			{
 				if (cur_frame_time > frame_start_time)
@@ -948,7 +943,7 @@ hls_muxer_simulate_get_iframes(
 		if (last_frame && cur_frame[0].key_frame)
 		{
 			// get the frame time
-			cur_frame_time = rescale_time(cur_frame_time_offset + cur_frame[0].pts_delay, selected_stream->timescale, 1000);		// in millis
+			cur_frame_time = rescale_time(cur_frame_time_offset + cur_frame[0].pts_delay, HLS_TIMESCALE, 1000);		// in millis
 			if (frame_size != 0)
 			{
 				if (cur_frame_time > frame_start_time)
@@ -1015,9 +1010,8 @@ hls_muxer_simulate_get_segment_size(hls_muxer_state_t* state, size_t* result)
 
 		cur_frame = selected_stream->cur_frame;
 		selected_stream->cur_frame++;
+		cur_frame_dts = selected_stream->next_frame_time_offset;
 		selected_stream->next_frame_time_offset += cur_frame->duration;
-		cur_frame_dts = selected_stream->next_frame_dts;
-		selected_stream->next_frame_dts = rescale_time(selected_stream->next_frame_time_offset, selected_stream->timescale, HLS_TIMESCALE);
 
 		// flush any buffered frames if their delay becomes too big
 		hls_muxer_simulation_flush_delayed_streams(state, selected_stream, cur_frame_dts);
@@ -1083,7 +1077,6 @@ hls_muxer_simulation_reset(hls_muxer_state_t* state)
 			cur_stream->cur_frame_part = *cur_stream->first_frame_part;
 			cur_stream->cur_frame = cur_stream->cur_frame_part.first_frame;
 			cur_stream->next_frame_time_offset = cur_stream->first_frame_time_offset;
-			cur_stream->next_frame_dts = rescale_time(cur_stream->next_frame_time_offset, cur_stream->timescale, HLS_TIMESCALE);
 		}
 	}
 

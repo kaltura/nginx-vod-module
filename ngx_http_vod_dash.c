@@ -11,6 +11,7 @@
 #define SUPPORTED_CODECS_MP4 (VOD_CODEC_FLAG(AVC) | VOD_CODEC_FLAG(HEVC) | VOD_CODEC_FLAG(AAC))
 #define SUPPORTED_CODECS_WEBM (VOD_CODEC_FLAG(VP8) | VOD_CODEC_FLAG(VP9) | VOD_CODEC_FLAG(VORBIS) | VOD_CODEC_FLAG(OPUS))
 #define SUPPORTED_CODECS (SUPPORTED_CODECS_MP4 | SUPPORTED_CODECS_WEBM)
+#define TIMESCALE (10000)
 
 ngx_conf_enum_t  dash_manifest_formats[] = {
 	{ ngx_string("segmentlist"), FORMAT_SEGMENT_LIST },
@@ -338,6 +339,7 @@ static const ngx_http_vod_request_t dash_manifest_request = {
 	PARSE_FLAG_DURATION_LIMITS_AND_TOTAL_SIZE | PARSE_FLAG_CODEC_NAME,
 	REQUEST_CLASS_MANIFEST,
 	SUPPORTED_CODECS,
+	TIMESCALE,
 	ngx_http_vod_dash_handle_manifest,
 	NULL,
 };
@@ -347,6 +349,7 @@ static const ngx_http_vod_request_t dash_mp4_init_request = {
 	PARSE_BASIC_METADATA_ONLY | PARSE_FLAG_SAVE_RAW_ATOMS,
 	REQUEST_CLASS_OTHER,
 	SUPPORTED_CODECS_MP4,
+	TIMESCALE,
 	ngx_http_vod_dash_mp4_handle_init_segment,
 	NULL,
 };
@@ -356,6 +359,7 @@ static const ngx_http_vod_request_t dash_mp4_fragment_request = {
 	PARSE_FLAG_FRAMES_ALL,
 	REQUEST_CLASS_SEGMENT,
 	SUPPORTED_CODECS_MP4,
+	TIMESCALE,
 	NULL,
 	ngx_http_vod_dash_mp4_init_frame_processor,
 };
@@ -365,6 +369,7 @@ static const ngx_http_vod_request_t edash_mp4_fragment_request = {
 	PARSE_FLAG_FRAMES_ALL | PARSE_FLAG_PARSED_EXTRA_DATA,
 	REQUEST_CLASS_SEGMENT,
 	SUPPORTED_CODECS_MP4,
+	TIMESCALE,
 	NULL,
 	ngx_http_vod_dash_mp4_init_frame_processor,
 };
@@ -374,6 +379,7 @@ static const ngx_http_vod_request_t dash_webm_init_request = {
 	PARSE_BASIC_METADATA_ONLY,
 	REQUEST_CLASS_OTHER,
 	SUPPORTED_CODECS_WEBM,
+	TIMESCALE,
 	ngx_http_vod_dash_webm_handle_init_segment,
 	NULL,
 };
@@ -383,6 +389,7 @@ static const ngx_http_vod_request_t dash_webm_fragment_request = {
 	PARSE_FLAG_FRAMES_ALL,
 	REQUEST_CLASS_SEGMENT,
 	SUPPORTED_CODECS_WEBM,
+	TIMESCALE,
 	NULL,
 	ngx_http_vod_dash_webm_init_frame_processor,
 };

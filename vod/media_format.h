@@ -75,10 +75,6 @@ enum {
 };
 
 enum {			// mp4 only
-	RTA_TKHD,
-	RTA_HDLR,
-	RTA_MDHD,
-	RTA_DINF,
 	RTA_STSD,
 
 	RTA_COUNT
@@ -141,8 +137,8 @@ typedef struct media_info_s {
 	uint32_t codec_id;
 	vod_str_t codec_name;
 	vod_str_t extra_data;
-	int64_t empty_duration;
-	int64_t start_time;
+	int64_t empty_duration;		// temporary during parsing
+	int64_t start_time;			// temporary during parsing
 	uint64_t codec_delay;
 	union {
 		video_media_info_t video;
@@ -158,9 +154,9 @@ typedef struct {
 
 struct input_frame_s {
 	uint64_t offset;
-	uint32_t duration;
 	uint32_t size;
 	uint32_t key_frame;
+	uint32_t duration;
 	uint32_t pts_delay;
 };
 
@@ -177,6 +173,7 @@ typedef struct {		// mp4 only
 typedef struct frame_list_part_s {
 	input_frame_t* first_frame;
 	input_frame_t* last_frame;
+	uint32_t clip_to;
 	frames_source_t* frames_source;
 	void* frames_source_context;
 	struct frame_list_part_s* next;
@@ -205,7 +202,6 @@ typedef struct {
 	media_track_t* last_track;
 	uint32_t total_track_count;
 	uint32_t track_count[MEDIA_TYPE_COUNT];
-	raw_atom_t mvhd_atom;		// mp4 only
 } media_track_array_t;
 
 typedef struct {

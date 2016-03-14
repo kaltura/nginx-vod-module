@@ -25,7 +25,6 @@ typedef struct {
 
 typedef struct {
 	int media_type;
-	uint32_t timescale;
 	
 	// input frames
 	frame_list_part_t* first_frame_part;
@@ -36,7 +35,6 @@ typedef struct {
 	int64_t clip_start_time;
 	uint64_t first_frame_time_offset;
 	uint64_t next_frame_time_offset;
-	uint64_t next_frame_dts;
 	int32_t clip_from_frame_offset;
 
 	// iframes simulation only

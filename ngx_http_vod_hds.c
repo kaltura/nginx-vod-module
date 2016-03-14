@@ -7,6 +7,7 @@
 
 // constants
 #define SUPPORTED_CODECS (VOD_CODEC_FLAG(AVC) | VOD_CODEC_FLAG(AAC) | VOD_CODEC_FLAG(MP3))
+#define TIMESCALE (1000)
 
 // content types
 static u_char f4m_content_type[] = "video/f4m";
@@ -132,6 +133,7 @@ static const ngx_http_vod_request_t hds_manifest_request = {
 	PARSE_FLAG_DURATION_LIMITS_AND_TOTAL_SIZE,
 	REQUEST_CLASS_MANIFEST,
 	SUPPORTED_CODECS,
+	TIMESCALE,
 	ngx_http_vod_hds_handle_manifest,
 	NULL,
 };
@@ -141,6 +143,7 @@ static const ngx_http_vod_request_t hds_bootstrap_request = {
 	0,
 	REQUEST_CLASS_MANIFEST,
 	SUPPORTED_CODECS,
+	TIMESCALE,
 	ngx_http_vod_hds_handle_bootstrap,
 	NULL,
 };
@@ -150,6 +153,7 @@ static const ngx_http_vod_request_t hds_fragment_request = {
 	PARSE_FLAG_FRAMES_ALL | PARSE_FLAG_EXTRA_DATA,
 	REQUEST_CLASS_SEGMENT,
 	SUPPORTED_CODECS,
+	TIMESCALE,
 	NULL,
 	ngx_http_vod_hds_init_frame_processor,
 };

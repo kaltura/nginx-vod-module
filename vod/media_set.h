@@ -38,7 +38,6 @@ typedef struct {
 typedef struct {
 	media_track_t* first_track;
 	media_track_t* last_track;
-	raw_atom_t mvhd_atom;
 	media_track_t* longest_track[MEDIA_TYPE_COUNT];
 } media_clip_filtered_t;
 

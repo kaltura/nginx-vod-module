@@ -1776,6 +1776,98 @@ ngx_http_vod_validate_streams(ngx_http_vod_ctx_t *ctx)
 	return NGX_OK;
 }
 
+static void
+ngx_http_vod_update_track_timescale(
+	ngx_http_vod_ctx_t *ctx, 
+	media_track_t* track, 
+	uint32_t new_timescale)
+{
+	frame_list_part_t* part;
+	input_frame_t* last_frame;
+	input_frame_t* cur_frame;
+	uint64_t clip_start_dts = 0;
+	uint64_t last_frame_dts;
+	uint64_t clip_end_dts;
+	uint64_t scaled_dts;
+	uint64_t last_dts;
+	uint64_t dts;
+	uint64_t pts;
+	uint32_t cur_timescale = track->media_info.timescale;
+
+	// frames
+	dts = track->first_frame_time_offset;
+	last_dts = rescale_time(dts, cur_timescale, new_timescale);
+	track->first_frame_time_offset = last_dts;
+
+	part = &track->frames;
+	last_frame = part->last_frame;
+	for (cur_frame = part->first_frame;; cur_frame++)
+	{
+		if (cur_frame >= last_frame)
+		{
+			if (part->first_frame < last_frame && part->clip_to != UINT_MAX)
+			{
+				clip_end_dts = clip_start_dts + rescale_time(part->clip_to, 1000, new_timescale);
+				last_frame_dts = last_dts - cur_frame[-1].duration;
+
+				if (clip_end_dts > last_frame_dts)
+				{
+					cur_frame[-1].duration = clip_end_dts - last_frame_dts;
+					last_dts = clip_end_dts;
+				}
+				else
+				{
+					ngx_log_error(NGX_LOG_WARN, ctx->submodule_context.request_context.log, 0,
+						"ngx_http_vod_update_track_timescale: last frame dts %uL greater than clip end dts %uL",
+						last_frame_dts, clip_end_dts);
+				}
+
+				clip_start_dts = last_dts;
+			}
+
+			if (part->next == NULL)
+			{
+				break;
+			}
+
+			part = part->next;
+			cur_frame = part->first_frame;
+			last_frame = part->last_frame;
+		}
+
+		pts = dts + cur_frame->pts_delay;
+		cur_frame->pts_delay = rescale_time(pts, cur_timescale, new_timescale) - last_dts;
+
+		dts += cur_frame->duration;
+		scaled_dts = rescale_time(dts, cur_timescale, new_timescale);
+		cur_frame->duration = scaled_dts - last_dts;
+		last_dts = scaled_dts;
+	}
+
+	track->total_frames_duration = last_dts - track->first_frame_time_offset;
+	track->clip_from_frame_offset = rescale_time(track->clip_from_frame_offset, cur_timescale, new_timescale);
+
+	// media info
+	track->media_info.duration = rescale_time(track->media_info.duration, cur_timescale, new_timescale);
+	track->media_info.full_duration = rescale_time(track->media_info.full_duration, cur_timescale, new_timescale);
+	track->media_info.min_frame_duration = rescale_time(track->media_info.min_frame_duration, cur_timescale, new_timescale);
+
+	track->media_info.timescale = new_timescale;
+	track->media_info.frames_timescale = new_timescale;
+}
+
+static void
+ngx_http_vod_update_timescale(ngx_http_vod_ctx_t *ctx)
+{
+	media_set_t* media_set = &ctx->submodule_context.media_set;
+	media_track_t* track;
+
+	for (track = media_set->filtered_tracks; track < media_set->filtered_tracks_end; track++)
+	{
+		ngx_http_vod_update_track_timescale(ctx, track, ctx->request->timescale);
+	}
+}
+
 ////// Metadata request handling
 
 static ngx_int_t
@@ -1788,6 +1880,8 @@ ngx_http_vod_handle_metadata_request(ngx_http_vod_ctx_t *ctx)
 	ngx_str_t response = ngx_null_string;
 	ngx_int_t rc;
 	int cache_type;
+
+	ngx_http_vod_update_timescale(ctx);
 
 	ngx_perf_counter_start(ctx->perf_counter_context);
 
@@ -2018,6 +2112,8 @@ ngx_http_vod_init_frame_processing(ngx_http_vod_ctx_t *ctx)
 	ngx_str_t output_buffer = ngx_null_string;
 	ngx_str_t content_type;
 	ngx_int_t rc;
+
+	ngx_http_vod_update_timescale(ctx);
 
 	// initialize the response writer
 	ctx->out.buf = NULL;

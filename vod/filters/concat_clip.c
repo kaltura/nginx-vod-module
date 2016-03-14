@@ -49,6 +49,7 @@ concat_clip_parse(
 	media_clip_source_t* sources;
 	vod_json_value_t* array_elts;
 	vod_json_value_t* params[CONCAT_PARAM_COUNT];
+	vod_json_value_t* duration_elt;
 	media_range_t* range;
 	vod_array_t* paths;
 	vod_array_t* array;
@@ -244,6 +245,8 @@ concat_clip_parse(
 		{
 			range[clip_count - 1].end = end - offset;
 		}
+
+		duration_elt = array_elts + min_index;
 	}
 
 	// initialize the tracks mask
@@ -358,7 +361,8 @@ concat_clip_parse(
 			break;
 		}
 
-		cur_source->clip_to = range->end;
+		cur_source->clip_to = duration_elt->v.num.nom;
+		duration_elt++;
 		cur_source++;
 		offset += range->end;
 		range++;
