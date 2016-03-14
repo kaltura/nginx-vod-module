@@ -49,7 +49,7 @@ concat_clip_parse(
 	media_clip_source_t* sources;
 	vod_json_value_t* array_elts;
 	vod_json_value_t* params[CONCAT_PARAM_COUNT];
-	vod_json_value_t* duration_elt;
+	vod_json_value_t* duration_elt = NULL;
 	media_range_t* range;
 	vod_array_t* paths;
 	vod_array_t* array;
