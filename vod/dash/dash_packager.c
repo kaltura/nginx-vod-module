@@ -1311,7 +1311,7 @@ dash_packager_get_track_sizes(media_set_t* media_set, media_track_t* cur_track, 
 {
 	size_t tkhd_atom_size;
 	size_t mdhd_atom_size;
-	size_t hdlr_atom_size;
+	size_t hdlr_atom_size = 0;
 
 	if (media_set->type != MEDIA_SET_LIVE && dash_rescale_millis(media_set->total_duration) > UINT_MAX)
 	{
