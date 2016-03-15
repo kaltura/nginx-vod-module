@@ -305,7 +305,7 @@ dynamic_clip_apply_mapping_string_clip(
 	if (source_count <= 0 || source_count > MAX_DYNAMIC_CLIP_SOURCE_COUNT)
 	{
 		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-			"dynamic_clip_apply_mapping_string: invalid dynamic clip source count %uD",
+			"dynamic_clip_apply_mapping_string_clip: invalid dynamic clip source count %uD",
 			source_count);
 		return VOD_BAD_REQUEST;
 	}
@@ -313,7 +313,7 @@ dynamic_clip_apply_mapping_string_clip(
 	if (p >= end || *p != '-')
 	{
 		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-			"dynamic_clip_apply_mapping_string: expected a delimiter (-) following the source count");
+			"dynamic_clip_apply_mapping_string_clip: expected a delimiter (-) following the source count");
 		return VOD_BAD_REQUEST;
 	}
 	p++;		// skip the -
@@ -323,7 +323,7 @@ dynamic_clip_apply_mapping_string_clip(
 	if (p >= end || *p != '-')
 	{
 		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-			"dynamic_clip_apply_mapping_string: expected a delimiter (-) following the offset");
+			"dynamic_clip_apply_mapping_string_clip: expected a delimiter (-) following the offset");
 		return VOD_BAD_REQUEST;
 	}
 	p++;
