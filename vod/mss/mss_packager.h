@@ -11,6 +11,7 @@
 // constants
 #define MSS_STREAM_TYPE_VIDEO "video"
 #define MSS_STREAM_TYPE_AUDIO "audio"
+#define MSS_TIMESCALE (10000000)
 
 // macros
 // Note: in order to be able to process fragment requests efficiently, we need to know the file index and track index

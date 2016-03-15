@@ -10,6 +10,9 @@
 #include "../media_format.h"
 #include "../segmenter.h"
 
+// constants
+#define HLS_TIMESCALE (90000)
+
 // typedefs
 typedef void(*hls_get_iframe_positions_callback_t)(
 	void* context, 

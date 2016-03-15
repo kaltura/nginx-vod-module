@@ -6,8 +6,6 @@
 #define dash_rescale_millis(millis) ((millis) * (DASH_TIMESCALE / 1000))
 
 // constants
-#define DASH_TIMESCALE (10000)
-
 #define VOD_DASH_MANIFEST_HEADER_VOD											\
     "<?xml version=\"1.0\"?>\n"													\
     "<MPD\n"																	\
@@ -1459,7 +1457,7 @@ dash_packager_write_tkhd_atom(
 	size_t atom_size = ATOM_HEADER_SIZE + sizeof(tkhd_atom_t);
 
 	write_atom_header(p, atom_size, 't', 'k', 'h', 'd');
-	write_be32(p, 0x0000000f);		// version + flags
+	write_be32(p, 0x00000003);		// version + flags
 	write_be32(p, 0);				// creation time
 	write_be32(p, 0);				// modification time
 	write_be32(p, 1);				// track id
@@ -1479,7 +1477,7 @@ dash_packager_write_tkhd64_atom(
 	size_t atom_size = ATOM_HEADER_SIZE + sizeof(tkhd64_atom_t);
 
 	write_atom_header(p, atom_size, 't', 'k', 'h', 'd');
-	write_be32(p, 0x0100000f);		// version + flags
+	write_be32(p, 0x01000003);		// version + flags
 	write_be64(p, 0LL);				// creation time
 	write_be64(p, 0LL);				// modification time
 	write_be32(p, 1);				// track id

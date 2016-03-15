@@ -1,8 +1,6 @@
 #include "frame_joiner_filter.h"
 #include "hls_muxer.h"
 
-#define HLS_TIMESCALE (90000)
-
 // from ffmpeg mpegtsenc
 #define DEFAULT_PES_HEADER_FREQ 16
 #define DEFAULT_PES_PAYLOAD_SIZE ((DEFAULT_PES_HEADER_FREQ - 1) * 184 + 170)

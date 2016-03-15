@@ -2,7 +2,6 @@
 #include "../mp4/mp4_defs.h"
 
 // constants
-#define MSS_TIMESCALE (10000000)
 #define MSS_LOOK_AHEAD_COUNT (2)
 #define TFRF_ATOM_SIZE (ATOM_HEADER_SIZE + sizeof(uuid_tfrf_atom_t) + sizeof(uuid_tfrf_entry_t) * MSS_LOOK_AHEAD_COUNT)
 
