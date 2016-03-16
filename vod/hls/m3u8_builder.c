@@ -2,7 +2,6 @@
 #include "../manifest_utils.h"
 
 // macros
-#define MAX_SEGMENT_COUNT (10 * 1024)			// more than 1 day when using 10 sec segments
 #define M3U8_HEADER_PART1 "#EXTM3U\n#EXT-X-TARGETDURATION:%d\n#EXT-X-ALLOW-CACHE:YES\n"
 #define M3U8_HEADER_VOD "#EXT-X-PLAYLIST-TYPE:VOD\n"
 #define M3U8_HEADER_PART2 "#EXT-X-VERSION:%d\n#EXT-X-MEDIA-SEQUENCE:%uD\n"
