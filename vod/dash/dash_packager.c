@@ -5,6 +5,7 @@
 #define vod_copy_atom(p, raw_atom) vod_copy(p, (raw_atom).ptr, (raw_atom).size)
 
 // constants
+#define VOD_DASH_MAX_FRAME_RATE_LEN (1 + 2 * VOD_INT32_LEN)
 
 #define VOD_DASH_MANIFEST_HEADER_VOD											\
     "<?xml version=\"1.0\"?>\n"													\
@@ -49,16 +50,16 @@
     "        segmentAlignment=\"true\"\n"										\
     "        maxWidth=\"%uD\"\n"												\
     "        maxHeight=\"%uD\"\n"												\
-    "        maxFrameRate=\"%uD.%03uD\">\n"
+    "        maxFrameRate=\"%V\">\n"
 
 #define VOD_DASH_MANIFEST_VIDEO_PREFIX											\
 	"      <Representation\n"													\
     "          id=\"%V\"\n"														\
-    "          mimeType=\"%V\"\n"										\
+    "          mimeType=\"%V\"\n"												\
     "          codecs=\"%V\"\n"													\
     "          width=\"%uD\"\n"													\
     "          height=\"%uD\"\n"												\
-    "          frameRate=\"%uD.%03uD\"\n"										\
+    "          frameRate=\"%V\"\n"												\
     "          sar=\"1:1\"\n"													\
     "          startWithSAP=\"1\"\n"											\
 	"          bandwidth=\"%uD\">\n"
@@ -82,7 +83,7 @@
 #define VOD_DASH_MANIFEST_AUDIO_PREFIX											\
 	"      <Representation\n"													\
 	"          id=\"%V\"\n"														\
-    "          mimeType=\"%V\"\n"										\
+    "          mimeType=\"%V\"\n"												\
     "          codecs=\"%V\"\n"													\
     "          audioSamplingRate=\"%uD\"\n"										\
     "          startWithSAP=\"1\"\n"											\
@@ -571,6 +572,46 @@ dash_packager_write_segment_list(
 	return p;
 }
 
+static uint32_t 
+dash_packager_find_gcd(uint32_t num1, uint32_t num2)
+{
+	while (num1 != num2)
+	{
+		if (num1 > num2)
+		{
+			num1 -= num2;
+		}
+		else
+		{
+			num2 -= num1;
+		}
+	}
+
+	return num1;
+}
+
+static void
+dash_packager_write_frame_rate(
+	uint32_t duration, 
+	uint32_t timescale, 
+	vod_str_t* result)
+{
+	uint32_t gcd = dash_packager_find_gcd(duration, timescale);
+	u_char* p = result->data;
+
+	duration /= gcd;
+	timescale /= gcd;
+
+	if (duration == 1)
+	{
+		result->len = vod_sprintf(p, "%uD", timescale) - p;
+	}
+	else
+	{
+		result->len = vod_sprintf(p, "%uD/%uD", timescale, duration) - p;
+	}
+}
+
 static u_char* 
 dash_packager_write_mpd_period(
 	u_char* p,
@@ -591,7 +632,9 @@ dash_packager_write_mpd_period(
 	media_track_t* last_track;
 	media_track_t* cur_track;
 	vod_str_t representation_id;
+	vod_str_t frame_rate;
 	u_char representation_id_buffer[MAX_TRACK_SPEC_LENGTH];
+	u_char frame_rate_buffer[VOD_DASH_MAX_FRAME_RATE_LEN];
 	uint32_t filtered_clip_index;
 	uint32_t max_width = 0;
 	uint32_t max_height = 0;
@@ -599,6 +642,8 @@ dash_packager_write_mpd_period(
 	uint32_t max_framerate_timescale = 0;
 	uint32_t segment_count = 0;
 	uint32_t start_number;
+
+	frame_rate.data = frame_rate_buffer;
 
 	representation_id.data = representation_id_buffer;
 
@@ -675,12 +720,16 @@ dash_packager_write_mpd_period(
 		}
 
 		// print the header
+		dash_packager_write_frame_rate(
+			max_framerate_duration,
+			max_framerate_timescale,
+			&frame_rate);
+
 		p = vod_sprintf(p,
 			VOD_DASH_MANIFEST_VIDEO_HEADER,
 			max_width,
 			max_height,
-			(uint32_t)max_framerate_timescale / max_framerate_duration,
-			(uint32_t)(((uint64_t)max_framerate_timescale * 1000) / max_framerate_duration % 1000));
+			&frame_rate);
 
 		// get the segment index start number
 		if (clip_index == 0)
@@ -746,6 +795,11 @@ dash_packager_write_mpd_period(
 				dash_packager_get_track_spec(
 					&representation_id, media_set, clip_index, cur_sequence->index, cur_track->index, 'v');
 
+				dash_packager_write_frame_rate(
+					cur_track->media_info.min_frame_duration,
+					cur_track->media_info.timescale,
+					&frame_rate);
+
 				p = vod_sprintf(p,
 					VOD_DASH_MANIFEST_VIDEO_PREFIX,
 					&representation_id,
@@ -753,8 +807,7 @@ dash_packager_write_mpd_period(
 					&cur_track->media_info.codec_name,
 					(uint32_t)cur_track->media_info.u.video.width,
 					(uint32_t)cur_track->media_info.u.video.height,
-					(uint32_t)(cur_track->media_info.timescale / cur_track->media_info.min_frame_duration),
-					(uint32_t)(((uint64_t)cur_track->media_info.timescale * 1000) / cur_track->media_info.min_frame_duration % 1000),
+					&frame_rate,
 					cur_track->media_info.bitrate
 					);
 
@@ -1098,9 +1151,9 @@ dash_packager_build_mpd(
 
 	base_period_size =
 		sizeof(VOD_DASH_MANIFEST_PERIOD_HEADER_DURATION) - 1 + 3 * VOD_INT32_LEN +
-			sizeof(VOD_DASH_MANIFEST_VIDEO_HEADER) - 1 + 4 * VOD_INT32_LEN + 
+			sizeof(VOD_DASH_MANIFEST_VIDEO_HEADER) - 1 + 2 * VOD_INT32_LEN + VOD_DASH_MAX_FRAME_RATE_LEN +
 				media_set->track_count[MEDIA_TYPE_VIDEO] * (
-				sizeof(VOD_DASH_MANIFEST_VIDEO_PREFIX) - 1 + MAX_TRACK_SPEC_LENGTH + MAX_MIME_TYPE_SIZE + MAX_CODEC_NAME_SIZE + 5 * VOD_INT32_LEN +
+				sizeof(VOD_DASH_MANIFEST_VIDEO_PREFIX) - 1 + MAX_TRACK_SPEC_LENGTH + MAX_MIME_TYPE_SIZE + MAX_CODEC_NAME_SIZE + 3 * VOD_INT32_LEN + VOD_DASH_MAX_FRAME_RATE_LEN +
 				sizeof(VOD_DASH_MANIFEST_VIDEO_SUFFIX) - 1) +
 			sizeof(VOD_DASH_MANIFEST_VIDEO_FOOTER) - 1 +
 			sizeof(VOD_DASH_MANIFEST_AUDIO_HEADER) - 1 + 
