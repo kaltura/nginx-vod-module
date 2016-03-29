@@ -2,7 +2,6 @@
 #include "../mp4/mp4_defs.h"
 
 // constants
-#define MSS_TIMESCALE (10000000)
 #define MSS_LOOK_AHEAD_COUNT (2)
 #define TFRF_ATOM_SIZE (ATOM_HEADER_SIZE + sizeof(uuid_tfrf_atom_t) + sizeof(uuid_tfrf_entry_t) * MSS_LOOK_AHEAD_COUNT)
 
@@ -534,14 +533,14 @@ mss_get_segment_timing_info(media_sequence_t* sequence, segment_timing_info_t* r
 
 	cur_clip = sequence->filtered_clips;
 	track = cur_clip->first_track;
-	result->timestamp = rescale_time(track->first_frame_time_offset, track->media_info.timescale, MSS_TIMESCALE) + mss_rescale_millis(track->clip_start_time);
-	result->duration = rescale_time(track->total_frames_duration, track->media_info.timescale, MSS_TIMESCALE);
+	result->timestamp = track->first_frame_time_offset + mss_rescale_millis(track->clip_start_time);
+	result->duration = track->total_frames_duration;
 	cur_clip++;
 
 	for (; cur_clip < sequence->filtered_clips_end; cur_clip++)
 	{
 		track = cur_clip->first_track;
-		result->duration += rescale_time(track->total_frames_duration, track->media_info.timescale, MSS_TIMESCALE);
+		result->duration += track->total_frames_duration;
 	}
 }
 
@@ -597,13 +596,8 @@ mss_packager_build_fragment_header(
 	size_t* total_fragment_size)
 {
 	segment_timing_info_t timing_info;
-	media_clip_filtered_t* cur_clip;
-	frame_list_part_t* part;
 	media_sequence_t* sequence = media_set->sequences;
-	input_frame_t* last_frame;
-	input_frame_t* cur_frame;
 	media_track_t* first_track = sequence->filtered_clips[0].first_track;
-	media_track_t* track;
 	uint32_t media_type = sequence->media_type;
 	size_t mdat_atom_size;
 	size_t trun_atom_size;
@@ -677,29 +671,6 @@ mss_packager_build_fragment_header(
 	}
 
 	// moof.traf.trun
-	for (cur_clip = sequence->filtered_clips; cur_clip < sequence->filtered_clips_end; cur_clip++)
-	{
-		track = cur_clip->first_track;
-		part = &track->frames;
-		last_frame = part->last_frame;
-		for (cur_frame = part->first_frame; ; cur_frame++)
-		{
-			if (cur_frame >= last_frame)
-			{
-				if (part->next == NULL)
-				{
-					break;
-				}
-				part = part->next;
-				cur_frame = part->first_frame;
-				last_frame = part->last_frame;
-			}
-
-			cur_frame->duration = rescale_time(cur_frame->duration, track->media_info.timescale, MSS_TIMESCALE);
-			cur_frame->pts_delay = rescale_time(cur_frame->pts_delay, track->media_info.timescale, MSS_TIMESCALE);
-		}
-	}
-
 	p = mp4_builder_write_trun_atom(
 		p,
 		sequence,

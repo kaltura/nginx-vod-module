@@ -3,6 +3,7 @@
 
 // macros
 #define vod_copy_atom(p, raw_atom) vod_copy(p, (raw_atom).ptr, (raw_atom).size)
+#define dash_rescale_millis(millis) ((millis) * (DASH_TIMESCALE / 1000))
 
 // constants
 #define VOD_DASH_MAX_FRAME_RATE_LEN (1 + 2 * VOD_INT32_LEN)
@@ -247,6 +248,48 @@ static const u_char ftyp_atom[] = {
 	0x00, 0x00, 0x00, 0x01,		// minor version
 	0x69, 0x73, 0x6f, 0x6d,		// compatible brand
 	0x61, 0x76, 0x63, 0x31,		// compatible brand
+};
+
+static const u_char hdlr_video_atom[] = {
+	0x00, 0x00, 0x00, 0x2d,		// size
+	0x68, 0x64, 0x6c, 0x72,		// hdlr
+	0x00, 0x00, 0x00, 0x00,		// version + flags
+	0x00, 0x00, 0x00, 0x00,		// pre defined
+	0x76, 0x69, 0x64, 0x65,		// handler type = vide
+	0x00, 0x00, 0x00, 0x00,		// reserved1
+	0x00, 0x00, 0x00, 0x00,		// reserved2
+	0x00, 0x00, 0x00, 0x00,		// reserved3
+	0x56, 0x69, 0x64, 0x65,		// VideoHandler\0
+	0x6f, 0x48, 0x61, 0x6e,
+	0x64, 0x6c, 0x65, 0x72,
+	0x00
+};
+
+static const u_char hdlr_audio_atom[] = {
+	0x00, 0x00, 0x00, 0x2d,		// size
+	0x68, 0x64, 0x6c, 0x72,		// hdlr
+	0x00, 0x00, 0x00, 0x00,		// version + flags
+	0x00, 0x00, 0x00, 0x00,		// pre defined
+	0x73, 0x6f, 0x75, 0x6e,		// handler type = soun
+	0x00, 0x00, 0x00, 0x00,		// reserved1
+	0x00, 0x00, 0x00, 0x00,		// reserved2
+	0x00, 0x00, 0x00, 0x00,		// reserved3
+	0x53, 0x6f, 0x75, 0x6e,		// name = SoundHandler\0
+	0x64, 0x48, 0x61, 0x6e,
+	0x64, 0x6c, 0x65, 0x72,
+	0x00
+};
+
+static const u_char dinf_atom[] = {
+	0x00, 0x00, 0x00, 0x24,		// atom size
+	0x64, 0x69, 0x6e, 0x66,		// dinf
+	0x00, 0x00, 0x00, 0x1c,		// atom size
+	0x64, 0x72, 0x65, 0x66,		// dref
+	0x00, 0x00, 0x00, 0x00,		// version + flags
+	0x00, 0x00, 0x00, 0x01,		// entry count
+	0x00, 0x00, 0x00, 0x0c,		// atom size
+	0x75, 0x72, 0x6c, 0x20,		// url
+	0x00, 0x00, 0x00, 0x01,		// version + flags
 };
 
 static const u_char vmhd_atom[] = {
@@ -1316,31 +1359,48 @@ dash_packager_build_mpd(
 // init mp4 writing code
 
 static void
-dash_packager_get_track_sizes(media_track_t* cur_track, size_t stsd_size, track_sizes_t* result)
+dash_packager_get_track_sizes(media_set_t* media_set, media_track_t* cur_track, size_t stsd_size, track_sizes_t* result)
 {
+	size_t tkhd_atom_size;
+	size_t mdhd_atom_size;
+	size_t hdlr_atom_size = 0;
+
+	if (media_set->type != MEDIA_SET_LIVE && dash_rescale_millis(media_set->total_duration) > UINT_MAX)
+	{
+		tkhd_atom_size = ATOM_HEADER_SIZE + sizeof(tkhd64_atom_t);
+		mdhd_atom_size = ATOM_HEADER_SIZE + sizeof(mdhd64_atom_t);
+	}
+	else
+	{
+		tkhd_atom_size = ATOM_HEADER_SIZE + sizeof(tkhd_atom_t);
+		mdhd_atom_size = ATOM_HEADER_SIZE + sizeof(mdhd_atom_t);
+	}
+
 	result->track_stbl_size = ATOM_HEADER_SIZE + stsd_size + sizeof(fixed_stbl_atoms);
-	result->track_minf_size = ATOM_HEADER_SIZE + cur_track->raw_atoms[RTA_DINF].size + result->track_stbl_size;
+	result->track_minf_size = ATOM_HEADER_SIZE + sizeof(dinf_atom) + result->track_stbl_size;
 	switch (cur_track->media_info.media_type)
 	{
 	case MEDIA_TYPE_VIDEO:
 		result->track_minf_size += sizeof(vmhd_atom);
+		hdlr_atom_size = sizeof(hdlr_video_atom);
 		break;
 	case MEDIA_TYPE_AUDIO:
 		result->track_minf_size += sizeof(smhd_atom);
+		hdlr_atom_size = sizeof(hdlr_audio_atom);
 		break;
 	}
-	result->track_mdia_size = ATOM_HEADER_SIZE + cur_track->raw_atoms[RTA_MDHD].size + cur_track->raw_atoms[RTA_HDLR].size + result->track_minf_size;
-	result->track_trak_size = ATOM_HEADER_SIZE + cur_track->raw_atoms[RTA_TKHD].size + result->track_mdia_size;
+	result->track_mdia_size = ATOM_HEADER_SIZE + mdhd_atom_size + hdlr_atom_size + result->track_minf_size;
+	result->track_trak_size = ATOM_HEADER_SIZE + tkhd_atom_size + result->track_mdia_size;
 }
 
 static u_char*
-dash_packager_write_trex_atom(u_char* p, uint32_t track_id)
+dash_packager_write_trex_atom(u_char* p)
 {
 	size_t atom_size = ATOM_HEADER_SIZE + sizeof(trex_atom_t);
 
 	write_atom_header(p, atom_size, 't', 'r', 'e', 'x');
 	write_be32(p, 0);			// version + flags
-	write_be32(p, track_id);	// track id
+	write_be32(p, 1);			// track id
 	write_be32(p, 1);			// default sample description index
 	write_be32(p, 0);			// default sample duration
 	write_be32(p, 0);			// default sample size
@@ -1394,7 +1454,7 @@ dash_packager_write_mvhd_atom(u_char* p, uint32_t timescale, uint32_t duration)
 	write_be32(p, timescale);	// timescale
 	write_be32(p, duration);	// duration
 	p = dash_packager_write_mvhd_constants(p);
-	write_be32(p, 0xffffffff); // next track id
+	write_be32(p, 0xffffffff);	// next track id
 	return p;
 }
 
@@ -1411,6 +1471,104 @@ dash_packager_write_mvhd64_atom(u_char* p, uint32_t timescale, uint64_t duration
 	write_be64(p, duration);	// duration
 	p = dash_packager_write_mvhd_constants(p);
 	write_be32(p, 0xffffffff);	// next track id
+	return p;
+}
+
+static u_char*
+dash_packager_write_tkhd_trailer(
+	u_char* p, 
+	uint32_t media_type, 
+	uint16_t width, 
+	uint16_t height)
+{
+	write_be32(p, 0);				// reserved
+	write_be32(p, 0);				// reserved
+	write_be32(p, 0);				// layer / alternate group
+	write_be16(p, media_type == MEDIA_TYPE_AUDIO ? 0x0100 : 0);		// volume
+	write_be16(p, 0);				// reserved
+	p = dash_packager_write_matrix(p, 1, 0, 0, 1, 0, 0);	// matrix
+	if (media_type == MEDIA_TYPE_VIDEO)
+	{
+		write_be32(p, width << 16);		// width
+		write_be32(p, height << 16);	// height
+	}
+	else
+	{
+		write_be32(p, 0);			// width
+		write_be32(p, 0);			// height
+	}
+	return p;
+}
+
+static u_char*
+dash_packager_write_tkhd_atom(
+	u_char* p, 
+	uint32_t duration, 
+	uint32_t media_type, 
+	uint16_t width, 
+	uint16_t height)
+{
+	size_t atom_size = ATOM_HEADER_SIZE + sizeof(tkhd_atom_t);
+
+	write_atom_header(p, atom_size, 't', 'k', 'h', 'd');
+	write_be32(p, 0x00000003);		// version + flags
+	write_be32(p, 0);				// creation time
+	write_be32(p, 0);				// modification time
+	write_be32(p, 1);				// track id
+	write_be32(p, 0);				// reserved
+	write_be32(p, duration);		// duration
+	return dash_packager_write_tkhd_trailer(p, media_type, width, height);
+}
+
+static u_char*
+dash_packager_write_tkhd64_atom(
+	u_char* p, 
+	uint64_t duration, 
+	uint32_t media_type, 
+	uint16_t width, 
+	uint16_t height)
+{
+	size_t atom_size = ATOM_HEADER_SIZE + sizeof(tkhd64_atom_t);
+
+	write_atom_header(p, atom_size, 't', 'k', 'h', 'd');
+	write_be32(p, 0x01000003);		// version + flags
+	write_be64(p, 0LL);				// creation time
+	write_be64(p, 0LL);				// modification time
+	write_be32(p, 1);				// track id
+	write_be32(p, 0);				// reserved
+	write_be64(p, duration);		// duration
+	return dash_packager_write_tkhd_trailer(p, media_type, width, height);
+}
+
+static u_char*
+dash_packager_write_mdhd_atom(u_char* p, uint32_t duration)
+{
+	size_t atom_size = ATOM_HEADER_SIZE + sizeof(mdhd_atom_t);
+
+	write_atom_header(p, atom_size, 'm', 'd', 'h', 'd');
+	write_be32(p, 0);				// version + flags
+	write_be32(p, 0);				// creation time
+	write_be32(p, 0);				// modification time
+	write_be32(p, DASH_TIMESCALE);	// timescale
+	write_be32(p, duration);		// duration
+	write_be16(p, 0);				// language
+	write_be16(p, 0);				// reserved
+	return p;
+}
+
+static u_char*
+dash_packager_write_mdhd64_atom(u_char* p, uint64_t duration)
+{
+	size_t atom_size = ATOM_HEADER_SIZE + sizeof(mdhd64_atom_t);
+
+	write_atom_header(p, atom_size, 'm', 'd', 'h', 'd');
+	write_be32(p, 0x01000000);		// version + flags
+	write_be64(p, 0LL);				// creation time
+	write_be64(p, 0LL);				// modification time
+	write_be32(p, DASH_TIMESCALE);	// timescale
+	write_be64(p, duration);		// duration
+	write_be16(p, 0);				// language
+	write_be16(p, 0);				// reserved
 	return p;
 }
 
@@ -1432,7 +1590,7 @@ dash_packager_init_mp4_calc_size(
 		result->stsd_size = first_track->raw_atoms[RTA_STSD].size;
 	}
 
-	dash_packager_get_track_sizes(first_track, result->stsd_size, &result->track_sizes);
+	dash_packager_get_track_sizes(media_set, first_track, result->stsd_size, &result->track_sizes);
 
 	result->mvex_atom_size = ATOM_HEADER_SIZE + ATOM_HEADER_SIZE + sizeof(trex_atom_t);
 
@@ -1440,11 +1598,7 @@ dash_packager_init_mp4_calc_size(
 		result->track_sizes.track_trak_size +
 		result->mvex_atom_size;
 
-	if (media_set->sequences[0].filtered_clips[0].mvhd_atom.ptr != NULL)
-	{
-		result->moov_atom_size += media_set->sequences[0].filtered_clips[0].mvhd_atom.size;
-	}
-	else if (media_set->type != MEDIA_SET_LIVE && media_set->total_duration > UINT_MAX)
+	if (media_set->type != MEDIA_SET_LIVE && dash_rescale_millis(media_set->total_duration) > UINT_MAX)
 	{
 		result->moov_atom_size += ATOM_HEADER_SIZE + sizeof(mvhd64_atom_t);
 	}
@@ -1471,6 +1625,7 @@ dash_packager_init_mp4_write(
 	atom_writer_t* stsd_atom_writer)
 {
 	media_track_t* first_track = media_set->sequences[0].filtered_clips[0].first_track;
+	uint64_t duration = media_set->type == MEDIA_SET_LIVE ? 0 : dash_rescale_millis(media_set->total_duration);
 
 	// ftyp
 	p = vod_copy(p, ftyp_atom, sizeof(ftyp_atom));
@@ -1479,40 +1634,69 @@ dash_packager_init_mp4_write(
 	write_atom_header(p, sizes->moov_atom_size, 'm', 'o', 'o', 'v');
 
 	// moov.mvhd
-	if (media_set->sequences[0].filtered_clips[0].mvhd_atom.ptr != NULL)
+	if (duration > UINT_MAX)
 	{
-		// TODO: adjust the mvhd duration (can change in case of clipping or sequencing)
-		p = vod_copy_atom(p, media_set->sequences[0].filtered_clips[0].mvhd_atom);
-	}
-	else if (media_set->type == MEDIA_SET_LIVE)
-	{
-		p = dash_packager_write_mvhd_atom(p, 1000, 0);
-	}
-	else if (media_set->total_duration > UINT_MAX)
-	{
-		p = dash_packager_write_mvhd64_atom(p, 1000, media_set->total_duration);
+		p = dash_packager_write_mvhd64_atom(p, DASH_TIMESCALE, duration);
 	}
 	else
 	{
-		p = dash_packager_write_mvhd_atom(p, 1000, media_set->total_duration);
+		p = dash_packager_write_mvhd_atom(p, DASH_TIMESCALE, duration);
 	}
 
 	// moov.mvex
 	write_atom_header(p, sizes->mvex_atom_size, 'm', 'v', 'e', 'x');
 
 	// moov.mvex.trex
-	p = dash_packager_write_trex_atom(p, first_track->media_info.track_id);
+	p = dash_packager_write_trex_atom(p);
 
 	// moov.trak
 	write_atom_header(p, sizes->track_sizes.track_trak_size, 't', 'r', 'a', 'k');
-	p = vod_copy_atom(p, first_track->raw_atoms[RTA_TKHD]);
+
+	// moov.tkhd
+	if (duration > UINT_MAX)
+	{
+		p = dash_packager_write_tkhd64_atom(
+			p,
+			duration,
+			first_track->media_info.media_type,
+			first_track->media_info.u.video.width,
+			first_track->media_info.u.video.height);
+	}
+	else
+	{
+		p = dash_packager_write_tkhd_atom(
+			p,
+			duration,
+			first_track->media_info.media_type,
+			first_track->media_info.u.video.width,
+			first_track->media_info.u.video.height);
+	}
 
 	// moov.trak.mdia
 	write_atom_header(p, sizes->track_sizes.track_mdia_size, 'm', 'd', 'i', 'a');
-	p = vod_copy_atom(p, first_track->raw_atoms[RTA_MDHD]);
-	p = vod_copy_atom(p, first_track->raw_atoms[RTA_HDLR]);
 
-	// moov.trak.minf
+	// moov.trak.mdia.mdhd
+	if (duration > UINT_MAX)
+	{
+		p = dash_packager_write_mdhd64_atom(p, duration);
+	}
+	else
+	{
+		p = dash_packager_write_mdhd_atom(p, duration);
+	}
+
+	// moov.trak.mdia.hdlr
+	switch (first_track->media_info.media_type)
+	{
+	case MEDIA_TYPE_VIDEO:
+		p = vod_copy(p, hdlr_video_atom, sizeof(hdlr_video_atom));
+		break;
+	case MEDIA_TYPE_AUDIO:
+		p = vod_copy(p, hdlr_audio_atom, sizeof(hdlr_audio_atom));
+		break;
+	}
+
+	// moov.trak.mdia.minf
 	write_atom_header(p, sizes->track_sizes.track_minf_size, 'm', 'i', 'n', 'f');
 	switch (first_track->media_info.media_type)
 	{
@@ -1523,9 +1707,9 @@ dash_packager_init_mp4_write(
 		p = vod_copy(p, smhd_atom, sizeof(smhd_atom));
 		break;
 	}
-	p = vod_copy_atom(p, first_track->raw_atoms[RTA_DINF]);
+	p = vod_copy(p, dinf_atom, sizeof(dinf_atom));
 
-	// moov.trak.minf.stbl
+	// moov.trak.mdia.minf.stbl
 	write_atom_header(p, sizes->track_sizes.track_stbl_size, 's', 't', 'b', 'l');
 	if (stsd_atom_writer != NULL)
 	{
@@ -1665,7 +1849,7 @@ dash_packager_write_sidx64_atom(
 }
 
 static u_char*
-dash_packager_write_tfhd_atom(u_char* p, uint32_t track_id, uint32_t sample_description_index)
+dash_packager_write_tfhd_atom(u_char* p, uint32_t sample_description_index)
 {
 	size_t atom_size;
 	uint32_t flags;
@@ -1680,7 +1864,7 @@ dash_packager_write_tfhd_atom(u_char* p, uint32_t track_id, uint32_t sample_desc
 
 	write_atom_header(p, atom_size, 't', 'f', 'h', 'd');
 	write_be32(p, flags);			// flags
-	write_be32(p, track_id);		// track id
+	write_be32(p, 1);				// track id
 	if (sample_description_index > 0)
 	{
 		write_be32(p, sample_description_index);
@@ -1717,42 +1901,22 @@ dash_packager_init_sidx_params(media_set_t* media_set, media_sequence_t* sequenc
 	media_track_t* track;
 	uint64_t earliest_pres_time;
 	uint64_t total_frames_duration;
-	uint32_t timescale;
 
 	// initialize according to the first clip
 	cur_clip = sequence->filtered_clips;
 	track = cur_clip->first_track;
 	total_frames_duration = track->total_frames_duration;
 	earliest_pres_time = dash_packager_get_earliest_pres_time(media_set, track);
-	timescale = track->media_info.timescale;
 	cur_clip++;
 
 	for (; cur_clip < sequence->filtered_clips_end; cur_clip++)
 	{
-		track = cur_clip->first_track;
-
-		if (timescale > track->media_info.timescale)
-		{
-			// scale the track duration to timescale
-			total_frames_duration += rescale_time(track->total_frames_duration, track->media_info.timescale, timescale);
-			continue;
-		}
-
-		if (timescale < track->media_info.timescale)
-		{
-			// rescale to track->media_info.timescale
-			total_frames_duration = rescale_time(total_frames_duration, timescale, track->media_info.timescale);
-			earliest_pres_time = rescale_time(earliest_pres_time, timescale, track->media_info.timescale);
-			timescale = track->media_info.timescale;
-		}
-
-		// same timescale, just add
-		total_frames_duration += track->total_frames_duration;
+		total_frames_duration += cur_clip->first_track->total_frames_duration;
 	}
 
 	result->total_frames_duration = total_frames_duration;
 	result->earliest_pres_time = earliest_pres_time;
-	result->timescale = timescale;
+	result->timescale = DASH_TIMESCALE;
 }
 
 vod_status_t
@@ -1851,7 +2015,7 @@ dash_packager_build_fragment_header(
 	write_atom_header(p, traf_atom_size, 't', 'r', 'a', 'f');
 
 	// moof.traf.tfhd
-	p = dash_packager_write_tfhd_atom(p, first_track->media_info.track_id, sample_description_index);
+	p = dash_packager_write_tfhd_atom(p, sample_description_index);
 
 	// moof.traf.tfdt
 	if (earliest_pres_time > UINT_MAX)

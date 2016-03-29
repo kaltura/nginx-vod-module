@@ -8,6 +8,9 @@
 #include "../segmenter.h"
 #include "../common.h"
 
+// constants
+#define DASH_TIMESCALE (90000)
+
 // typedefs
 enum {
 	FORMAT_SEGMENT_LIST,

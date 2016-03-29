@@ -100,8 +100,6 @@ filter_init_filtered_clip_from_source(
 {
 	media_track_t* cur_track;
 
-	state->output_clip->mvhd_atom = source->track_array.mvhd_atom;
-
 	// copy video tracks then audio tracks so that video tracks will appear first
 	for (cur_track = source->track_array.first_track; cur_track < source->track_array.last_track; cur_track++)
 	{
@@ -134,11 +132,6 @@ filter_scale_video_tracks(filters_init_state_t* state, media_clip_t* clip, uint3
 	if (clip->type == MEDIA_CLIP_SOURCE)
 	{
 		source = vod_container_of(clip, media_clip_source_t, base);
-
-		if (state->source_count == 0)
-		{
-			state->output_clip->mvhd_atom = source->track_array.mvhd_atom;
-		}
 
 		for (cur_track = source->track_array.first_track;
 			cur_track < source->track_array.last_track;
@@ -373,12 +366,6 @@ filter_init_filtered_clips(
 				if (rc != VOD_OK)
 				{
 					return rc;
-				}
-
-				if (init_state.source_count != 1)
-				{
-					// got more than one mvhd, clear it
-					vod_memzero(&output_clip->mvhd_atom, sizeof(output_clip->mvhd_atom));
 				}
 			}
 

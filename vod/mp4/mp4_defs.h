@@ -113,7 +113,14 @@ typedef struct {
 	u_char	track_id[4];
 	u_char  reserved1[4];
 	u_char  duration[4];
-	// Note: additional fields not listed
+	u_char  reserved2[2 * 4];
+	u_char  layer[2];
+	u_char  alternate_group[2];
+	u_char  volume[2];
+	u_char  reserved[2];
+	u_char  matrix[4 * 9];
+	u_char  width[4];
+	u_char  height[4];
 } tkhd_atom_t;
 
 typedef struct {
@@ -124,7 +131,14 @@ typedef struct {
 	u_char	track_id[4];
 	u_char  reserved1[4];
 	u_char  duration[8];
-	// Note: additional fields not listed
+	u_char  reserved2[2 * 4];
+	u_char  layer[2];
+	u_char  alternate_group[2];
+	u_char  volume[2];
+	u_char  reserved[2];
+	u_char  matrix[4 * 9];
+	u_char  width[4];
+	u_char  height[4];
 } tkhd64_atom_t;
 
 typedef struct {

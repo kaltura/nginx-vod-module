@@ -176,6 +176,7 @@ static const ngx_http_vod_request_t mss_manifest_request = {
 	PARSE_FLAG_TOTAL_SIZE_ESTIMATE | PARSE_FLAG_PARSED_EXTRA_DATA,
 	REQUEST_CLASS_MANIFEST,
 	SUPPORTED_CODECS,
+	MSS_TIMESCALE,
 	ngx_http_vod_mss_handle_manifest,
 	NULL,
 };
@@ -185,6 +186,7 @@ static const ngx_http_vod_request_t mss_fragment_request = {
 	PARSE_FLAG_FRAMES_ALL,
 	REQUEST_CLASS_SEGMENT,
 	SUPPORTED_CODECS,
+	MSS_TIMESCALE,
 	NULL,
 	ngx_http_vod_mss_init_frame_processor,
 };
@@ -194,6 +196,7 @@ static const ngx_http_vod_request_t mss_playready_fragment_request = {
 	PARSE_FLAG_FRAMES_ALL | PARSE_FLAG_PARSED_EXTRA_DATA,
 	REQUEST_CLASS_SEGMENT,
 	SUPPORTED_CODECS,
+	MSS_TIMESCALE,
 	NULL,
 	ngx_http_vod_mss_init_frame_processor,
 };

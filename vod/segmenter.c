@@ -2,6 +2,8 @@
 
 // constants
 #define MAX_SEGMENT_COUNT (100000)
+#define MIN_SEGMENT_DURATION (500)
+#define SEGMENT_FROM_TIMESTAMP_MARGIN (100)		// in case of clipping, a segment may start up to 2 frames before the segment boundary
 
 // typedefs
 typedef struct {
@@ -19,6 +21,11 @@ segmenter_init_config(segmenter_conf_t* conf, vod_pool_t* pool)
 	uint32_t cur_pos = 0;
 	uint32_t i;
 	int32_t cur_duration;
+
+	if (conf->segment_duration < MIN_SEGMENT_DURATION)
+	{
+		return VOD_BAD_DATA;
+	}
 
 	conf->max_segment_duration = conf->segment_duration;
 
@@ -63,7 +70,7 @@ segmenter_init_config(segmenter_conf_t* conf, vod_pool_t* pool)
 		cur_str = (vod_str_t*)conf->bootstrap_segments->elts + i;
 		
 		cur_duration = vod_atoi(cur_str->data, cur_str->len);
-		if (cur_duration <= 0)
+		if (cur_duration < MIN_SEGMENT_DURATION)
 		{
 			return VOD_BAD_DATA;
 		}
@@ -73,6 +80,11 @@ segmenter_init_config(segmenter_conf_t* conf, vod_pool_t* pool)
 		conf->bootstrap_segments_mid[i] = cur_pos + conf->bootstrap_segments_durations[i] / 2;
 		cur_pos += conf->bootstrap_segments_durations[i];
 		conf->bootstrap_segments_end[i] = cur_pos;
+
+		if ((uint32_t)cur_duration > conf->max_segment_duration)
+		{
+			conf->max_segment_duration = cur_duration;
+		}
 	}
 	conf->bootstrap_segments_total_duration = cur_pos;
 
@@ -197,6 +209,8 @@ segmenter_get_segment_index_no_discontinuity(
 	uint32_t* cur_end_offset;
 	uint32_t result;
 
+	time_millis += SEGMENT_FROM_TIMESTAMP_MARGIN;
+
 	// regular segments
 	if (time_millis >= conf->bootstrap_segments_total_duration)
 	{
@@ -230,6 +244,8 @@ segmenter_get_segment_index_discontinuity(
 	uint32_t* end_duration = clip_durations + total_clip_count;
 	uint32_t clip_segment_limit;
 	uint32_t segment_index = initial_segment_index;
+
+	time_millis += SEGMENT_FROM_TIMESTAMP_MARGIN;
 
 	for (cur_duration = clip_durations; ; cur_duration++)
 	{

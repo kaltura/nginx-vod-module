@@ -218,14 +218,19 @@ dynamic_clip_get_mapping_string(
 			*p++ = '-';
 		}
 
-		p = vod_sprintf(p, "%V-%uD", &cur_clip->id, cur_clip->base.source_count);
+		cur_source = (media_clip_source_t*)cur_clip->base.sources[0];
+
+		p = vod_sprintf(p, "%V-%uD-%uL", 
+			&cur_clip->id, 
+			cur_clip->base.source_count, 
+			cur_source->sequence_offset - cur_clip->sequence_offset);
 
 		for (i = 0; i < cur_clip->base.source_count; i++)
 		{
 			cur_source = (media_clip_source_t*)cur_clip->base.sources[i];
-			p = vod_sprintf(p, "-%V-%uL", 
+			p = vod_sprintf(p, "-%V-%uD", 
 				&cur_source->mapped_uri, 
-				cur_source->sequence_offset - cur_clip->sequence_offset);
+				cur_source->clip_to);
 		}
 	}
 
@@ -271,7 +276,6 @@ dynamic_clip_apply_mapping_string_clip(
 	request_context_t* request_context,
 	media_set_t* media_set,
 	media_clip_dynamic_t* clip, 
-	uint32_t source_count,
 	u_char** cur, 
 	u_char* end)
 {
@@ -280,11 +284,12 @@ dynamic_clip_apply_mapping_string_clip(
 	media_range_t* range;
 	media_clip_t** cur_source_ptr;
 	vod_str_t clip_id;
-	uint32_t last_offset = 0;
 	uint32_t offset;
 	u_char* p = *cur;
 	uint64_t range_start;
 	uint64_t range_end;
+	uint32_t source_count;
+	uint32_t duration;
 	uint32_t i;
 	vod_status_t rc;
 
@@ -294,6 +299,34 @@ dynamic_clip_apply_mapping_string_clip(
 			"dynamic_clip_apply_mapping_string_clip: manifest request issued on a location with vod_apply_dynamic_mapping set");
 		return VOD_BAD_REQUEST;
 	}
+
+	// get the source count
+	p = parse_utils_extract_uint32_token(p, end, &source_count);
+	if (source_count <= 0 || source_count > MAX_DYNAMIC_CLIP_SOURCE_COUNT)
+	{
+		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+			"dynamic_clip_apply_mapping_string_clip: invalid dynamic clip source count %uD",
+			source_count);
+		return VOD_BAD_REQUEST;
+	}
+
+	if (p >= end || *p != '-')
+	{
+		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+			"dynamic_clip_apply_mapping_string_clip: expected a delimiter (-) following the source count");
+		return VOD_BAD_REQUEST;
+	}
+	p++;		// skip the -
+
+	// get the start offset
+	p = parse_utils_extract_uint32_token(p, end, &offset);
+	if (p >= end || *p != '-')
+	{
+		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+			"dynamic_clip_apply_mapping_string_clip: expected a delimiter (-) following the offset");
+		return VOD_BAD_REQUEST;
+	}
+	p++;
 
 	range_start = clip->range->start;
 	range_end = clip->range->end;
@@ -323,8 +356,8 @@ dynamic_clip_apply_mapping_string_clip(
 			return rc;
 		}
 
-		// offset
-		p = parse_utils_extract_uint32_token(p, end, &offset);
+		// duration
+		p = parse_utils_extract_uint32_token(p, end, &duration);
 		if (p < end)
 		{
 			if (*p != '-')
@@ -337,24 +370,21 @@ dynamic_clip_apply_mapping_string_clip(
 			p++;			// skip the -
 		}
 
-		// validate the ofset
-		if (i > 0)
+		if (duration > UINT_MAX - offset)
 		{
-			if (offset <= last_offset)
-			{
-				vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-					"dynamic_clip_apply_mapping_string_clip: current offset %uD is smaller than previous offset %uD", 
-					offset, last_offset);
-				return VOD_BAD_REQUEST;
-			}
+			vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+				"dynamic_clip_apply_mapping_string_clip: duration %uD too big for offset %uD", 
+				duration, offset);
+			return VOD_BAD_REQUEST;
+		}
 
-			if (offset <= range_start)
-			{
-				vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-					"dynamic_clip_apply_mapping_string_clip: current offset %uD is smaller than range start %uL",
-					offset, range_start);
-				return VOD_BAD_REQUEST;
-			}
+		// validate the ofset
+		if (offset + duration <= range_start)
+		{
+			vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+				"dynamic_clip_apply_mapping_string_clip: end offset %uD is smaller than range start %uL",
+				offset, range_start);
+			return VOD_BAD_REQUEST;
 		}
 
 		if (range_end <= offset)
@@ -366,24 +396,24 @@ dynamic_clip_apply_mapping_string_clip(
 		}
 
 		// calculate the range
-		range->start = 0;
 		range->timescale = 1000;
 
-		if (i == 0)
+		if (i == 0 && range_start > offset)
 		{
-			if (range_start > offset)
-			{
-				range->start = range_start - offset;
-			}
+			range->start = range_start - offset;
 		}
 		else
 		{
-			range[-1].end = offset - last_offset;
+			range->start = 0;
 		}
 
 		if (i + 1 == source_count)
 		{
 			range->end = range_end - offset;
+		}
+		else
+		{
+			range->end = duration;
 		}
 
 		// initialize the source
@@ -398,7 +428,7 @@ dynamic_clip_apply_mapping_string_clip(
 		cur_source->range = range;
 		cur_source->sequence_offset = clip->sequence_offset + offset;
 		cur_source->stripped_uri = cur_source->mapped_uri = clip_id;
-		cur_source->clip_to = range->end;
+		cur_source->clip_to = duration;
 
 		vod_log_debug1(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
 			"dynamic_clip_apply_mapping_string_clip: parsed clip source - clipId=%V", &clip_id);
@@ -407,7 +437,7 @@ dynamic_clip_apply_mapping_string_clip(
 		cur_source++;
 		range++;
 
-		last_offset = offset;
+		offset += duration;
 	}
 
 	media_set->mapped_sources_head = sources_list_head;
@@ -431,7 +461,6 @@ dynamic_clip_apply_mapping_string(
 	media_clip_dynamic_t* cur;
 	vod_str_t clip_id;
 	vod_status_t rc;
-	uint32_t source_count;
 	u_char* end;
 	u_char* p;
 
@@ -454,24 +483,6 @@ dynamic_clip_apply_mapping_string(
 			return rc;
 		}
 
-		// get the source count
-		p = parse_utils_extract_uint32_token(p, end, &source_count);
-		if (source_count <= 0 || source_count > MAX_DYNAMIC_CLIP_SOURCE_COUNT)
-		{
-			vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-				"dynamic_clip_apply_mapping_string: invalid dynamic clip source count %uD",
-				source_count);
-			return VOD_BAD_REQUEST;
-		}
-
-		if (p >= end || *p != '-')
-		{
-			vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-				"dynamic_clip_apply_mapping_string: expected a delimiter (-) following the source count");
-			return VOD_BAD_REQUEST;
-		}
-		p++;		// skip the -
-
 		// look up the dynamic clip
 		for (prev = &media_set->dynamic_clips_head; ; prev = &cur->next)
 		{
@@ -491,7 +502,7 @@ dynamic_clip_apply_mapping_string(
 		}
 
 		// apply the mapping
-		rc = dynamic_clip_apply_mapping_string_clip(request_context, media_set, cur, source_count, &p, end);
+		rc = dynamic_clip_apply_mapping_string_clip(request_context, media_set, cur, &p, end);
 		if (rc != VOD_OK)
 		{
 			return rc;
