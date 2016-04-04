@@ -1271,6 +1271,14 @@ When disabled, on every switch between audio / video the muxer flushes the MPEG 
 When enabled, every video / audio frame is aligned to MPEG TS packet boundary,
 padding is added as needed.
 
+#### vod_hls_output_id3_timestamps
+* **syntax**: `vod_hls_output_id3_timestamps on/off`
+* **default**: `on`
+* **context**: `http`, `server`, `location`
+
+When enabled, an ID3 TEXT frame will be outputted in each TS segment, containing a JSON with the absolute segment timestamp.
+The timestamp is measured in milliseconds since the epoch (unixtime x 1000), the JSON structure is: `{"timestamp":1459779115000}`
+
 ### Configuration directives - MSS
 
 #### vod_mss_manifest_file_name_prefix

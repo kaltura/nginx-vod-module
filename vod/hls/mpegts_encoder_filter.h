@@ -43,6 +43,7 @@ typedef struct {
 	
 	// frame state
 	unsigned cc;
+	unsigned initial_cc;
 	u_char* cur_pes_size_ptr;
 	uint32_t pes_bytes_written;
 	uint32_t flushed_frame_bytes;
@@ -61,8 +62,9 @@ typedef struct {
 
 typedef struct {
 	request_context_t* request_context;
-
 	hls_encryption_params_t* encryption_params;
+	uint32_t segment_index;
+
 	u_char* pat_packet_start;
 	u_char* pmt_packet_start;
 	u_char* pmt_packet_end;
@@ -91,7 +93,6 @@ vod_status_t mpegts_encoder_init(
 	mpegts_encoder_state_t* state,
 	mpegts_encoder_init_streams_state_t* stream_state,
 	media_track_t* track,
-	request_context_t* request_context,
 	write_buffer_queue_t* queue,
 	bool_t interleave_frames,
 	bool_t align_frames);
