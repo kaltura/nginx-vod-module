@@ -5,8 +5,9 @@
 #define member_size(type, member) sizeof(((type *)0)->member)
 
 #define PCR_PID (0x100)
-#define FIRST_VIDEO_SID (0xE0)
+#define PRIVATE_STREAM_1_SID (0xBD)
 #define FIRST_AUDIO_SID (0xC0)
+#define FIRST_VIDEO_SID (0xE0)
 
 #define SIZEOF_MPEGTS_HEADER (4)
 #define MPEGTS_PACKET_USABLE_SIZE (MPEGTS_PACKET_SIZE - SIZEOF_MPEGTS_HEADER)
@@ -355,6 +356,7 @@ mpegts_encoder_init_streams(
 
 	stream_state->request_context = request_context;
 	stream_state->encryption_params = encryption_params;
+	stream_state->segment_index = segment_index;
 	stream_state->cur_pid = PCR_PID;
 	stream_state->cur_video_sid = FIRST_VIDEO_SID;
 	stream_state->cur_audio_sid = FIRST_AUDIO_SID;
@@ -440,23 +442,22 @@ static vod_status_t
 mpegts_encoder_add_stream(
 	mpegts_encoder_init_streams_state_t* stream_state, 
 	media_track_t* track,
-	unsigned* pid, 
-	unsigned* sid)
+	mpegts_stream_info_t* stream_info)
 {
 	const u_char* pmt_entry;
 	int pmt_entry_size;
 
-	*pid = stream_state->cur_pid++;
+	stream_info->pid = stream_state->cur_pid++;
 
 	if (stream_state->pmt_packet_start == NULL)			// simulation only
 	{
 		return VOD_OK;
 	}
 
-	switch (track->media_info.media_type)
+	switch (stream_info->media_type)
 	{
 	case MEDIA_TYPE_VIDEO:
-		*sid = stream_state->cur_video_sid++;
+		stream_info->sid = stream_state->cur_video_sid++;
 		if (stream_state->encryption_params->type == HLS_ENC_SAMPLE_AES)
 		{
 			pmt_entry = pmt_entry_template_sample_aes_avc;
@@ -480,7 +481,7 @@ mpegts_encoder_add_stream(
 		break;
 
 	case MEDIA_TYPE_AUDIO:
-		*sid = stream_state->cur_audio_sid++;
+		stream_info->sid = stream_state->cur_audio_sid++;
 		if (stream_state->encryption_params->type == HLS_ENC_SAMPLE_AES)
 		{
 			pmt_entry = pmt_entry_template_sample_aes_aac;
@@ -488,7 +489,6 @@ mpegts_encoder_add_stream(
 				sizeof(registration_descriptor_t) + 
 				sizeof(audio_setup_information_t) + 
 				track->media_info.extra_data.len;
-
 		}
 		else
 		{
@@ -507,13 +507,19 @@ mpegts_encoder_add_stream(
 		}
 		break;
 
+	case MEDIA_TYPE_NONE:
+		stream_info->sid = PRIVATE_STREAM_1_SID;
+		pmt_entry = pmt_entry_template_id3;
+		pmt_entry_size = sizeof(pmt_entry_template_id3);
+		break;
+
 	default:
 		vod_log_error(VOD_LOG_ERR, stream_state->request_context->log, 0,
-			"mpegts_encoder_add_stream: invalid media type %d", track->media_info.media_type);
+			"mpegts_encoder_add_stream: invalid media type %d", stream_info->media_type);
 		return VOD_UNEXPECTED;
 	}
 
-	if (stream_state->pmt_packet_pos + pmt_entry_size + sizeof(pmt_entry_template_id3) + sizeof(uint32_t) >= 
+	if (stream_state->pmt_packet_pos + pmt_entry_size + sizeof(uint32_t) >= 
 		stream_state->pmt_packet_end)
 	{
 		vod_log_error(VOD_LOG_ERR, stream_state->request_context->log, 0,
@@ -533,7 +539,7 @@ mpegts_encoder_add_stream(
 	{
 		vod_memcpy(stream_state->pmt_packet_pos, pmt_entry, pmt_entry_size);
 	}
-	pmt_entry_set_elementary_pid(stream_state->pmt_packet_pos, *pid);
+	pmt_entry_set_elementary_pid(stream_state->pmt_packet_pos, stream_info->pid);
 	stream_state->pmt_packet_pos += pmt_entry_size;
 	return VOD_OK;
 }
@@ -549,11 +555,6 @@ mpegts_encoder_finalize_streams(mpegts_encoder_init_streams_state_t* stream_stat
 	{
 		return;
 	}
-
-	// append id3 stream
-	vod_memcpy(p, pmt_entry_template_id3, sizeof(pmt_entry_template_id3));
-	pmt_entry_set_elementary_pid(p, stream_state->cur_pid);
-	p += sizeof(pmt_entry_template_id3);
 
 	// update the length in the PMT header
 	pmt_set_section_length(stream_state->pmt_packet_start + SIZEOF_MPEGTS_HEADER, 
@@ -580,11 +581,11 @@ mpegts_encoder_init(
 	mpegts_encoder_state_t* state,
 	mpegts_encoder_init_streams_state_t* stream_state,
 	media_track_t* track,
-	request_context_t* request_context,
 	write_buffer_queue_t* queue,
 	bool_t interleave_frames,
 	bool_t align_frames)
 {
+	request_context_t* request_context = stream_state->request_context;
 	vod_status_t rc;
 
 	vod_memzero(state, sizeof(*state));
@@ -592,13 +593,22 @@ mpegts_encoder_init(
 	state->queue = queue;
 	state->interleave_frames = interleave_frames;
 	state->align_frames = align_frames;
-	state->stream_info.media_type = track->media_info.media_type;
+
+	if (track != NULL)
+	{
+		state->stream_info.media_type = track->media_info.media_type;
+	}
+	else
+	{
+		// id3 track
+		state->stream_info.media_type = MEDIA_TYPE_NONE;
+		state->initial_cc = state->cc = stream_state->segment_index & 0x0f;
+	}
 
 	rc = mpegts_encoder_add_stream(
 		stream_state,
 		track,
-		&state->stream_info.pid,
-		&state->stream_info.sid);
+		&state->stream_info);
 	if (rc != VOD_OK)
 	{
 		return rc;
@@ -1051,7 +1061,8 @@ mpegts_encoder_flush_frame(void* context, bool_t last_stream_frame)
 	}
 
 	// on the last frame, add null packets to set the continuity counters
-	if (last_stream_frame)
+	if (last_stream_frame && 
+		state->stream_info.media_type != MEDIA_TYPE_NONE)		// don't output null packets in id3
 	{
 		while (state->cc & 0x0F)
 		{
@@ -1226,11 +1237,15 @@ mpegts_encoder_simulated_flush_frame(void* context, bool_t last_stream_frame)
 	}
 
 	// on the last frame, add null packets to set the continuity counters
-	if (last_stream_frame && (state->cc & 0x0F) != 0)
+	if (last_stream_frame)
 	{
-		queue->cur_offset += (0x10 - (state->cc & 0x0F)) * MPEGTS_PACKET_SIZE;
-		queue->last_writer_context = state;
-		state->cc = 0;
+		if ((state->cc & 0x0F) != 0 &&
+			state->stream_info.media_type != MEDIA_TYPE_NONE)	// don't output null packets in id3
+		{
+			queue->cur_offset += (0x10 - (state->cc & 0x0F)) * MPEGTS_PACKET_SIZE;
+			queue->last_writer_context = state;
+		}
+		state->cc = state->initial_cc;
 	}
 }
 

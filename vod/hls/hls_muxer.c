@@ -1,15 +1,29 @@
+#include "../input/frames_source_memory.h"
 #include "frame_joiner_filter.h"
+#include "id3_encoder_filter.h"
 #include "hls_muxer.h"
+
+#define ID3_TEXT_JSON_FORMAT "{\"timestamp\":%uL}%Z"
 
 // from ffmpeg mpegtsenc
 #define DEFAULT_PES_HEADER_FREQ 16
 #define DEFAULT_PES_PAYLOAD_SIZE ((DEFAULT_PES_HEADER_FREQ - 1) * 184 + 170)
 
 #define hls_rescale_millis(millis) ((millis) * (HLS_TIMESCALE / 1000))
+#define hls_rescale_to_millis(ts) ((ts) / (HLS_TIMESCALE / 1000))
 
+// typedefs
+typedef struct {
+	id3_encoder_state_t encoder;
+	input_frame_t frame;
+	u_char data[sizeof(ID3_TEXT_JSON_FORMAT) + VOD_INT64_LEN];
+} id3_context_t;
+
+// forward decls
 static vod_status_t hls_muxer_start_frame(hls_muxer_state_t* state);
 static vod_status_t hls_muxer_simulate_get_segment_size(hls_muxer_state_t* state, size_t* result);
 static void hls_muxer_simulation_reset(hls_muxer_state_t* state);
+static vod_status_t hls_muxer_choose_stream(hls_muxer_state_t* state, hls_muxer_stream_state_t** result);
 
 static vod_status_t
 hls_muxer_init_track(
@@ -22,8 +36,7 @@ hls_muxer_init_track(
 	cur_stream->first_frame_part = &track->frames;
 	cur_stream->cur_frame_part = track->frames;
 	cur_stream->cur_frame = track->frames.first_frame;
-	cur_stream->clip_start_time = hls_rescale_millis(track->clip_start_time);
-	cur_stream->first_frame_time_offset = track->first_frame_time_offset;
+	cur_stream->first_frame_time_offset = hls_rescale_millis(track->clip_start_time) + track->first_frame_time_offset;
 	cur_stream->clip_from_frame_offset = track->clip_from_frame_offset;
 	cur_stream->next_frame_time_offset = cur_stream->first_frame_time_offset;
 
@@ -84,6 +97,102 @@ hls_muxer_simulation_supported(
 	}
 
 	return TRUE;
+}
+
+static vod_status_t
+hls_muxer_init_id3_stream(
+	hls_muxer_state_t* state,
+	hls_muxer_conf_t* conf,
+	mpegts_encoder_init_streams_state_t* init_streams_state)
+{
+	hls_muxer_stream_state_t* cur_stream;
+	hls_muxer_stream_state_t* reference_stream;
+	id3_context_t* context;
+	vod_status_t rc;
+
+	cur_stream = state->last_stream;
+
+	// init the mpeg ts encoder
+	rc = mpegts_encoder_init(
+		&cur_stream->mpegts_encoder_state,
+		init_streams_state,
+		NULL,
+		&state->queue,
+		conf->interleave_frames,
+		conf->align_frames);
+	if (rc != VOD_OK)
+	{
+		return rc;
+	}
+
+	if (!conf->output_id3_timestamps)
+	{
+		return VOD_OK;
+	}
+
+	// get the stream that has the first frame
+	rc = hls_muxer_choose_stream(state, &reference_stream);
+	if (rc != VOD_OK)
+	{
+		if (rc == VOD_NOT_FOUND)
+		{
+			return VOD_OK;
+		}
+		return rc;
+	}
+
+	// allocate the context
+	context = vod_alloc(state->request_context->pool, sizeof(*context));
+	if (context == NULL)
+	{
+		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, state->request_context->log, 0,
+			"hls_muxer_init_id3_stream: vod_alloc failed");
+		return VOD_ALLOC_FAILED;
+	}
+
+	// init the memory frames source
+	rc = frames_source_memory_init(state->request_context, &cur_stream->cur_frame_part.frames_source_context);
+	if (rc != VOD_OK)
+	{
+		return rc;
+	}
+
+	cur_stream->cur_frame_part.frames_source = &frames_source_memory;
+
+	// base initialization
+	cur_stream->media_type = MEDIA_TYPE_NONE;
+	cur_stream->segment_limit = ULLONG_MAX;
+	cur_stream->buffer_state = NULL;
+
+	// init the id3 encoder
+	id3_encoder_init(&context->encoder, &mpegts_encoder, &cur_stream->mpegts_encoder_state);
+
+	cur_stream->top_filter = &id3_encoder;
+	cur_stream->top_filter_context = &context->encoder;
+
+	// copy the time stamps
+	cur_stream->first_frame_time_offset = reference_stream->first_frame_time_offset;
+	cur_stream->next_frame_time_offset = reference_stream->next_frame_time_offset;
+	cur_stream->clip_from_frame_offset = reference_stream->clip_from_frame_offset;
+
+	// init the frame part
+	cur_stream->cur_frame = &context->frame;
+	cur_stream->first_frame_part = &cur_stream->cur_frame_part;
+	cur_stream->cur_frame_part.next = NULL;
+	cur_stream->cur_frame_part.first_frame = &context->frame;
+	cur_stream->cur_frame_part.last_frame = &context->frame + 1;
+
+	// init the frame
+	context->frame.size = vod_sprintf(context->data, ID3_TEXT_JSON_FORMAT,
+		hls_rescale_to_millis(cur_stream->first_frame_time_offset)) - context->data;
+	context->frame.duration = 0;
+	context->frame.key_frame = 1;
+	context->frame.pts_delay = 0;
+	context->frame.offset = (uintptr_t)&context->data;
+
+	state->last_stream++;
+
+	return VOD_OK;
 }
 
 static vod_status_t 
@@ -160,7 +269,8 @@ hls_muxer_init_base(
 	}
 
 	// allocate the streams
-	state->first_stream = vod_alloc(request_context->pool, sizeof(*state->first_stream) * media_set->sequences[0].total_track_count);
+	state->first_stream = vod_alloc(request_context->pool, 
+		sizeof(*state->first_stream) * (media_set->sequences[0].total_track_count + 1));
 	if (state->first_stream == NULL)
 	{
 		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
@@ -179,7 +289,6 @@ hls_muxer_init_base(
 			&cur_stream->mpegts_encoder_state,
 			&init_streams_state,
 			track,
-			request_context,
 			&state->queue,
 			conf->interleave_frames,
 			conf->align_frames);
@@ -309,6 +418,13 @@ hls_muxer_init_base(
 		}
 	}
 
+	// init the id3 stream
+	rc = hls_muxer_init_id3_stream(state, conf, &init_streams_state);
+	if (rc != VOD_OK)
+	{
+		return rc;
+	}
+
 	mpegts_encoder_finalize_streams(&init_streams_state, response_header);
 
 	if (media_set->durations != NULL)
@@ -413,6 +529,11 @@ hls_muxer_reinit_tracks(hls_muxer_state_t* state)
 	track = state->cur_clip->first_track;
 	for (cur_stream = state->first_stream; cur_stream < state->last_stream; cur_stream++, track++)
 	{
+		if (cur_stream->media_type == MEDIA_TYPE_NONE)		// id3 track
+		{
+			continue;
+		}
+
 		rc = hls_muxer_init_track(cur_stream, track);
 		if (rc != VOD_OK)
 		{
@@ -540,8 +661,8 @@ hls_muxer_start_frame(hls_muxer_state_t* state)
 	state->cur_writer_context = selected_stream->top_filter_context;
 
 	// initialize the mpeg ts frame info
-	output_frame.pts = cur_frame_time_offset + state->cur_frame->pts_delay + selected_stream->clip_start_time;
-	output_frame.dts = cur_frame_dts + selected_stream->clip_start_time;
+	output_frame.pts = cur_frame_time_offset + state->cur_frame->pts_delay;
+	output_frame.dts = cur_frame_dts;
 	output_frame.key = state->cur_frame->key_frame;
 	output_frame.size = state->cur_frame->size;
 	output_frame.header_size = 0;
@@ -707,7 +828,7 @@ hls_muxer_simulation_write_frame(hls_muxer_stream_state_t* selected_stream, inpu
 
 	// initialize the mpeg ts frame info
 	// Note: no need to initialize the pts or original size
-	output_frame.dts = cur_frame_dts + selected_stream->clip_start_time;
+	output_frame.dts = cur_frame_dts;
 	output_frame.key = cur_frame->key_frame;
 	output_frame.header_size = 0;
 

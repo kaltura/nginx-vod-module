@@ -99,7 +99,6 @@ typedef struct {
 	uint32_t index;
 	uint32_t tag_size;
 
-	int64_t clip_start_time;
 	uint64_t first_frame_time_offset;
 	uint64_t next_frame_time_offset;
 
@@ -590,8 +589,7 @@ hds_muxer_init_track(
 	cur_stream->cur_frame_part = cur_track->frames;
 	cur_stream->cur_frame = cur_track->frames.first_frame;
 
-	cur_stream->clip_start_time = hds_rescale_millis(cur_track->clip_start_time);
-	cur_stream->first_frame_time_offset = cur_track->first_frame_time_offset;
+	cur_stream->first_frame_time_offset = hds_rescale_millis(cur_track->clip_start_time) + cur_track->first_frame_time_offset;
 	cur_stream->next_frame_time_offset = cur_stream->first_frame_time_offset;
 
 	if (cur_track->media_info.media_type == MEDIA_TYPE_AUDIO)
@@ -729,7 +727,7 @@ hds_calculate_output_offsets_and_write_afra_entries(
 			{
 				*p = hds_write_afra_atom_entry(
 					*p,
-					selected_stream->next_frame_time_offset + selected_stream->clip_start_time,
+					selected_stream->next_frame_time_offset,
 					cur_offset + afra_entries_base);
 			}
 			cur_offset += state->codec_config_size;
@@ -1162,7 +1160,7 @@ hds_muxer_init_fragment(
 		p = hds_muxer_write_codec_config(
 			p, 
 			state, 
-			state->first_stream->next_frame_time_offset + state->first_stream->clip_start_time);
+			state->first_stream->next_frame_time_offset);
 	}
 
 	header->len = p - header->data;
@@ -1216,7 +1214,7 @@ hds_muxer_start_frame(hds_muxer_state_t* state)
 	selected_stream->cur_frame++;
 	selected_stream->cur_frame_output_offset++;
 
-	cur_frame_dts = selected_stream->next_frame_time_offset + selected_stream->clip_start_time;
+	cur_frame_dts = selected_stream->next_frame_time_offset;
 	selected_stream->next_frame_time_offset += state->cur_frame->duration;
 
 	state->cache_slot_id = selected_stream->media_type;

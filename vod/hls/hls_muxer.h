@@ -24,6 +24,7 @@ typedef void(*hls_get_iframe_positions_callback_t)(
 typedef struct {
 	bool_t interleave_frames;
 	bool_t align_frames;
+	bool_t output_id3_timestamps;
 } hls_muxer_conf_t;
 
 typedef struct {
@@ -35,7 +36,6 @@ typedef struct {
 	input_frame_t* cur_frame;
 
 	// time offsets
-	int64_t clip_start_time;
 	uint64_t first_frame_time_offset;
 	uint64_t next_frame_time_offset;
 	int32_t clip_from_frame_offset;
