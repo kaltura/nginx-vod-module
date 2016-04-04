@@ -252,6 +252,11 @@ typedef struct {
 } hdlr_atom_t;
 
 typedef struct {
+	u_char    reserved1[6];
+	u_char    data_reference_index[2];
+} sample_entry_t;
+
+typedef struct {
 	u_char	version[2];
 	u_char	revision_level[2];
 	u_char	vendor[4];
@@ -309,6 +314,11 @@ typedef struct {
 	u_char	g[2];
 	u_char	b[2];
 } stsd_video_palette_entry_t;
+
+typedef struct {
+	u_char tag[1];
+	u_char len[1];
+} descr_header_t;
 
 typedef struct {
 	u_char object_type_id[1];
