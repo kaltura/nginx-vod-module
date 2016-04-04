@@ -1776,7 +1776,7 @@ ngx_http_vod_validate_streams(ngx_http_vod_ctx_t *ctx)
 	return NGX_OK;
 }
 
-static void
+static ngx_int_t
 ngx_http_vod_update_track_timescale(
 	ngx_http_vod_ctx_t *ctx, 
 	media_track_t* track, 
@@ -1850,22 +1850,47 @@ ngx_http_vod_update_track_timescale(
 	// media info
 	track->media_info.duration = rescale_time(track->media_info.duration, cur_timescale, new_timescale);
 	track->media_info.full_duration = rescale_time(track->media_info.full_duration, cur_timescale, new_timescale);
-	track->media_info.min_frame_duration = rescale_time(track->media_info.min_frame_duration, cur_timescale, new_timescale);
+	if (track->media_info.full_duration == 0)
+	{
+		ngx_log_error(NGX_LOG_ERR, ctx->submodule_context.request_context.log, 0,
+			"ngx_http_vod_update_track_timescale: full duration is zero following rescale");
+		return ngx_http_vod_status_to_ngx_error(VOD_BAD_DATA);
+	}
+
+	if (track->media_info.min_frame_duration != 0)
+	{
+		track->media_info.min_frame_duration = rescale_time(track->media_info.min_frame_duration, cur_timescale, new_timescale);
+		if (track->media_info.min_frame_duration == 0)
+		{
+			ngx_log_error(NGX_LOG_ERR, ctx->submodule_context.request_context.log, 0,
+				"ngx_http_vod_update_track_timescale: min frame duration is zero following rescale");
+			return ngx_http_vod_status_to_ngx_error(VOD_BAD_DATA);
+		}
+	}
 
 	track->media_info.timescale = new_timescale;
 	track->media_info.frames_timescale = new_timescale;
+
+	return NGX_OK;
 }
 
-static void
+static ngx_int_t
 ngx_http_vod_update_timescale(ngx_http_vod_ctx_t *ctx)
 {
 	media_set_t* media_set = &ctx->submodule_context.media_set;
 	media_track_t* track;
+	ngx_int_t rc;
 
 	for (track = media_set->filtered_tracks; track < media_set->filtered_tracks_end; track++)
 	{
-		ngx_http_vod_update_track_timescale(ctx, track, ctx->request->timescale);
+		rc = ngx_http_vod_update_track_timescale(ctx, track, ctx->request->timescale);
+		if (rc != NGX_OK)
+		{
+			return rc;
+		}
 	}
+
+	return NGX_OK;
 }
 
 ////// Metadata request handling
@@ -1881,7 +1906,11 @@ ngx_http_vod_handle_metadata_request(ngx_http_vod_ctx_t *ctx)
 	ngx_int_t rc;
 	int cache_type;
 
-	ngx_http_vod_update_timescale(ctx);
+	rc = ngx_http_vod_update_timescale(ctx);
+	if (rc != NGX_OK)
+	{
+		return rc;
+	}
 
 	ngx_perf_counter_start(ctx->perf_counter_context);
 
@@ -2113,7 +2142,11 @@ ngx_http_vod_init_frame_processing(ngx_http_vod_ctx_t *ctx)
 	ngx_str_t content_type;
 	ngx_int_t rc;
 
-	ngx_http_vod_update_timescale(ctx);
+	rc = ngx_http_vod_update_timescale(ctx);
+	if (rc != NGX_OK)
+	{
+		return rc;
+	}
 
 	// initialize the response writer
 	ctx->out.buf = NULL;
