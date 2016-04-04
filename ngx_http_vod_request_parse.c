@@ -739,6 +739,7 @@ ngx_http_vod_parse_uri_path(
 	media_set->has_multi_sequences = (multi_uri.parts_count > 1);
 	media_set->total_clip_count = 1;
 	media_set->clip_count = 1;
+	media_set->presentation_end = TRUE;
 
 	return NGX_OK;
 }

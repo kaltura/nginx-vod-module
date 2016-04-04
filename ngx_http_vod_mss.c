@@ -288,7 +288,7 @@ ngx_http_vod_mss_parse_uri_file_name(
 		// Note: assuming no discontinuity, if this changes the segment index will be recalculated
 		request_params->segment_index = segmenter_get_segment_index_no_discontinuity(
 			&conf->segmenter, 
-			request_params->segment_time);
+			request_params->segment_time + SEGMENT_FROM_TIMESTAMP_MARGIN);
 
 		*request = conf->drm_enabled ? &mss_playready_fragment_request : &mss_fragment_request;
 

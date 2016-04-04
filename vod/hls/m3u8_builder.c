@@ -443,7 +443,7 @@ m3u8_builder_build_index_playlist(
 	}
 
 	// write the footer
-	if (media_set->type == MEDIA_SET_VOD)
+	if (media_set->presentation_end)
 	{
 		p = vod_copy(p, m3u8_footer, sizeof(m3u8_footer) - 1);
 	}

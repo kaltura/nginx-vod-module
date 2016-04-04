@@ -128,7 +128,7 @@ hds_get_abst_atom_size(media_set_t* media_set, segment_durations_t* segment_dura
 
 	base_size = ABST_BASE_ATOM_SIZE;
 	fragment_run_entries = segment_durations->item_count;
-	if (media_set->type == MEDIA_SET_VOD)
+	if (media_set->presentation_end)
 	{
 		fragment_run_entries++;				// zero entry
 		base_size += sizeof(u_char);		// discontinuity indicator
@@ -154,7 +154,7 @@ hds_write_abst_atom(
 	size_t abst_atom_size = ABST_BASE_ATOM_SIZE;
 
 	fragment_run_entries = segment_durations->item_count;
-	if (media_set->type == MEDIA_SET_VOD)
+	if (media_set->presentation_end)
 	{
 		fragment_run_entries++;					// zero entry
 		afrt_atom_size += sizeof(u_char);		// discontinuity indicator
@@ -211,7 +211,7 @@ hds_write_abst_atom(
 		start_offset += cur_item->duration * cur_item->repeat_count;
 	}
 
-	if (media_set->type == MEDIA_SET_VOD)
+	if (media_set->presentation_end)
 	{
 		// last entry
 		write_be32(p, 0);					// first fragment
