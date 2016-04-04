@@ -330,6 +330,8 @@ mp4_parser_validate_stsz_atom(
 				return VOD_BAD_DATA;
 			}
 
+			*entries = parse_be32(atom->entries);
+
 			return VOD_OK;
 		}
 		*field_size = 32;
