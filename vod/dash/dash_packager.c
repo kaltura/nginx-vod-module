@@ -4,6 +4,7 @@
 // macros
 #define vod_copy_atom(p, raw_atom) vod_copy(p, (raw_atom).ptr, (raw_atom).size)
 #define dash_rescale_millis(millis) ((millis) * (DASH_TIMESCALE / 1000))
+#define esds_atom_size(extra_data_len) (ATOM_HEADER_SIZE + 29 + extra_data_len)
 
 // constants
 #define VOD_DASH_MAX_FRAME_RATE_LEN (1 + 2 * VOD_INT32_LEN)
@@ -682,7 +683,6 @@ dash_packager_write_mpd_period(
 	uint32_t max_width = 0;
 	uint32_t max_height = 0;
 	uint32_t max_framerate_duration = 0;
-	uint32_t max_framerate_timescale = 0;
 	uint32_t segment_count = 0;
 	uint32_t start_number;
 
@@ -752,11 +752,9 @@ dash_packager_write_mpd_period(
 			}
 
 			if (max_framerate_duration == 0 ||
-				cur_track->media_info.timescale * max_framerate_duration >
-				max_framerate_timescale * cur_track->media_info.min_frame_duration)
+				max_framerate_duration > cur_track->media_info.min_frame_duration)
 			{
 				max_framerate_duration = cur_track->media_info.min_frame_duration;
-				max_framerate_timescale = cur_track->media_info.timescale;
 			}
 
 			reference_track = cur_track;
@@ -765,7 +763,7 @@ dash_packager_write_mpd_period(
 		// print the header
 		dash_packager_write_frame_rate(
 			max_framerate_duration,
-			max_framerate_timescale,
+			DASH_TIMESCALE,
 			&frame_rate);
 
 		p = vod_sprintf(p,
@@ -840,7 +838,7 @@ dash_packager_write_mpd_period(
 
 				dash_packager_write_frame_rate(
 					cur_track->media_info.min_frame_duration,
-					cur_track->media_info.timescale,
+					DASH_TIMESCALE,
 					&frame_rate);
 
 				p = vod_sprintf(p,
@@ -1572,6 +1570,154 @@ dash_packager_write_mdhd64_atom(u_char* p, uint64_t duration)
 	return p;
 }
 
+static u_char*
+dash_packager_write_avcc_atom(u_char* p, media_track_t* track)
+{
+	size_t atom_size = ATOM_HEADER_SIZE + track->media_info.extra_data.len;
+
+	write_atom_header(p, atom_size, 'a', 'v', 'c', 'C');
+	p = vod_copy(p, track->media_info.extra_data.data, track->media_info.extra_data.len);
+	return p;
+}
+
+static u_char*
+dash_packager_write_stsd_video_entry(u_char* p, media_track_t* track)
+{
+	size_t atom_size = ATOM_HEADER_SIZE + sizeof(sample_entry_t) + sizeof(stsd_video_t) +
+		ATOM_HEADER_SIZE + track->media_info.extra_data.len;
+
+	write_atom_header(p, atom_size, 'a', 'v', 'c', '1');
+
+	// sample_entry_t
+	write_be32(p, 0);		// reserved
+	write_be16(p, 0);		// reserved
+	write_be16(p, 1);		// data reference index
+
+	// stsd_video_t
+	write_be16(p, 0);		// pre defined
+	write_be16(p, 0);		// reserved
+	write_be32(p, 0);		// pre defined
+	write_be32(p, 0);		// pre defined
+	write_be32(p, 0);		// pre defined
+	write_be16(p, track->media_info.u.video.width);
+	write_be16(p, track->media_info.u.video.height);
+	write_be32(p, 0x00480000);	// horiz res (72 DPI)
+	write_be32(p, 0x00480000);	// vert res (72 DPI)
+	write_be32(p, 0);		// reserved
+	write_be16(p, 1);		// frame count
+	vod_memzero(p, 32);		// compressor name
+	p += 32;
+	write_be16(p, 0x18);	// depth
+	write_be16(p, 0xffff);	// pre defined
+
+	p = dash_packager_write_avcc_atom(p, track);
+
+	return p;
+}
+
+static u_char*
+dash_packager_write_esds_atom(u_char* p, media_track_t* track)
+{
+	size_t extra_data_len = track->media_info.extra_data.len;
+	size_t atom_size = esds_atom_size(extra_data_len);
+
+	write_atom_header(p, atom_size, 'e', 's', 'd', 's');
+	write_be32(p, 0);							// version + flags
+
+	*p++ = MP4ESDescrTag;						// tag
+	*p++ = 3 + 3 * sizeof(descr_header_t) +		// len
+		sizeof(config_descr_t) + extra_data_len + 1;
+	write_be16(p, 1);							// track id
+	*p++ = 0;									// flags
+
+	*p++ = MP4DecConfigDescrTag;				// tag
+	*p++ = sizeof(config_descr_t) +				// len
+		sizeof(descr_header_t) + extra_data_len;
+	*p++ = track->media_info.u.audio.object_type_id;
+	*p++ = 0x15;								// stream type
+	write_be24(p, 0);							// buffer size
+	write_be32(p, track->media_info.bitrate);	// max bitrate
+	write_be32(p, track->media_info.bitrate);	// avg bitrate
+
+	*p++ = MP4DecSpecificDescrTag;				// tag
+	*p++ = extra_data_len;						// len
+	p = vod_copy(p, track->media_info.extra_data.data, extra_data_len);
+
+	*p++ = MP4SLDescrTag;						// tag
+	*p++ = 1;									// len
+	*p++ = 2;
+
+	return p;
+}
+
+static u_char*
+dash_packager_write_stsd_audio_entry(u_char* p, media_track_t* track)
+{
+	size_t atom_size = ATOM_HEADER_SIZE + sizeof(sample_entry_t) + sizeof(stsd_audio_t) +
+		esds_atom_size(track->media_info.extra_data.len);
+
+	write_atom_header(p, atom_size, 'm', 'p', '4', 'a');
+
+	// sample_entry_t
+	write_be32(p, 0);		// reserved
+	write_be16(p, 0);		// reserved
+	write_be16(p, 1);		// data reference index
+
+	// stsd_audio_t
+	write_be32(p, 0);		// reserved
+	write_be32(p, 0);		// reserved
+	write_be16(p, track->media_info.u.audio.channels);
+	write_be16(p, track->media_info.u.audio.bits_per_sample);
+	write_be16(p, 0);		// pre defined
+	write_be16(p, 0);		// reserved
+	write_be16(p, track->media_info.u.audio.sample_rate);
+	write_be16(p, 0);
+
+	p = dash_packager_write_esds_atom(p, track);
+
+	return p;
+}
+
+static size_t
+dash_packager_get_stsd_atom_size(media_track_t* track)
+{
+	size_t atom_size = ATOM_HEADER_SIZE + sizeof(stsd_atom_t);
+
+	switch (track->media_info.media_type)
+	{
+	case MEDIA_TYPE_VIDEO:
+		atom_size += ATOM_HEADER_SIZE + sizeof(sample_entry_t) + sizeof(stsd_video_t)+
+			ATOM_HEADER_SIZE + track->media_info.extra_data.len;
+		break;
+
+	case MEDIA_TYPE_AUDIO:
+		atom_size += ATOM_HEADER_SIZE + sizeof(sample_entry_t) + sizeof(stsd_audio_t)+
+			esds_atom_size(track->media_info.extra_data.len);
+		break;
+	}
+
+	return atom_size;
+}
+
+static u_char*
+dash_packager_write_stsd_atom(u_char* p, size_t atom_size, media_track_t* track)
+{
+	write_atom_header(p, atom_size, 's', 't', 's', 'd');
+	write_be32(p, 0);				// version + flags
+	write_be32(p, 1);				// entries
+	switch (track->media_info.media_type)
+	{
+	case MEDIA_TYPE_VIDEO:
+		p = dash_packager_write_stsd_video_entry(p, track);
+		break;
+
+	case MEDIA_TYPE_AUDIO:
+		p = dash_packager_write_stsd_audio_entry(p, track);
+		break;
+	}
+	return p;
+}
+
 static void
 dash_packager_init_mp4_calc_size(
 	media_set_t* media_set,
@@ -1739,8 +1885,35 @@ dash_packager_build_init_mp4(
 	atom_writer_t* stsd_atom_writer,
 	vod_str_t* result)
 {
+	media_track_t* first_track = media_set->sequences[0].filtered_clips[0].first_track;
 	init_mp4_sizes_t sizes;
+	size_t atom_size;
 	u_char* p;
+
+	// create an stsd atom if needed
+	if (first_track->raw_atoms[RTA_STSD].size == 0)
+	{
+		atom_size = dash_packager_get_stsd_atom_size(first_track);
+		p = vod_alloc(request_context->pool, atom_size);
+		if (p == NULL)
+		{
+			vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
+				"dash_packager_build_init_mp4: vod_alloc failed (1)");
+			return VOD_ALLOC_FAILED;
+		}
+
+		first_track->raw_atoms[RTA_STSD].ptr = p;
+		first_track->raw_atoms[RTA_STSD].size =
+			dash_packager_write_stsd_atom(p, atom_size, first_track) - p;
+
+		if (first_track->raw_atoms[RTA_STSD].size > atom_size)
+		{
+			vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+				"dash_packager_build_init_mp4: stsd length %uL greater than allocated length %uz",
+				first_track->raw_atoms[RTA_STSD].size, atom_size);
+			return VOD_UNEXPECTED;
+		}
+	}
 
 	// get the result size
 	dash_packager_init_mp4_calc_size(
@@ -1761,7 +1934,7 @@ dash_packager_build_init_mp4(
 	if (result->data == NULL)
 	{
 		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
-			"dash_packager_build_init_mp4: vod_alloc failed");
+			"dash_packager_build_init_mp4: vod_alloc failed (2)");
 		return VOD_ALLOC_FAILED;
 	}
 
@@ -1796,7 +1969,7 @@ dash_packager_get_earliest_pres_time(media_set_t* media_set, media_track_t* trac
 	
 	if (!media_set->use_discontinuity)
 	{
-		result += rescale_time_neg(track->clip_start_time, 1000, track->media_info.timescale);
+		result += dash_rescale_millis(track->clip_start_time);
 	}
 
 	if (track->frame_count > 0)

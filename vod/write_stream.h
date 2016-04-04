@@ -16,6 +16,13 @@
 	*(p)++ = (w)& 0xFF;			\
 	}
 
+#define write_be24(p, dw)			\
+	{								\
+	*(p)++ = ((dw) >> 16) & 0xFF;	\
+	*(p)++ = ((dw) >> 8) & 0xFF;	\
+	*(p)++ = (dw)& 0xFF;			\
+	}
+
 #define write_be32(p, dw)			\
 	{								\
 	*(p)++ = ((dw) >> 24) & 0xFF;	\
