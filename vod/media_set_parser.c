@@ -23,6 +23,7 @@ enum {
 	MEDIA_SET_PARAM_SEGMENT_BASE_TIME,
 	MEDIA_SET_PARAM_PLAYLIST_TYPE,
 	MEDIA_SET_PARAM_REFERENCE_CLIP_INDEX,
+	MEDIA_SET_PARAM_PRESENTATION_END,
 
 	MEDIA_SET_PARAM_COUNT
 };
@@ -78,6 +79,7 @@ static json_object_key_def_t media_set_params[] = {
 	{ vod_string("segmentBaseTime"),				VOD_JSON_INT,	MEDIA_SET_PARAM_SEGMENT_BASE_TIME },
 	{ vod_string("playlistType"),					VOD_JSON_STRING,MEDIA_SET_PARAM_PLAYLIST_TYPE },
 	{ vod_string("referenceClipIndex"),				VOD_JSON_INT,	MEDIA_SET_PARAM_REFERENCE_CLIP_INDEX },
+	{ vod_string("presentationEnd"),				VOD_JSON_BOOL,	MEDIA_SET_PARAM_PRESENTATION_END },
 	{ vod_null_string, 0, 0 }
 };
 
@@ -822,46 +824,87 @@ media_set_get_live_window(
 	uint32_t max_segment_index;
 
 	// non-segment request
-	current_time = vod_time() * 1000;
-	if (media_set->first_clip_time > current_time)
-	{
-		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-			"media_set_get_live_window: first clip time %uL is larger than current time %uL",
-			media_set->first_clip_time, current_time);
-		return VOD_BAD_MAPPING;
-	}
 
-	// get the max segment index
-	if (media_set->use_discontinuity)
+	if (segmenter->live_segment_count == 0)
 	{
-		rc = segmenter_get_segment_index_discontinuity(
-			request_context,
-			segmenter,
-			media_set->initial_segment_index,
-			media_set->durations,
-			media_set->total_clip_count,
-			current_time - segment_base_time,
-			&max_segment_index);
-		if (rc != VOD_OK)
+		// output all segments that are fully included in the mapping
+		if (media_set->use_discontinuity)
 		{
-			return rc;
+			min_segment_index = media_set->initial_segment_index;
+
+			rc = segmenter_get_segment_index_discontinuity(
+				request_context,
+				segmenter,
+				media_set->initial_segment_index,
+				media_set->durations,
+				media_set->total_clip_count,
+				media_set->total_duration - 1,
+				&max_segment_index);
+			if (rc != VOD_OK)
+			{
+				return rc;
+			}
+		}
+		else
+		{
+			min_segment_index = segmenter_get_segment_index_no_discontinuity_round_up(
+				segmenter,
+				media_set->first_clip_time - segment_base_time);
+
+			max_segment_index = segmenter_get_segment_index_no_discontinuity(
+				segmenter,
+				media_set->first_clip_time + media_set->total_duration - segment_base_time - 1);
+
+			if (!media_set->presentation_end)
+			{
+				max_segment_index--;
+			}
 		}
 	}
 	else
 	{
-		max_segment_index = segmenter_get_segment_index_no_discontinuity(
-			segmenter,
-			current_time - segment_base_time);
-	}
+		// output live_segment_count segments (at maximum) according to the current time
+		current_time = vod_time() * 1000;
+		if (media_set->first_clip_time > current_time)
+		{
+			vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+				"media_set_get_live_window: first clip time %uL is larger than current time %uL",
+				media_set->first_clip_time, current_time);
+			return VOD_BAD_MAPPING;
+		}
 
-	// get the min segment index
-	if (max_segment_index > media_set->initial_segment_index + segmenter->live_segment_count - 1)
-	{
-		min_segment_index = max_segment_index - segmenter->live_segment_count + 1;
-	}
-	else
-	{
-		min_segment_index = media_set->initial_segment_index;
+		// get the max segment index
+		if (media_set->use_discontinuity)
+		{
+			rc = segmenter_get_segment_index_discontinuity(
+				request_context,
+				segmenter,
+				media_set->initial_segment_index,
+				media_set->durations,
+				media_set->total_clip_count,
+				current_time - segment_base_time,
+				&max_segment_index);
+			if (rc != VOD_OK)
+			{
+				return rc;
+			}
+		}
+		else
+		{
+			max_segment_index = segmenter_get_segment_index_no_discontinuity(
+				segmenter,
+				current_time - segment_base_time);
+		}
+
+		// get the min segment index
+		if (max_segment_index > media_set->initial_segment_index + segmenter->live_segment_count - 1)
+		{
+			min_segment_index = max_segment_index - segmenter->live_segment_count + 1;
+		}
+		else
+		{
+			min_segment_index = media_set->initial_segment_index;
+		}
 	}
 
 	// get the ranges of the first and last segments
@@ -1068,6 +1111,7 @@ media_set_parse_json(
 		result->durations = NULL;
 		result->use_discontinuity = FALSE;
 		result->type = MEDIA_SET_VOD;
+		result->presentation_end = TRUE;
 
 		// parse the sequences
 		context.clip_ranges.clip_ranges = NULL;
@@ -1085,29 +1129,26 @@ media_set_parse_json(
 	}
 
 	// vod / live
-	if (params[MEDIA_SET_PARAM_PLAYLIST_TYPE] != NULL)
+	if (params[MEDIA_SET_PARAM_PLAYLIST_TYPE] == NULL || 
+		(params[MEDIA_SET_PARAM_PLAYLIST_TYPE]->v.str.len == playlist_type_vod.len &&
+		vod_strncasecmp(params[MEDIA_SET_PARAM_PLAYLIST_TYPE]->v.str.data, playlist_type_vod.data, playlist_type_vod.len) == 0))
 	{
-		if (params[MEDIA_SET_PARAM_PLAYLIST_TYPE]->v.str.len == playlist_type_vod.len &&
-			vod_strncasecmp(params[MEDIA_SET_PARAM_PLAYLIST_TYPE]->v.str.data, playlist_type_vod.data, playlist_type_vod.len) == 0)
-		{
-			result->type = MEDIA_SET_VOD;
-		}
-		else if (params[MEDIA_SET_PARAM_PLAYLIST_TYPE]->v.str.len == playlist_type_live.len &&
-			vod_strncasecmp(params[MEDIA_SET_PARAM_PLAYLIST_TYPE]->v.str.data, playlist_type_live.data, playlist_type_live.len) == 0)
-		{
-			result->type = MEDIA_SET_LIVE;
-		}
-		else
-		{
-			vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-				"media_set_parse_json: invalid playlist type \"%V\", must be either live or vod", 
-				&params[MEDIA_SET_PARAM_PLAYLIST_TYPE]->v.str);
-			return VOD_BAD_MAPPING;
-		}
+		result->type = MEDIA_SET_VOD;
+		result->presentation_end = TRUE;
+	}
+	else if (params[MEDIA_SET_PARAM_PLAYLIST_TYPE]->v.str.len == playlist_type_live.len &&
+		vod_strncasecmp(params[MEDIA_SET_PARAM_PLAYLIST_TYPE]->v.str.data, playlist_type_live.data, playlist_type_live.len) == 0)
+	{
+		result->type = MEDIA_SET_LIVE;
+		result->presentation_end = params[MEDIA_SET_PARAM_PRESENTATION_END] != NULL &&
+			params[MEDIA_SET_PARAM_PRESENTATION_END]->v.boolean;
 	}
 	else
 	{
-		result->type = MEDIA_SET_VOD;
+		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+			"media_set_parse_json: invalid playlist type \"%V\", must be either live or vod", 
+			&params[MEDIA_SET_PARAM_PLAYLIST_TYPE]->v.str);
+		return VOD_BAD_MAPPING;
 	}
 
 	// discontinuity
@@ -1182,7 +1223,7 @@ media_set_parse_json(
 					result->initial_segment_index,
 					result->durations,
 					result->total_clip_count,
-					request_params->segment_time - segment_base_time,
+					request_params->segment_time - segment_base_time + SEGMENT_FROM_TIMESTAMP_MARGIN,
 					&request_params->segment_index);
 				if (rc != VOD_OK)
 				{
@@ -1194,7 +1235,7 @@ media_set_parse_json(
 				// recalculate the segment index if it was determined according to timestamp
 				request_params->segment_index = segmenter_get_segment_index_no_discontinuity(
 					segmenter,
-					request_params->segment_time - segment_base_time);
+					request_params->segment_time - segment_base_time + SEGMENT_FROM_TIMESTAMP_MARGIN);
 			}
 		}
 

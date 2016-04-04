@@ -396,6 +396,9 @@ Live fields:
 * `initialSegmentIndex` - integer, mandatory for non-continuous live streams, contains the
 	index of the first segment in the playlist. Whenever a clip is pushed out of the head of
 	the playlist, this value must be incremented by the number of segments in the clip.
+* `presentationEnd` - boolean, optional, set to true to signal the end of the live presentation.
+	The default value is false. In HLS, for example, this parameter controls whether an
+	`#EXT-X-ENDLIST` tag should be included in the media playlist.
 	
 #### Sequence
 
@@ -606,6 +609,13 @@ location ~ ^/fpshls/p/\d+/(sp/\d+/)?serveFlavor/entryId/([^/]+)/(.*) {
 }
 ```
 
+##### Verified configurations
+
+Following is a list of configurations that were tested and found working:
+* DASH/CENC with PlayReady & Widevine PSSH together
+* MSS PlayReady
+* HLS FairPlay
+
 ### Performance recommendations
 
 1. For medium/large scale deployments, don't have users play the videos directly from nginx-vod-module.
@@ -691,6 +701,7 @@ Sets the segment duration in milliseconds.
 * **context**: `http`, `server`, `location`
 
 Sets the number of segments that should be returned in a live manifest.
+If the value is set to zero, the live manifest will contain all the segments that are fully contained in the mapping json time frame.
 
 #### vod_bootstrap_segment_durations
 * **syntax**: `vod_bootstrap_segment_durations duration`

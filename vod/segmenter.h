@@ -7,6 +7,7 @@
 
 // constants
 #define INVALID_SEGMENT_COUNT UINT_MAX
+#define SEGMENT_FROM_TIMESTAMP_MARGIN (100)		// in case of clipping, a segment may start up to 2 frames before the segment boundary
 
 // typedefs
 struct segmenter_conf_s;
@@ -99,6 +100,10 @@ vod_status_t segmenter_get_segment_durations_accurate(
 
 // get segment index
 uint32_t segmenter_get_segment_index_no_discontinuity(
+	segmenter_conf_t* conf,
+	uint64_t time_millis);
+
+uint32_t segmenter_get_segment_index_no_discontinuity_round_up(
 	segmenter_conf_t* conf,
 	uint64_t time_millis);
 
