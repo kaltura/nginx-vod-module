@@ -297,20 +297,29 @@ filter_init_filtered_clips(
 			}
 		}
 
-		// update the media set total track count
+		// set the sequence media type
+		sequence->total_track_count = sequence->track_count[MEDIA_TYPE_VIDEO] + sequence->track_count[MEDIA_TYPE_AUDIO];
+		switch (sequence->total_track_count)
+		{
+		case 0:
+			media_set->sequence_count--;
+			media_set->sequences_end--;
+			vod_memmove(sequence, sequence + 1, (u_char*)media_set->sequences_end - (u_char*)sequence);
+			sequence--;
+			continue;
+
+		case 1:
+			sequence->media_type = sequence->track_count[MEDIA_TYPE_VIDEO] > 0 ? MEDIA_TYPE_VIDEO : MEDIA_TYPE_AUDIO;
+			break;
+
+		default:
+			sequence->media_type = MEDIA_TYPE_NONE;
+			break;
+		}
+
+		// update the media set track count
 		media_set->track_count[MEDIA_TYPE_VIDEO] += sequence->track_count[MEDIA_TYPE_VIDEO];
 		media_set->track_count[MEDIA_TYPE_AUDIO] += sequence->track_count[MEDIA_TYPE_AUDIO];
-		sequence->total_track_count = sequence->track_count[MEDIA_TYPE_VIDEO] + sequence->track_count[MEDIA_TYPE_AUDIO];
-
-		// set the sequence media type
-		if (sequence->total_track_count == 1)
-		{
-			sequence->media_type = sequence->track_count[MEDIA_TYPE_VIDEO] > 0 ? MEDIA_TYPE_VIDEO : MEDIA_TYPE_AUDIO;
-		}
-		else
-		{
-			sequence->media_type = MEDIA_TYPE_NONE;
-		}
 
 		// initialize the filtered clips array
 		sequence->filtered_clips = output_clip;
