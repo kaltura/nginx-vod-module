@@ -6,7 +6,7 @@
 
 #define MP4_AES_CTR_KEY_SIZE (16)
 #define MP4_AES_CTR_IV_SIZE (8)
-#define MP4_AES_CTR_COUNTER_SIZE (AES_BLOCK_SIZE)
+#define MP4_AES_CTR_COUNTER_BUFFER_SIZE (AES_BLOCK_SIZE * 64)
 
 // typedefs
 typedef struct {
@@ -14,9 +14,10 @@ typedef struct {
 #if (VOD_HAVE_OPENSSL_EVP)
 	EVP_CIPHER_CTX cipher;
 #endif //(VOD_HAVE_OPENSSL_EVP)
-	u_char counter[MP4_AES_CTR_COUNTER_SIZE];
-	u_char encrypted_counter[MP4_AES_CTR_COUNTER_SIZE];
-	int block_offset;
+	u_char counter[MP4_AES_CTR_COUNTER_BUFFER_SIZE];
+	u_char encrypted_counter[MP4_AES_CTR_COUNTER_BUFFER_SIZE];
+	u_char* encrypted_pos;
+	u_char* encrypted_end;
 } mp4_aes_ctr_state_t;
 
 // functions
