@@ -55,7 +55,7 @@ struct segmenter_conf_s {
 	uintptr_t segment_duration;
 	vod_array_t* bootstrap_segments;		// array of vod_str_t
 	bool_t align_to_key_frames;
-	uintptr_t live_segment_count;
+	intptr_t live_segment_count;
 	segmenter_get_segment_count_t get_segment_count;			// last short / last long / last rounded
 	segmenter_get_segment_durations_t get_segment_durations;	// estimate / accurate
 

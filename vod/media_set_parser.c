@@ -825,9 +825,9 @@ media_set_get_live_window(
 
 	// non-segment request
 
-	if (segmenter->live_segment_count == 0)
+	if (segmenter->live_segment_count <= 0)
 	{
-		// output all segments that are fully included in the mapping
+		// find the full range of segments included in the mapping
 		if (media_set->use_discontinuity)
 		{
 			min_segment_index = media_set->initial_segment_index;
@@ -859,6 +859,13 @@ media_set_get_live_window(
 			{
 				max_segment_index--;
 			}
+		}
+
+		// if live segment count is negative, output the last N segments
+		if (segmenter->live_segment_count < 0 && 
+			max_segment_index - min_segment_index + 1 > -segmenter->live_segment_count)
+		{
+			min_segment_index = max_segment_index + (int32_t)(segmenter->live_segment_count + 1);
 		}
 	}
 	else

@@ -701,7 +701,9 @@ Sets the segment duration in milliseconds.
 * **context**: `http`, `server`, `location`
 
 Sets the number of segments that should be returned in a live manifest.
+If the value is positive, nginx vod returns at most vod_live_segment_count segments, the last of which contains the current server time.
 If the value is set to zero, the live manifest will contain all the segments that are fully contained in the mapping json time frame.
+If the value is negative, nginx vod will return the last -vod_live_segment_count segments contained in the mapping json.
 
 #### vod_bootstrap_segment_durations
 * **syntax**: `vod_bootstrap_segment_durations duration`
