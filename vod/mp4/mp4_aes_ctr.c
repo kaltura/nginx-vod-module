@@ -48,7 +48,8 @@ mp4_aes_ctr_set_iv(
 {
 	vod_memcpy(state->counter, iv, MP4_AES_CTR_IV_SIZE);
 	vod_memzero(state->counter + MP4_AES_CTR_IV_SIZE, sizeof(state->counter) - MP4_AES_CTR_IV_SIZE);
-	state->block_offset = 0;
+	state->encrypted_pos = NULL;
+	state->encrypted_end = NULL;
 }
 
 void
@@ -72,39 +73,75 @@ mp4_aes_ctr_process(mp4_aes_ctr_state_t* state, u_char* dest, const u_char* src,
 	const u_char* src_end = src + size;
 	const u_char* cur_end_pos;
 	u_char* encrypted_counter_pos;
+	u_char* cur_block;
+	u_char* next_block;
+	u_char* end_block;
+	size_t encrypted_size;
 	int out_size;
 
 	while (src < src_end)
 	{
-		if (state->block_offset == 0)
+		if (state->encrypted_pos >= state->encrypted_end)
 		{
+			// find the size of the data to encrypt
+			encrypted_size = aes_round_up_to_block_exact(src_end - src);
+			if (encrypted_size > sizeof(state->counter))
+			{
+				encrypted_size = sizeof(state->counter);
+			}
+
+			// initialize the clear counters (the first counter is already initialized)
+			end_block = state->counter + encrypted_size - AES_BLOCK_SIZE;
+			for (cur_block = state->counter; cur_block < end_block; cur_block = next_block)
+			{
+				next_block = cur_block + AES_BLOCK_SIZE;
+				vod_memcpy(next_block, cur_block, AES_BLOCK_SIZE);
+				mp4_aes_ctr_increment_be64(next_block + 8);
+			}
+
+			// encrypt the clear counters
 			if (1 != EVP_EncryptUpdate(
 				&state->cipher,
 				state->encrypted_counter,
 				&out_size,
 				state->counter,
-				sizeof(state->counter)) ||
-				out_size != sizeof(state->encrypted_counter))
+				encrypted_size) ||
+				out_size != (int)encrypted_size)
 			{
 				vod_log_error(VOD_LOG_ERR, state->request_context->log, 0,
 					"mp4_aes_ctr_process: EVP_EncryptUpdate failed");
 				return VOD_UNEXPECTED;
 			}
 
+			// update the first counter
+			if (encrypted_size > AES_BLOCK_SIZE)
+			{
+				vod_memcpy(state->counter, end_block, AES_BLOCK_SIZE);
+			}
 			mp4_aes_ctr_increment_be64(state->counter + 8);
+
+			state->encrypted_end = state->encrypted_counter + encrypted_size;
+
+			encrypted_counter_pos = state->encrypted_counter;
+			cur_end_pos = src + encrypted_size;
+		}
+		else
+		{
+			encrypted_counter_pos = state->encrypted_pos;
+			cur_end_pos = src + (state->encrypted_end - encrypted_counter_pos);
 		}
 
-		encrypted_counter_pos = state->encrypted_counter + state->block_offset;
-		cur_end_pos = src + MP4_AES_CTR_COUNTER_SIZE - state->block_offset;
-		cur_end_pos = vod_min(cur_end_pos, src_end);
-
-		state->block_offset += cur_end_pos - src;
-		state->block_offset &= (MP4_AES_CTR_COUNTER_SIZE - 1);
+		if (src_end < cur_end_pos)
+		{
+			cur_end_pos = src_end;
+		}
 
 		while (src < cur_end_pos)
 		{
 			*dest++ = *src++ ^ *encrypted_counter_pos++;
 		}
+
+		state->encrypted_pos = encrypted_counter_pos;
 	}
 
 	return VOD_OK;

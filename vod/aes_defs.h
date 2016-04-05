@@ -16,5 +16,6 @@
 // macros
 #define aes_round_down_to_block(n) ((n) & ~0xf)
 #define aes_round_up_to_block(n) aes_round_down_to_block((n) + 0x10)
+#define aes_round_up_to_block_exact(n) aes_round_down_to_block((n) + 0xf)
 
 #endif //__AES_DEFS_H__
