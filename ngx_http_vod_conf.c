@@ -128,7 +128,7 @@ ngx_http_vod_create_loc_conf(ngx_conf_t *cf)
 	conf->submodule.parse_uri_file_name = NGX_CONF_UNSET_PTR;
 	conf->request_handler = NGX_CONF_UNSET_PTR;
 	conf->segmenter.segment_duration = NGX_CONF_UNSET_UINT;
-	conf->segmenter.live_segment_count = NGX_CONF_UNSET_UINT;
+	conf->segmenter.live_segment_count = NGX_CONF_UNSET;
 	conf->segmenter.bootstrap_segments = NGX_CONF_UNSET_PTR;
 	conf->segmenter.align_to_key_frames = NGX_CONF_UNSET;
 	conf->segmenter.get_segment_count = NGX_CONF_UNSET_PTR;
@@ -190,7 +190,7 @@ ngx_http_vod_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child)
 	ngx_conf_merge_str_value(conf->multi_uri_suffix, prev->multi_uri_suffix, ".urlset");
 
 	ngx_conf_merge_uint_value(conf->segmenter.segment_duration, prev->segmenter.segment_duration, 10000);
-	ngx_conf_merge_uint_value(conf->segmenter.live_segment_count, prev->segmenter.live_segment_count, 3);
+	ngx_conf_merge_value(conf->segmenter.live_segment_count, prev->segmenter.live_segment_count, 3);
 	ngx_conf_merge_ptr_value(conf->segmenter.bootstrap_segments, prev->segmenter.bootstrap_segments, NULL);
 	ngx_conf_merge_value(conf->segmenter.align_to_key_frames, prev->segmenter.align_to_key_frames, 0);
 	ngx_conf_merge_ptr_value(conf->segmenter.get_segment_count, prev->segmenter.get_segment_count, segmenter_get_segment_count_last_short);
@@ -445,6 +445,47 @@ ngx_http_vod_set_time_slot(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
 	if (cmd->post) {
 		post = cmd->post;
 		return post->post_handler(cf, post, sp);
+	}
+
+	return NGX_CONF_OK;
+}
+
+char *
+ngx_http_vod_set_signed_slot(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
+{
+	char  *p = conf;
+
+	ngx_int_t        *np;
+	ngx_str_t        *value;
+	ngx_conf_post_t  *post;
+
+
+	np = (ngx_int_t *)(p + cmd->offset);
+
+	if (*np != NGX_CONF_UNSET) {
+		return "is duplicate";
+	}
+
+	value = cf->args->elts;
+	if (value[1].len > 0 && value[1].data[0] == '-')
+	{
+		*np = ngx_atoi(value[1].data + 1, value[1].len - 1);
+		if (*np == NGX_ERROR) {
+			return "invalid number";
+		}
+		*np = -(*np);
+	}
+	else
+	{
+		*np = ngx_atoi(value[1].data, value[1].len);
+		if (*np == NGX_ERROR) {
+			return "invalid number";
+		}
+	}
+
+	if (cmd->post) {
+		post = cmd->post;
+		return post->post_handler(cf, post, np);
 	}
 
 	return NGX_CONF_OK;
@@ -821,7 +862,7 @@ ngx_command_t ngx_http_vod_commands[] = {
 
 	{ ngx_string("vod_live_segment_count"),
 	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1,
-	ngx_conf_set_num_slot,
+	ngx_http_vod_set_signed_slot,
 	NGX_HTTP_LOC_CONF_OFFSET,
 	offsetof(ngx_http_vod_loc_conf_t, segmenter.live_segment_count),
 	NULL },
