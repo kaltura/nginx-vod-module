@@ -6,11 +6,14 @@
 #include "../segmenter.h"
 
 // constants
+#define BITRATE_ESTIMATE_SEC (5)
 #define FRAMES_PER_PART (160)		// about 4K
+#define MAX_GOP_FRAMES (600)		// 10 sec GOP in 60 fps
 
 // prototypes
 static vod_status_t mkv_parse_seek_entry(ebml_context_t* context, ebml_spec_t* spec, void* dst);
 static vod_status_t mkv_parse_frame(ebml_context_t* context, ebml_spec_t* spec, void* dst);
+static vod_status_t mkv_parse_frame_estimate_bitrate(ebml_context_t* context, ebml_spec_t* spec, void* dst);
 
 // raw parsing structs
 typedef struct {
@@ -146,6 +149,17 @@ static ebml_spec_t mkv_spec_cluster[] = {
 	{ 0, EBML_NONE, 0, NULL }
 };
 
+static ebml_spec_t mkv_spec_bitrate_estimate_cluster_fields[] = {
+	{ MKV_ID_CLUSTERTIMECODE,		EBML_UINT,		offsetof(mkv_cluster_t, timecode),			NULL },
+	{ MKV_ID_SIMPLEBLOCK,			EBML_CUSTOM,	0,											mkv_parse_frame_estimate_bitrate },
+	{ 0, EBML_NONE, 0, NULL }
+};
+
+static ebml_spec_t mkv_spec_bitrate_estimate_cluster[] = {
+	{ MKV_ID_CLUSTER,				EBML_MASTER,	0,											mkv_spec_bitrate_estimate_cluster_fields },
+	{ 0, EBML_NONE, 0, NULL }
+};
+
 // enums
 enum {
 	SECTION_INFO,
@@ -168,7 +182,6 @@ enum {
 enum {
 	FRS_WAIT_START_KEY_FRAME,
 	FRS_WAIT_END_KEY_FRAME,
-	FRS_PROCESS_FRAMES,
 	FRS_DONE,
 };
 
@@ -196,6 +209,7 @@ typedef struct {
 	uint64_t start_time;
 	uint64_t end_time;
 	uint32_t max_frame_count;
+	bool_t parse_frames;
 } mkv_base_metadata_t;
 
 typedef struct {
@@ -209,16 +223,26 @@ typedef struct {
 } mkv_metadata_reader_state_t;
 
 typedef struct {
+	input_frame_t* frame;
+	uint64_t timecode;
+	input_frame_t* unsorted_frame;
+	uint64_t unsorted_timecode;
+} frame_timecode_t;
+
+typedef struct {
+	uint64_t track_number;
+	bool_t done;
+
 	frame_list_part_t frames;
 	frame_list_part_t* last_frames_part;
 	uint32_t frame_count;
 	uint32_t key_frame_count;
-
-	uint64_t track_number;
-	uint64_t last_timecode;
-	uint64_t first_timecode;
 	uint64_t total_frames_size;
-	bool_t done;
+	uint64_t total_frames_duration;
+	uint64_t first_timecode;
+
+	vod_array_t gop_frames;		// array of frame_timecode_t
+	int32_t min_pts_delay;
 } mkv_frame_parse_track_context_t;
 
 typedef struct {
@@ -230,6 +254,19 @@ typedef struct {
 	mkv_frame_parse_track_context_t* first_track;
 	mkv_frame_parse_track_context_t* last_track;
 } mkv_frame_parse_context_t;
+
+typedef struct {
+	uint64_t track_number;
+	uint64_t min_frame_timecode;
+	uint64_t max_frame_timecode;
+	uint64_t total_frames_size;
+} mkv_estimate_bitrate_track_context_t;
+
+typedef struct {
+	ebml_context_t context;
+	mkv_estimate_bitrate_track_context_t* first_track;
+	mkv_estimate_bitrate_track_context_t* last_track;
+} mkv_estimate_bitrate_context_t;
 
 static vod_str_t mkv_supported_doctypes[] = {
 	vod_string("matroska"),
@@ -657,6 +694,12 @@ mkv_metadata_parse(
 		return VOD_ALLOC_FAILED;
 	}
 
+	// if raw atoms were requested, parse the extra data so that the raw atoms can be constructed later
+	if ((parse_params->parse_type & PARSE_FLAG_SAVE_RAW_ATOMS) != 0)
+	{
+		parse_params->parse_type |= PARSE_FLAG_EXTRA_DATA;
+	}
+
 	context.cur_pos = metadata_parts[SECTION_TRACKS].data;
 	context.end_pos = context.cur_pos + metadata_parts[SECTION_TRACKS].len;
 
@@ -762,10 +805,11 @@ mkv_metadata_parse(
 			cur_track->media_info.u.audio.bits_per_sample = track.u.audio.bitdepth;
 			cur_track->media_info.u.audio.channels = track.u.audio.channels;
 			cur_track->media_info.u.audio.sample_rate = (uint32_t)track.u.audio.sample_rate;
-			// XXXXX init object_type_id;
-
-			if (cur_codec->codec_id == VOD_CODEC_ID_AAC)
+			switch (cur_codec->codec_id)
 			{
+			case VOD_CODEC_ID_AAC:
+				cur_track->media_info.u.audio.object_type_id = 0x40;
+
 				rc = codec_config_mp4a_config_parse(
 					request_context,
 					&track.codec_private,
@@ -774,6 +818,11 @@ mkv_metadata_parse(
 				{
 					return rc;
 				}
+				break;
+
+			case VOD_CODEC_ID_MP3:
+				cur_track->media_info.u.audio.object_type_id = cur_track->media_info.u.audio.sample_rate > 24000 ? 0x6B : 0x69;
+				break;
 			}
 			break;
 		}
@@ -823,10 +872,9 @@ mkv_metadata_parse(
 }
 
 static vod_status_t
-mkv_read_frames(
+mkv_get_read_frames_request(
 	request_context_t* request_context,
 	mkv_base_metadata_t* metadata,
-	media_parse_params_t* parse_params,
 	uint32_t end_margin,
 	media_format_read_request_t* read_req)
 {
@@ -836,11 +884,6 @@ mkv_read_frames(
 	mkv_index_t index;
 	vod_status_t rc;
 	bool_t done = FALSE;
-
-	// Note: must save all the data we'll need from parse params (won't be available in parse frames)
-	metadata->start_time = rescale_time(parse_params->range->start, 1000, metadata->base.timescale);
-	metadata->end_time = rescale_time(parse_params->range->end, 1000, metadata->base.timescale);
-	metadata->max_frame_count = parse_params->max_frame_count;
 
 	// Note: adding a second to the end time, to make sure we get a frame following the last frame
 	//	this is required since there is no duration per frame
@@ -863,7 +906,7 @@ mkv_read_frames(
 			if (rc != VOD_OK)
 			{
 				vod_log_debug1(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
-					"mkv_read_frames: ebml_parse_single failed %i", rc);
+					"mkv_get_read_frames_request: ebml_parse_single failed %i", rc);
 				return rc;
 			}
 		}
@@ -898,24 +941,240 @@ mkv_read_frames(
 	if (index.cluster_pos <= read_req->read_offset)
 	{
 		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-			"mkv_read_frames: end cue pos %uL is less than start cue pos %uL",
+			"mkv_get_read_frames_request: end cue pos %uL is less than start cue pos %uL",
 			index.cluster_pos, read_req->read_offset);
 		return VOD_BAD_DATA;
 	}
 
 	read_req->read_size = index.cluster_pos - read_req->read_offset;
-
-	if (read_req->read_size > parse_params->max_frames_size)
-	{
-		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-			"mkv_read_frames: read size %uz exceeds the limit %uz", 
-			read_req->read_size, parse_params->max_frames_size);
-		return VOD_BAD_REQUEST;
-	}
-
 	read_req->read_offset += metadata->base_layout.position_reference;
 
 	return VOD_AGAIN;
+}
+
+static void 
+mkv_sort_gop_frames(vod_array_t* gop_frames)
+{
+	frame_timecode_t* frames = gop_frames->elts;
+	frame_timecode_t* frame1;
+	frame_timecode_t* frame2;
+	input_frame_t* temp_frame;
+	uint64_t temp_timecode;
+	vod_uint_t index1;
+	vod_uint_t index2;
+	vod_uint_t limit;
+	bool_t done;
+
+	// Note: the last entry is not being sorted (it's the next key frame)
+	limit = gop_frames->nelts - 2;
+
+	// Note: using bubble sort since the frames are expected to be nearly sorted
+	//		specifically, if the stream does not use B-frames it will be completely sorted
+
+	for (index1 = 0; index1 < limit; index1++)
+	{
+		done = TRUE;
+		for (index2 = limit - index1, frame1 = frames;
+			index2 > 0; 
+			index2--, frame1 = frame2)
+		{
+			frame2 = frame1 + 1;
+			if (frame1->timecode <= frame2->timecode)
+			{
+				continue;
+			}
+
+			temp_frame = frame1->frame;
+			frame1->frame = frame2->frame;
+			frame2->frame = temp_frame;
+
+			temp_timecode = frame1->timecode;
+			frame1->timecode = frame2->timecode;
+			frame2->timecode = temp_timecode;
+
+			done = FALSE;
+		}
+
+		if (done)
+		{
+			break;
+		}
+	}
+}
+
+static void
+mkv_update_frame_timestamps(mkv_frame_parse_track_context_t* context)
+{
+	frame_timecode_t* cur_frame;
+	frame_timecode_t* last_frame;
+	int32_t pts_delay;
+
+	// sort the frames
+	if (context->gop_frames.nelts > 2)
+	{
+		mkv_sort_gop_frames(&context->gop_frames);
+	}
+
+	cur_frame = context->gop_frames.elts;
+	last_frame = cur_frame + (context->gop_frames.nelts - 1);
+
+	if (cur_frame->frame != NULL)
+	{
+		// this gop is included in the parsed frames, calculate the pts delay and duration
+		for (; cur_frame < last_frame; cur_frame++)
+		{
+			pts_delay = cur_frame->unsorted_timecode - cur_frame->timecode;
+
+			if (pts_delay < context->min_pts_delay)
+			{
+				context->min_pts_delay = pts_delay;
+			}
+
+			cur_frame->unsorted_frame->pts_delay = pts_delay;
+			cur_frame->frame->duration = cur_frame[1].timecode - cur_frame[0].timecode;
+		}
+	}
+	else
+	{
+		// this gop is not included in the parsed frames, only find the min pts delay
+		for (cur_frame = context->gop_frames.elts;
+			cur_frame < last_frame;
+			cur_frame++)
+		{
+			pts_delay = cur_frame->unsorted_timecode - cur_frame->timecode;
+
+			if (pts_delay < context->min_pts_delay)
+			{
+				context->min_pts_delay = pts_delay;
+			}
+		}
+	}
+
+	// reset the gop frames array
+	context->gop_frames.nelts = 0;
+}
+
+static vod_status_t
+mkv_parse_frame_estimate_bitrate(
+	ebml_context_t* context,
+	ebml_spec_t* spec,
+	void* dst)
+{
+	mkv_estimate_bitrate_track_context_t* track_context;
+	mkv_estimate_bitrate_context_t* estimate_context = vod_container_of(context, mkv_estimate_bitrate_context_t, context);
+	mkv_cluster_t* cluster = dst;
+	uint64_t frame_timecode;
+	uint64_t track_number;
+	int16_t timecode;
+	vod_status_t rc;
+
+	// get the track context
+	rc = ebml_read_num(context, &track_number, 8, 1);
+	if (rc < 0)
+	{
+		vod_log_debug1(VOD_LOG_DEBUG_LEVEL, context->request_context->log, 0,
+			"mkv_parse_frame_estimate_bitrate: ebml_read_num(track_number) failed %i", rc);
+		return rc;
+	}
+
+	for (track_context = estimate_context->first_track; ; track_context++)
+	{
+		if (track_context >= estimate_context->last_track)
+		{
+			return VOD_OK;		// unneeded track
+		}
+
+		if (track_number == track_context->track_number)
+		{
+			break;
+		}
+	}
+
+	// get the timecode
+	if (context->cur_pos + 3 > context->end_pos)
+	{
+		vod_log_error(VOD_LOG_ERR, context->request_context->log, 0,
+			"mkv_parse_frame_estimate_bitrate: block too small");
+		return VOD_BAD_DATA;
+	}
+
+	read_be16(context->cur_pos, timecode);
+	context->cur_pos++;			// flags
+
+	// update the mix/max timecodes
+	frame_timecode = cluster->timecode + timecode;
+
+	if (frame_timecode < track_context->min_frame_timecode)
+	{
+		track_context->min_frame_timecode = frame_timecode;
+	}
+
+	if (frame_timecode > track_context->max_frame_timecode)
+	{
+		track_context->max_frame_timecode = frame_timecode;
+	}
+
+	// update the total size
+	track_context->total_frames_size += context->end_pos - context->cur_pos;
+
+	return VOD_OK;
+}
+
+static vod_status_t
+mkv_parse_frames_estimate_bitrate(
+	request_context_t* request_context,
+	media_base_metadata_t* base,
+	vod_str_t* frame_data,
+	media_track_array_t* result)
+{
+	mkv_estimate_bitrate_track_context_t* track_context;
+	mkv_estimate_bitrate_context_t context;
+	media_track_t* cur_track;
+	mkv_cluster_t cluster;
+	vod_uint_t i;
+	size_t alloc_size = sizeof(context.first_track[0]) * base->tracks.nelts;
+
+	context.first_track = vod_alloc(request_context->pool, alloc_size);
+	if (context.first_track == NULL)
+	{
+		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
+			"mkv_parse_frames_estimate_bitrate: vod_alloc failed (1)");
+		return VOD_ALLOC_FAILED;
+	}
+
+	context.last_track = (void*)((u_char*)context.first_track + alloc_size);
+
+	context.context.request_context = request_context;
+	context.context.cur_pos = frame_data->data;
+	context.context.end_pos = frame_data->data + frame_data->len;
+
+	for (i = 0; i < base->tracks.nelts; i++)
+	{
+		cur_track = (media_track_t*)base->tracks.elts + i;
+		track_context = context.first_track + i;
+
+		track_context->track_number = cur_track->media_info.track_id;
+		track_context->min_frame_timecode = ULLONG_MAX;
+		track_context->max_frame_timecode = 0;
+		track_context->total_frames_size = 0;
+	}
+
+	ebml_parse_master(&context.context, mkv_spec_bitrate_estimate_cluster, &cluster);		// ignoring errors
+
+	for (i = 0; i < base->tracks.nelts; i++)
+	{
+		cur_track = (media_track_t*)base->tracks.elts + i;
+		track_context = context.first_track + i;
+
+		if (track_context->max_frame_timecode > track_context->min_frame_timecode)
+		{
+			cur_track->media_info.bitrate = track_context->total_frames_size * base->timescale * 8 / (track_context->max_frame_timecode - track_context->min_frame_timecode);
+		}
+
+		result->track_count[cur_track->media_info.media_type]++;
+	}
+
+	return VOD_OK;
 }
 
 static vod_status_t
@@ -928,6 +1187,7 @@ mkv_parse_frame(
 	mkv_frame_parse_track_context_t* track_context;
 	frame_list_part_t* last_frames_part;
 	frame_list_part_t* new_frames_part;
+	frame_timecode_t* gop_frame;
 	mkv_cluster_t* cluster = dst;
 	input_frame_t* cur_frame;
 	uint64_t frame_timecode;
@@ -975,20 +1235,91 @@ mkv_parse_frame(
 	read_be16(context->cur_pos, timecode);
 	flags = *context->cur_pos++;
 
-	frame_timecode = cluster->timecode + timecode;
-
-	if (frame_timecode < frame_parse_context->start_time)
+	// add a record to the gop frames
+	if (track_context->gop_frames.nelts > MAX_GOP_FRAMES)
 	{
-		return VOD_OK;
+		vod_log_error(VOD_LOG_ERR, context->request_context->log, 0,
+			"mkv_parse_frame: gop size exceeds the limit");
+		return VOD_BAD_DATA;
 	}
+
+	frame_timecode = cluster->timecode + timecode;
+	
+	gop_frame = vod_array_push(&track_context->gop_frames);
+	if (gop_frame == NULL)
+	{
+		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, context->request_context->log, 0,
+			"mkv_parse_frame: vod_array_push failed");
+		return VOD_ALLOC_FAILED;
+	}
+	gop_frame->timecode = frame_timecode;
+	gop_frame->unsorted_timecode = frame_timecode;
+	gop_frame->frame = NULL;
+	gop_frame->unsorted_frame = NULL;
 
 	switch (flags)
 	{
 	case 0:
+		// XXXXX should not cross the clip offset
+
+		if (frame_parse_context->state == FRS_WAIT_START_KEY_FRAME)
+		{
+			return VOD_OK;
+		}
+
 		key_frame = 0;
 		break;
 
 	case 0x80:
+		mkv_update_frame_timestamps(track_context);
+
+		// repush the gop frame following the reset of the array
+		gop_frame = vod_array_push(&track_context->gop_frames);		// cant fail
+		
+		gop_frame->timecode = frame_timecode;
+		gop_frame->unsorted_timecode = frame_timecode;
+		gop_frame->frame = NULL;
+		gop_frame->unsorted_frame = NULL;
+
+		switch (frame_parse_context->state)
+		{
+		case FRS_WAIT_START_KEY_FRAME:
+			if (frame_timecode < frame_parse_context->start_time || 
+				track_context != frame_parse_context->first_track)		// wait for keyframe on the first track only (will be video in case of muxed stream)
+			{
+				return VOD_OK;
+			}
+
+			frame_parse_context->state = FRS_WAIT_END_KEY_FRAME;
+			break;
+
+		case FRS_WAIT_END_KEY_FRAME:
+			if (frame_timecode < frame_parse_context->end_time ||
+				track_context != frame_parse_context->first_track)
+			{
+				break;
+			}
+
+			frame_parse_context->state = FRS_DONE;
+			// fallthrough
+
+		case FRS_DONE:
+			track_context->done = TRUE;
+
+			// check whether all tracks are done
+			for (track_context = frame_parse_context->first_track;
+				track_context < frame_parse_context->last_track;
+				track_context++)
+			{
+				if (!track_context->done)
+				{
+					return VOD_OK;
+				}
+			}
+
+			return VOD_DONE;
+		}
+
 		key_frame = 1;
 		break;
 
@@ -996,56 +1327,6 @@ mkv_parse_frame(
 		vod_log_error(VOD_LOG_ERR, context->request_context->log, 0,
 			"mkv_parse_frame: unsupported frame flags 0x%uxD", (uint32_t)flags);
 		return VOD_BAD_DATA;
-	}
-
-	last_frames_part = track_context->last_frames_part;
-
-	switch (frame_parse_context->state)
-	{
-	case FRS_WAIT_START_KEY_FRAME:
-		if (track_context == frame_parse_context->first_track &&		// wait for keyframe on the first track only (will be video in case of muxed stream)
-			key_frame)
-		{
-			frame_parse_context->state = FRS_WAIT_END_KEY_FRAME;
-			break;
-		}
-		return VOD_OK;
-
-	case FRS_WAIT_END_KEY_FRAME:
-		if (frame_timecode >= frame_parse_context->end_time && 
-			track_context == frame_parse_context->first_track &&
-			key_frame)
-		{
-			frame_parse_context->state = FRS_DONE;
-		}
-		break;
-	}
-
-	if (frame_parse_context->state == FRS_DONE ||
-		(frame_parse_context->state == FRS_PROCESS_FRAMES &&
-		 frame_timecode >= frame_parse_context->end_time))
-	{
-		track_context->done = TRUE;
-
-		// set the duration of the last frame
-		if (track_context->frame_count > 0)
-		{
-			last_frames_part->last_frame[-1].duration = frame_timecode - track_context->last_timecode;
-		}
-		track_context->last_timecode = frame_timecode;
-
-		// check whether all tracks are done
-		for (track_context = frame_parse_context->first_track;
-			track_context < frame_parse_context->last_track;
-			track_context++)
-		{
-			if (!track_context->done)
-			{
-				return VOD_OK;
-			}
-		}
-
-		return VOD_DONE;
 	}
 
 	// enforce frame count limit
@@ -1056,15 +1337,7 @@ mkv_parse_frame(
 		return VOD_BAD_DATA;
 	}
 
-	// update the last frame duration
-	if (track_context->frame_count > 0)
-	{
-		last_frames_part->last_frame[-1].duration = frame_timecode - track_context->last_timecode;
-	}
-	else
-	{
-		track_context->first_timecode = frame_timecode;
-	}
+	last_frames_part = track_context->last_frames_part;
 
 	if (last_frames_part->last_frame >= last_frames_part->first_frame + FRAMES_PER_PART)
 	{
@@ -1082,23 +1355,32 @@ mkv_parse_frame(
 		new_frames_part->last_frame = new_frames_part->first_frame;
 		new_frames_part->frames_source = last_frames_part->frames_source;
 		new_frames_part->frames_source_context = last_frames_part->frames_source_context;
+		new_frames_part->clip_to = UINT_MAX;		// XXXXX fix this
 
 		last_frames_part->next = new_frames_part;
 		track_context->last_frames_part = new_frames_part;
 		last_frames_part = new_frames_part;
 	}
 
+	// initialize the new frame (duration & pts delay are initialized later)
 	cur_frame = last_frames_part->last_frame++;
-
 	cur_frame->key_frame = key_frame;
 	cur_frame->offset = (uintptr_t)context->cur_pos;
 	cur_frame->size = context->end_pos - context->cur_pos;
-	cur_frame->pts_delay = 0;		// XXXXX calculate some dts value and determine the pts delay
 
-	track_context->last_timecode = frame_timecode;
-	track_context->total_frames_size += cur_frame->size;
+	// add the frame to the gop frames
+	gop_frame->frame = cur_frame;
+	gop_frame->unsorted_frame = cur_frame;
+
+	// update the track context
+	if (track_context->frame_count == 0)
+	{
+		track_context->first_timecode = frame_timecode;
+	}
 	track_context->frame_count++;
 	track_context->key_frame_count += key_frame;
+	track_context->total_frames_size += cur_frame->size;
+	track_context->total_frames_duration += cur_frame->duration;
 
 	return VOD_OK;
 }
@@ -1107,61 +1389,25 @@ static vod_status_t
 mkv_parse_frames(
 	request_context_t* request_context,
 	media_base_metadata_t* base,
-	media_parse_params_t* parse_params,
-	segmenter_conf_t* segmenter,
-	read_cache_state_t* read_cache_state,
 	vod_str_t* frame_data,
-	media_format_read_request_t* read_req,
 	media_track_array_t* result)
 {
 	mkv_frame_parse_track_context_t* track_context;
 	mkv_frame_parse_context_t frame_parse_context;
 	mkv_base_metadata_t* metadata = vod_container_of(base, mkv_base_metadata_t, base);
+	frame_list_part_t* part;
+	frame_timecode_t* gop_frame;
+	input_frame_t* last_frame;
+	input_frame_t* cur_frame;
 	media_track_t* cur_track;
 	mkv_cluster_t cluster;
 	vod_status_t rc;
 	vod_uint_t i;
-	uint32_t end_margin;
+	size_t alloc_size = sizeof(frame_parse_context.first_track[0]) * base->tracks.nelts;
 
-	if (frame_data == NULL &&
-		(parse_params->parse_type & PARSE_FLAG_FRAMES_ALL) != 0)
-	{
-		end_margin = segmenter->align_to_key_frames ? segmenter->max_segment_duration : 1000;
+	// XXXXX support clipping (also set clip_from_time_offset)
 
-		rc = mkv_read_frames(
-			request_context,
-			metadata,
-			parse_params,
-			end_margin,
-			read_req);
-		if (rc != VOD_OK)
-		{
-			return rc;
-		}
-	
-		// XXXXX if PARSE_FLAG_TOTAL_SIZE_ESTIMATE need to read some range of frames to estimate the size
-	}
-
-	vod_memzero(result, sizeof(*result));
-	result->first_track = (media_track_t*)base->tracks.elts;
-	result->last_track = result->first_track + base->tracks.nelts;
-	result->total_track_count = base->tracks.nelts;
-
-	if (frame_data == NULL)
-	{
-		// no need to parse any frames
-		for (cur_track = result->first_track; cur_track < result->last_track; cur_track++)
-		{
-			result->track_count[cur_track->media_info.media_type]++;
-		}
-		return VOD_OK;
-	}
-
-	// XXXXX support clipping (also set clip_from_frame_offset)
-
-	frame_parse_context.first_track = vod_alloc(
-		request_context->pool, 
-		sizeof(frame_parse_context.first_track[0]) * base->tracks.nelts);
+	frame_parse_context.first_track = vod_alloc(request_context->pool, alloc_size);
 	if (frame_parse_context.first_track == NULL)
 	{
 		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
@@ -1169,8 +1415,8 @@ mkv_parse_frames(
 		return VOD_ALLOC_FAILED;
 	}
 
-	vod_memzero(frame_parse_context.first_track, sizeof(frame_parse_context.first_track[0]) * base->tracks.nelts);
-	frame_parse_context.last_track = frame_parse_context.first_track + base->tracks.nelts;
+	vod_memzero(frame_parse_context.first_track, alloc_size);
+	frame_parse_context.last_track = (void*)((u_char*)frame_parse_context.first_track + alloc_size);
 
 	frame_parse_context.context.request_context = request_context;
 	frame_parse_context.context.cur_pos = frame_data->data;
@@ -1178,7 +1424,7 @@ mkv_parse_frames(
 	frame_parse_context.start_time = metadata->start_time;
 	frame_parse_context.end_time = metadata->end_time;
 	frame_parse_context.max_frame_count = metadata->max_frame_count;
-	frame_parse_context.state = segmenter->align_to_key_frames ? FRS_WAIT_START_KEY_FRAME : FRS_PROCESS_FRAMES;
+	frame_parse_context.state = FRS_WAIT_START_KEY_FRAME;
 
 	for (i = 0; i < base->tracks.nelts; i++)
 	{
@@ -1207,7 +1453,16 @@ mkv_parse_frames(
 			return VOD_ALLOC_FAILED;
 		}
 
+		// initialize the gop frames array
+		if (vod_array_init(&track_context->gop_frames, request_context->pool, 60, sizeof(frame_timecode_t)) != VOD_OK)
+		{
+			vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
+				"mkv_parse_frames: vod_array_init failed");
+			return VOD_ALLOC_FAILED;
+		}
+
 		track_context->frames.last_frame = track_context->frames.first_frame;
+		track_context->frames.clip_to = UINT_MAX;		// XXXXX fix this
 	}
 
 	rc = ebml_parse_master(&frame_parse_context.context, mkv_spec_cluster, &cluster);
@@ -1225,16 +1480,49 @@ mkv_parse_frames(
 
 		track_context->last_frames_part->next = NULL;
 
-		if (!track_context->done && track_context->frame_count > 0)
+		if (track_context->frame_count > 0)
 		{
-			if (track_context->last_timecode < base->duration)
+			if (!track_context->done)
 			{
-				track_context->last_frames_part->last_frame[-1].duration = base->duration - track_context->last_timecode;
-				track_context->last_timecode = base->duration;
+				// add a dummy gop entry with the total duration
+				gop_frame = vod_array_push(&track_context->gop_frames);
+				if (gop_frame == NULL)
+				{
+					vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
+						"mkv_parse_frames: vod_array_push failed");
+					return VOD_ALLOC_FAILED;
+				}
+				gop_frame->timecode = base->duration;
+				gop_frame->unsorted_timecode = base->duration;
+				gop_frame->frame = NULL;
+				gop_frame->unsorted_frame = NULL;
+
+				// close the last gop
+				mkv_update_frame_timestamps(track_context);
 			}
-			else
+
+			if (track_context->min_pts_delay != 0)
 			{
-				track_context->last_frames_part->last_frame[-1].duration = 0;
+				part = &track_context->frames;
+				last_frame = part->last_frame;
+
+				// make sure the pts delay is always positive
+				for (cur_frame = part->first_frame;; cur_frame++)
+				{
+					if (cur_frame >= last_frame)
+					{
+						if (part->next == NULL)
+						{
+							break;
+						}
+
+						part = part->next;
+						cur_frame = part->first_frame;
+						last_frame = part->last_frame;
+					}
+
+					cur_frame->pts_delay -= track_context->min_pts_delay;
+				}
 			}
 		}
 
@@ -1243,7 +1531,7 @@ mkv_parse_frames(
 		cur_track->first_frame_time_offset = track_context->first_timecode;
 		cur_track->key_frame_count = track_context->key_frame_count;
 		cur_track->total_frames_size = track_context->total_frames_size;
-		cur_track->total_frames_duration = track_context->last_timecode - track_context->first_timecode;
+		cur_track->total_frames_duration = track_context->total_frames_duration;
 
 		// Note: no efficient way to determine first_frame_index
 
@@ -1251,6 +1539,93 @@ mkv_parse_frames(
 	}
 
 	return VOD_OK;
+}
+
+static vod_status_t
+mkv_read_frames(
+	request_context_t* request_context,
+	media_base_metadata_t* base,
+	media_parse_params_t* parse_params,
+	segmenter_conf_t* segmenter,
+	read_cache_state_t* read_cache_state,
+	vod_str_t* frame_data,
+	media_format_read_request_t* read_req,
+	media_track_array_t* result)
+{
+	mkv_base_metadata_t* metadata = vod_container_of(base, mkv_base_metadata_t, base);
+	media_track_t* cur_track;
+	uint32_t end_margin;
+	uint32_t range;
+	vod_status_t rc;
+
+	if (frame_data == NULL && 
+		(parse_params->parse_type & (PARSE_FLAG_FRAMES_ALL | PARSE_FLAG_TOTAL_SIZE_ESTIMATE)) != 0)
+	{
+		if ((parse_params->parse_type & PARSE_FLAG_FRAMES_ALL) != 0)
+		{
+			// Note: must save all the data we'll need from parse params (won't be available in parse frames)
+			metadata->start_time = rescale_time(parse_params->range->start, 1000, metadata->base.timescale);
+			metadata->end_time = rescale_time(parse_params->range->end, 1000, metadata->base.timescale);
+			metadata->max_frame_count = parse_params->max_frame_count;
+			metadata->parse_frames = TRUE;
+			end_margin = segmenter->max_segment_duration;
+		}
+		else
+		{
+			range = BITRATE_ESTIMATE_SEC * metadata->base.timescale;
+			if (metadata->base.duration > range)
+			{
+				metadata->start_time = (metadata->base.duration - range) / 2;
+			}
+			else
+			{
+				metadata->start_time = 0;
+			}
+			metadata->end_time = metadata->start_time + range;
+			metadata->parse_frames = FALSE;
+			end_margin = 0;
+		}
+
+		rc = mkv_get_read_frames_request(
+			request_context,
+			metadata,
+			end_margin,
+			read_req);
+		if (rc != VOD_OK)
+		{
+			if (rc == VOD_AGAIN && read_req->read_size > parse_params->max_frames_size)
+			{
+				vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+					"mkv_read_frames: read size %uz exceeds the limit %uz",
+					read_req->read_size, parse_params->max_frames_size);
+				return VOD_BAD_REQUEST;
+			}
+
+			return rc;
+		}
+	}
+
+	vod_memzero(result, sizeof(*result));
+	result->first_track = (media_track_t*)base->tracks.elts;
+	result->last_track = result->first_track + base->tracks.nelts;
+	result->total_track_count = base->tracks.nelts;
+
+	if (frame_data == NULL)
+	{
+		// no need to parse any frames
+		for (cur_track = result->first_track; cur_track < result->last_track; cur_track++)
+		{
+			result->track_count[cur_track->media_info.media_type]++;
+		}
+		return VOD_OK;
+	}
+
+	if (metadata->parse_frames)
+	{
+		return mkv_parse_frames(request_context, base, frame_data, result);
+	}
+
+	return mkv_parse_frames_estimate_bitrate(request_context, base, frame_data, result);
 }
 
 media_format_t mkv_format = {
@@ -1261,5 +1636,5 @@ media_format_t mkv_format = {
 	NULL,
 	NULL,
 	mkv_metadata_parse,
-	mkv_parse_frames,
+	mkv_read_frames,
 };
