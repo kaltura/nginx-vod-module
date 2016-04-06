@@ -936,18 +936,10 @@ audio_filter_update_track(audio_filter_state_t* state)
 	output->frames.frames_source = &frames_source_memory;
 
 	// calculate the total frames size and duration
-	output->media_info.min_frame_duration = 0;
-	
 	for (cur_frame = output->frames.first_frame; cur_frame < last_frame; cur_frame++)
 	{
 		output->total_frames_size += cur_frame->size;
 		output->total_frames_duration += cur_frame->duration;
-		
-		if (cur_frame->duration != 0 && 
-			(output->media_info.min_frame_duration == 0 || cur_frame->duration < output->media_info.min_frame_duration))
-		{
-			output->media_info.min_frame_duration = cur_frame->duration;
-		}
 	}
 	
 	// update media info

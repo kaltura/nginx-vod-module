@@ -342,7 +342,6 @@ ngx_http_vod_range_parse(ngx_str_t* range, off_t content_length, off_t* out_star
 
     if (end >= content_length) {
         end = content_length;
-
     } else {
         end++;
     }

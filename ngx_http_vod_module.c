@@ -1857,7 +1857,7 @@ ngx_http_vod_update_track_timescale(
 		return ngx_http_vod_status_to_ngx_error(VOD_BAD_DATA);
 	}
 
-	if (track->media_info.min_frame_duration != 0)
+	if (track->media_info.media_type == MEDIA_TYPE_VIDEO && track->media_info.min_frame_duration != 0)
 	{
 		track->media_info.min_frame_duration = rescale_time(track->media_info.min_frame_duration, cur_timescale, new_timescale);
 		if (track->media_info.min_frame_duration == 0)
@@ -2141,6 +2141,8 @@ ngx_http_vod_init_frame_processing(ngx_http_vod_ctx_t *ctx)
 	ngx_str_t output_buffer = ngx_null_string;
 	ngx_str_t content_type;
 	ngx_int_t rc;
+	off_t range_start;
+	off_t range_end;
 
 	rc = ngx_http_vod_update_timescale(ctx);
 	if (rc != NGX_OK)
@@ -2178,14 +2180,6 @@ ngx_http_vod_init_frame_processing(ngx_http_vod_ctx_t *ctx)
 		return rc;
 	}
 
-	rc = read_cache_allocate_buffer_slots(&ctx->read_cache_state, 0);
-	if (rc != VOD_OK)
-	{
-		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
-			"ngx_http_vod_init_frame_processing: read_cache_allocate_buffer_slots failed %i", rc);
-		return ngx_http_vod_status_to_ngx_error(rc);
-	}
-
 	ngx_perf_counter_end(ctx->perf_counters, ctx->perf_counter_context, PC_INIT_FRAME_PROCESS);
 
 	r->headers_out.content_type_len = content_type.len;
@@ -2218,6 +2212,27 @@ ngx_http_vod_init_frame_processing(ngx_http_vod_ctx_t *ctx)
 				"ngx_http_vod_init_frame_processing: write_tail failed %i", rc);
 			return ngx_http_vod_status_to_ngx_error(rc);
 		}
+
+		// in case of a range request that is fully contained in the output buffer (e.g. 0-0), we're done
+		if (ctx->content_length != 0 &&
+			ctx->submodule_context.r->headers_in.range != NULL &&
+			ngx_http_vod_range_parse(
+				&ctx->submodule_context.r->headers_in.range->value,
+				ctx->content_length,
+				&range_start,
+				&range_end) == NGX_OK &&
+			(size_t)range_end <= output_buffer.len)
+		{
+			return NGX_DONE;
+		}
+	}
+
+	rc = read_cache_allocate_buffer_slots(&ctx->read_cache_state, 0);
+	if (rc != VOD_OK)
+	{
+		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+			"ngx_http_vod_init_frame_processing: read_cache_allocate_buffer_slots failed %i", rc);
+		return ngx_http_vod_status_to_ngx_error(rc);
 	}
 
 	return NGX_OK;
