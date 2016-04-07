@@ -1862,9 +1862,9 @@ ngx_http_vod_update_track_timescale(
 		track->media_info.min_frame_duration = rescale_time(track->media_info.min_frame_duration, cur_timescale, new_timescale);
 		if (track->media_info.min_frame_duration == 0)
 		{
-			ngx_log_error(NGX_LOG_ERR, ctx->submodule_context.request_context.log, 0,
+			ngx_log_error(NGX_LOG_WARN, ctx->submodule_context.request_context.log, 0,
 				"ngx_http_vod_update_track_timescale: min frame duration is zero following rescale");
-			return ngx_http_vod_status_to_ngx_error(VOD_BAD_DATA);
+			track->media_info.min_frame_duration = 1;
 		}
 	}
 
