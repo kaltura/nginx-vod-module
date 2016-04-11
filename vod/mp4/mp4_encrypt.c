@@ -209,7 +209,6 @@ mp4_encrypt_video_init_track(mp4_encrypt_video_state_t* state, media_track_t* tr
 
 	state->cur_state = STATE_PACKET_SIZE;
 	state->length_bytes_left = state->nal_packet_size_length;
-	state->clear_bytes_left = state->nal_packet_size_length + 1;
 	state->packet_size_left = 0;
 
 	return VOD_OK;
@@ -282,6 +281,7 @@ mp4_encrypt_video_snpf_write_buffer(void* context, u_char* buffer, uint32_t size
 	mp4_encrypt_video_state_t* state = (mp4_encrypt_video_state_t*)context;
 	u_char* buffer_end = buffer + size;
 	u_char* cur_pos = buffer;
+	u_char* cur_end_pos;
 	u_char* output;
 	uint32_t write_size;
 	bool_t init_track;
@@ -310,7 +310,7 @@ mp4_encrypt_video_snpf_write_buffer(void* context, u_char* buffer, uint32_t size
 
 			// copy the clear bytes
 			write_size = (uint32_t)(buffer_end - cur_pos);
-			write_size = vod_min(write_size, state->clear_bytes_left);
+			write_size = vod_min(write_size, state->length_bytes_left + 1);
 
 			rc = write_buffer_get_bytes(&state->base.write_buffer, write_size, NULL, &output);
 			if (rc != VOD_OK)
@@ -318,14 +318,31 @@ mp4_encrypt_video_snpf_write_buffer(void* context, u_char* buffer, uint32_t size
 				return rc;
 			}
 
-			vod_memcpy(output, cur_pos, write_size);
-			cur_pos += write_size;
+			// copy the nalu length
+			if (write_size >= state->length_bytes_left)
+			{
+				cur_end_pos = cur_pos + state->length_bytes_left;
+				state->length_bytes_left = 0;
+			}
+			else
+			{
+				cur_end_pos = cur_pos + write_size;
+				state->length_bytes_left -= write_size;
+			}
 
-			state->clear_bytes_left -= write_size;
-			if (state->clear_bytes_left > 0)
+			while (cur_pos < cur_end_pos)
+			{
+				state->packet_size_left = (state->packet_size_left << 8) | *cur_pos;
+				*output++ = *cur_pos++;
+			}
+
+			if (cur_pos >= buffer_end)
 			{
 				break;
 			}
+
+			// copy the nalu type
+			*output++ = *cur_pos++;
 
 			if (state->base.frame_size_left < state->nal_packet_size_length + 1)
 			{
@@ -335,7 +352,20 @@ mp4_encrypt_video_snpf_write_buffer(void* context, u_char* buffer, uint32_t size
 				return VOD_BAD_DATA;
 			}
 
-			state->base.frame_size_left -= state->nal_packet_size_length + 1;
+			state->base.frame_size_left -= state->nal_packet_size_length;
+
+			if (state->packet_size_left != state->base.frame_size_left && 
+				!state->single_nalu_warning_printed)
+			{
+				vod_log_error(VOD_LOG_WARN, state->base.request_context->log, 0,
+					"mp4_encrypt_video_snpf_write_buffer: frame does not contain a single nalu, "
+					"consider changing vod_min_single_nalu_per_frame_segment, "
+					"packet size=%uD, frame size=%uD",
+					state->packet_size_left, state->base.frame_size_left);
+				state->single_nalu_warning_printed = TRUE;
+			}
+
+			state->base.frame_size_left--;
 
 			state->cur_state++;
 			// fall through
@@ -360,7 +390,8 @@ mp4_encrypt_video_snpf_write_buffer(void* context, u_char* buffer, uint32_t size
 
 			// finished a packet
 			state->cur_state = STATE_CLEAR_BYTES;
-			state->clear_bytes_left = state->nal_packet_size_length + 1;
+			state->length_bytes_left = state->nal_packet_size_length;
+			state->packet_size_left = 0;
 
 			// move to the next frame
 			if (mp4_encrypt_move_to_next_frame(&state->base, &init_track))
@@ -749,6 +780,7 @@ mp4_encrypt_video_get_fragment_writer(
 	{
 		// each frame is a single nal unit, can generate the auxiliary data and write the header now
 		state->build_fragment_header = NULL;
+		state->single_nalu_warning_printed = FALSE;
 
 		rc = mp4_encrypt_video_snpf_build_auxiliary_data(state);
 		if (rc != VOD_OK)

@@ -67,7 +67,7 @@ struct mp4_encrypt_video_state_s {
 	int cur_state;
 	uint32_t length_bytes_left;
 	uint32_t packet_size_left;
-	uint32_t clear_bytes_left;
+	bool_t single_nalu_warning_printed;
 
 	// saiz / saio
 	u_char default_auxiliary_sample_size;
