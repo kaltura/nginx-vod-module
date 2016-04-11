@@ -38,13 +38,14 @@ ngx_http_vod_dash_handle_manifest(
 	ngx_str_t* response,
 	ngx_str_t* content_type)
 {
+	ngx_http_vod_loc_conf_t* conf = submodule_context->conf;
 	ngx_str_t base_url = ngx_null_string;
 	vod_status_t rc;
 	ngx_str_t file_uri;
 
-	if (submodule_context->conf->dash.absolute_manifest_urls)
+	if (conf->dash.absolute_manifest_urls)
 	{
-		if (submodule_context->conf->dash.mpd_config.manifest_format == FORMAT_SEGMENT_LIST)
+		if (conf->dash.mpd_config.manifest_format == FORMAT_SEGMENT_LIST)
 		{
 			file_uri.data = NULL;
 			file_uri.len = 0;
@@ -54,14 +55,14 @@ ngx_http_vod_dash_handle_manifest(
 			file_uri = submodule_context->r->uri;
 		}
 
-		ngx_http_vod_get_base_url(submodule_context->r, &submodule_context->conf->https_header_name, NULL, 0, &file_uri, &base_url);
+		ngx_http_vod_get_base_url(submodule_context->r, &conf->https_header_name, NULL, 0, &file_uri, &base_url);
 	}
 
-	if (submodule_context->conf->drm_enabled)
+	if (conf->drm_enabled)
 	{
 		rc = edash_packager_build_mpd(
 			&submodule_context->request_context,
-			&submodule_context->conf->dash.mpd_config,
+			&conf->dash.mpd_config,
 			&base_url,
 			&submodule_context->media_set,
 			response);
@@ -70,7 +71,7 @@ ngx_http_vod_dash_handle_manifest(
 	{
 		rc = dash_packager_build_mpd(
 			&submodule_context->request_context,
-			&submodule_context->conf->dash.mpd_config,
+			&conf->dash.mpd_config,
 			&base_url,
 			&submodule_context->media_set,
 			0,
@@ -98,14 +99,15 @@ ngx_http_vod_dash_mp4_handle_init_segment(
 	ngx_str_t* response,
 	ngx_str_t* content_type)
 {
+	ngx_http_vod_loc_conf_t* conf = submodule_context->conf;
 	vod_status_t rc;
 
-	if (submodule_context->conf->drm_enabled)
+	if (conf->drm_enabled)
 	{
 		rc = edash_packager_build_init_mp4(
 			&submodule_context->request_context,
 			&submodule_context->media_set,
-			submodule_context->conf->drm_clear_lead_segment_count > 0,
+			conf->drm_clear_lead_segment_count > 0,
 			ngx_http_vod_submodule_size_only(submodule_context),
 			response);
 	}
@@ -152,14 +154,15 @@ ngx_http_vod_dash_mp4_init_frame_processor(
 	ngx_str_t* content_type)
 {
 	dash_fragment_header_extensions_t header_extensions;
+	ngx_http_vod_loc_conf_t* conf = submodule_context->conf;
 	fragment_writer_state_t* state;
 	segment_writer_t edash_writer;
 	vod_status_t rc;
 	bool_t reuse_buffers = FALSE;
 	bool_t size_only = ngx_http_vod_submodule_size_only(submodule_context);
 
-	if (submodule_context->conf->drm_enabled && 
-		submodule_context->request_params.segment_index >= submodule_context->conf->drm_clear_lead_segment_count)
+	if (conf->drm_enabled && 
+		submodule_context->request_params.segment_index >= conf->drm_clear_lead_segment_count)
 	{
 		// encyrpted fragment
 		rc = edash_packager_get_fragment_writer(
@@ -167,6 +170,7 @@ ngx_http_vod_dash_mp4_init_frame_processor(
 			&submodule_context->request_context,
 			&submodule_context->media_set,
 			submodule_context->request_params.segment_index,
+			conf->min_single_nalu_per_frame_segment > 0 && submodule_context->request_params.segment_index >= conf->min_single_nalu_per_frame_segment - 1,
 			segment_writer,
 			submodule_context->media_set.sequences[0].encryption_key,		// iv
 			size_only,
@@ -194,7 +198,7 @@ ngx_http_vod_dash_mp4_init_frame_processor(
 			&submodule_context->request_context,
 			&submodule_context->media_set,
 			submodule_context->request_params.segment_index,
-			submodule_context->conf->drm_enabled ? 2 : 0,	// sample description index
+			conf->drm_enabled ? 2 : 0,	// sample description index
 			&header_extensions,
 			size_only,
 			output_buffer,

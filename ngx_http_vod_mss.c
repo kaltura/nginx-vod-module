@@ -85,19 +85,21 @@ ngx_http_vod_mss_init_frame_processor(
 	size_t* response_size,
 	ngx_str_t* content_type)
 {
+	ngx_http_vod_loc_conf_t* conf = submodule_context->conf;
 	fragment_writer_state_t* state;
 	segment_writer_t drm_writer;
 	vod_status_t rc;
 	bool_t reuse_buffers = FALSE;
 	bool_t size_only = ngx_http_vod_submodule_size_only(submodule_context);
 
-	if (submodule_context->conf->drm_enabled)
+	if (conf->drm_enabled)
 	{
 		rc = mss_playready_get_fragment_writer(
 			&drm_writer,
 			&submodule_context->request_context,
 			&submodule_context->media_set,
 			submodule_context->request_params.segment_index,
+			conf->min_single_nalu_per_frame_segment > 0 && submodule_context->request_params.segment_index >= conf->min_single_nalu_per_frame_segment - 1,
 			segment_writer,
 			submodule_context->media_set.sequences[0].encryption_key,		// iv
 			size_only,

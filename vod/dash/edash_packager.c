@@ -330,10 +330,10 @@ edash_packager_video_write_encryption_atoms(void* context, u_char* p, size_t mda
 static vod_status_t
 edash_packager_video_build_fragment_header(
 	mp4_encrypt_video_state_t* state,
-	vod_str_t* fragment_header)
+	vod_str_t* fragment_header, 
+	size_t* total_fragment_size)
 {
 	dash_fragment_header_extensions_t header_extensions;
-	size_t total_fragment_size;
 
 	// get the header extensions
 	header_extensions.extra_traf_atoms_size = 
@@ -352,7 +352,7 @@ edash_packager_video_build_fragment_header(
 		&header_extensions,
 		FALSE,
 		fragment_header,
-		&total_fragment_size);
+		total_fragment_size);
 }
 
 ////// audio fragment functions
@@ -452,6 +452,7 @@ edash_packager_get_fragment_writer(
 	request_context_t* request_context,
 	media_set_t* media_set,
 	uint32_t segment_index,
+	bool_t single_nalu_per_frame,
 	segment_writer_t* segment_writer,
 	const u_char* iv,
 	bool_t size_only,
@@ -504,6 +505,7 @@ edash_packager_get_fragment_writer(
 			request_context, 
 			media_set, 
 			segment_index, 
+			single_nalu_per_frame,
 			edash_packager_video_build_fragment_header,
 			segment_writer, 
 			iv, 

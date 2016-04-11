@@ -194,10 +194,10 @@ mss_playready_audio_build_fragment_header(
 static vod_status_t
 mss_playready_video_build_fragment_header(
 	mp4_encrypt_video_state_t* state,
-	vod_str_t* fragment_header)
+	vod_str_t* fragment_header, 
+	size_t* total_fragment_size)
 {
 	mss_playready_video_extra_traf_atoms_context writer_context;
-	size_t total_fragment_size;
 
 	writer_context.uuid_piff_atom_size = ATOM_HEADER_SIZE + sizeof(uuid_piff_atom_t) + state->auxiliary_data.pos - state->auxiliary_data.start;
 	writer_context.state = state;
@@ -211,7 +211,7 @@ mss_playready_video_build_fragment_header(
 		&writer_context,
 		FALSE,
 		fragment_header,
-		&total_fragment_size);
+		total_fragment_size);
 }
 
 static u_char*
@@ -257,6 +257,7 @@ mss_playready_get_fragment_writer(
 	request_context_t* request_context,
 	media_set_t* media_set,
 	uint32_t segment_index,
+	bool_t single_nalu_per_frame,
 	segment_writer_t* segment_writer,
 	const u_char* iv,
 	bool_t size_only,
@@ -304,6 +305,7 @@ mss_playready_get_fragment_writer(
 			request_context,
 			media_set,
 			segment_index,
+			single_nalu_per_frame,
 			mss_playready_video_build_fragment_header,
 			segment_writer,
 			iv, 
