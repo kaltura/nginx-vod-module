@@ -158,7 +158,7 @@ mp4_encrypt_start_frame(mp4_encrypt_state_t* state)
 }
 
 static vod_status_t
-mp4_encrypt_write_encryped(
+mp4_encrypt_write_encrypted(
 	mp4_encrypt_state_t* state,
 	u_char* cur_pos, 
 	uint32_t write_size)
@@ -344,7 +344,7 @@ mp4_encrypt_video_snpf_write_buffer(void* context, u_char* buffer, uint32_t size
 			write_size = (uint32_t)(buffer_end - cur_pos);
 			write_size = vod_min(write_size, state->base.frame_size_left);
 
-			rc = mp4_encrypt_write_encryped(&state->base, cur_pos, write_size);
+			rc = mp4_encrypt_write_encrypted(&state->base, cur_pos, write_size);
 			if (rc != VOD_OK)
 			{
 				return rc;
@@ -610,7 +610,7 @@ mp4_encrypt_video_write_buffer(void* context, u_char* buffer, uint32_t size)
 			write_size = (uint32_t)(buffer_end - cur_pos);
 			write_size = vod_min(write_size, state->packet_size_left);
 			
-			rc = mp4_encrypt_write_encryped(&state->base, cur_pos, write_size);
+			rc = mp4_encrypt_write_encrypted(&state->base, cur_pos, write_size);
 			if (rc != VOD_OK)
 			{
 				return rc;
@@ -877,7 +877,7 @@ mp4_encrypt_audio_write_buffer(void* context, u_char* buffer, uint32_t size)
 		write_size = (uint32_t)(buffer_end - cur_pos);
 		write_size = vod_min(write_size, state->frame_size_left);
 		
-		rc = mp4_encrypt_write_encryped(state, cur_pos, write_size);
+		rc = mp4_encrypt_write_encrypted(state, cur_pos, write_size);
 		if (rc != VOD_OK)
 		{
 			return rc;
