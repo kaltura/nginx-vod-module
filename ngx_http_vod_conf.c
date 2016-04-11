@@ -148,6 +148,7 @@ ngx_http_vod_create_loc_conf(ngx_conf_t *cf)
 	conf->drm_enabled = NGX_CONF_UNSET;
 	conf->drm_clear_lead_segment_count = NGX_CONF_UNSET_UINT;
 	conf->drm_max_info_length = NGX_CONF_UNSET_SIZE;
+	conf->min_single_nalu_per_frame_segment = NGX_CONF_UNSET_UINT;
 
 #if (NGX_THREADS)
 	conf->open_file_thread_pool = NGX_CONF_UNSET_PTR;
@@ -302,7 +303,8 @@ ngx_http_vod_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child)
 	{
 		conf->drm_request_uri = prev->drm_request_uri;
 	}
-
+	ngx_conf_merge_uint_value(conf->min_single_nalu_per_frame_segment, prev->min_single_nalu_per_frame_segment, 0);
+	
 	ngx_conf_merge_str_value(conf->clip_to_param_name, prev->clip_to_param_name, "clipTo");
 	ngx_conf_merge_str_value(conf->clip_from_param_name, prev->clip_from_param_name, "clipFrom");
 	ngx_conf_merge_str_value(conf->tracks_param_name, prev->tracks_param_name, "tracks");
@@ -1174,6 +1176,13 @@ ngx_command_t ngx_http_vod_commands[] = {
 	ngx_http_set_complex_value_slot,
 	NGX_HTTP_LOC_CONF_OFFSET,
 	offsetof(ngx_http_vod_loc_conf_t, drm_request_uri),
+	NULL },
+
+	{ ngx_string("vod_min_single_nalu_per_frame_segment"),
+	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1,
+	ngx_conf_set_num_slot,
+	NGX_HTTP_LOC_CONF_OFFSET,
+	offsetof(ngx_http_vod_loc_conf_t, min_single_nalu_per_frame_segment),
 	NULL },
 #endif //(NGX_HAVE_OPENSSL_EVP)
 

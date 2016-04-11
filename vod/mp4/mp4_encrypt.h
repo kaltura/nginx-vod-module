@@ -16,7 +16,8 @@ typedef struct mp4_encrypt_video_state_s mp4_encrypt_video_state_t;
 
 typedef vod_status_t (*mp4_encrypt_video_build_fragment_header_t)(
 	mp4_encrypt_video_state_t* state, 
-	vod_str_t* header);
+	vod_str_t* header, 
+	size_t* total_fragment_size);
 
 typedef struct {
 	segment_writer_t segment_writer;
@@ -66,6 +67,7 @@ struct mp4_encrypt_video_state_s {
 	int cur_state;
 	uint32_t length_bytes_left;
 	uint32_t packet_size_left;
+	uint32_t clear_bytes_left;
 
 	// saiz / saio
 	u_char default_auxiliary_sample_size;
@@ -80,6 +82,7 @@ vod_status_t mp4_encrypt_video_get_fragment_writer(
 	request_context_t* request_context,
 	media_set_t* media_set,
 	uint32_t segment_index,
+	bool_t single_nalu_per_frame,
 	mp4_encrypt_video_build_fragment_header_t build_fragment_header,
 	segment_writer_t* segment_writer,
 	const u_char* iv, 

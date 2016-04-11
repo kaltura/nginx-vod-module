@@ -148,7 +148,7 @@ struct hds_muxer_state_s {
 };
 
 typedef struct {
-	u_char is_encryped[1];
+	u_char is_encrypted[1];
 	u_char iv[AES_BLOCK_SIZE];
 } hds_selective_encryption_filter_params_t;
 

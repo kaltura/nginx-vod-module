@@ -66,6 +66,7 @@ struct ngx_http_vod_loc_conf_s {
 	size_t drm_max_info_length;
 	ngx_buffer_cache_t* drm_info_cache;
 	ngx_http_complex_value_t *drm_request_uri;
+	ngx_uint_t min_single_nalu_per_frame_segment;
 
 	ngx_str_t clip_to_param_name;
 	ngx_str_t clip_from_param_name;
