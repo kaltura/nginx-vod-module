@@ -1,14 +1,13 @@
 #include "audio_filter.h"
+#include "rate_filter.h"
 
 #if (VOD_HAVE_LIB_AV_CODEC && VOD_HAVE_LIB_AV_FILTER)
-
 #include <libavcodec/avcodec.h>
 #include <libavfilter/avfilter.h>
 #include <libavfilter/buffersrc.h>
 #include <libavfilter/buffersink.h>
 #include <libavutil/opt.h>
 #include "../input/frames_source_memory.h"
-#include "rate_filter.h"
 
 // constants
 #define ENCODER_INPUT_SAMPLE_FORMAT (AV_SAMPLE_FMT_S16)
@@ -51,6 +50,140 @@ typedef struct
 	AVCodecContext *encoder;
 } audio_filter_sink_t;
 
+#endif
+
+typedef struct {
+	// phase 1
+	request_context_t* request_context;
+	uint32_t graph_desc_size;
+	uint32_t source_count;
+	uint32_t output_frame_count;
+
+#if (VOD_HAVE_LIB_AV_CODEC && VOD_HAVE_LIB_AV_FILTER)
+	// phase 2
+	AVFilterGraph *filter_graph;
+	AVFilterInOut** outputs;
+	u_char* graph_desc;
+	u_char* graph_desc_pos;
+	audio_filter_source_t* cur_source;
+	uint32_t max_frame_size;
+	int cache_slot_id;
+#endif
+} audio_filter_init_context_t;
+
+static vod_status_t 
+audio_filter_walk_filters_prepare_init(
+	audio_filter_init_context_t* state, 
+	media_clip_t** clip_ptr, 
+	uint32_t speed_nom, 
+	uint32_t speed_denom)
+{
+	media_clip_rate_filter_t* rate_filter;
+	media_clip_source_t* source;
+	media_track_t* audio_track;
+	media_track_t* cur_track;
+	media_clip_t** sources_end;
+	media_clip_t** sources_cur;
+	media_clip_t* clip = *clip_ptr;
+	media_clip_t* last_source = NULL;
+	vod_status_t rc;
+	uint32_t cur_frame_count;
+	uint32_t source_count;
+
+	switch (clip->type)
+	{
+	case MEDIA_CLIP_SOURCE:
+		source = vod_container_of(clip, media_clip_source_t, base);
+
+		audio_track = NULL;
+		for (cur_track = source->track_array.first_track; cur_track < source->track_array.last_track; cur_track++)
+		{
+			if (cur_track->media_info.media_type != MEDIA_TYPE_AUDIO)
+			{
+				continue;
+			}
+
+			if (audio_track != NULL)
+			{
+				vod_log_error(VOD_LOG_ERR, state->request_context->log, 0,
+					"audio_filter_walk_filters_prepare_init: more than one audio track per source - unsupported");
+				return VOD_BAD_REQUEST;
+			}
+
+			audio_track = cur_track;
+		}
+
+		if (audio_track == NULL || audio_track->frame_count == 0)
+		{
+			*clip_ptr = NULL;
+			return VOD_OK;
+		}
+
+		state->source_count++;
+
+		cur_frame_count = ((uint64_t)audio_track->frame_count * speed_denom) / speed_nom;
+		if (state->output_frame_count < cur_frame_count)
+		{
+			state->output_frame_count = cur_frame_count;
+		}
+		return VOD_OK;
+
+	case MEDIA_CLIP_RATE_FILTER:
+		rate_filter = vod_container_of(clip, media_clip_rate_filter_t, base);
+		speed_nom = ((uint64_t)speed_nom * rate_filter->rate.nom) / rate_filter->rate.denom;
+		break;
+
+	default:;
+	}
+
+	// recursively prepare the child sources
+	source_count = 0;
+
+	sources_end = clip->sources + clip->source_count;
+	for (sources_cur = clip->sources; sources_cur < sources_end; sources_cur++)
+	{
+		rc = audio_filter_walk_filters_prepare_init(state, sources_cur, speed_nom, speed_denom);
+		if (rc != VOD_OK)
+		{
+			return rc;
+		}
+
+		if (*sources_cur != NULL)
+		{
+			source_count++;
+			last_source = *sources_cur;
+		}
+	}
+
+	// skip the current filter when it's not needed
+	switch (source_count)
+	{
+	case 0:
+		*clip_ptr = NULL;
+		return VOD_OK;
+
+	case 1:
+		switch (clip->type)
+		{
+		case MEDIA_CLIP_MIX_FILTER:
+		case MEDIA_CLIP_CONCAT:
+			// in case of mixing a single clip or concat, skip the filter
+			*clip_ptr = last_source;
+			return VOD_OK;
+
+		default:;
+		}
+		break;
+	}
+
+	// update the graph description size
+	state->graph_desc_size += clip->audio_filter->get_filter_desc_size(clip) + 1;	// 1 = ';'
+
+	return VOD_OK;
+}
+
+#if (VOD_HAVE_LIB_AV_CODEC && VOD_HAVE_LIB_AV_FILTER)
+
 typedef struct {
 	request_context_t* request_context;
 	
@@ -76,23 +209,6 @@ typedef struct {
 	uint32_t cur_frame_pos;
 	bool_t first_time;
 } audio_filter_state_t;
-
-typedef struct {
-	// phase 1
-	request_context_t* request_context;
-	uint32_t graph_desc_size;
-	uint32_t source_count;
-	uint32_t output_frame_count;
-
-	// phase 2
-	AVFilterGraph *filter_graph;
-	AVFilterInOut** outputs;
-	u_char* graph_desc;
-	u_char* graph_desc_pos;
-	audio_filter_source_t* cur_source;
-	uint32_t max_frame_size;
-	int cache_slot_id;
-} audio_filter_init_context_t;
 
 // globals
 static AVFilter *buffersrc_filter = NULL;
@@ -427,117 +543,6 @@ audio_filter_init_sink(
 }
 
 static vod_status_t 
-audio_filter_walk_filters_prepare_init(
-	audio_filter_init_context_t* state, 
-	media_clip_t** clip_ptr, 
-	uint32_t speed_nom, 
-	uint32_t speed_denom)
-{
-	media_clip_rate_filter_t* rate_filter;
-	media_clip_source_t* source;
-	media_track_t* audio_track;
-	media_track_t* cur_track;
-	media_clip_t** sources_end;
-	media_clip_t** sources_cur;
-	media_clip_t* clip = *clip_ptr;
-	media_clip_t* last_source = NULL;
-	vod_status_t rc;
-	uint32_t cur_frame_count;
-	uint32_t source_count;
-
-	switch (clip->type)
-	{
-	case MEDIA_CLIP_SOURCE:
-		source = vod_container_of(clip, media_clip_source_t, base);
-
-		audio_track = NULL;
-		for (cur_track = source->track_array.first_track; cur_track < source->track_array.last_track; cur_track++)
-		{
-			if (cur_track->media_info.media_type != MEDIA_TYPE_AUDIO)
-			{
-				continue;
-			}
-
-			if (audio_track != NULL)
-			{
-				vod_log_error(VOD_LOG_ERR, state->request_context->log, 0,
-					"audio_filter_walk_filters_prepare_init: more than one audio track per source - unsupported");
-				return VOD_BAD_REQUEST;
-			}
-
-			audio_track = cur_track;
-		}
-
-		if (audio_track == NULL || audio_track->frame_count == 0)
-		{
-			*clip_ptr = NULL;
-			return VOD_OK;
-		}
-
-		state->source_count++;
-
-		cur_frame_count = ((uint64_t)audio_track->frame_count * speed_denom) / speed_nom;
-		if (state->output_frame_count < cur_frame_count)
-		{
-			state->output_frame_count = cur_frame_count;
-		}
-		return VOD_OK;
-
-	case MEDIA_CLIP_RATE_FILTER:
-		rate_filter = vod_container_of(clip, media_clip_rate_filter_t, base);
-		speed_nom = ((uint64_t)speed_nom * rate_filter->rate.nom) / rate_filter->rate.denom;
-		break;
-
-	default:;
-	}
-
-	// recursively prepare the child sources
-	source_count = 0;
-
-	sources_end = clip->sources + clip->source_count;
-	for (sources_cur = clip->sources; sources_cur < sources_end; sources_cur++)
-	{
-		rc = audio_filter_walk_filters_prepare_init(state, sources_cur, speed_nom, speed_denom);
-		if (rc != VOD_OK)
-		{
-			return rc;
-		}
-
-		if (*sources_cur != NULL)
-		{
-			source_count++;
-			last_source = *sources_cur;
-		}
-	}
-
-	// skip the current filter when it's not needed
-	switch (source_count)
-	{
-	case 0:
-		*clip_ptr = NULL;
-		return VOD_OK;
-
-	case 1:
-		switch (clip->type)
-		{
-		case MEDIA_CLIP_MIX_FILTER:
-		case MEDIA_CLIP_CONCAT:
-			// in case of mixing a single clip or concat, skip the filter
-			*clip_ptr = last_source;
-			return VOD_OK;
-
-		default:;
-		}
-		break;
-	}
-
-	// update the graph description size
-	state->graph_desc_size += clip->audio_filter->get_filter_desc_size(clip) + 1;	// 1 = ';'
-
-	return VOD_OK;
-}
-
-static vod_status_t 
 audio_filter_init_sources_and_graph_desc(audio_filter_init_context_t* state, media_clip_t* clip)
 {
 	audio_filter_source_t* cur_source;
@@ -657,13 +662,6 @@ audio_filter_alloc_state(
 	vod_status_t rc;
 	int avrc;
 
-	if (!initialized)
-	{
-		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
-			"audio_filter_alloc_state: module failed to initialize successfully");
-		return VOD_UNEXPECTED;
-	}
-
 	// get the source count and graph desc size
 	init_context.request_context = request_context;
 	init_context.graph_desc_size = 0;
@@ -687,6 +685,13 @@ audio_filter_alloc_state(
 	{
 		// got left with a source, following a mix of a single source, nothing to do
 		return VOD_OK;
+	}
+
+	if (!initialized)
+	{
+		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
+			"audio_filter_alloc_state: module failed to initialize successfully");
+		return VOD_UNEXPECTED;
 	}
 
 	if (init_context.output_frame_count > MAX_FRAME_COUNT)
@@ -1386,6 +1391,34 @@ audio_filter_alloc_state(
 	size_t* cache_buffer_count,
 	void** result)
 {
+	audio_filter_init_context_t init_context;
+	vod_status_t rc;
+
+	// get the source count and graph desc size
+	init_context.request_context = request_context;
+	init_context.graph_desc_size = 0;
+	init_context.source_count = 0;
+	init_context.output_frame_count = 0;
+
+	rc = audio_filter_walk_filters_prepare_init(&init_context, &clip, 100, 100);
+	if (rc != VOD_OK)
+	{
+		return rc;
+	}
+
+	if (clip == NULL || init_context.source_count <= 0)
+	{
+		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+			"audio_filter_alloc_state: unexpected - no sources found");
+		return VOD_UNEXPECTED;
+	}
+
+	if (clip->type == MEDIA_CLIP_SOURCE)
+	{
+		// got left with a source, following a mix of a single source, nothing to do
+		return VOD_OK;
+	}
+
 	vod_log_error(VOD_LOG_ERR, request_context->log, 0,
 		"audio_filter_alloc_state: audio filtering not supported, recompile with avcodec/avfilter to enable it");
 	return VOD_UNEXPECTED;
