@@ -652,7 +652,8 @@ mkv_builder_start_frame(mkv_fragment_writer_state_t* state)
 
 	rc = state->cur_frame_part.frames_source->start_frame(
 		state->cur_frame_part.frames_source_context,
-		state->cur_frame);
+		state->cur_frame, 
+		ULLONG_MAX);
 	if (rc != VOD_OK)
 	{
 		return rc;

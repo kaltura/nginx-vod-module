@@ -1308,7 +1308,8 @@ audio_filter_process(void* context)
 			// start the frame
 			rc = source->cur_frame_part.frames_source->start_frame(
 				source->cur_frame_part.frames_source_context, 
-				source->cur_frame);
+				source->cur_frame,
+				ULLONG_MAX);
 			if (rc != VOD_OK)
 			{
 				return rc;

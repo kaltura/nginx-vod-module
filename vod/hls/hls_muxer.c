@@ -1,4 +1,5 @@
 #include "../input/frames_source_memory.h"
+#include "../input/frames_source_cache.h"
 #include "frame_joiner_filter.h"
 #include "id3_encoder_filter.h"
 #include "hls_muxer.h"
@@ -36,6 +37,7 @@ hls_muxer_init_track(
 	cur_stream->first_frame_part = &track->frames;
 	cur_stream->cur_frame_part = track->frames;
 	cur_stream->cur_frame = track->frames.first_frame;
+	cur_stream->source = get_frame_part_source_clip(cur_stream->cur_frame_part);
 	cur_stream->first_frame_time_offset = hls_rescale_millis(track->clip_start_time) + track->first_frame_time_offset;
 	cur_stream->clip_from_frame_offset = track->clip_from_frame_offset;
 	cur_stream->next_frame_time_offset = cur_stream->first_frame_time_offset;
@@ -181,6 +183,7 @@ hls_muxer_init_id3_stream(
 	cur_stream->cur_frame_part.next = NULL;
 	cur_stream->cur_frame_part.first_frame = &context->frame;
 	cur_stream->cur_frame_part.last_frame = &context->frame + 1;
+	cur_stream->source = NULL;
 
 	// init the frame
 	context->frame.size = vod_sprintf(context->data, ID3_TEXT_JSON_FORMAT,
@@ -565,6 +568,7 @@ hls_muxer_choose_stream(hls_muxer_state_t* state, hls_muxer_stream_state_t** res
 				}
 				cur_stream->cur_frame_part = *cur_stream->cur_frame_part.next;
 				cur_stream->cur_frame = cur_stream->cur_frame_part.first_frame;
+				cur_stream->source = get_frame_part_source_clip(cur_stream->cur_frame_part);
 				state->first_time = TRUE;
 			}
 
@@ -613,9 +617,11 @@ hls_muxer_start_frame(hls_muxer_state_t* state)
 	hls_muxer_stream_state_t* cur_stream;
 	hls_muxer_stream_state_t* selected_stream;
 	output_frame_t output_frame;
+	input_frame_t* cur_frame;
 	uint64_t cur_frame_time_offset;
 	uint64_t cur_frame_dts;
 	uint64_t buffer_dts;
+	uint64_t min_offset;
 	vod_status_t rc;
 
 	rc = hls_muxer_choose_stream(state, &selected_stream);
@@ -637,22 +643,36 @@ hls_muxer_start_frame(hls_muxer_state_t* state)
 	state->last_stream_frame = selected_stream->cur_frame >= selected_stream->cur_frame_part.last_frame && 
 		selected_stream->cur_frame_part.next == NULL;
 
-	// flush any buffered frames if their delay becomes too big
+	min_offset = ULLONG_MAX;
+
 	for (cur_stream = state->first_stream; cur_stream < state->last_stream; cur_stream++)
 	{
-		if (selected_stream == cur_stream || cur_stream->buffer_state == NULL)
+		if (selected_stream == cur_stream)
 		{
 			continue;
 		}
 
-		if (buffer_filter_get_dts(cur_stream->buffer_state, &buffer_dts) &&
-			cur_frame_dts > buffer_dts + HLS_DELAY / 2)
+		// flush any buffered frames if their delay becomes too big
+		if (cur_stream->buffer_state != NULL)
 		{
-			rc = buffer_filter_force_flush(cur_stream->buffer_state, FALSE);
-			if (rc != VOD_OK)
+			if (buffer_filter_get_dts(cur_stream->buffer_state, &buffer_dts) &&
+				cur_frame_dts > buffer_dts + HLS_DELAY / 2)
 			{
-				return rc;
+				rc = buffer_filter_force_flush(cur_stream->buffer_state, FALSE);
+				if (rc != VOD_OK)
+				{
+					return rc;
+				}
 			}
+		}
+
+		// find the min offset
+		cur_frame = cur_stream->cur_frame;
+		if (cur_frame < cur_stream->cur_frame_part.last_frame &&
+			cur_frame->offset < min_offset && 
+			cur_stream->source == selected_stream->source)
+		{
+			min_offset = cur_frame->offset;
 		}
 	}
 
@@ -670,7 +690,7 @@ hls_muxer_start_frame(hls_muxer_state_t* state)
 	state->cache_slot_id = selected_stream->mpegts_encoder_state.stream_info.pid;
 
 	// start the frame
-	rc = state->frames_source->start_frame(state->frames_source_context, state->cur_frame);
+	rc = state->frames_source->start_frame(state->frames_source_context, state->cur_frame, min_offset);
 	if (rc != VOD_OK)
 	{
 		return rc;
@@ -1195,6 +1215,7 @@ hls_muxer_simulation_reset(hls_muxer_state_t* state)
 		{
 			cur_stream->cur_frame_part = *cur_stream->first_frame_part;
 			cur_stream->cur_frame = cur_stream->cur_frame_part.first_frame;
+			cur_stream->source = get_frame_part_source_clip(cur_stream->cur_frame_part);
 			cur_stream->next_frame_time_offset = cur_stream->first_frame_time_offset;
 		}
 	}

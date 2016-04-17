@@ -34,6 +34,7 @@ typedef struct {
 	frame_list_part_t* first_frame_part;
 	frame_list_part_t cur_frame_part;
 	input_frame_t* cur_frame;
+	media_clip_source_t* source;
 
 	// time offsets
 	uint64_t first_frame_time_offset;

@@ -1,3 +1,4 @@
+#include "../input/frames_source_cache.h"
 #include "hds_fragment.h"
 #include "hds_amf0_encoder.h"
 #include "../write_buffer.h"
@@ -106,6 +107,7 @@ typedef struct {
 	frame_list_part_t* first_frame_part;
 	frame_list_part_t cur_frame_part;
 	input_frame_t* cur_frame;
+	media_clip_source_t* source;
 
 	// frame output offsets
 	uint32_t* first_frame_output_offset;
@@ -588,6 +590,7 @@ hds_muxer_init_track(
 	cur_stream->first_frame_part = &cur_track->frames;
 	cur_stream->cur_frame_part = cur_track->frames;
 	cur_stream->cur_frame = cur_track->frames.first_frame;
+	cur_stream->source = get_frame_part_source_clip(cur_stream->cur_frame_part);
 
 	cur_stream->first_frame_time_offset = hds_rescale_millis(cur_track->clip_start_time) + cur_track->first_frame_time_offset;
 	cur_stream->next_frame_time_offset = cur_stream->first_frame_time_offset;
@@ -664,6 +667,7 @@ hds_muxer_choose_stream(hds_muxer_state_t* state, hds_muxer_stream_state_t** res
 
 				cur_stream->cur_frame_part = *cur_stream->cur_frame_part.next;
 				cur_stream->cur_frame = cur_stream->cur_frame_part.first_frame;
+				cur_stream->source = get_frame_part_source_clip(cur_stream->cur_frame_part);
 				state->first_time = TRUE;
 			}
 
@@ -785,6 +789,7 @@ hds_calculate_output_offsets_and_write_afra_entries(
 		{
 			cur_stream->cur_frame_part = *cur_stream->first_frame_part;
 			cur_stream->cur_frame = cur_stream->cur_frame_part.first_frame;
+			cur_stream->source = get_frame_part_source_clip(cur_stream->cur_frame_part);
 			cur_stream->cur_frame_output_offset = cur_stream->first_frame_output_offset;
 			cur_stream->next_frame_time_offset = cur_stream->first_frame_time_offset;
 		}
@@ -1195,7 +1200,10 @@ static vod_status_t
 hds_muxer_start_frame(hds_muxer_state_t* state)
 {
 	hds_muxer_stream_state_t* selected_stream;
+	hds_muxer_stream_state_t* cur_stream;
+	input_frame_t* cur_frame;
 	uint64_t cur_frame_dts;
+	uint64_t min_offset;
 	uint32_t frame_size;
 	size_t alloc_size;
 	u_char* p;
@@ -1299,7 +1307,26 @@ hds_muxer_start_frame(hds_muxer_state_t* state)
 		}
 	}
 
-	rc = state->frames_source->start_frame(state->frames_source_context, state->cur_frame);
+	// find the min offset
+	min_offset = ULLONG_MAX;
+
+	for (cur_stream = state->first_stream; cur_stream < state->last_stream; cur_stream++)
+	{
+		if (selected_stream == cur_stream)
+		{
+			continue;
+		}
+
+		cur_frame = cur_stream->cur_frame;
+		if (cur_frame < cur_stream->cur_frame_part.last_frame &&
+			cur_frame->offset < min_offset &&
+			cur_stream->source == selected_stream->source)
+		{
+			min_offset = cur_frame->offset;
+		}
+	}
+
+	rc = state->frames_source->start_frame(state->frames_source_context, state->cur_frame, min_offset);
 	if (rc != VOD_OK)
 	{
 		return rc;

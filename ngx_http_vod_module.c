@@ -2241,10 +2241,8 @@ ngx_http_vod_init_frame_processing(ngx_http_vod_ctx_t *ctx)
 static ngx_int_t 
 ngx_http_vod_process_media_frames(ngx_http_vod_ctx_t *ctx)
 {
-	media_clip_source_t* source;
-	uint64_t read_offset;
+	read_cache_get_read_buffer_t read_buf;
 	size_t cache_buffer_size;
-	uint32_t read_size;
 	vod_status_t rc;
 
 	for (;;)
@@ -2273,17 +2271,15 @@ ngx_http_vod_process_media_frames(ngx_http_vod_ctx_t *ctx)
 
 		// get a buffer to read into
 		read_cache_get_read_buffer(
-			&ctx->read_cache_state, 
-			(void**)&source, 
-			&read_offset, 
-			&ctx->read_buffer.start, 
-			&read_size);
+			&ctx->read_cache_state,
+			&read_buf);
 
 		cache_buffer_size = ctx->submodule_context.conf->cache_buffer_size;
 
-		if (ctx->read_buffer.start != NULL)
+		ctx->read_buffer.start = read_buf.buffer;
+		if (read_buf.buffer != NULL)
 		{
-			ctx->read_buffer.end = ctx->read_buffer.start + cache_buffer_size;
+			ctx->read_buffer.end = read_buf.buffer + cache_buffer_size;
 		}
 
 		rc = ngx_http_vod_alloc_read_buffer(ctx, cache_buffer_size, ctx->alloc_params_index);
@@ -2295,7 +2291,11 @@ ngx_http_vod_process_media_frames(ngx_http_vod_ctx_t *ctx)
 		// perform the read
 		ngx_perf_counter_start(ctx->perf_counter_context);
 
-		rc = ctx->async_read(source->reader_context, &ctx->read_buffer, read_size, read_offset);
+		rc = ctx->async_read(
+			read_buf.source->reader_context, 
+			&ctx->read_buffer, 
+			read_buf.size, 
+			read_buf.offset);
 		if (rc != NGX_OK)
 		{
 			if (rc != NGX_AGAIN)
