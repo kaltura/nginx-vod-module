@@ -1,20 +1,12 @@
 #include "frames_source_cache.h"
 #include "../media_format.h"
 
-// typedefs
-typedef struct {
-	read_cache_state_t* read_cache_state;
-	void* source;
-	int cache_slot_id;
-	uint64_t cur_offset;
-	uint64_t end_offset;
-} frames_source_cache_state_t;
-
 vod_status_t
 frames_source_cache_init(
 	request_context_t* request_context,
 	read_cache_state_t* read_cache_state,
 	void* source,
+	int cache_slot_id,
 	void** result)
 {
 	frames_source_cache_state_t* state;
@@ -28,7 +20,8 @@ frames_source_cache_init(
 	}
 
 	state->read_cache_state = read_cache_state;
-	state->source = source;
+	state->req.source = source;
+	state->req.cache_slot_id = cache_slot_id;
 
 	*result = state;
 
@@ -40,16 +33,17 @@ frames_source_cache_set_cache_slot_id(void* ctx, int cache_slot_id)
 {
 	frames_source_cache_state_t* state = ctx;
 
-	state->cache_slot_id = cache_slot_id;
+	state->req.cache_slot_id = cache_slot_id;
 }
 
 static vod_status_t
-frames_source_cache_start_frame(void* ctx, input_frame_t* frame)
+frames_source_cache_start_frame(void* ctx, input_frame_t* frame, uint64_t min_offset)
 {
 	frames_source_cache_state_t* state = ctx;
 
-	state->cur_offset = frame->offset;
-	state->end_offset = frame->offset + frame->size;
+	state->req.cur_offset = frame->offset;
+	state->req.end_offset = frame->offset + frame->size;
+	state->req.min_offset = min_offset;
 
 	return VOD_OK;
 }
@@ -62,26 +56,24 @@ frames_source_cache_read(void* ctx, u_char** buffer, uint32_t* size, bool_t* fra
 
 	if (!read_cache_get_from_cache(
 		state->read_cache_state,
-		state->cache_slot_id,
-		state->source,
-		state->cur_offset,
+		&state->req,
 		buffer,
 		size))
 	{
 		return VOD_AGAIN;
 	}
 
-	cur_end_offset = state->cur_offset + *size;
-	if (cur_end_offset >= state->end_offset)
+	cur_end_offset = state->req.cur_offset + *size;
+	if (cur_end_offset >= state->req.end_offset)
 	{
-		*size = state->end_offset - state->cur_offset;
+		*size = state->req.end_offset - state->req.cur_offset;
 		*frame_done = TRUE;
-		state->cur_offset = state->end_offset;
+		state->req.cur_offset = state->req.end_offset;
 	}
 	else
 	{
 		*frame_done = FALSE;
-		state->cur_offset = cur_end_offset;
+		state->req.cur_offset = cur_end_offset;
 	}
 	return VOD_OK;
 }

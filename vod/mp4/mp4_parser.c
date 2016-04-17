@@ -2582,6 +2582,7 @@ mp4_parser_parse_frames(
 	void* frames_source_context;
 	vod_status_t rc;
 	vod_array_t tracks;
+	uint64_t last_offset;
 	uint32_t media_type;
 
 	if (vod_array_init(&tracks, request_context->pool, 2, sizeof(media_track_t)) != VOD_OK)
@@ -2614,9 +2615,9 @@ mp4_parser_parse_frames(
 	for (cur_track = first_track; cur_track < last_track; cur_track++)
 	{
 		vod_log_debug3(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
-			"mp4_parser_parse_frames: parsing range %uL-%uL scale %uD", 
-			context.parse_params.range->start, 
-			context.parse_params.range->end, 
+			"mp4_parser_parse_frames: parsing range %uL-%uL scale %uD",
+			context.parse_params.range->start,
+			context.parse_params.range->end,
 			context.parse_params.range->timescale);
 
 		media_type = cur_track->media_info.media_type;
@@ -2676,6 +2677,7 @@ mp4_parser_parse_frames(
 			request_context,
 			read_cache_state,
 			cur_track->file_info.source,
+			media_type,
 			&frames_source_context);
 		if (rc != VOD_OK)
 		{
@@ -2727,6 +2729,17 @@ mp4_parser_parse_frames(
 		result_track->clip_start_time = parse_params->clip_start_time;
 		result_track->clip_from_frame_offset = context.clip_from_frame_offset;
 		result_track->source_clip = NULL;
+
+		// update the last offset of the source clip
+		if (context.frame_count > 0)
+		{
+			last_frame = result_track->frames.last_frame - 1;
+			last_offset = last_frame->offset + last_frame->size;
+			if (last_offset > cur_track->file_info.source->last_offset)
+			{
+				cur_track->file_info.source->last_offset = last_offset;
+			}
+		}
 
 		vod_log_debug1(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
 			"mp4_parser_parse_frames: first frame dts is %uL",

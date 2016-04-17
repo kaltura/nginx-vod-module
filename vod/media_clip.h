@@ -54,6 +54,7 @@ struct media_clip_source_s {
 	media_track_array_t track_array;
 	struct media_sequence_s* sequence;
 	media_clip_source_t* next;
+	uint64_t last_offset;
 };
 
 #endif //__MEDIA_CLIP_H__

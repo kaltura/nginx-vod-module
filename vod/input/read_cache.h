@@ -5,6 +5,8 @@
 #include "../common.h"
 
 // typedefs
+struct media_clip_source_s;
+
 typedef struct {
 	u_char* buffer_start;
 	u_char* buffer_pos;
@@ -25,6 +27,21 @@ typedef struct {
 	bool_t reuse_buffers;
 } read_cache_state_t;
 
+typedef struct {
+	int cache_slot_id;
+	struct media_clip_source_s* source;
+	uint64_t cur_offset;
+	uint64_t end_offset;
+	uint64_t min_offset;
+} read_cache_request_t;
+
+typedef struct {
+	struct media_clip_source_s* source;
+	uint64_t offset;
+	u_char* buffer;
+	uint32_t size;
+} read_cache_get_read_buffer_t;
+
 // functions
 void read_cache_init(
 	read_cache_state_t* state, 
@@ -38,10 +55,8 @@ vod_status_t read_cache_allocate_buffer_slots(
 
 bool_t read_cache_get_from_cache(
 	read_cache_state_t* state, 
-	int cache_slot_id, 
-	void* source,
-	uint64_t offset, 
-	u_char** buffer, 
+	read_cache_request_t* request,
+	u_char** buffer,
 	uint32_t* size);
 
 void read_cache_disable_buffer_reuse(
@@ -49,10 +64,7 @@ void read_cache_disable_buffer_reuse(
 
 void read_cache_get_read_buffer(
 	read_cache_state_t* state, 
-	void** source,
-	uint64_t* out_offset,
-	u_char** buffer, 
-	uint32_t* size);
+	read_cache_get_read_buffer_t* result);
 	
 void read_cache_read_completed(read_cache_state_t* state, vod_buf_t* buf);
 
