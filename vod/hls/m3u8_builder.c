@@ -546,7 +546,7 @@ m3u8_builder_build_master_playlist(
 	vod_str_t* result)
 {
 	adaptation_sets_t adaptation_sets;
-	adaptation_set_t* first_audio_adaptation_set;
+	adaptation_set_t* first_audio_adaptation_set = NULL;
 	adaptation_set_t* adaptation_set;
 	media_track_t** cur_track_ptr;
 	media_track_t* cur_track;
