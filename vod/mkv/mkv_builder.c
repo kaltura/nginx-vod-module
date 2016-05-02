@@ -302,7 +302,7 @@ mkv_write_track(u_char* p, media_track_t* track, uint64_t track_uid)
 
 	if (track->media_info.codec_delay != 0)
 	{
-		write_id16(p, MKV_ID_CODECDELAY);
+		write_id16(p, MKV_ID_TRACKCODECDELAY);
 		p = ebml_write_uint(p, track->media_info.codec_delay);
 	}
 	

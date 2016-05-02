@@ -442,7 +442,7 @@ ngx_http_vod_dash_parse_uri_file_name(
 	const ngx_http_vod_request_t** request)
 {
 	ngx_int_t rc;
-	bool_t expect_segment_index;
+	uint32_t flags;
 
 	// fragment
 	if (ngx_http_vod_match_prefix_postfix(start_pos, end_pos, &conf->dash.mpd_config.fragment_file_name_prefix, fragment_file_ext))
@@ -450,7 +450,7 @@ ngx_http_vod_dash_parse_uri_file_name(
 		start_pos += conf->dash.mpd_config.fragment_file_name_prefix.len;
 		end_pos -= (sizeof(fragment_file_ext) - 1);
 		*request = conf->drm_enabled ? &edash_mp4_fragment_request : &dash_mp4_fragment_request;
-		expect_segment_index = TRUE;
+		flags = PARSE_FILE_NAME_EXPECT_SEGMENT_INDEX;
 	}
 	// init segment
 	else if (ngx_http_vod_match_prefix_postfix(start_pos, end_pos, &conf->dash.mpd_config.init_file_name_prefix, init_segment_file_ext))
@@ -458,7 +458,7 @@ ngx_http_vod_dash_parse_uri_file_name(
 		start_pos += conf->dash.mpd_config.init_file_name_prefix.len;
 		end_pos -= (sizeof(init_segment_file_ext) - 1);
 		*request = &dash_mp4_init_request;
-		expect_segment_index = FALSE;
+		flags = 0;
 	}
 	// webm fragment
 	else if (ngx_http_vod_match_prefix_postfix(start_pos, end_pos, &conf->dash.mpd_config.fragment_file_name_prefix, webm_file_ext))
@@ -466,7 +466,7 @@ ngx_http_vod_dash_parse_uri_file_name(
 		start_pos += conf->dash.mpd_config.fragment_file_name_prefix.len;
 		end_pos -= (sizeof(webm_file_ext) - 1);
 		*request = &dash_webm_fragment_request;
-		expect_segment_index = TRUE;
+		flags = PARSE_FILE_NAME_EXPECT_SEGMENT_INDEX;
 	}
 	// webm init segment
 	else if (ngx_http_vod_match_prefix_postfix(start_pos, end_pos, &conf->dash.mpd_config.init_file_name_prefix, webm_file_ext))
@@ -474,7 +474,7 @@ ngx_http_vod_dash_parse_uri_file_name(
 		start_pos += conf->dash.mpd_config.init_file_name_prefix.len;
 		end_pos -= (sizeof(webm_file_ext) - 1);
 		*request = &dash_webm_init_request;
-		expect_segment_index = FALSE;
+		flags = 0;
 	}
 	// manifest
 	else if (ngx_http_vod_match_prefix_postfix(start_pos, end_pos, &conf->dash.manifest_file_name_prefix, manifest_file_ext))
@@ -482,7 +482,7 @@ ngx_http_vod_dash_parse_uri_file_name(
 		start_pos += conf->dash.manifest_file_name_prefix.len;
 		end_pos -= (sizeof(manifest_file_ext) - 1);
 		*request = &dash_manifest_request;
-		expect_segment_index = FALSE;
+		flags = PARSE_FILE_NAME_MULTI_STREAMS_PER_TYPE;
 	}
 	else
 	{
@@ -492,7 +492,7 @@ ngx_http_vod_dash_parse_uri_file_name(
 	}
 
 	// parse the required tracks string
-	rc = ngx_http_vod_parse_uri_file_name(r, start_pos, end_pos, expect_segment_index, request_params);
+	rc = ngx_http_vod_parse_uri_file_name(r, start_pos, end_pos, flags, request_params);
 	if (rc != NGX_OK)
 	{
 		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,

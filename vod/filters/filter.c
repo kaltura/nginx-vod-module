@@ -133,6 +133,9 @@ filter_scale_video_tracks(filters_init_state_t* state, media_clip_t* clip, uint3
 	{
 		source = vod_container_of(clip, media_clip_source_t, base);
 
+		// reset the sequence pointer, may have shifted in case one more sequences were removed
+		source->sequence = state->sequence;
+
 		for (cur_track = source->track_array.first_track;
 			cur_track < source->track_array.last_track;
 			cur_track++)
@@ -365,6 +368,9 @@ filter_init_filtered_clips(
 			if (input_clip->type == MEDIA_CLIP_SOURCE)
 			{
 				filter_init_filtered_clip_from_source(&init_state, (media_clip_source_t*)input_clip);
+
+				// reset the sequence pointer, may have shifted in case one more sequences were removed
+				((media_clip_source_t*)input_clip)->sequence = sequence;
 			}
 			else
 			{

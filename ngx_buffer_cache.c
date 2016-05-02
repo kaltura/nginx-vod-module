@@ -200,7 +200,7 @@ ngx_buffer_cache_free_oldest_entry(ngx_buffer_cache_sh_t *cache, uint32_t expira
 	}
 
 	// make sure the entry is expired, if that is the requirement
-	if (expiration && ngx_time() < entry->write_time + expiration)
+	if (expiration && ngx_time() < (time_t)(entry->write_time + expiration))
 	{
 		return NULL;
 	}
@@ -339,7 +339,7 @@ ngx_buffer_cache_fetch(
 	{
 		entry = ngx_buffer_cache_rbtree_lookup(&sh->rbtree, key, hash);
 		if (entry != NULL && entry->state == CES_READY && 
-			(cache->expiration == 0 || ngx_time() < entry->write_time + cache->expiration))
+			(cache->expiration == 0 || ngx_time() < (time_t)(entry->write_time + cache->expiration)))
 		{
 			result = 1;
 

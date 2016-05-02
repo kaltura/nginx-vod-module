@@ -70,10 +70,9 @@ typedef struct {
 	write_buffer_queue_t queue;
 	aes_cbc_encrypt_context_t* encrypted_write_context;
 	
-	// cur sequence state
-	media_clip_filtered_t* clips_start;
-	media_clip_filtered_t* clips_end;
-	media_clip_filtered_t* cur_clip;
+	// cur clip state
+	media_set_t* media_set;
+	media_track_t* first_clip_track;
 	bool_t use_discontinuity;
 
 	// cur frame state

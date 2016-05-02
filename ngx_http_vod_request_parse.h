@@ -11,6 +11,9 @@
 #define MAX_SUB_URIS (32)
 #define MAX_URI_PARAM_NAME_LEN (32)			// clipTo, clipFrom etc.
 
+#define PARSE_FILE_NAME_EXPECT_SEGMENT_INDEX	(0x1)
+#define PARSE_FILE_NAME_MULTI_STREAMS_PER_TYPE	(0x2)
+
 // macros
 #define ngx_http_vod_starts_with(start_pos, end_pos, prefix)	\
 	((end_pos) - (start_pos) >= (int)(prefix)->len && ngx_memcmp((start_pos), (prefix)->data, (prefix)->len) == 0)
@@ -79,7 +82,7 @@ ngx_int_t ngx_http_vod_parse_uri_file_name(
 	ngx_http_request_t* r,
 	u_char* start_pos,
 	u_char* end_pos,
-	bool_t expect_segment_index,
+	uint32_t flags,
 	request_params_t* result);
 
 #endif // _NGX_HTTP_VOD_REQUEST_PARSE_H_INCLUDED_

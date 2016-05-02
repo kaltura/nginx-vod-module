@@ -47,6 +47,8 @@ struct media_sequence_s {
 	media_clip_t** clips;						// [clip_count]
 	vod_str_t stripped_uri;
 	vod_str_t id;
+	vod_str_t label;
+	language_id_t language;
 
 	// initialized after mapping
 	vod_str_t mapped_uri;
@@ -60,7 +62,7 @@ struct media_sequence_s {
 	uint32_t track_count[MEDIA_TYPE_COUNT];		// track count in each filtered_clips
 	uint32_t total_track_count;
 	int media_type;
-	media_clip_filtered_t* filtered_clips;		// [clip_count]
+	media_clip_filtered_t* filtered_clips;		// [clip_count]		// XXXXX reduce usage, use filtered_tracks instead
 	media_clip_filtered_t* filtered_clips_end;
 
 	uint64_t total_frame_size;
@@ -106,6 +108,8 @@ typedef struct {
 	uint32_t clip_index;
 	uint32_t sequences_mask;
 	uint32_t tracks_mask[MEDIA_TYPE_COUNT];
+	uint32_t* sequence_tracks_mask;	// [MAX_SEQUENCES][MEDIA_TYPE_COUNT]
+	uint8_t* langs_mask;			// [LANG_MASK_SIZE]
 } request_params_t;
 
 #endif //__MEDIA_SET_H__

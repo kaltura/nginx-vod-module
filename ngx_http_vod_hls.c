@@ -428,7 +428,7 @@ ngx_http_vod_hls_parse_uri_file_name(
 	request_params_t* request_params,
 	const ngx_http_vod_request_t** request)
 {
-	bool_t expect_segment_index;
+	uint32_t flags;
 	ngx_int_t rc;
 
 	// segment
@@ -437,7 +437,7 @@ ngx_http_vod_hls_parse_uri_file_name(
 		start_pos += conf->hls.m3u8_config.segment_file_name_prefix.len;
 		end_pos -= (sizeof(ts_file_ext) - 1);
 		*request = &hls_segment_request;
-		expect_segment_index = TRUE;
+		flags = PARSE_FILE_NAME_EXPECT_SEGMENT_INDEX;
 	}
 	// manifest
 	else if (ngx_http_vod_ends_with_static(start_pos, end_pos, m3u8_file_ext))
@@ -449,16 +449,19 @@ ngx_http_vod_hls_parse_uri_file_name(
 		{
 			*request = &hls_index_request;
 			start_pos += conf->hls.m3u8_config.index_file_name_prefix.len;
+			flags = 0;
 		}
 		else if (ngx_http_vod_starts_with(start_pos, end_pos, &conf->hls.iframes_file_name_prefix))
 		{
 			*request = &hls_iframes_request;
 			start_pos += conf->hls.iframes_file_name_prefix.len;
+			flags = 0;
 		}
 		else if (ngx_http_vod_starts_with(start_pos, end_pos, &conf->hls.master_file_name_prefix))
 		{
 			*request = &hls_master_request;
 			start_pos += conf->hls.master_file_name_prefix.len;
+			flags = PARSE_FILE_NAME_MULTI_STREAMS_PER_TYPE;
 		}
 		else
 		{
@@ -466,8 +469,6 @@ ngx_http_vod_hls_parse_uri_file_name(
 				"ngx_http_vod_hls_parse_uri_file_name: unidentified m3u8 request");
 			return NGX_HTTP_BAD_REQUEST;
 		}
-
-		expect_segment_index = FALSE;
 	}
 	// encryption key
 	else if (ngx_http_vod_match_prefix_postfix(start_pos, end_pos, &conf->hls.m3u8_config.encryption_key_file_name, key_file_ext) &&
@@ -476,7 +477,7 @@ ngx_http_vod_hls_parse_uri_file_name(
 		start_pos += conf->hls.m3u8_config.encryption_key_file_name.len;
 		end_pos -= (sizeof(key_file_ext) - 1);
 		*request = &hls_enc_key_request;
-		expect_segment_index = FALSE;
+		flags = 0;
 	}
 	else
 	{
@@ -486,7 +487,7 @@ ngx_http_vod_hls_parse_uri_file_name(
 	}
 
 	// parse the required tracks string
-	rc = ngx_http_vod_parse_uri_file_name(r, start_pos, end_pos, expect_segment_index, request_params);
+	rc = ngx_http_vod_parse_uri_file_name(r, start_pos, end_pos, flags, request_params);
 	if (rc != NGX_OK)
 	{
 		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
