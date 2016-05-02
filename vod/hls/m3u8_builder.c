@@ -546,6 +546,7 @@ m3u8_builder_build_master_playlist(
 	vod_str_t* result)
 {
 	adaptation_sets_t adaptation_sets;
+	adaptation_set_t* first_audio_adaptation_set;
 	adaptation_set_t* adaptation_set;
 	media_track_t** cur_track_ptr;
 	media_track_t* cur_track;
@@ -580,7 +581,12 @@ m3u8_builder_build_master_playlist(
 	if (adaptation_sets.total_count > 1)
 	{
 		// alternative audio
-		for (adaptation_set = adaptation_sets.first + 1; adaptation_set < adaptation_sets.last; adaptation_set++)
+		// Note: in case of audio only, the first track is printed twice - once as #EXT-X-STREAM-INF
+		//		and once as #EXT-X-MEDIA
+		first_audio_adaptation_set = adaptation_sets.first + adaptation_sets.count[MEDIA_TYPE_VIDEO];
+		for (adaptation_set = first_audio_adaptation_set;
+			adaptation_set < adaptation_sets.last; 
+			adaptation_set++)
 		{
 			cur_track = adaptation_set->first[0];
 
@@ -597,7 +603,7 @@ m3u8_builder_build_master_playlist(
 			(sizeof(M3U8_ALTERNATIVE_AUDIO_PART1) - 1 + LANG_ISO639_1_LEN +
 			sizeof(M3U8_ALTERNATIVE_AUDIO_PART2_DEFAULT) - 1 +
 			base_url_len +
-			sizeof("\"\n") - 1) * (adaptation_sets.total_count - 1);
+			sizeof("\"\n") - 1) * (adaptation_sets.total_count - adaptation_sets.count[MEDIA_TYPE_VIDEO]);
 	}
 
 	// variants
@@ -650,7 +656,9 @@ m3u8_builder_build_master_playlist(
 		*p++ = '\n';
 
 		tracks[MEDIA_TYPE_VIDEO] = NULL;
-		for (adaptation_set = adaptation_sets.first + 1; adaptation_set < adaptation_sets.last; adaptation_set++)
+		for (adaptation_set = first_audio_adaptation_set;
+			adaptation_set < adaptation_sets.last; 
+			adaptation_set++)
 		{
 			// take only the first track
 			tracks[MEDIA_TYPE_AUDIO] = adaptation_set->first[0];
@@ -659,7 +667,7 @@ m3u8_builder_build_master_playlist(
 			p = vod_sprintf(p, M3U8_ALTERNATIVE_AUDIO_PART1,
 				lang_get_iso639_1_name(tracks[MEDIA_TYPE_AUDIO]->media_info.language),
 				&tracks[MEDIA_TYPE_AUDIO]->media_info.label);
-			if (adaptation_set == adaptation_sets.first + 1)
+			if (adaptation_set == first_audio_adaptation_set)
 			{
 				p = vod_copy(p, M3U8_ALTERNATIVE_AUDIO_PART2_DEFAULT, sizeof(M3U8_ALTERNATIVE_AUDIO_PART2_DEFAULT) - 1);
 			}

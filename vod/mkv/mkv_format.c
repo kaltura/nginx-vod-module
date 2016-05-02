@@ -786,17 +786,17 @@ mkv_metadata_parse(
 			}
 		}
 
+		// is this track required ?
+		track_index = track_indexes[media_type]++;
+		if ((parse_params->required_tracks_mask[media_type] & (1 << track_index)) == 0)
+		{
+			continue;
+		}
+
 		// filter by language
 		if (parse_params->langs_mask != NULL &&
 			media_type == MEDIA_TYPE_AUDIO &&
 			!vod_is_bit_set(parse_params->langs_mask, lang_id))
-		{
-			return VOD_OK;
-		}
-
-		// is this track required ?
-		track_index = track_indexes[media_type]++;
-		if ((parse_params->required_tracks_mask[media_type] & (1 << track_index)) == 0)
 		{
 			continue;
 		}
