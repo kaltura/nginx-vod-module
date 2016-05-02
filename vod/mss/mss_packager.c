@@ -286,7 +286,7 @@ mss_packager_build_manifest(
 	uint32_t bitrate;
 	uint32_t audio_tag;
 	vod_status_t rc;
-	size_t adaptation_set_size;
+	size_t adaptation_set_size = 0;
 	size_t result_size;
 	u_char* p;
 
