@@ -24,6 +24,12 @@
 
 * Audio only/video only files
 
+* Alternative audio renditions - supporting both:
+  1. Generation of manifest with different audio renditions, allowing selection on the client side
+  2. Muxing together audio and video streams from separate files / tracks - provides the ability
+	to serve different audio renditions of a single video, without the need for any special support
+	on the client side.
+
 * Track selection for multi audio/video MP4 files
 
 * Playback rate change - 0.5x up to 2x (requires libavcodec and libavfilter)
@@ -40,8 +46,6 @@ without the overhead of short segments for the whole duration of the video
 * DASH: common encryption (CENC) support
 
 * MSS: PlayReady encryption support
-
-* HLS: Mux audio and video streams from separate MP4 files (HLS/HDS)
 
 * HLS: Generation of I-frames playlist (EXT-X-I-FRAMES-ONLY)
 
@@ -159,7 +163,7 @@ The following parameters are supported on the URL path:
 #### Filename structure
 
 The structure of filename is:
-`<basename>[<fileparams>][<trackparams>].<extension>`
+`<basename>[<fileparams>][<trackparams>][<langparams>].<extension>`
 
 Where:
 * basename + extension - the set of options is packager specific (the list below applies to the default settings):
@@ -174,6 +178,8 @@ Where:
 	For example, manifest-a1.f4m will return an F4M containing only the first audio stream.
 	The default is to include the first audio and first video tracks of each file.
 	The tracks selected on the file name are AND-ed with the tracks selected with the /tracks/ path parameter.
+* langparams - can be used to filter audio tracks according to their language.
+	For example, master-leng.m3u8 will return only english audio tracks.
 
 ### Mapping response format
 
@@ -409,6 +415,11 @@ Mandatory fields:
 	
 Optional fields:
 * `id` - a string that identifies the sequence. The id can be retrieved by `$vod_sequence_id`.
+* `language` - a 3-letter (ISO-639-2) language code, this field takes priority over any language
+	specified on the media file (MP4 mdhd atom)
+* `label` - a friendly string that identifies the sequence. if a language is specified,
+	a default label will be automatically derived by it - e.g. if language is `ita`, 
+	by default `italiano` will be used as the label.
 
 #### Clip (abstract)
 
@@ -694,7 +705,10 @@ http://host/hls/common-prefix,bitrate1,bitrate2,common-suffix.urlset/master.m3u8
 * **default**: `10s`
 * **context**: `http`, `server`, `location`
 
-Sets the segment duration in milliseconds.
+Sets the segment duration in milliseconds. It is highly recommended to use a segment duration that is a multiple of the GOP duration.
+If the segment duration is not a multiple of GOP duration, and `vod_align_segments_to_key_frames` is enabled, there could be significant
+differences between the segment duration that is reported in the manifest and the actual segment duration. This could also lead to
+the appearance of empty segments within the stream.
 
 #### vod_live_segment_count
 * **syntax**: `vod_live_segment_count count`

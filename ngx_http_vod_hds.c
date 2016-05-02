@@ -103,7 +103,7 @@ ngx_http_vod_hds_init_frame_processor(
 		&submodule_context->conf->hds.fragment_config,
 		&encryption_params,
 		submodule_context->request_params.segment_index,
-		submodule_context->media_set.sequences,
+		&submodule_context->media_set,
 		segment_writer->write_tail,
 		segment_writer->context,
 		ngx_http_vod_submodule_size_only(submodule_context),
@@ -195,6 +195,7 @@ ngx_http_vod_hds_parse_uri_file_name(
 	request_params_t* request_params,
 	const ngx_http_vod_request_t** request)
 {
+	uint32_t flags = 0;
 	ngx_int_t rc;
 
 	// fragment request
@@ -239,6 +240,7 @@ ngx_http_vod_hds_parse_uri_file_name(
 		start_pos += conf->hds.manifest_file_name_prefix.len;
 		end_pos -= (sizeof(manifest_file_ext) - 1);
 		*request = &hds_manifest_request;
+		flags = PARSE_FILE_NAME_MULTI_STREAMS_PER_TYPE;
 	}
 	else
 	{
@@ -248,7 +250,7 @@ ngx_http_vod_hds_parse_uri_file_name(
 	}
 
 	// parse the required tracks string
-	rc = ngx_http_vod_parse_uri_file_name(r, start_pos, end_pos, FALSE, request_params);
+	rc = ngx_http_vod_parse_uri_file_name(r, start_pos, end_pos, flags, request_params);
 	if (rc != NGX_OK)
 	{
 		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,

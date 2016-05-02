@@ -1,6 +1,7 @@
 #include "hds_manifest.h"
 #include "hds_fragment.h"
 #include "hds_amf0_encoder.h"
+#include "../manifest_utils.h"
 #include "../mp4/mp4_defs.h"
 #include "../udrm.h"
 
@@ -17,6 +18,10 @@
 
 #define HDS_MANIFEST_HEADER_LIVE						\
 	"  <streamType>live</streamType>\n"
+
+#define HDS_MANIFEST_HEADER_LANG						\
+	"  <label>%V</label>\n"								\
+	"  <lang>%s</lang>\n"
 
 #define HDS_BOOTSTRAP_LIVE_PREFIX						\
 	"  <bootstrapInfo\n"								\
@@ -52,6 +57,15 @@
 #define HDS_MEDIA_HEADER_PREFIX_AUDIO					\
 	"  <media\n"										\
 	"    bitrate=\"%uD\"\n"								\
+	"    url=\""
+
+#define HDS_MEDIA_HEADER_PREFIX_AUDIO_LANG				\
+	"  <media\n"										\
+	"    bitrate=\"%uD\"\n"								\
+	"    type=\"audio\"\n"								\
+	"    label=\"%V\"\n"								\
+	"    lang=\"%s\"\n"									\
+	"    alternate=\"true\"\n"							\
 	"    url=\""
 
 #define HDS_MEDIA_HEADER_SUFFIX							\
@@ -294,12 +308,19 @@ hds_packager_build_manifest(
 	bool_t drm_enabled,
 	vod_str_t* result)
 {
-	segmenter_conf_t* segmenter_conf = media_set->segmenter_conf;
-	media_track_t** cur_sequence_tracks;
-	media_sequence_t* cur_sequence;
-	media_track_t* track;
 	segment_durations_t* segment_durations;
+	adaptation_sets_t adaptation_sets;
+	adaptation_set_t* adaptation_set;
+	segmenter_conf_t* segmenter_conf = media_set->segmenter_conf;
+	media_sequence_t* cur_sequence;
+	media_track_t** tracks;
+	media_track_t** cur_track_ptr;
+	media_track_t* tracks_array[MEDIA_TYPE_COUNT];
+	media_track_t* track;
 	vod_str_t* drm_metadata;
+	uint32_t initial_muxed_tracks;
+	uint32_t muxed_tracks;
+	uint32_t media_count;
 	uint32_t bitrate;
 	uint32_t index;
 	uint32_t abst_atom_size;
@@ -309,9 +330,22 @@ hds_packager_build_manifest(
 	u_char* temp_buffer;
 	u_char* p;
 
-	segment_durations = vod_alloc(
-		request_context->pool, 
-		media_set->sequence_count * sizeof(*segment_durations));
+	// get the adaptations sets
+	rc = manifest_utils_get_adaptation_sets(
+		request_context, 
+		media_set, 
+		ADAPTATION_SETS_FLAG_FORCE_MUXED | 
+		ADAPTATION_SETS_FLAG_SINGLE_LANG_TRACK | 
+		ADAPTATION_SETS_FLAG_AVOID_AUDIO_ONLY,
+		&adaptation_sets);
+	if (rc != VOD_OK)
+	{
+		return rc;
+	}
+
+	// allocate the segment durations
+	media_count = adaptation_sets.first->count + adaptation_sets.total_count - 1;
+	segment_durations = vod_alloc(request_context->pool, sizeof(segment_durations[0]) * media_count);
 	if (segment_durations == NULL)
 	{
 		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
@@ -322,77 +356,109 @@ hds_packager_build_manifest(
 	// calculate the result size
 	result_size = 
 		sizeof(HDS_MANIFEST_HEADER) - 1 + manifest_id->len + 
+		sizeof(HDS_MANIFEST_HEADER_LANG) - 1 + LANG_ISO639_2_LEN +
 		sizeof(HDS_MANIFEST_FOOTER);
 
 	switch (media_set->type)
 	{
 	case MEDIA_SET_VOD:
-		result_size += sizeof(HDS_MANIFEST_HEADER_VOD) - 1 + 2 * VOD_INT32_LEN;
+		result_size += 
+			sizeof(HDS_MANIFEST_HEADER_VOD) - 1 + 2 * VOD_INT32_LEN + 
+			(sizeof(HDS_BOOTSTRAP_VOD_HEADER) - 1 + VOD_INT32_LEN +
+			sizeof(HDS_BOOTSTRAP_VOD_FOOTER) - 1) * media_count;
 		break;
 
 	case MEDIA_SET_LIVE:
-		result_size += sizeof(HDS_MANIFEST_HEADER_LIVE) - 1;
+		result_size += 
+			sizeof(HDS_MANIFEST_HEADER_LIVE) - 1 + 
+			(sizeof(HDS_BOOTSTRAP_LIVE_PREFIX) - 1 + VOD_INT32_LEN +
+			conf->bootstrap_file_name_prefix.len +
+			MANIFEST_UTILS_TRACKS_SPEC_MAX_SIZE +
+			sizeof(HDS_BOOTSTRAP_LIVE_SUFFIX) - 1) * media_count;
 		break;
 	}
 
-	index = 0;
-	for (cur_sequence = media_set->sequences; cur_sequence < media_set->sequences_end; cur_sequence++)
+	if (drm_enabled)
 	{
-		switch (media_set->type)
-		{
-		case MEDIA_SET_VOD:
-			rc = segmenter_conf->get_segment_durations(
-				request_context,
-				segmenter_conf,
-				media_set,
-				cur_sequence,
-				MEDIA_TYPE_NONE,
-				&segment_durations[index]);
-			if (rc != VOD_OK)
-			{
-				return rc;
-			}
-
-			abst_atom_size = hds_get_abst_atom_size(media_set, &segment_durations[index]);
-			if (abst_atom_size > max_abst_atom_size)
-			{
-				max_abst_atom_size = abst_atom_size;
-			}
-
-			result_size +=
-				sizeof(HDS_BOOTSTRAP_VOD_HEADER) - 1 + VOD_INT32_LEN + 
-					vod_base64_encoded_length(abst_atom_size) +
-				sizeof(HDS_BOOTSTRAP_VOD_FOOTER) - 1;
-
-			index++;
-			break;
-
-		case MEDIA_SET_LIVE:
-			result_size +=
-				sizeof(HDS_BOOTSTRAP_LIVE_PREFIX) - 1 + VOD_INT32_LEN +
-					conf->bootstrap_file_name_prefix.len +
-					sizeof("-f-v-a") - 1 + VOD_INT32_LEN * 3 +
-				sizeof(HDS_BOOTSTRAP_LIVE_SUFFIX) - 1;
-			break;
-		}
-
-		if (drm_enabled)
-		{
-			drm_metadata = &((drm_info_t*)cur_sequence->drm_info)->pssh_array.first->data;
-
-			result_size += 
-				sizeof(HDS_DRM_ADDITIONAL_HEADER_PREFIX) - 1 + VOD_INT32_LEN +
-				drm_metadata->len +
-				sizeof(HDS_DRM_ADDITIONAL_HEADER_SUFFIX) - 1;
-		}
-
 		result_size += 
-			sizeof(HDS_MEDIA_HEADER_PREFIX_VIDEO) - 1 + 3 * VOD_INT32_LEN +
-				conf->fragment_file_name_prefix.len + 
-				sizeof("-f-v-a-") - 1 + 3 * VOD_INT32_LEN + 
-			sizeof(HDS_MEDIA_HEADER_SUFFIX_DRM) - 1 + 2 * VOD_INT32_LEN + 
-				vod_base64_encoded_length(amf0_max_total_size) +
-			sizeof(HDS_MEDIA_FOOTER) - 1;
+			(sizeof(HDS_DRM_ADDITIONAL_HEADER_PREFIX) - 1 + VOD_INT32_LEN +
+			sizeof(HDS_DRM_ADDITIONAL_HEADER_SUFFIX) - 1) * media_count;
+	}
+
+	result_size +=
+		(vod_max(sizeof(HDS_MEDIA_HEADER_PREFIX_VIDEO) - 1 + 3 * VOD_INT32_LEN, 
+			sizeof(HDS_MEDIA_HEADER_PREFIX_AUDIO_LANG) - 1 + VOD_INT32_LEN + LANG_ISO639_2_LEN) +
+		conf->fragment_file_name_prefix.len +
+		MANIFEST_UTILS_TRACKS_SPEC_MAX_SIZE + 1 +		// 1 = -
+		sizeof(HDS_MEDIA_HEADER_SUFFIX_DRM) - 1 + 2 * VOD_INT32_LEN +
+		vod_base64_encoded_length(amf0_max_total_size) +
+		sizeof(HDS_MEDIA_FOOTER) - 1) * media_count;
+
+	initial_muxed_tracks = adaptation_sets.first->type == ADAPTATION_TYPE_MUXED ? MEDIA_TYPE_COUNT : 1;
+
+	muxed_tracks = initial_muxed_tracks;
+	index = 0;
+	for (adaptation_set = adaptation_sets.first; adaptation_set < adaptation_sets.last; adaptation_set++)
+	{
+		if (adaptation_set->type == ADAPTATION_TYPE_MUXED)
+		{
+			if (adaptation_set->first[MEDIA_TYPE_AUDIO] != NULL)
+			{
+				result_size += adaptation_set->first[MEDIA_TYPE_AUDIO]->media_info.label.len;
+			}
+		}
+		else
+		{
+			result_size += adaptation_set->first[0]->media_info.label.len;
+		}
+
+		for (cur_track_ptr = adaptation_set->first; cur_track_ptr < adaptation_set->last; cur_track_ptr += muxed_tracks)
+		{
+			if (cur_track_ptr[0] != NULL)
+			{
+				cur_sequence = cur_track_ptr[0]->file_info.source->sequence;
+			}
+			else
+			{
+				cur_sequence = cur_track_ptr[1]->file_info.source->sequence;
+			}
+
+			switch (media_set->type)
+			{
+			case MEDIA_SET_VOD:
+				rc = segmenter_conf->get_segment_durations(
+					request_context,
+					segmenter_conf,
+					media_set,
+					cur_sequence,		// XXXXX change to work with tracks instead of sequence
+					MEDIA_TYPE_NONE,
+					&segment_durations[index]);
+				if (rc != VOD_OK)
+				{
+					return rc;
+				}
+
+				abst_atom_size = hds_get_abst_atom_size(media_set, &segment_durations[index]);
+				if (abst_atom_size > max_abst_atom_size)
+				{
+					max_abst_atom_size = abst_atom_size;
+				}
+
+				result_size += vod_base64_encoded_length(abst_atom_size);
+
+				index++;
+				break;
+			}
+
+			if (drm_enabled)
+			{
+				drm_metadata = &((drm_info_t*)cur_sequence->drm_info)->pssh_array.first->data;
+
+				result_size += drm_metadata->len;
+			}
+		}
+
+		muxed_tracks = 1;
 	}
 
 	// allocate the buffers
@@ -408,7 +474,7 @@ hds_packager_build_manifest(
 	if (temp_buffer == NULL)
 	{
 		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
-			"hds_packager_build_manifest: vod_alloc failed (1)");
+			"hds_packager_build_manifest: vod_alloc failed (3)");
 		return VOD_ALLOC_FAILED;
 	}
 
@@ -428,117 +494,180 @@ hds_packager_build_manifest(
 		break;
 	}
 
-	// bootstrap tags
-	index = 0;
-	for (cur_sequence = media_set->sequences; cur_sequence < media_set->sequences_end; cur_sequence++)
+	if (adaptation_sets.total_count > 1)
 	{
-		cur_sequence_tracks = cur_sequence->filtered_clips[0].longest_track;
-
-		switch (media_set->type)
+		if (adaptation_sets.first->type == ADAPTATION_TYPE_MUXED)
 		{
-		case MEDIA_SET_VOD:
-			p = vod_sprintf(p, HDS_BOOTSTRAP_VOD_HEADER, index);
-			p = hds_write_base64_abst_atom(p, temp_buffer, media_set, &segment_durations[index]);
-			p = vod_copy(p, HDS_BOOTSTRAP_VOD_FOOTER, sizeof(HDS_BOOTSTRAP_VOD_FOOTER) - 1);
-			break;
-
-		case MEDIA_SET_LIVE:
-			p = vod_sprintf(p, HDS_BOOTSTRAP_LIVE_PREFIX, index);
-			p = vod_copy(p, conf->bootstrap_file_name_prefix.data, conf->bootstrap_file_name_prefix.len);
-			if (media_set->has_multi_sequences)
-			{
-				p = vod_sprintf(p, "-f%uD", cur_sequence->index + 1);
-			}
-
-			if (cur_sequence_tracks[MEDIA_TYPE_VIDEO] != NULL)
-			{
-				p = vod_sprintf(p, "-v%uD", cur_sequence_tracks[MEDIA_TYPE_VIDEO]->index + 1);
-			}
-
-			if (cur_sequence_tracks[MEDIA_TYPE_AUDIO] != NULL)
-			{
-				p = vod_sprintf(p, "-a%uD", cur_sequence_tracks[MEDIA_TYPE_AUDIO]->index + 1);
-			}
-			p = vod_copy(p, HDS_BOOTSTRAP_LIVE_SUFFIX, sizeof(HDS_BOOTSTRAP_LIVE_SUFFIX) - 1);
-			break;
+			track = adaptation_sets.first->first[MEDIA_TYPE_AUDIO];
+		}
+		else
+		{
+			track = adaptation_sets.first->first[0];
 		}
 
-		index++;
+		p = vod_sprintf(p, HDS_MANIFEST_HEADER_LANG, 
+			&track->media_info.label,
+			lang_get_iso639_2t_name(track->media_info.language));
+	}
+
+	// bootstrap tags
+	muxed_tracks = initial_muxed_tracks;
+	index = 0;
+	for (adaptation_set = adaptation_sets.first; adaptation_set < adaptation_sets.last; adaptation_set++)
+	{
+		for (cur_track_ptr = adaptation_set->first; cur_track_ptr < adaptation_set->last; cur_track_ptr += muxed_tracks)
+		{
+			switch (media_set->type)
+			{
+			case MEDIA_SET_VOD:
+				p = vod_sprintf(p, HDS_BOOTSTRAP_VOD_HEADER, index);
+				p = hds_write_base64_abst_atom(p, temp_buffer, media_set, &segment_durations[index]);
+				p = vod_copy(p, HDS_BOOTSTRAP_VOD_FOOTER, sizeof(HDS_BOOTSTRAP_VOD_FOOTER) - 1);
+				break;
+
+			case MEDIA_SET_LIVE:
+				// get the tracks
+				if (muxed_tracks == 1)
+				{
+					if (cur_track_ptr[0]->media_info.media_type == MEDIA_TYPE_VIDEO)
+					{
+						tracks_array[MEDIA_TYPE_VIDEO] = cur_track_ptr[0];
+						tracks_array[MEDIA_TYPE_AUDIO] = NULL;
+					}
+					else
+					{
+						tracks_array[MEDIA_TYPE_VIDEO] = NULL;
+						tracks_array[MEDIA_TYPE_AUDIO] = cur_track_ptr[0];
+					}
+					tracks = tracks_array;
+				}
+				else
+				{
+					tracks = cur_track_ptr;
+				}
+
+				p = vod_sprintf(p, HDS_BOOTSTRAP_LIVE_PREFIX, index);
+				p = vod_copy(p, conf->bootstrap_file_name_prefix.data, conf->bootstrap_file_name_prefix.len);
+				p = manifest_utils_append_tracks_spec(p, tracks, media_set->has_multi_sequences);
+				p = vod_copy(p, HDS_BOOTSTRAP_LIVE_SUFFIX, sizeof(HDS_BOOTSTRAP_LIVE_SUFFIX) - 1);
+				break;
+			}
+
+			index++;
+		}
+
+		muxed_tracks = 1;
 	}
 
 	if (drm_enabled)
 	{
+		muxed_tracks = initial_muxed_tracks;
 		index = 0;
-		for (cur_sequence = media_set->sequences; cur_sequence < media_set->sequences_end; cur_sequence++)
+		for (adaptation_set = adaptation_sets.first; adaptation_set < adaptation_sets.last; adaptation_set++)
 		{
-			drm_metadata = &((drm_info_t*)cur_sequence->drm_info)->pssh_array.first->data;
+			for (cur_track_ptr = adaptation_set->first; cur_track_ptr < adaptation_set->last; cur_track_ptr += muxed_tracks)
+			{
+				if (cur_track_ptr[0] != NULL)
+				{
+					cur_sequence = cur_track_ptr[0]->file_info.source->sequence;
+				}
+				else
+				{
+					cur_sequence = cur_track_ptr[1]->file_info.source->sequence;
+				}
 
-			p = vod_sprintf(p, HDS_DRM_ADDITIONAL_HEADER_PREFIX, index);
-			p = vod_copy(p, drm_metadata->data, drm_metadata->len);
-			p = vod_copy(p, HDS_DRM_ADDITIONAL_HEADER_SUFFIX, sizeof(HDS_DRM_ADDITIONAL_HEADER_SUFFIX) - 1);
+				drm_metadata = &((drm_info_t*)cur_sequence->drm_info)->pssh_array.first->data;
 
-			index++;
+				p = vod_sprintf(p, HDS_DRM_ADDITIONAL_HEADER_PREFIX, index);
+				p = vod_copy(p, drm_metadata->data, drm_metadata->len);
+				p = vod_copy(p, HDS_DRM_ADDITIONAL_HEADER_SUFFIX, sizeof(HDS_DRM_ADDITIONAL_HEADER_SUFFIX) - 1);
+
+				index++;
+			}
+
+			muxed_tracks = 1;
 		}
 	}
 
 	// media tags
+	muxed_tracks = initial_muxed_tracks;
 	index = 0;
-	for (cur_sequence = media_set->sequences; cur_sequence < media_set->sequences_end; cur_sequence++)
+	for (adaptation_set = adaptation_sets.first; adaptation_set < adaptation_sets.last; adaptation_set++)
 	{
-		cur_sequence_tracks = cur_sequence->filtered_clips[0].longest_track;
-
-		if (cur_sequence_tracks[MEDIA_TYPE_VIDEO] != NULL)
+		for (cur_track_ptr = adaptation_set->first; cur_track_ptr < adaptation_set->last; cur_track_ptr += muxed_tracks)
 		{
-			track = cur_sequence_tracks[MEDIA_TYPE_VIDEO];
-			bitrate = track->media_info.bitrate;
-			if (cur_sequence_tracks[MEDIA_TYPE_AUDIO] != NULL)
+			// get the tracks
+			if (muxed_tracks == 1)
 			{
-				bitrate += cur_sequence_tracks[MEDIA_TYPE_AUDIO]->media_info.bitrate;
+				if (cur_track_ptr[0]->media_info.media_type == MEDIA_TYPE_VIDEO)
+				{
+					tracks_array[MEDIA_TYPE_VIDEO] = cur_track_ptr[0];
+					tracks_array[MEDIA_TYPE_AUDIO] = NULL;
+				}
+				else
+				{
+					tracks_array[MEDIA_TYPE_VIDEO] = NULL;
+					tracks_array[MEDIA_TYPE_AUDIO] = cur_track_ptr[0];
+				}
+				tracks = tracks_array;
+			}
+			else
+			{
+				tracks = cur_track_ptr;
 			}
 
-			p = vod_sprintf(p, HDS_MEDIA_HEADER_PREFIX_VIDEO,
-				bitrate / 1000,
-				(uint32_t)track->media_info.u.video.width,
-				(uint32_t)track->media_info.u.video.height);
-		}
-		else
-		{
-			track = cur_sequence_tracks[MEDIA_TYPE_AUDIO];
-			p = vod_sprintf(p, HDS_MEDIA_HEADER_PREFIX_AUDIO,
-				track->media_info.bitrate / 1000);
+			if (tracks[MEDIA_TYPE_VIDEO] != NULL)
+			{
+				bitrate = tracks[MEDIA_TYPE_VIDEO]->media_info.bitrate;
+				if (tracks[MEDIA_TYPE_AUDIO] != NULL)
+				{
+					bitrate += tracks[MEDIA_TYPE_AUDIO]->media_info.bitrate;
+				}
+
+				p = vod_sprintf(p, HDS_MEDIA_HEADER_PREFIX_VIDEO,
+					bitrate / 1000,
+					(uint32_t)tracks[MEDIA_TYPE_VIDEO]->media_info.u.video.width,
+					(uint32_t)tracks[MEDIA_TYPE_VIDEO]->media_info.u.video.height);
+			}
+			else
+			{
+				bitrate = tracks[MEDIA_TYPE_AUDIO]->media_info.bitrate;
+				if (adaptation_sets.total_count > 1 && adaptation_set > adaptation_sets.first)
+				{
+					p = vod_sprintf(p, HDS_MEDIA_HEADER_PREFIX_AUDIO_LANG,
+						bitrate / 1000, 
+						&tracks[MEDIA_TYPE_AUDIO]->media_info.label, 
+						lang_get_iso639_2t_name(tracks[MEDIA_TYPE_AUDIO]->media_info.language));
+				}
+				else
+				{
+					p = vod_sprintf(p, HDS_MEDIA_HEADER_PREFIX_AUDIO,
+						bitrate / 1000);
+				}
+			}
+
+			// url
+			p = vod_copy(p, conf->fragment_file_name_prefix.data, conf->fragment_file_name_prefix.len);
+			p = manifest_utils_append_tracks_spec(p, tracks, media_set->has_multi_sequences);
+			*p++ = '-';
+
+			if (drm_enabled)
+			{
+				p = vod_sprintf(p, HDS_MEDIA_HEADER_SUFFIX_DRM, index, index);
+			}
+			else
+			{
+				p = vod_sprintf(p, HDS_MEDIA_HEADER_SUFFIX, index);
+			}
+
+			p = hds_amf0_write_base64_metadata(p, temp_buffer, media_set, tracks);
+
+			p = vod_copy(p, HDS_MEDIA_FOOTER, sizeof(HDS_MEDIA_FOOTER) - 1);
+
+			index++;
 		}
 
-		// url
-		p = vod_copy(p, conf->fragment_file_name_prefix.data, conf->fragment_file_name_prefix.len);
-		if (media_set->has_multi_sequences)
-		{
-			p = vod_sprintf(p, "-f%uD", cur_sequence->index + 1);
-		}
-
-		if (cur_sequence_tracks[MEDIA_TYPE_VIDEO] != NULL)
-		{
-			p = vod_sprintf(p, "-v%uD", cur_sequence_tracks[MEDIA_TYPE_VIDEO]->index + 1);
-		}
-
-		if (cur_sequence_tracks[MEDIA_TYPE_AUDIO] != NULL)
-		{
-			p = vod_sprintf(p, "-a%uD", cur_sequence_tracks[MEDIA_TYPE_AUDIO]->index + 1);
-		}
-		*p++ = '-';
-
-		if (drm_enabled)
-		{
-			p = vod_sprintf(p, HDS_MEDIA_HEADER_SUFFIX_DRM, index, index);
-		}
-		else
-		{
-			p = vod_sprintf(p, HDS_MEDIA_HEADER_SUFFIX, index);
-		}
-		index++;
-
-		p = hds_amf0_write_base64_metadata(p, temp_buffer, media_set, cur_sequence_tracks);
-
-		p = vod_copy(p, HDS_MEDIA_FOOTER, sizeof(HDS_MEDIA_FOOTER) - 1);
+		muxed_tracks = 1;
 	}
 
 	// manifest footer

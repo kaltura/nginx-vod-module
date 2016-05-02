@@ -495,7 +495,7 @@ class DashTestSuite(ProtocolTestSuite):
 
     def testBadFragmentIndex(self):
         assertRequestFails(self.getUrl('/fragment-x-a1-x1.m4s'), 400)
-        self.logTracker.assertContains('ngx_http_vod_extract_uint32_token failed')
+        self.logTracker.assertContains('failed to parse segment index')
 
     def testBadStreamTypeFragment(self):
         assertRequestFails(self.getUrl('/fragment-1-a1-x1.m4s'), 400)
@@ -549,7 +549,7 @@ class HlsTestSuite(ProtocolTestSuite):
     # bad requests
     def testBadSegmentIndex(self):
         assertRequestFails(self.getUrl('/seg-abc-a1-v1.ts'), 400)
-        self.logTracker.assertContains('ngx_http_vod_extract_uint32_token failed')
+        self.logTracker.assertContains('failed to parse segment index')
     
     def testBadStreamIndex(self):
         assertRequestFails(self.getUrl('/seg-1-aabc-v1.ts'), 400)

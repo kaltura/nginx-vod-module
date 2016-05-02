@@ -42,6 +42,8 @@ typedef struct {
 	uint64_t type;
 	vod_str_t codec_id;
 	vod_str_t codec_private;
+	vod_str_t language;
+	vod_str_t name;
 	uint64_t default_duration;
 	uint64_t codec_delay;
 	union {
@@ -107,7 +109,9 @@ static ebml_spec_t mkv_spec_track_fields[] = {
 	{ MKV_ID_TRACKCODECID,			EBML_STRING,	offsetof(mkv_track_t, codec_id),			NULL },
 	{ MKV_ID_TRACKCODECPRIVATE,		EBML_BINARY,	offsetof(mkv_track_t, codec_private),		NULL },
 	{ MKV_ID_TRACKDEFAULTDURATION,	EBML_UINT,		offsetof(mkv_track_t, default_duration),	NULL },
-	{ MKV_ID_CODECDELAY,			EBML_UINT,		offsetof(mkv_track_t, codec_delay),			NULL },
+	{ MKV_ID_TRACKCODECDELAY,		EBML_UINT,		offsetof(mkv_track_t, codec_delay),			NULL },
+	{ MKV_ID_TRACKLANGUAGE,			EBML_STRING,	offsetof(mkv_track_t, language),			NULL },
+	{ MKV_ID_TRACKNAME,				EBML_STRING,	offsetof(mkv_track_t, name),				NULL },	
 	{ MKV_ID_TRACKVIDEO,			EBML_MASTER,	offsetof(mkv_track_t, u.video),				mkv_spec_track_video },
 	{ MKV_ID_TRACKAUDIO,			EBML_MASTER,	offsetof(mkv_track_t, u.audio),				mkv_spec_track_audio },
 	{ 0, EBML_NONE, 0, NULL }
@@ -624,8 +628,10 @@ mkv_metadata_parse(
 {
 	mkv_base_metadata_t* metadata;
 	const mkv_codec_type_t* cur_codec;
+	media_sequence_t* sequence;
 	media_track_t* cur_track;
 	ebml_context_t context;
+	language_id_t lang_id;
 	uint32_t timescale;
 	mkv_track_t track;
 	mkv_info_t info;
@@ -756,9 +762,41 @@ mkv_metadata_parse(
 			continue;
 		}
 
+		// get the language id
+		if (track.language.len >= LANG_ISO639_2_LEN)
+		{
+			lang_id = lang_parse_iso639_2_code(iso639_2_str_to_int(track.language.data));
+		}
+		else
+		{
+			lang_id = 0;
+		}
+
+		// inherit the sequence language and label
+		sequence = file_info->source->sequence;
+		if (sequence->label.len != 0)
+		{
+			track.name = sequence->label;
+
+			// Note: it is not possible for the sequence to have a language without a label,
+			//              since a default label will be assigned according to the language
+			if (sequence->language != 0)
+			{
+				lang_id = sequence->language;
+			}
+		}
+
 		// is this track required ?
 		track_index = track_indexes[media_type]++;
 		if ((parse_params->required_tracks_mask[media_type] & (1 << track_index)) == 0)
+		{
+			continue;
+		}
+
+		// filter by language
+		if (parse_params->langs_mask != NULL &&
+			media_type == MEDIA_TYPE_AUDIO &&
+			!vod_is_bit_set(parse_params->langs_mask, lang_id))
 		{
 			continue;
 		}
@@ -827,6 +865,15 @@ mkv_metadata_parse(
 			break;
 		}
 
+		cur_track->media_info.language = lang_id;
+		if (track.name.len > 0)
+		{
+			cur_track->media_info.label = track.name;
+		}
+		else if (lang_id > 0)
+		{
+			lang_get_native_name(lang_id, &cur_track->media_info.label);
+		}
 		cur_track->media_info.media_type = media_type;
 		cur_track->media_info.codec_id = cur_codec->codec_id;
 		cur_track->media_info.format = cur_codec->format;

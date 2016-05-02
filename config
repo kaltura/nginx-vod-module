@@ -135,6 +135,8 @@ NGX_ADDON_DEPS="$NGX_ADDON_DEPS                                     \
                 $ngx_addon_dir/vod/input/frames_source_memory.h     \
                 $ngx_addon_dir/vod/input/read_cache.h               \
                 $ngx_addon_dir/vod/json_parser.h                    \
+                $ngx_addon_dir/vod/language_code.h                  \
+                $ngx_addon_dir/vod/languages_x.h                    \
                 $ngx_addon_dir/vod/list_entry.h                     \
                 $ngx_addon_dir/vod/manifest_utils.h                 \
                 $ngx_addon_dir/vod/media_clip.h                     \
@@ -213,6 +215,7 @@ NGX_ADDON_SRCS="$NGX_ADDON_SRCS                                     \
                 $ngx_addon_dir/vod/input/frames_source_memory.c     \
                 $ngx_addon_dir/vod/input/read_cache.c               \
                 $ngx_addon_dir/vod/json_parser.c                    \
+                $ngx_addon_dir/vod/language_code.c                  \
                 $ngx_addon_dir/vod/manifest_utils.c                 \
                 $ngx_addon_dir/vod/media_format.c                   \
                 $ngx_addon_dir/vod/media_set_parser.c               \

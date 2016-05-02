@@ -16,6 +16,14 @@
 #define vod_div_ceil(x, y) (((x) + (y) - 1) / (y))
 #define vod_array_entries(x) (sizeof(x) / sizeof(x[0]))
 
+#define vod_is_bit_set(mask, index) (((mask)[(index) >> 3] >> ((index) & 7)) & 1)
+#define vod_set_bit(mask, index) (mask)[(index) >> 3] |= 1 << ((index) & 7)
+
+// Note: comparing the pointers since in the case of labels if both were derived by the language, 
+//		they will have the same pointer and we can skip the memcmp
+#define vod_str_equals(l1, l2) \
+	((l1).len == (l2).len && ((l1).data == (l2).data || vod_memcmp((l1).data, (l2).data, (l1).len) == 0))
+
 #ifdef VOD_STAND_ALONE
 
 // includes

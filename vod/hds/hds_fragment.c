@@ -126,10 +126,9 @@ struct hds_muxer_state_s {
 
 	write_buffer_state_t write_buffer_state;
 
-	// cur sequence state
-	media_clip_filtered_t* clips_start;
-	media_clip_filtered_t* clips_end;
-	media_clip_filtered_t* cur_clip;
+	// cur clip state
+	media_set_t* media_set;
+	media_track_t* first_clip_track;
 
 	input_frame_t* cur_frame;
 	int cache_slot_id;
@@ -625,7 +624,7 @@ hds_muxer_reinit_tracks(hds_muxer_state_t* state)
 	state->first_time = TRUE;
 	state->codec_config_size = 0;
 
-	cur_track = state->cur_clip->first_track;
+	cur_track = state->first_clip_track;
 	for (cur_stream = state->first_stream; cur_stream < state->last_stream; cur_stream++, cur_track++)
 	{
 		rc = hds_muxer_init_track(state, cur_stream, cur_track);
@@ -642,7 +641,7 @@ hds_muxer_reinit_tracks(hds_muxer_state_t* state)
 				sizeof(uint32_t);
 		}
 	}
-	state->cur_clip++;
+	state->first_clip_track = cur_track;
 
 	return VOD_OK;
 }
@@ -683,7 +682,7 @@ hds_muxer_choose_stream(hds_muxer_state_t* state, hds_muxer_stream_state_t** res
 			return VOD_OK;
 		}
 
-		if (state->cur_clip >= state->clips_end)
+		if (state->first_clip_track >= state->media_set->filtered_tracks_end)
 		{
 			break;
 		}
@@ -767,9 +766,9 @@ hds_calculate_output_offsets_and_write_afra_entries(
 	}
 
 	// reset the state
-	if (state->clips_end > state->clips_start + 1)
+	if (state->media_set->clip_count > 1)
 	{
-		state->cur_clip = state->clips_start;
+		state->first_clip_track = state->media_set->filtered_tracks;
 		rc = hds_muxer_reinit_tracks(state);
 		if (rc != VOD_OK)
 		{
@@ -804,15 +803,15 @@ static vod_status_t
 hds_muxer_init_state(
 	request_context_t* request_context,
 	hds_encryption_params_t* encryption_params,
-	media_sequence_t* sequence,
+	media_set_t* media_set,
 	write_callback_t write_callback,
 	void* write_context,
 	hds_muxer_state_t** result)
 {
-	media_clip_filtered_t* track_array;
 	media_track_t* cur_track;
 	hds_muxer_stream_state_t* cur_stream;
 	hds_muxer_state_t* state;
+	uint32_t clip_index;
 	uint32_t index;
 	vod_status_t rc;
 
@@ -827,37 +826,35 @@ hds_muxer_init_state(
 
 	state->first_stream = vod_alloc(
 		request_context->pool, 
-		sizeof(state->first_stream[0]) * sequence->total_track_count);
+		sizeof(state->first_stream[0]) * media_set->total_track_count);
 	if (state->first_stream == NULL)
 	{
 		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
 			"hds_muxer_init_state: vod_alloc failed (2)");
 		return VOD_ALLOC_FAILED;
 	}
-	state->last_stream = state->first_stream + sequence->total_track_count;
+	state->last_stream = state->first_stream + media_set->total_track_count;
 	state->request_context = request_context;
 	state->cur_frame = NULL;
 	state->first_time = TRUE;
 
-	state->clips_start = sequence->filtered_clips;
-	state->clips_end = sequence->filtered_clips_end;
-	state->cur_clip = sequence->filtered_clips + 1;
+	state->media_set = media_set;
 
 	write_buffer_init(&state->write_buffer_state, request_context, write_callback, write_context, FALSE);
 
 	state->codec_config_size = 0;
 
 	index = 0;
-	cur_track = state->clips_start->first_track;
+	cur_track = media_set->filtered_tracks;
 	for (cur_stream = state->first_stream; cur_stream < state->last_stream; cur_stream++, cur_track++, index++)
 	{
 		cur_stream->index = index;
 
 		// get total frame count for this stream
 		cur_stream->frame_count = cur_track->frame_count;
-		for (track_array = state->cur_clip; track_array < state->clips_end; track_array++)
+		for (clip_index = 1; clip_index < media_set->clip_count; clip_index++)
 		{
-			cur_stream->frame_count += track_array->first_track[cur_stream->index].frame_count;
+			cur_stream->frame_count += cur_track[clip_index * media_set->total_track_count].frame_count;
 		}
 
 		// allocate the output offset
@@ -888,6 +885,8 @@ hds_muxer_init_state(
 				sizeof(uint32_t);
 		}
 	}
+
+	state->first_clip_track = cur_track;
 
 	state->enc_type = encryption_params->type;
 	if (state->enc_type != HDS_ENC_NONE)
@@ -962,7 +961,7 @@ hds_muxer_init_fragment(
 	hds_fragment_config_t* conf,
 	hds_encryption_params_t* encryption_params,
 	uint32_t segment_index,
-	media_sequence_t* sequence,
+	media_set_t* media_set,
 	write_callback_t write_callback,
 	void* write_context,
 	bool_t size_only,
@@ -970,15 +969,17 @@ hds_muxer_init_fragment(
 	size_t* total_fragment_size,
 	hds_muxer_state_t** processor_state)
 {
-	media_clip_filtered_t* cur_clip;
 	media_track_t* cur_track;
 	hds_muxer_stream_state_t* cur_stream;
 	frame_list_part_t* part;
+	media_sequence_t* sequence;
 	input_frame_t* cur_frame;
 	input_frame_t* last_frame;
 	hds_muxer_state_t* state;
 	vod_status_t rc;
+	uint32_t video_key_frame_count = 0;
 	uint32_t track_id = 1;
+	uint32_t clip_index;
 	uint32_t* output_offset;
 	uint32_t mdat_header_size;
 	size_t afra_atom_size;
@@ -988,11 +989,17 @@ hds_muxer_init_fragment(
 	size_t result_size;
 	u_char* p;
 
+	// get the total video key frame count
+	for (sequence = media_set->sequences; sequence < media_set->sequences_end; sequence++)
+	{
+		video_key_frame_count += sequence->video_key_frame_count;
+	}
+
 	// initialize the muxer state
 	rc = hds_muxer_init_state(
 		request_context, 
 		encryption_params,
-		sequence,
+		media_set,
 		write_callback, 
 		write_context, 
 		&state);
@@ -1005,7 +1012,7 @@ hds_muxer_init_fragment(
 
 	// get the mdat header size
 	mdat_header_size = ATOM_HEADER_SIZE;
-	if (sequence->video_key_frame_count == 0)
+	if (video_key_frame_count == 0)
 	{
 		// audio only - output the codec config up front, video - output the codec config before every key frame
 		mdat_header_size += state->codec_config_size;
@@ -1014,7 +1021,7 @@ hds_muxer_init_fragment(
 	// get the fragment header size
 	if (conf->generate_moof_atom)
 	{
-		afra_atom_size = ATOM_HEADER_SIZE + sizeof(afra_atom_t) + sizeof(afra_entry_t) * sequence->video_key_frame_count;
+		afra_atom_size = ATOM_HEADER_SIZE + sizeof(afra_atom_t) + sizeof(afra_entry_t) * video_key_frame_count;
 		moof_atom_size =
 			ATOM_HEADER_SIZE +
 			ATOM_HEADER_SIZE + sizeof(mfhd_atom_t);
@@ -1070,7 +1077,7 @@ hds_muxer_init_fragment(
 	if (conf->generate_moof_atom)
 	{
 		// afra
-		p = hds_write_afra_atom_header(p, afra_atom_size, sequence->video_key_frame_count);
+		p = hds_write_afra_atom_header(p, afra_atom_size, video_key_frame_count);
 
 		rc = hds_calculate_output_offsets_and_write_afra_entries(state, mdat_header_size, afra_atom_size + moof_atom_size, &mdat_atom_size, &p);
 		if (rc != VOD_OK)
@@ -1103,10 +1110,10 @@ hds_muxer_init_fragment(
 			switch (cur_stream->media_type)
 			{
 			case MEDIA_TYPE_VIDEO:
-				for (cur_clip = sequence->filtered_clips; cur_clip < sequence->filtered_clips_end; cur_clip++)
+				clip_index = 0;
+				cur_track = media_set->filtered_tracks + cur_stream->index;
+				for (;;)
 				{
-					cur_track = cur_clip->first_track + cur_stream->index;
-					
 					part = &cur_track->frames;
 					last_frame = part->last_frame;
 					for (cur_frame = part->first_frame, output_offset = cur_stream->first_frame_output_offset; ;
@@ -1125,14 +1132,21 @@ hds_muxer_init_fragment(
 
 						p = hds_write_single_video_frame_trun_atom(p, state->enc_type, cur_frame, *output_offset);
 					}
+
+					clip_index++;
+					if (clip_index >= media_set->clip_count)
+					{
+						break;
+					}
+					cur_track += media_set->total_track_count;
 				}
 				break;
 
 			case MEDIA_TYPE_AUDIO:
-				for (cur_clip = sequence->filtered_clips; cur_clip < sequence->filtered_clips_end; cur_clip++)
+				clip_index = 0;
+				cur_track = media_set->filtered_tracks + cur_stream->index;
+				for (;;)
 				{
-					cur_track = cur_clip->first_track + cur_stream->index;
-
 					part = &cur_track->frames;
 					last_frame = part->last_frame;
 					for (cur_frame = part->first_frame, output_offset = cur_stream->first_frame_output_offset; ;
@@ -1151,6 +1165,13 @@ hds_muxer_init_fragment(
 
 						p = hds_write_single_audio_frame_trun_atom(p, state->enc_type, cur_frame, *output_offset);
 					}
+
+					clip_index++;
+					if (clip_index >= media_set->clip_count)
+					{
+						break;
+					}
+					cur_track += media_set->total_track_count;
 				}
 				break;
 			}
@@ -1160,7 +1181,7 @@ hds_muxer_init_fragment(
 	// mdat
 	write_atom_header(p, mdat_atom_size, 'm', 'd', 'a', 't');
 
-	if (sequence->video_key_frame_count == 0)
+	if (video_key_frame_count == 0)
 	{
 		p = hds_muxer_write_codec_config(
 			p, 

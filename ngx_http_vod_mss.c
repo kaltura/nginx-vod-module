@@ -302,7 +302,7 @@ ngx_http_vod_mss_parse_uri_file_name(
 		*request = &mss_manifest_request;
 		start_pos += conf->mss.manifest_file_name_prefix.len;
 
-		rc = ngx_http_vod_parse_uri_file_name(r, start_pos, end_pos, FALSE, request_params);
+		rc = ngx_http_vod_parse_uri_file_name(r, start_pos, end_pos, PARSE_FILE_NAME_MULTI_STREAMS_PER_TYPE, request_params);
 		if (rc != NGX_OK)
 		{
 			ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
@@ -319,7 +319,7 @@ ngx_http_vod_mss_parse_uri_file_name(
 		end_pos -= (sizeof(m4s_file_ext) - 1);
 		*request = conf->drm_enabled ? &mss_playready_fragment_request : &mss_fragment_request;
 
-		return ngx_http_vod_parse_uri_file_name(r, start_pos, end_pos, TRUE, request_params);
+		return ngx_http_vod_parse_uri_file_name(r, start_pos, end_pos, PARSE_FILE_NAME_EXPECT_SEGMENT_INDEX, request_params);
 	}
 	else
 	{

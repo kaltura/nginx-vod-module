@@ -1,4 +1,5 @@
 #include "dash_packager.h"
+#include "../manifest_utils.h"
 #include "../mp4/mp4_defs.h"
 
 // macros
@@ -46,7 +47,7 @@
 #define VOD_DASH_MANIFEST_PERIOD_HEADER_START_ZERO								\
 	"  <Period id=\"0\" start=\"PT0S\">\n"
 
-#define VOD_DASH_MANIFEST_VIDEO_HEADER											\
+#define VOD_DASH_MANIFEST_ADAPTATION_HEADER_VIDEO								\
     "    <AdaptationSet\n"														\
     "        id=\"1\"\n"														\
     "        segmentAlignment=\"true\"\n"										\
@@ -54,7 +55,7 @@
     "        maxHeight=\"%uD\"\n"												\
     "        maxFrameRate=\"%V\">\n"
 
-#define VOD_DASH_MANIFEST_VIDEO_PREFIX											\
+#define VOD_DASH_MANIFEST_REPRESENTATION_HEADER_VIDEO							\
 	"      <Representation\n"													\
     "          id=\"%V\"\n"														\
     "          mimeType=\"%V\"\n"												\
@@ -66,14 +67,8 @@
     "          startWithSAP=\"1\"\n"											\
 	"          bandwidth=\"%uD\">\n"
 
-#define VOD_DASH_MANIFEST_VIDEO_SUFFIX											\
-	"      </Representation>\n"
-
-#define VOD_DASH_MANIFEST_VIDEO_FOOTER											\
-    "    </AdaptationSet>\n"
-
 // TODO: value should be the number of channels ?
-#define VOD_DASH_MANIFEST_AUDIO_HEADER											\
+#define VOD_DASH_MANIFEST_ADAPTATION_HEADER_AUDIO								\
     "    <AdaptationSet\n"														\
     "        id=\"2\"\n"														\
     "        segmentAlignment=\"true\">\n"										\
@@ -82,7 +77,17 @@
                                 "23003:3:audio_channel_configuration:2011\"\n"	\
     "          value=\"1\"/>\n"
 
-#define VOD_DASH_MANIFEST_AUDIO_PREFIX											\
+#define VOD_DASH_MANIFEST_ADAPTATION_HEADER_AUDIO_LANG							\
+    "    <AdaptationSet\n"														\
+	"        id=\"%uD\"\n"														\
+	"        lang=\"%s\"\n"														\
+	"        segmentAlignment=\"true\">\n"										\
+    "      <AudioChannelConfiguration\n"										\
+    "          schemeIdUri=\"urn:mpeg:dash:"									\
+                                "23003:3:audio_channel_configuration:2011\"\n"	\
+    "          value=\"1\"/>\n"
+
+#define VOD_DASH_MANIFEST_REPRESENTATION_HEADER_AUDIO							\
 	"      <Representation\n"													\
 	"          id=\"%V\"\n"														\
     "          mimeType=\"%V\"\n"												\
@@ -91,11 +96,11 @@
     "          startWithSAP=\"1\"\n"											\
     "          bandwidth=\"%uD\">\n"
 
-#define VOD_DASH_MANIFEST_AUDIO_SUFFIX											\
+#define VOD_DASH_MANIFEST_REPRESENTATION_FOOTER									\
 	"      </Representation>\n"
 
-#define VOD_DASH_MANIFEST_AUDIO_FOOTER											\
-    "    </AdaptationSet>\n"
+#define VOD_DASH_MANIFEST_ADAPTATION_FOOTER										\
+	"    </AdaptationSet>\n"
 
 // SegmentTemplate
 #define VOD_DASH_MANIFEST_SEGMENT_TEMPLATE_FIXED								\
@@ -153,6 +158,20 @@
 #define MAX_FILE_EXT_SIZE (sizeof("webm") - 1)
 
 //typedefs
+typedef struct {
+	dash_manifest_config_t* conf;
+	vod_str_t* base_url;
+	media_set_t* media_set;
+	write_tags_callback_t write_representation_tags;
+	void* representation_tags_writer_context;
+	u_char* base_url_temp_buffer;
+	segment_durations_t segment_durations[MEDIA_TYPE_COUNT];
+	segment_duration_item_t** cur_duration_items;
+	uint32_t clip_index;
+	uint64_t clip_start_offset;
+	adaptation_sets_t adaptation_sets;
+} write_period_context_t;
+
 typedef struct {
 	vod_str_t mime_type;
 	vod_str_t init_file_ext;
@@ -378,7 +397,7 @@ dash_packager_compare_tracks(uintptr_t bitrate_threshold, const media_info_t* mi
 			(mi1->u.video.height == mi2->u.video.height);
 	}
 
-	return TRUE;
+	return vod_str_equals(mi1->label, mi2->label);
 }
 
 static void
@@ -388,7 +407,7 @@ dash_packager_get_track_spec(
 	uint32_t clip_index,
 	uint32_t sequence_index,
 	uint32_t track_index,
-	int media_type_char)
+	uint32_t media_type)
 {
 	u_char* p = result->data;
 
@@ -402,7 +421,7 @@ dash_packager_get_track_spec(
 		p = vod_sprintf(p, "f%uD-", sequence_index + 1);
 	}
 
-	p = vod_sprintf(p, "%c%uD", media_type_char, track_index + 1);
+	p = vod_sprintf(p, "%c%uD", media_type == MEDIA_TYPE_VIDEO ? 'v' : 'a', track_index + 1);
 
 	result->len = p - result->data;
 }
@@ -549,7 +568,6 @@ dash_packager_write_segment_list(
 	media_track_t* cur_track,
 	uint32_t segment_count)
 {
-	int media_type_char = cur_track->media_info.media_type == MEDIA_TYPE_VIDEO ? 'v' : 'a';
 	vod_str_t track_spec;
 	vod_str_t cur_base_url;
 	u_char track_spec_buffer[MAX_TRACK_SPEC_LENGTH];
@@ -588,7 +606,7 @@ dash_packager_write_segment_list(
 		clip_index,
 		sequence_index,
 		cur_track->index,
-		media_type_char);
+		cur_track->media_info.media_type);
 
 	// write the header
 	p = vod_sprintf(p,
@@ -659,35 +677,29 @@ dash_packager_write_frame_rate(
 static u_char* 
 dash_packager_write_mpd_period(
 	u_char* p,
-	u_char* base_url_temp_buffer,
-	segment_durations_t* segment_durations,
-	segment_duration_item_t** cur_duration_items,
-	uint32_t clip_index,
-	uint64_t clip_start_offset,
-	dash_manifest_config_t* conf,
-	vod_str_t* base_url,
-	media_set_t* media_set,
-	write_tags_callback_t write_representation_tags,
-	void* representation_tags_writer_context)
+	write_period_context_t* context)
 {
-	media_clip_filtered_t* cur_clip;
+	segment_duration_item_t** cur_duration_items;
 	media_sequence_t* cur_sequence;
+	adaptation_set_t* adaptation_set;
 	media_track_t* reference_track = NULL;
-	media_track_t* last_track;
+	media_track_t** cur_track_ptr;
 	media_track_t* cur_track;
+	media_set_t* media_set = context->media_set;
 	vod_str_t representation_id;
 	vod_str_t frame_rate;
 	u_char representation_id_buffer[MAX_TRACK_SPEC_LENGTH];
 	u_char frame_rate_buffer[VOD_DASH_MAX_FRAME_RATE_LEN];
-	uint32_t filtered_clip_index;
+	uint32_t filtered_clip_offset;
 	uint32_t max_width = 0;
 	uint32_t max_height = 0;
 	uint32_t max_framerate_duration = 0;
 	uint32_t segment_count = 0;
 	uint32_t start_number;
+	uint32_t media_type;
+	uint32_t audio_adapt_id = 2;
 
 	frame_rate.data = frame_rate_buffer;
-
 	representation_id.data = representation_id_buffer;
 
 	if (media_set->use_discontinuity)
@@ -697,17 +709,17 @@ dash_packager_write_mpd_period(
 		case MEDIA_SET_VOD:
 			p = vod_sprintf(p,
 				VOD_DASH_MANIFEST_PERIOD_HEADER_DURATION,
-				media_set->initial_clip_index + clip_index,
-				media_set->durations[clip_index] / 1000,
-				media_set->durations[clip_index] % 1000);
+				media_set->initial_clip_index + context->clip_index,
+				media_set->durations[context->clip_index] / 1000,
+				media_set->durations[context->clip_index] % 1000);
 			break;
 
 		case MEDIA_SET_LIVE:
 			p = vod_sprintf(p,
 				VOD_DASH_MANIFEST_PERIOD_HEADER_START,
-				media_set->initial_clip_index + clip_index,
-				clip_start_offset / 1000,
-				clip_start_offset % 1000);
+				media_set->initial_clip_index + context->clip_index,
+				context->clip_start_offset / 1000,
+				context->clip_start_offset % 1000);
 			break;
 		}
 	}
@@ -726,54 +738,73 @@ dash_packager_write_mpd_period(
 	}
 
 	// Note: clip_index can be greater than clip count when consistentSequenceMediaInfo is true
-	filtered_clip_index = clip_index < media_set->clip_count ? clip_index : 0;
+	filtered_clip_offset = context->clip_index < media_set->clip_count ? 
+		context->clip_index * media_set->total_track_count : 0;
 
-	// video adaptation set
-	if (media_set->track_count[MEDIA_TYPE_VIDEO] != 0)
+	// print the adaptation sets
+	for (adaptation_set = context->adaptation_sets.first, cur_duration_items = context->cur_duration_items;
+		adaptation_set < context->adaptation_sets.last;
+		adaptation_set++, cur_duration_items++)
 	{
-		// get the max width, height and frame rate
-		cur_track = media_set->filtered_tracks + filtered_clip_index * media_set->total_track_count;
-		last_track = cur_track + media_set->total_track_count;
-		for (; cur_track < last_track; cur_track++)
+		media_type = adaptation_set->type;
+		switch (media_type)
 		{
-			if (cur_track->media_info.media_type != MEDIA_TYPE_VIDEO)
+		case MEDIA_TYPE_VIDEO:
+			// get the max width, height and frame rate
+			for (cur_track_ptr = adaptation_set->first;
+				cur_track_ptr < adaptation_set->last;
+				cur_track_ptr++)
 			{
-				continue;
+				cur_track = (*cur_track_ptr) + filtered_clip_offset;
+
+				if (cur_track->media_info.u.video.width > max_width)
+				{
+					max_width = cur_track->media_info.u.video.width;
+				}
+
+				if (cur_track->media_info.u.video.height > max_height)
+				{
+					max_height = cur_track->media_info.u.video.height;
+				}
+
+				if (max_framerate_duration == 0 ||
+					max_framerate_duration > cur_track->media_info.min_frame_duration)
+				{
+					max_framerate_duration = cur_track->media_info.min_frame_duration;
+				}
 			}
 
-			if (cur_track->media_info.u.video.width > max_width)
-			{
-				max_width = cur_track->media_info.u.video.width;
-			}
+			reference_track = adaptation_set->last[-1] + filtered_clip_offset;		// Note: taking the last track only for compatiblity with past versions of this module
 
-			if (cur_track->media_info.u.video.height > max_height)
-			{
-				max_height = cur_track->media_info.u.video.height;
-			}
+			// print the header
+			dash_packager_write_frame_rate(
+				max_framerate_duration,
+				DASH_TIMESCALE,
+				&frame_rate);
 
-			if (max_framerate_duration == 0 ||
-				max_framerate_duration > cur_track->media_info.min_frame_duration)
-			{
-				max_framerate_duration = cur_track->media_info.min_frame_duration;
-			}
+			p = vod_sprintf(p,
+				VOD_DASH_MANIFEST_ADAPTATION_HEADER_VIDEO,
+				max_width,
+				max_height,
+				&frame_rate);
+			break;
 
-			reference_track = cur_track;
+		case MEDIA_TYPE_AUDIO:
+			reference_track = (*adaptation_set->first) + filtered_clip_offset;
+			if (context->adaptation_sets.count[ADAPTATION_TYPE_AUDIO] > 1)
+			{
+				p = vod_sprintf(p, VOD_DASH_MANIFEST_ADAPTATION_HEADER_AUDIO_LANG, 
+					audio_adapt_id++, lang_get_iso639_1_name(reference_track->media_info.language));
+			}
+			else
+			{
+				p = vod_copy(p, VOD_DASH_MANIFEST_ADAPTATION_HEADER_AUDIO, sizeof(VOD_DASH_MANIFEST_ADAPTATION_HEADER_AUDIO) - 1);
+			}
+			break;
 		}
 
-		// print the header
-		dash_packager_write_frame_rate(
-			max_framerate_duration,
-			DASH_TIMESCALE,
-			&frame_rate);
-
-		p = vod_sprintf(p,
-			VOD_DASH_MANIFEST_VIDEO_HEADER,
-			max_width,
-			max_height,
-			&frame_rate);
-
 		// get the segment index start number
-		if (clip_index == 0)
+		if (context->clip_index == 0)
 		{
 			start_number = media_set->initial_segment_index - media_set->initial_clip_segment_index;
 		}
@@ -783,66 +814,70 @@ dash_packager_write_mpd_period(
 		}
 
 		// print the segment template
-		switch (conf->manifest_format)
+		switch (context->conf->manifest_format)
 		{
 		case FORMAT_SEGMENT_TEMPLATE:
 			p = dash_packager_write_segment_template(
 				p,
-				conf,
+				context->conf,
 				start_number,
 				media_set,
 				reference_track,
-				base_url);
+				context->base_url);
 			break;
 
 		case FORMAT_SEGMENT_TIMELINE:
 			p = dash_packager_write_segment_timeline(
 				p,
-				conf,
+				context->conf,
 				start_number,
-				clip_start_offset,
+				context->clip_start_offset,
 				reference_track,
-				&segment_durations[MEDIA_TYPE_VIDEO],
-				&cur_duration_items[MEDIA_TYPE_VIDEO],
-				base_url);
+				&context->segment_durations[media_type],
+				cur_duration_items,
+				context->base_url);
 			break;
 
 		case FORMAT_SEGMENT_LIST:
 			if (media_set->use_discontinuity)
 			{
 				segment_count = dash_packager_get_cur_clip_segment_count(
-					&segment_durations[MEDIA_TYPE_VIDEO],
-					&cur_duration_items[MEDIA_TYPE_VIDEO]);
+					&context->segment_durations[media_type],
+					cur_duration_items);
 			}
 			else
 			{
-				segment_count = segment_durations[MEDIA_TYPE_VIDEO].segment_count;
+				segment_count = context->segment_durations[media_type].segment_count;
 			}
 			break;
 		}
 
 		// print the representations
-		for (cur_sequence = media_set->sequences; cur_sequence < media_set->sequences_end; cur_sequence++)
+		for (cur_track_ptr = adaptation_set->first;
+			cur_track_ptr < adaptation_set->last;
+			cur_track_ptr++)
 		{
-			cur_clip = &cur_sequence->filtered_clips[filtered_clip_index];
-			last_track = cur_clip->last_track;
-			for (cur_track = cur_clip->first_track; cur_track < last_track; cur_track++)
+			cur_track = (*cur_track_ptr) + filtered_clip_offset;
+			cur_sequence = cur_track->file_info.source->sequence;
+
+			dash_packager_get_track_spec(
+				&representation_id, 
+				media_set, 
+				context->clip_index, 
+				cur_sequence->index, 
+				cur_track->index, 
+				cur_track->media_info.media_type);
+
+			switch (media_type)
 			{
-				if (cur_track->media_info.media_type != MEDIA_TYPE_VIDEO)
-				{
-					continue;
-				}
-
-				dash_packager_get_track_spec(
-					&representation_id, media_set, clip_index, cur_sequence->index, cur_track->index, 'v');
-
+			case MEDIA_TYPE_VIDEO:
 				dash_packager_write_frame_rate(
 					cur_track->media_info.min_frame_duration,
 					DASH_TIMESCALE,
 					&frame_rate);
 
 				p = vod_sprintf(p,
-					VOD_DASH_MANIFEST_VIDEO_PREFIX,
+					VOD_DASH_MANIFEST_REPRESENTATION_HEADER_VIDEO,
 					&representation_id,
 					&dash_codecs[cur_track->media_info.codec_id].mime_type,
 					&cur_track->media_info.codec_name,
@@ -851,155 +886,45 @@ dash_packager_write_mpd_period(
 					&frame_rate,
 					cur_track->media_info.bitrate
 					);
+				break;
 
-				if (conf->manifest_format == FORMAT_SEGMENT_LIST)
-				{
-					p = dash_packager_write_segment_list(
-						p,
-						conf,
-						start_number,
-						media_set,
-						base_url,
-						base_url_temp_buffer,
-						clip_index,
-						cur_sequence,
-						cur_track,
-						segment_count);
-				}
-
-				// write any additional tags
-				if (write_representation_tags != NULL)
-				{
-					p = write_representation_tags(representation_tags_writer_context, p, cur_track);
-				}
-
-				p = vod_copy(p, VOD_DASH_MANIFEST_VIDEO_SUFFIX, sizeof(VOD_DASH_MANIFEST_VIDEO_SUFFIX) - 1);
-			}
-		}
-
-		// print the footer
-		p = vod_copy(p, VOD_DASH_MANIFEST_VIDEO_FOOTER, sizeof(VOD_DASH_MANIFEST_VIDEO_FOOTER) - 1);
-	}
-
-	// audio adaptation set
-	if (media_set->track_count[MEDIA_TYPE_AUDIO] != 0)
-	{
-		// find some reference audio track
-		cur_track = media_set->filtered_tracks + filtered_clip_index * media_set->total_track_count;
-		last_track = cur_track + media_set->total_track_count;
-		for (; cur_track < last_track; cur_track++)
-		{
-			if (cur_track->media_info.media_type != MEDIA_TYPE_AUDIO)
-			{
-				continue;
-			}
-
-			reference_track = cur_track;
-			break;
-		}
-
-		// print the header
-		p = vod_copy(p, VOD_DASH_MANIFEST_AUDIO_HEADER, sizeof(VOD_DASH_MANIFEST_AUDIO_HEADER) - 1);
-
-		// get the segment index start number
-		if (clip_index == 0)
-		{
-			start_number = media_set->initial_segment_index - media_set->initial_clip_segment_index;
-		}
-		else
-		{
-			start_number = 0;
-		}
-
-		// print the segment template
-		switch (conf->manifest_format)
-		{
-		case FORMAT_SEGMENT_TEMPLATE:
-			p = dash_packager_write_segment_template(
-				p,
-				conf,
-				start_number,
-				media_set,
-				reference_track,
-				base_url);
-			break;
-
-		case FORMAT_SEGMENT_TIMELINE:
-			p = dash_packager_write_segment_timeline(
-				p,
-				conf,
-				start_number,
-				clip_start_offset,
-				reference_track,
-				&segment_durations[MEDIA_TYPE_AUDIO],
-				&cur_duration_items[MEDIA_TYPE_AUDIO],
-				base_url);
-			break;
-
-		case FORMAT_SEGMENT_LIST:
-			if (media_set->use_discontinuity)
-			{
-				segment_count = dash_packager_get_cur_clip_segment_count(
-					&segment_durations[MEDIA_TYPE_AUDIO],
-					&cur_duration_items[MEDIA_TYPE_AUDIO]);
-			}
-			else
-			{
-				segment_count = segment_durations[MEDIA_TYPE_AUDIO].segment_count;
-			}
-			break;
-		}
-
-		// print the representations
-		for (cur_sequence = media_set->sequences; cur_sequence < media_set->sequences_end; cur_sequence++)
-		{
-			cur_clip = &cur_sequence->filtered_clips[filtered_clip_index];
-			last_track = cur_clip->last_track;
-			for (cur_track = cur_clip->first_track; cur_track < last_track; cur_track++)
-			{
-				if (cur_track->media_info.media_type != MEDIA_TYPE_AUDIO)
-				{
-					continue;
-				}
-
-				dash_packager_get_track_spec(
-					&representation_id, media_set, clip_index, cur_sequence->index, cur_track->index, 'a');
-
+			case MEDIA_TYPE_AUDIO:
 				p = vod_sprintf(p,
-					VOD_DASH_MANIFEST_AUDIO_PREFIX,
+					VOD_DASH_MANIFEST_REPRESENTATION_HEADER_AUDIO,
 					&representation_id,
 					&dash_codecs[cur_track->media_info.codec_id].mime_type,
 					&cur_track->media_info.codec_name,
 					cur_track->media_info.u.audio.sample_rate,
 					cur_track->media_info.bitrate);
-
-				if (conf->manifest_format == FORMAT_SEGMENT_LIST)
-				{
-					p = dash_packager_write_segment_list(
-						p,
-						conf,
-						start_number,
-						media_set,
-						base_url,
-						base_url_temp_buffer,
-						clip_index,
-						cur_sequence,
-						cur_track,
-						segment_count);
-				}
-
-				// write any additional tags
-				if (write_representation_tags != NULL)
-				{
-					p = write_representation_tags(representation_tags_writer_context, p, cur_track);
-				}
-
-				p = vod_copy(p, VOD_DASH_MANIFEST_AUDIO_SUFFIX, sizeof(VOD_DASH_MANIFEST_AUDIO_SUFFIX)-1);
+				break;
 			}
+
+			if (context->conf->manifest_format == FORMAT_SEGMENT_LIST)
+			{
+				p = dash_packager_write_segment_list(
+					p,
+					context->conf,
+					start_number,
+					media_set,
+					context->base_url,
+					context->base_url_temp_buffer,
+					context->clip_index,
+					cur_sequence,
+					cur_track,
+					segment_count);
+			}
+
+			// write any additional tags
+			if (context->write_representation_tags != NULL)
+			{
+				p = context->write_representation_tags(context->representation_tags_writer_context, p, cur_track);
+			}
+
+			p = vod_copy(p, VOD_DASH_MANIFEST_REPRESENTATION_FOOTER, sizeof(VOD_DASH_MANIFEST_REPRESENTATION_FOOTER) - 1);
 		}
 
 		// print the footer
-		p = vod_copy(p, VOD_DASH_MANIFEST_AUDIO_FOOTER, sizeof(VOD_DASH_MANIFEST_AUDIO_FOOTER) - 1);
+		p = vod_copy(p, VOD_DASH_MANIFEST_ADAPTATION_FOOTER, sizeof(VOD_DASH_MANIFEST_ADAPTATION_FOOTER) - 1);
 	}
 
 	p = vod_copy(p, VOD_DASH_MANIFEST_PERIOD_FOOTER, sizeof(VOD_DASH_MANIFEST_PERIOD_FOOTER) - 1);
@@ -1018,12 +943,12 @@ dash_packager_get_segment_list_total_size(
 	segment_duration_item_t* cur_duration_item;
 	media_track_t* last_track;
 	media_track_t* cur_track;
-	uint32_t filtered_clip_index;
+	uint32_t filtered_clip_offset;
 	uint32_t period_count = media_set->use_discontinuity ? media_set->total_clip_count : 1;
 	uint32_t segment_count;
 	uint32_t clip_index;
 	uint32_t media_type;
-	size_t base_url_len;
+	size_t base_url_len = 0;
 	size_t result = 0;
 
 	for (media_type = 0; media_type < MEDIA_TYPE_COUNT; media_type++)
@@ -1037,7 +962,7 @@ dash_packager_get_segment_list_total_size(
 
 		for (clip_index = 0; clip_index < period_count; clip_index++)
 		{
-			filtered_clip_index = clip_index < media_set->clip_count ? clip_index : 0;
+			filtered_clip_offset = clip_index < media_set->clip_count ? clip_index * media_set->total_track_count : 0;
 
 			if (media_set->use_discontinuity)
 			{
@@ -1050,7 +975,7 @@ dash_packager_get_segment_list_total_size(
 				segment_count = segment_durations[media_type].segment_count;
 			}
 
-			cur_track = media_set->filtered_tracks + filtered_clip_index * media_set->total_track_count;
+			cur_track = media_set->filtered_tracks + filtered_clip_offset;
 			last_track = cur_track + media_set->total_track_count;
 			for (; cur_track < last_track; cur_track++)
 			{
@@ -1075,10 +1000,6 @@ dash_packager_get_segment_list_total_size(
 					{
 						*base_url_temp_buffer_size = base_url_len;
 					}
-				}
-				else
-				{
-					base_url_len = 0;
 				}
 
 				result += 
@@ -1143,23 +1064,33 @@ dash_packager_build_mpd(
 	void* representation_tags_writer_context,
 	vod_str_t* result)
 {
-	segment_durations_t segment_durations[MEDIA_TYPE_COUNT];
-	segment_duration_item_t* cur_duration_items[MEDIA_TYPE_COUNT];
+	segment_duration_item_t** cur_duration_items;
+	write_period_context_t context;
+	adaptation_set_t* adaptation_set;
 	segmenter_conf_t* segmenter_conf = media_set->segmenter_conf;
 	vod_tm_t start_time_gmt;
 	size_t base_url_temp_buffer_size = 0;
 	size_t base_period_size;
 	size_t result_size = 0;
 	size_t urls_length;
-	uint64_t clip_start_offset;
 	uint32_t min_update_period;
 	uint32_t window_size;
 	uint32_t period_count = media_set->use_discontinuity ? media_set->total_clip_count : 1;
-	uint32_t clip_index;
 	uint32_t media_type;
 	vod_status_t rc;
-	u_char* base_url_temp_buffer = NULL;
 	u_char* p = NULL;
+
+	// remove redundant tracks
+	dash_packager_remove_redundant_tracks(
+		conf->duplicate_bitrate_threshold,
+		media_set);
+
+	// get the adaptation sets
+	rc = manifest_utils_get_adaptation_sets(request_context, media_set, 0, &context.adaptation_sets);
+	if (rc != VOD_OK)
+	{
+		return rc;
+	}
 
 	// get segment durations and count for each media type
 	for (media_type = 0; media_type < MEDIA_TYPE_COUNT; media_type++)
@@ -1175,33 +1106,32 @@ dash_packager_build_mpd(
 			media_set,
 			NULL,
 			media_type,
-			&segment_durations[media_type]);
+			&context.segment_durations[media_type]);
 		if (rc != VOD_OK)
 		{
 			return rc;
 		}
 	}
 
-	// remove redundant tracks
-	dash_packager_remove_redundant_tracks(
-		conf->duplicate_bitrate_threshold,
-		media_set);
-
 	// calculate the total size
-	urls_length = 2 * base_url->len + conf->init_file_name_prefix.len + conf->fragment_file_name_prefix.len + MAX_FILE_EXT_SIZE;
+	urls_length = 2 * base_url->len + 2 * MAX_FILE_EXT_SIZE +
+		conf->init_file_name_prefix.len + 
+		conf->fragment_file_name_prefix.len;
 
 	base_period_size =
 		sizeof(VOD_DASH_MANIFEST_PERIOD_HEADER_DURATION) - 1 + 3 * VOD_INT32_LEN +
-			sizeof(VOD_DASH_MANIFEST_VIDEO_HEADER) - 1 + 2 * VOD_INT32_LEN + VOD_DASH_MAX_FRAME_RATE_LEN +
-				media_set->track_count[MEDIA_TYPE_VIDEO] * (
-				sizeof(VOD_DASH_MANIFEST_VIDEO_PREFIX) - 1 + MAX_TRACK_SPEC_LENGTH + MAX_MIME_TYPE_SIZE + MAX_CODEC_NAME_SIZE + 3 * VOD_INT32_LEN + VOD_DASH_MAX_FRAME_RATE_LEN +
-				sizeof(VOD_DASH_MANIFEST_VIDEO_SUFFIX) - 1) +
-			sizeof(VOD_DASH_MANIFEST_VIDEO_FOOTER) - 1 +
-			sizeof(VOD_DASH_MANIFEST_AUDIO_HEADER) - 1 + 
-				media_set->track_count[MEDIA_TYPE_AUDIO] * (
-				sizeof(VOD_DASH_MANIFEST_AUDIO_PREFIX) - 1 + MAX_TRACK_SPEC_LENGTH + MAX_MIME_TYPE_SIZE + MAX_CODEC_NAME_SIZE + 2 * VOD_INT32_LEN +
-				sizeof(VOD_DASH_MANIFEST_AUDIO_SUFFIX) - 1) +
-			sizeof(VOD_DASH_MANIFEST_AUDIO_FOOTER) - 1 +
+			// video adaptations
+			(sizeof(VOD_DASH_MANIFEST_ADAPTATION_HEADER_VIDEO) - 1 + 2 * VOD_INT32_LEN + VOD_DASH_MAX_FRAME_RATE_LEN +
+			sizeof(VOD_DASH_MANIFEST_ADAPTATION_FOOTER) - 1) * context.adaptation_sets.count[ADAPTATION_TYPE_VIDEO] +
+			// video representations
+			(sizeof(VOD_DASH_MANIFEST_REPRESENTATION_HEADER_VIDEO) - 1 + MAX_TRACK_SPEC_LENGTH + MAX_MIME_TYPE_SIZE + MAX_CODEC_NAME_SIZE + 3 * VOD_INT32_LEN + VOD_DASH_MAX_FRAME_RATE_LEN +
+			sizeof(VOD_DASH_MANIFEST_REPRESENTATION_FOOTER) - 1) * media_set->track_count[MEDIA_TYPE_VIDEO] +
+			// audio adaptations
+			(sizeof(VOD_DASH_MANIFEST_ADAPTATION_HEADER_AUDIO_LANG) - 1 + VOD_INT32_LEN + LANG_ISO639_1_LEN +
+			sizeof(VOD_DASH_MANIFEST_ADAPTATION_FOOTER) - 1) * context.adaptation_sets.count[ADAPTATION_TYPE_AUDIO] +
+			// audio representations
+			(sizeof(VOD_DASH_MANIFEST_REPRESENTATION_HEADER_AUDIO) - 1 + MAX_TRACK_SPEC_LENGTH + MAX_MIME_TYPE_SIZE + MAX_CODEC_NAME_SIZE + 2 * VOD_INT32_LEN +
+			sizeof(VOD_DASH_MANIFEST_REPRESENTATION_FOOTER) - 1) * media_set->track_count[MEDIA_TYPE_AUDIO] +
 		sizeof(VOD_DASH_MANIFEST_PERIOD_FOOTER) - 1 +
 		representation_tags_size;
 
@@ -1223,22 +1153,23 @@ dash_packager_build_mpd(
 	case FORMAT_SEGMENT_TEMPLATE:
 		result_size += 
 			(sizeof(VOD_DASH_MANIFEST_SEGMENT_TEMPLATE_FIXED) - 1 + VOD_INT32_LEN + VOD_INT64_LEN + urls_length) * 
-			MEDIA_TYPE_COUNT * period_count;
+			context.adaptation_sets.total_count * period_count;
 		break;
 
 	case FORMAT_SEGMENT_TIMELINE:
 		for (media_type = 0; media_type < MEDIA_TYPE_COUNT; media_type++)
 		{
-			if (media_set->track_count[media_type] == 0)
+			if (context.adaptation_sets.count[media_type] == 0)
 			{
 				continue;
 			}
 
 			result_size += 
-				(sizeof(VOD_DASH_MANIFEST_SEGMENT_TEMPLATE_HEADER) - 1 + VOD_INT32_LEN + urls_length +
-				sizeof(VOD_DASH_MANIFEST_SEGMENT_TEMPLATE_FOOTER) - 1) * period_count +
-				(sizeof(VOD_DASH_MANIFEST_SEGMENT_REPEAT) - 1 + 2 * VOD_INT32_LEN) * segment_durations[media_type].item_count +
-				sizeof(VOD_DASH_MANIFEST_SEGMENT_REPEAT_TIME) - 1 + VOD_INT64_LEN;
+				((sizeof(VOD_DASH_MANIFEST_SEGMENT_TEMPLATE_HEADER) - 1 + VOD_INT32_LEN + urls_length +
+				sizeof(VOD_DASH_MANIFEST_SEGMENT_TEMPLATE_FOOTER) - 1 + 
+				sizeof(VOD_DASH_MANIFEST_SEGMENT_REPEAT_TIME) - 1 + VOD_INT64_LEN) * period_count +
+				(sizeof(VOD_DASH_MANIFEST_SEGMENT_REPEAT) - 1 + 2 * VOD_INT32_LEN) * context.segment_durations[media_type].item_count) * 
+				context.adaptation_sets.count[media_type];
 		}
 		break;
 
@@ -1246,7 +1177,7 @@ dash_packager_build_mpd(
 		result_size += dash_packager_get_segment_list_total_size(
 			conf,
 			media_set,
-			segment_durations,
+			context.segment_durations,
 			base_url, 
 			&base_url_temp_buffer_size);
 		break;
@@ -1261,17 +1192,25 @@ dash_packager_build_mpd(
 		return VOD_ALLOC_FAILED;
 	}
 
-	if (base_url_temp_buffer_size != 0)
+	context.base_url_temp_buffer = vod_alloc(request_context->pool, base_url_temp_buffer_size + 
+		sizeof(context.cur_duration_items[0]) * context.adaptation_sets.total_count);
+	if (context.base_url_temp_buffer == NULL)
 	{
-		base_url_temp_buffer = vod_alloc(request_context->pool, base_url_temp_buffer_size);
-		if (base_url_temp_buffer == NULL)
-		{
-			vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
-				"dash_packager_build_mpd: vod_alloc failed (2)");
-			return VOD_ALLOC_FAILED;
-		}
+		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
+			"dash_packager_build_mpd: vod_alloc failed (2)");
+		return VOD_ALLOC_FAILED;
 	}
+
+	// initialize the duration items pointers to the beginning (according to the media type)
+	context.cur_duration_items = (void*)(context.base_url_temp_buffer + base_url_temp_buffer_size);
 	
+	for (adaptation_set = context.adaptation_sets.first, cur_duration_items = context.cur_duration_items;
+		adaptation_set < context.adaptation_sets.last;
+		adaptation_set++, cur_duration_items++)
+	{
+		*cur_duration_items = context.segment_durations[adaptation_set->type].items;
+	}
+
 	// print the manifest header
 	switch (media_set->type)
 	{
@@ -1287,10 +1226,10 @@ dash_packager_build_mpd(
 	case MEDIA_SET_LIVE:
 		media_type = media_set->track_count[MEDIA_TYPE_VIDEO] != 0 ? MEDIA_TYPE_VIDEO : MEDIA_TYPE_AUDIO;
 
-		window_size = segment_durations[media_type].end_time - segment_durations[media_type].start_time;
+		window_size = context.segment_durations[media_type].end_time - context.segment_durations[media_type].start_time;
 		min_update_period = segmenter_conf->segment_duration / 2;
 
-		vod_gmtime(segment_durations[media_type].start_time / 1000, &start_time_gmt);
+		vod_gmtime(context.segment_durations[media_type].start_time / 1000, &start_time_gmt);
 
 		p = vod_sprintf(result->data,
 			VOD_DASH_MANIFEST_HEADER_LIVE,
@@ -1308,34 +1247,27 @@ dash_packager_build_mpd(
 		break;
 	}
 
-	cur_duration_items[MEDIA_TYPE_VIDEO] = segment_durations[MEDIA_TYPE_VIDEO].items;
-	cur_duration_items[MEDIA_TYPE_AUDIO] = segment_durations[MEDIA_TYPE_AUDIO].items;
-
-	clip_start_offset = 0;
-	clip_index = 0;
+	context.clip_start_offset = 0;
+	context.clip_index = 0;
+	context.conf = conf;
+	context.base_url = base_url;
+	context.media_set = media_set;
+	context.write_representation_tags = write_representation_tags;
+	context.representation_tags_writer_context = representation_tags_writer_context;
 
 	for (;;)
 	{
 		p = dash_packager_write_mpd_period(
 			p,
-			base_url_temp_buffer,
-			segment_durations,
-			cur_duration_items,
-			clip_index,
-			clip_start_offset,
-			conf,
-			base_url,
-			media_set,
-			write_representation_tags,
-			representation_tags_writer_context);
+			&context);
 
-		clip_index++;
-		if (clip_index >= period_count)
+		context.clip_index++;
+		if (context.clip_index >= period_count)
 		{
 			break;
 		}
 
-		clip_start_offset += media_set->durations[clip_index];
+		context.clip_start_offset += media_set->durations[context.clip_index - 1];
 	}
 
 	p = vod_copy(p, VOD_DASH_MANIFEST_FOOTER, sizeof(VOD_DASH_MANIFEST_FOOTER) - 1);

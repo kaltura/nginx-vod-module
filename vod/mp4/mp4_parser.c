@@ -387,6 +387,7 @@ mp4_parser_parse_mdhd_atom(atom_info_t* atom_info, metadata_parse_context_t* con
 	const mdhd64_atom_t* atom64 = (const mdhd64_atom_t*)atom_info->ptr;
 	uint64_t duration;
 	uint32_t timescale;
+	uint16_t language;
 
 	if (atom_info->size < sizeof(*atom))
 	{
@@ -406,11 +407,13 @@ mp4_parser_parse_mdhd_atom(atom_info_t* atom_info, metadata_parse_context_t* con
 			
 		timescale = parse_be32(atom64->timescale);
 		duration = parse_be64(atom64->duration);
+		language = parse_be16(atom64->language);
 	}
 	else
 	{
 		timescale = parse_be32(atom->timescale);
 		duration = parse_be32(atom->duration);
+		language = parse_be16(atom->language);
 	}
 	
 	if (timescale == 0)
@@ -431,6 +434,8 @@ mp4_parser_parse_mdhd_atom(atom_info_t* atom_info, metadata_parse_context_t* con
 	context->media_info.frames_timescale = timescale;
 	context->media_info.full_duration = duration;
 	context->media_info.duration_millis = rescale_time(duration, timescale, 1000);
+	context->media_info.language = lang_parse_iso639_2_code(language);
+	lang_get_native_name(context->media_info.language, &context->media_info.label);
 
 	return VOD_OK;
 }
@@ -1883,6 +1888,7 @@ mp4_parser_parse_stsd_atom(atom_info_t* atom_info, metadata_parse_context_t* con
 {
 	const stsd_atom_t* atom = (const stsd_atom_t*)atom_info->ptr;
 	uint32_t entries;
+	const u_char* entry_end_pos;
 	const u_char* cur_pos;
 	const u_char* end_pos;
 	uint32_t size;
@@ -1926,37 +1932,48 @@ mp4_parser_parse_stsd_atom(atom_info_t* atom_info, metadata_parse_context_t* con
 	
 		context->media_info.format = parse_le32(((stsd_entry_header_t*)cur_pos)->format);
 		size = parse_be32(((stsd_entry_header_t*)cur_pos)->size);
+		if (size > end_pos - cur_pos)
+		{
+			vod_log_error(VOD_LOG_ERR, context->request_context->log, 0,
+				"mp4_parser_parse_stsd_atom: stsd entry overflow the stream");
+			return VOD_BAD_DATA;
+		}
+
+		entry_end_pos = cur_pos + size;
+
 		cur_pos += sizeof(stsd_entry_header_t);
 		if (size >= 16)
 		{
 			cur_pos += sizeof(stsd_large_entry_header_t);
 		}
 		
-		cur_pos = skip_function(cur_pos, end_pos, context);
+		cur_pos = skip_function(cur_pos, entry_end_pos, context);
 		if (cur_pos == NULL)
 		{
 			vod_log_error(VOD_LOG_ERR, context->request_context->log, 0,
 				"mp4_parser_parse_stsd_atom: failed to skip audio/video data");
 			return VOD_BAD_DATA;
 		}
-	}
 
-	if (cur_pos > end_pos)
-	{
-		vod_log_error(VOD_LOG_ERR, context->request_context->log, 0,
-			"mp4_parser_parse_stsd_atom: stream overflow before reaching extra data");
-		return VOD_BAD_DATA;
-	}
-	
-	if (cur_pos < end_pos)
-	{
-		vod_log_buffer(VOD_LOG_DEBUG_LEVEL, context->request_context->log, 0, "mp4_parser_parse_stsd_atom: extra data ", cur_pos, end_pos - cur_pos);
-		
-		rc = mp4_parser_parse_atoms(context->request_context, cur_pos, end_pos - cur_pos, TRUE, parse_function, context);
-		if (rc != VOD_OK)
+		if (cur_pos > entry_end_pos)
 		{
-			return rc;
+			vod_log_error(VOD_LOG_ERR, context->request_context->log, 0,
+				"mp4_parser_parse_stsd_atom: stream overflow before reaching extra data");
+			return VOD_BAD_DATA;
 		}
+
+		if (cur_pos + 8 < entry_end_pos)
+		{
+			vod_log_buffer(VOD_LOG_DEBUG_LEVEL, context->request_context->log, 0, "mp4_parser_parse_stsd_atom: extra data ", cur_pos, entry_end_pos - cur_pos);
+
+			rc = mp4_parser_parse_atoms(context->request_context, cur_pos, entry_end_pos - cur_pos, TRUE, parse_function, context);
+			if (rc != VOD_OK)
+			{
+				return rc;
+			}
+		}
+
+		cur_pos = entry_end_pos;
 	}
 	
 	return VOD_OK;
@@ -2137,6 +2154,7 @@ mp4_parser_process_moov_atom_callback(void* ctx, atom_info_t* atom_info)
 	mp4_track_base_metadata_t* result_track;
 	mp4_base_metadata_t* result = context->result;
 	trak_atom_infos_t trak_atom_infos;
+	media_sequence_t* sequence;
 	uint32_t duration_millis;
 	uint32_t track_index;
 	bool_t extra_data_required;
@@ -2262,9 +2280,38 @@ mp4_parser_process_moov_atom_callback(void* ctx, atom_info_t* atom_info)
 		return rc;
 	}
 
+	// get the duration and language
+	rc = mp4_parser_parse_mdhd_atom(&trak_atom_infos.mdhd, &metadata_parse_context);
+	if (rc != VOD_OK)
+	{
+		return rc;
+	}
+
+	// inherit the sequence language and label
+	sequence = context->file_info->source->sequence;
+	if (sequence->label.len != 0)
+	{
+		metadata_parse_context.media_info.label = sequence->label;
+
+		// Note: it is not possible for the sequence to have a language without a label,
+		//              since a default label will be assigned according to the language
+		if (sequence->language != 0)
+		{
+			metadata_parse_context.media_info.language = sequence->language;
+		}
+	}
+
 	// check whether we should include this track
 	track_index = context->track_indexes[metadata_parse_context.media_info.media_type]++;
 	if ((context->parse_params.required_tracks_mask[metadata_parse_context.media_info.media_type] & (1 << track_index)) == 0)
+	{
+		return VOD_OK;
+	}
+
+	// filter by language
+	if (context->parse_params.langs_mask != NULL &&
+		metadata_parse_context.media_info.media_type == MEDIA_TYPE_AUDIO &&
+		!vod_is_bit_set(context->parse_params.langs_mask, metadata_parse_context.media_info.language))
 	{
 		return VOD_OK;
 	}
@@ -2279,13 +2326,6 @@ mp4_parser_process_moov_atom_callback(void* ctx, atom_info_t* atom_info)
 		{
 			return rc;
 		}
-	}
-
-	// get the duration
-	rc = mp4_parser_parse_mdhd_atom(&trak_atom_infos.mdhd, &metadata_parse_context);
-	if (rc != VOD_OK)
-	{
-		return rc;
 	}
 
 	// Microsoft H.264 Encoder generates a wrong duration in mdhd, pull it from stts

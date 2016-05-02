@@ -3,7 +3,7 @@
 #include "mp4_clipper.h"
 
 // constants
-#define MAX_MOOV_START_READS (3)		// maximum number of attempts to find the moov atom start for non-fast-start files
+#define MAX_MOOV_START_READS (4)		// maximum number of attempts to find the moov atom start for non-fast-start files
 
 // enums
 enum {

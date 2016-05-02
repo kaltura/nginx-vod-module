@@ -4,6 +4,7 @@
 // includes
 #include "input/frames_source.h"
 #include "input/read_cache.h"
+#include "language_code.h"
 #include "codec_config.h"
 
 // macros
@@ -89,6 +90,7 @@ typedef struct {
 
 typedef struct {
 	uint32_t* required_tracks_mask;
+	uint8_t* langs_mask;
 	int64_t clip_start_time;
 	uint32_t clip_from;
 	uint32_t clip_to;
@@ -140,6 +142,8 @@ typedef struct media_info_s {
 	int64_t empty_duration;		// temporary during parsing
 	int64_t start_time;			// temporary during parsing
 	uint64_t codec_delay;
+	language_id_t language;
+	vod_str_t label;
 	union {
 		video_media_info_t video;
 		audio_media_info_t audio;

@@ -377,10 +377,10 @@ ngx_http_vod_set_dynamic_mapping_var(ngx_http_request_t *r, ngx_http_variable_va
 ngx_int_t
 ngx_http_vod_set_request_params_var(ngx_http_request_t *r, ngx_http_variable_value_t *v, uintptr_t data)
 {
+	request_params_t* request_params;
 	ngx_http_vod_ctx_t *ctx;
 	vod_status_t rc;
 	ngx_str_t value;
-	uint32_t sequence_index;
 
 	ctx = ngx_http_get_module_ctx(r, ngx_http_vod_module);
 	if (ctx == NULL)
@@ -389,27 +389,15 @@ ngx_http_vod_set_request_params_var(ngx_http_request_t *r, ngx_http_variable_val
 		return NGX_OK;
 	}
 
-	if (vod_get_number_of_set_bits(ctx->submodule_context.request_params.sequences_mask) == 1)
-	{
-		for (sequence_index = 0; sequence_index < 32; sequence_index++)
-		{
-			if ((ctx->submodule_context.request_params.sequences_mask & (1 << sequence_index)) != 0)
-			{
-				break;
-			}
-		}
-	}
-	else
-	{
-		sequence_index = INVALID_SEQUENCE_INDEX;
-	}
+	request_params = &ctx->submodule_context.request_params;
 
 	rc = manifest_utils_build_request_params_string(
 		&ctx->submodule_context.request_context,
-		ctx->submodule_context.request_params.tracks_mask,		// the media set may not be ready yet, include all tracks that were passed on the request
-		ctx->submodule_context.request_params.segment_index,
-		sequence_index,
-		ctx->submodule_context.request_params.tracks_mask,
+		request_params->tracks_mask,		// the media set may not be ready yet, include all tracks that were passed on the request
+		request_params->segment_index,
+		request_params->sequences_mask,
+		request_params->sequence_tracks_mask,
+		request_params->tracks_mask,
 		&value);
 	if (rc != VOD_OK)
 	{
@@ -1007,6 +995,7 @@ ngx_http_vod_parse_metadata(
 	media_range_t range;
 	vod_status_t rc;
 	file_info_t file_info;
+	uint32_t* request_tracks_mask;
 	uint32_t tracks_mask[MEDIA_TYPE_COUNT];
 	uint32_t duration_millis;
 	vod_fraction_t rate;
@@ -1057,9 +1046,19 @@ ngx_http_vod_parse_metadata(
 	}
 	parse_params.codecs_mask = request->codecs_mask;
 
-	tracks_mask[MEDIA_TYPE_VIDEO] = cur_source->tracks_mask[MEDIA_TYPE_VIDEO] & ctx->submodule_context.request_params.tracks_mask[MEDIA_TYPE_VIDEO];
-	tracks_mask[MEDIA_TYPE_AUDIO] = cur_source->tracks_mask[MEDIA_TYPE_AUDIO] & ctx->submodule_context.request_params.tracks_mask[MEDIA_TYPE_AUDIO];
+	if (ctx->submodule_context.request_params.sequence_tracks_mask != NULL)
+	{
+		request_tracks_mask = ctx->submodule_context.request_params.sequence_tracks_mask + 
+			cur_source->sequence->index * MEDIA_TYPE_COUNT;
+	}
+	else
+	{
+		request_tracks_mask = ctx->submodule_context.request_params.tracks_mask;
+	}
+	tracks_mask[MEDIA_TYPE_VIDEO] = cur_source->tracks_mask[MEDIA_TYPE_VIDEO] & request_tracks_mask[MEDIA_TYPE_VIDEO];
+	tracks_mask[MEDIA_TYPE_AUDIO] = cur_source->tracks_mask[MEDIA_TYPE_AUDIO] & request_tracks_mask[MEDIA_TYPE_AUDIO];
 	parse_params.required_tracks_mask = tracks_mask;
+	parse_params.langs_mask = ctx->submodule_context.request_params.langs_mask;
 	parse_params.clip_from = cur_source->clip_from;
 	parse_params.clip_to = cur_source->clip_to;
 	parse_params.clip_start_time = ctx->submodule_context.media_set.first_clip_time + cur_source->sequence_offset;
@@ -1744,7 +1743,7 @@ ngx_http_vod_validate_streams(ngx_http_vod_ctx_t *ctx)
 		}
 	}
 	
-	if ((ctx->request->flags & (REQUEST_FLAG_SINGLE_TRACK_PER_MEDIA_TYPE | REQUEST_FLAG_SINGLE_TRACK)) != 0)
+	if ((ctx->request->flags & REQUEST_FLAG_SINGLE_TRACK) != 0)
 	{
 		if (ctx->submodule_context.media_set.sequence_count != 1)
 		{
@@ -1753,22 +1752,30 @@ ngx_http_vod_validate_streams(ngx_http_vod_ctx_t *ctx)
 			return NGX_HTTP_BAD_REQUEST;
 		}
 
-		if ((ctx->request->flags & REQUEST_FLAG_SINGLE_TRACK) != 0 &&
-			ctx->submodule_context.media_set.sequences[0].total_track_count != 1)
+		if (ctx->submodule_context.media_set.total_track_count != 1)
 		{
 			ngx_log_error(NGX_LOG_ERR, ctx->submodule_context.request_context.log, 0,
 				"ngx_http_vod_validate_streams: got %ui streams while only a single stream is supported",
-				ctx->submodule_context.media_set.sequences[0].total_track_count);
+				ctx->submodule_context.media_set.total_track_count);
+			return NGX_HTTP_BAD_REQUEST;
+		}
+	}
+	else if ((ctx->request->flags & REQUEST_FLAG_SINGLE_TRACK_PER_MEDIA_TYPE) != 0)
+	{
+		if (ctx->submodule_context.media_set.sequence_count != 1 && ctx->submodule_context.media_set.sequence_count != 2)
+		{
+			ngx_log_error(NGX_LOG_ERR, ctx->submodule_context.request_context.log, 0,
+				"ngx_http_vod_validate_streams: invalid sequence count %uD", ctx->submodule_context.media_set.sequence_count);
 			return NGX_HTTP_BAD_REQUEST;
 		}
 
-		if (ctx->submodule_context.media_set.sequences[0].track_count[MEDIA_TYPE_VIDEO] > 1 ||
-			ctx->submodule_context.media_set.sequences[0].track_count[MEDIA_TYPE_AUDIO] > 1)
+		if (ctx->submodule_context.media_set.track_count[MEDIA_TYPE_VIDEO] > 1 ||
+			ctx->submodule_context.media_set.track_count[MEDIA_TYPE_AUDIO] > 1)
 		{
 			ngx_log_error(NGX_LOG_ERR, ctx->submodule_context.request_context.log, 0,
 				"ngx_http_vod_validate_streams: one stream at most per media type is allowed video=%uD audio=%uD",
-				ctx->submodule_context.media_set.sequences[0].track_count[MEDIA_TYPE_VIDEO],
-				ctx->submodule_context.media_set.sequences[0].track_count[MEDIA_TYPE_AUDIO]);
+				ctx->submodule_context.media_set.track_count[MEDIA_TYPE_VIDEO],
+				ctx->submodule_context.media_set.track_count[MEDIA_TYPE_AUDIO]);
 			return NGX_HTTP_BAD_REQUEST;
 		}
 	}
@@ -2378,7 +2385,16 @@ ngx_http_vod_finalize_segment_response(ngx_http_vod_ctx_t *ctx)
 static ngx_int_t
 ngx_http_vod_process_init(ngx_cycle_t *cycle)
 {
+	vod_status_t rc;
+
 	audio_filter_process_init(cycle->log);
+	
+	rc = language_code_process_init(cycle->pool, cycle->log);
+	if (rc != VOD_OK)
+	{
+		return NGX_ERROR;
+	}
+
 	return NGX_OK;
 }
 
@@ -3803,6 +3819,7 @@ ngx_http_vod_map_media_set_apply(ngx_http_vod_ctx_t *ctx, ngx_str_t* mapping, in
 	ngx_perf_counter_context(perf_counter_context);
 	media_clip_source_t *cur_source = ctx->cur_source;
 	media_clip_source_t* mapped_source;
+	media_sequence_t* sequence;
 	media_set_t mapped_media_set;
 	ngx_str_t path;
 	ngx_int_t rc;
@@ -3902,7 +3919,10 @@ ngx_http_vod_map_media_set_apply(ngx_http_vod_ctx_t *ctx, ngx_str_t* mapping, in
 			mapped_source->tracks_mask[MEDIA_TYPE_VIDEO] == 0xffffffff)
 		{
 			// mapping result is a simple file path, set the uri of the current source
-			cur_source->sequence->mapped_uri = mapped_source->mapped_uri;
+			sequence = cur_source->sequence;
+			sequence->mapped_uri = mapped_source->mapped_uri;
+			sequence->language = mapped_media_set.sequences->language;
+			sequence->label = mapped_media_set.sequences->label;
 			cur_source->mapped_uri = mapped_source->mapped_uri;
 			cur_source->encryption_key = mapped_source->encryption_key;
 
@@ -4125,12 +4145,22 @@ ngx_http_vod_parse_uri(
 		return rc;
 	}
 
-	if (media_set->sequence_count != 1 && 
-		((*request)->flags & (REQUEST_FLAG_SINGLE_TRACK_PER_MEDIA_TYPE | REQUEST_FLAG_SINGLE_TRACK)) != 0)
+	if (media_set->sequence_count != 1)
 	{
-		ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
-			"ngx_http_vod_parse_uri: request has more than one sub uri while only one is supported");
-		return NGX_HTTP_BAD_REQUEST;
+		if (((*request)->flags & REQUEST_FLAG_SINGLE_TRACK) != 0)
+		{
+			ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
+				"ngx_http_vod_parse_uri: request has more than one sub uri while only one is supported");
+			return NGX_HTTP_BAD_REQUEST;
+		}
+
+		if (media_set->sequence_count != 2 &&
+			((*request)->flags & REQUEST_FLAG_SINGLE_TRACK_PER_MEDIA_TYPE) != 0)
+		{
+			ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
+				"ngx_http_vod_parse_uri: request has more than two sub uris while only a single track per media type is allowed");
+			return NGX_HTTP_BAD_REQUEST;
+		}
 	}
 
 	return NGX_OK;
