@@ -189,6 +189,11 @@ mss_packager_compare_tracks(uintptr_t bitrate_threshold, const media_info_t* mi1
 			(mi1->u.video.height == mi2->u.video.height);
 	}
 
+	if (mi1->label.len == 0 || mi2->label.len == 0)
+	{
+		return TRUE;
+	}
+
 	return vod_str_equals(mi1->label, mi2->label);
 }
 
@@ -200,10 +205,10 @@ mss_packager_remove_redundant_tracks(
 	media_track_t* track1;
 	media_track_t* track2;
 	media_track_t* last_track;
+	media_track_t* remove;
 	uint32_t media_type1;
 	uint32_t max_sample_rate = 0;
 	uint32_t clip_index;
-	bool_t remove_track;
 
 	// find the max audio sample rate in the first clip
 	last_track = media_set->filtered_tracks + media_set->total_track_count;
@@ -220,35 +225,9 @@ mss_packager_remove_redundant_tracks(
 	for (track1 = media_set->filtered_tracks; track1 < last_track; track1++)
 	{
 		media_type1 = track1->media_info.media_type;
+
 		if (media_type1 == MEDIA_TYPE_AUDIO &&
 			track1->media_info.u.audio.sample_rate != max_sample_rate)
-		{
-			remove_track = TRUE;
-		}
-		else
-		{
-			remove_track = FALSE;
-			for (track2 = media_set->filtered_tracks; track2 < track1; track2++)
-			{
-				if (media_type1 != track2->media_info.media_type)
-				{
-					continue;
-				}
-
-				if (!mss_packager_compare_tracks(
-					duplicate_bitrate_threshold,
-					&track1->media_info,
-					&track2->media_info))
-				{
-					continue;
-				}
-
-				remove_track = TRUE;
-				break;
-			}
-		}
-
-		if (remove_track)
 		{
 			// remove the track from all clips
 			media_set->track_count[media_type1]--;
@@ -256,6 +235,47 @@ mss_packager_remove_redundant_tracks(
 			for (clip_index = 0; clip_index < media_set->clip_count; clip_index++)
 			{
 				track1[clip_index * media_set->total_track_count].media_info.media_type = MEDIA_TYPE_NONE;
+			}
+			continue;
+		}
+
+		for (track2 = media_set->filtered_tracks; track2 < track1; track2++)
+		{
+			if (media_type1 != track2->media_info.media_type)
+			{
+				continue;
+			}
+
+			if (!mss_packager_compare_tracks(
+				duplicate_bitrate_threshold,
+				&track1->media_info,
+				&track2->media_info))
+			{
+				continue;
+			}
+
+			// prefer to remove a track that doesn't have a label, so that we won't lose a language 
+			//	in case of multi language manifest
+			if (track1->media_info.label.len == 0 || track2->media_info.label.len != 0)
+			{
+				remove = track1;
+			}
+			else
+			{
+				remove = track2;
+			}
+
+			// remove the track from all clips
+			media_set->track_count[media_type1]--;
+
+			for (clip_index = 0; clip_index < media_set->clip_count; clip_index++)
+			{
+				remove[clip_index * media_set->total_track_count].media_info.media_type = MEDIA_TYPE_NONE;
+			}
+
+			if (remove == track1)
+			{
+				break;
 			}
 		}
 	}
@@ -300,7 +320,11 @@ mss_packager_build_manifest(
 	mss_packager_remove_redundant_tracks(conf->duplicate_bitrate_threshold, media_set);
 
 	// get the adaptation sets
-	rc = manifest_utils_get_adaptation_sets(request_context, media_set, 0, &adaptation_sets);
+	rc = manifest_utils_get_adaptation_sets(
+		request_context, 
+		media_set, 
+		ADAPTATION_SETS_FLAG_DEFAULT_LANG_LAST, 
+		&adaptation_sets);
 	if (rc != VOD_OK)
 	{
 		return rc;

@@ -397,6 +397,11 @@ dash_packager_compare_tracks(uintptr_t bitrate_threshold, const media_info_t* mi
 			(mi1->u.video.height == mi2->u.video.height);
 	}
 
+	if (mi1->label.len == 0 || mi2->label.len == 0)
+	{
+		return TRUE;
+	}
+
 	return vod_str_equals(mi1->label, mi2->label);
 }
 
@@ -1020,6 +1025,7 @@ dash_packager_remove_redundant_tracks(
 {
 	media_track_t* track1;
 	media_track_t* track2;
+	media_track_t* remove;
 	media_track_t* last_track;
 	uint32_t clip_index;
 
@@ -1041,14 +1047,28 @@ dash_packager_remove_redundant_tracks(
 				continue;
 			}
 
+			// prefer to remove a track that doesn't have a label, so that we won't lose a language 
+			//	in case of multi language manifest
+			if (track1->media_info.label.len == 0 || track2->media_info.label.len != 0)
+			{
+				remove = track1;
+			}
+			else
+			{
+				remove = track2;
+			}
 			// remove the track from all clips
-			media_set->track_count[track1->media_info.media_type]--;
+			media_set->track_count[remove->media_info.media_type]--;
 		
 			for (clip_index = 0; clip_index < media_set->clip_count; clip_index++)
 			{
-				track1[clip_index * media_set->total_track_count].media_info.media_type = MEDIA_TYPE_NONE;
+				remove[clip_index * media_set->total_track_count].media_info.media_type = MEDIA_TYPE_NONE;
 			}
-			break;
+
+			if (remove == track1)
+			{
+				break;
+			}
 		}
 	}
 }

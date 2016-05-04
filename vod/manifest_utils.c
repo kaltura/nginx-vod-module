@@ -731,6 +731,8 @@ manifest_utils_get_adaptation_sets(
 	adaptation_sets_t* output)
 {
 	label_track_count_t* first_label;
+	label_track_count_t* last_label;
+	label_track_count_t temp_label;
 	size_t label_count;
 	vod_status_t rc;
 
@@ -746,6 +748,14 @@ manifest_utils_get_adaptation_sets(
 
 	if (label_count > 1)
 	{
+		if ((flags & ADAPTATION_SETS_FLAG_DEFAULT_LANG_LAST) != 0)
+		{
+			last_label = first_label + (label_count - 1);
+			temp_label = *first_label;
+			*first_label = *last_label;
+			*last_label = temp_label;
+		}
+
 		rc = manifest_utils_get_multilingual_adaptation_sets(
 			request_context,
 			media_set,
