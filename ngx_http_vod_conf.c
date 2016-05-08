@@ -201,12 +201,16 @@ ngx_http_vod_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child)
 	{
 		conf->secret_key = prev->secret_key;
 	}
-	ngx_conf_merge_str_value(conf->https_header_name, prev->https_header_name, "");
-	ngx_conf_merge_str_value(conf->segments_base_url, prev->segments_base_url, "");
-	conf->segments_base_url_has_scheme =
-		(ngx_strncasecmp(conf->segments_base_url.data, (u_char *) "http://", 7) == 0 ||
-		ngx_strncasecmp(conf->segments_base_url.data, (u_char *) "https://", 8) == 0);
 
+	if (conf->base_url == NULL)
+	{
+		conf->base_url = prev->base_url;
+	}
+
+	if (conf->segments_base_url == NULL)
+	{
+		conf->segments_base_url = prev->segments_base_url;
+	}
 
 	if (conf->metadata_cache == NULL)
 	{
@@ -904,16 +908,16 @@ ngx_command_t ngx_http_vod_commands[] = {
 	offsetof(ngx_http_vod_loc_conf_t, secret_key),
 	NULL },
 
-	{ ngx_string("vod_https_header_name"),
+	{ ngx_string("vod_base_url"),
 	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1,
-	ngx_conf_set_str_slot,
+	ngx_http_set_complex_value_slot,
 	NGX_HTTP_LOC_CONF_OFFSET,
-	offsetof(ngx_http_vod_loc_conf_t, https_header_name),
+	offsetof(ngx_http_vod_loc_conf_t, base_url),
 	NULL },
 
 	{ ngx_string("vod_segments_base_url"),
 	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1,
-	ngx_conf_set_str_slot,
+	ngx_http_set_complex_value_slot,
 	NGX_HTTP_LOC_CONF_OFFSET,
 	offsetof(ngx_http_vod_loc_conf_t, segments_base_url),
 	NULL },

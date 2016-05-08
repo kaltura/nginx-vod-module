@@ -55,7 +55,11 @@ ngx_http_vod_dash_handle_manifest(
 			file_uri = submodule_context->r->uri;
 		}
 
-		ngx_http_vod_get_base_url(submodule_context->r, &conf->https_header_name, NULL, 0, &file_uri, &base_url);
+		rc = ngx_http_vod_get_base_url(submodule_context->r, conf->base_url, &file_uri, &base_url);
+		if (rc != NGX_OK)
+		{
+			return rc;
+		}
 	}
 
 	if (conf->drm_enabled)

@@ -564,7 +564,7 @@ nginx access rules etc.).
 
 In addition, it is possible to configure nginx-vod-module to return the encryption key over HTTPS
 while having the segments delivered over HTTP. The way to configure this is to set `vod_segments_base_url`
-to `http://nginx-vod-host` and set `vod_https_header_name` to `host`.
+to `http://nginx-vod-host` and set `vod_base_url` to `https://nginx-vod-host`.
 
 #### DRM
 
@@ -776,26 +776,26 @@ See the list of nginx variables added by this module below.
 The bitrate threshold for removing identical bitrates, streams whose bitrate differences are less than
 this value will be considered identical.
 
-#### vod_https_header_name
-* **syntax**: `vod_https_header_name name`
-* **default**: `empty`
+#### vod_base_url
+* **syntax**: `vod_base_url url`
+* **default**: `see below`
 * **context**: `http`, `server`, `location`
 
-Sets the name of an HTTP header whose existence determines whether the request was issued over HTTPS.
-If not set, the decision is made according to the protocol used to connect to the nginx server.
-A common scenario for using this setting is a load-balancer placed before the nginx that performs SSL-offloading.
+Sets the base URL (scheme + domain) that should be returned in manifest responses.
+The parameter value can contain variables, if the parameter evaluates to an empty string, relative URLs will be used.
+If not set, the base URL is determined as follows:
+1. If the request did not contain a host header (HTTP/1.0) relative URLs will be returned
+2. Otherwise, the base URL will be `$scheme://$http_host`
+The setting currently affects only HLS and DASH. In MSS and HDS, relative URLs are always returned.
 
 #### vod_segments_base_url
 * **syntax**: `vod_segments_base_url url`
-* **default**: `empty`
+* **default**: `see below`
 * **context**: `http`, `server`, `location`
 
-Sets the base URL (usually domain only) that should be used for delivering video segments.
-When empty, the host header sent on the request will be used as the domain.
-The scheme (http/https) used in the returned URLs is determined by:
-* the value of vod_segments_base_url, if it starts with http:// or https://
-* the existence of a request header whose name matches the value of vod_https_header_name, if vod_https_header_name is not empty
-* the type of connection used to connect to the nginx server
+Sets the base URL (scheme + domain) that should be used for delivering video segments.
+The parameter value can contain variables, if the parameter evaluates to an empty string, relative URLs will be used.
+If not set, vod_base_url will be used.
 The setting currently affects only HLS.
 
 #### vod_open_file_thread_pool

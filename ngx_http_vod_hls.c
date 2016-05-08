@@ -89,7 +89,11 @@ ngx_http_vod_hls_handle_master_playlist(
 
 	if (submodule_context->conf->hls.absolute_master_urls)
 	{
-		ngx_http_vod_get_base_url(submodule_context->r, &submodule_context->conf->https_header_name, NULL, 0, &empty_string, &base_url);
+		rc = ngx_http_vod_get_base_url(submodule_context->r, submodule_context->conf->base_url, &empty_string, &base_url);
+		if (rc != NGX_OK)
+		{
+			return rc;
+		}
 	}
 
 	rc = m3u8_builder_build_master_playlist(
@@ -126,15 +130,28 @@ ngx_http_vod_hls_handle_index_playlist(
 
 	if (conf->hls.absolute_index_urls)
 	{
-		ngx_http_vod_get_base_url(submodule_context->r, &conf->https_header_name, NULL, 0, &submodule_context->r->uri, &base_url);
+		rc = ngx_http_vod_get_base_url(submodule_context->r, conf->base_url, &submodule_context->r->uri, &base_url);
+		if (rc != NGX_OK)
+		{
+			return rc;
+		}
 
-		ngx_http_vod_get_base_url(
-			submodule_context->r, 
-			&conf->https_header_name, 
-			&conf->segments_base_url, 
-			conf->segments_base_url_has_scheme, 
-			&submodule_context->r->uri, 
-			&segments_base_url);
+		if (conf->segments_base_url != NULL)
+		{
+			rc = ngx_http_vod_get_base_url(
+				submodule_context->r, 
+				conf->segments_base_url,
+				&submodule_context->r->uri, 
+				&segments_base_url);
+			if (rc != NGX_OK)
+			{
+				return rc;
+			}
+		}
+		else
+		{
+			segments_base_url = base_url;
+		}
 	}
 
 	ngx_http_vod_hls_init_encryption_params(&encryption_params, submodule_context, iv);
@@ -207,7 +224,11 @@ ngx_http_vod_hls_handle_iframe_playlist(
 
 	if (conf->hls.absolute_iframe_urls)
 	{
-		ngx_http_vod_get_base_url(submodule_context->r, &conf->https_header_name, NULL, 0, &submodule_context->r->uri, &base_url);
+		rc = ngx_http_vod_get_base_url(submodule_context->r, conf->base_url, &submodule_context->r->uri, &base_url);
+		if (rc != NGX_OK)
+		{
+			return rc;
+		}
 	}
 
 	rc = m3u8_builder_build_iframe_playlist(

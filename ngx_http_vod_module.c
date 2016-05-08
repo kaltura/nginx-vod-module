@@ -184,6 +184,7 @@ ngx_module_t  ngx_http_vod_module = {
 };
 
 static ngx_str_t options_content_type = ngx_string("text/plain");
+static ngx_str_t empty_string = ngx_null_string;
 
 static media_format_t* media_formats[] = {
 	&mp4_format,
@@ -4183,6 +4184,7 @@ ngx_http_vod_handler(ngx_http_request_t *r)
 	ngx_md5_t md5;
 	ngx_str_t content_type;
 	ngx_str_t response;
+	ngx_str_t base_url;
 	ngx_int_t rc;
 	int cache_type;
 
@@ -4274,24 +4276,27 @@ ngx_http_vod_handler(ngx_http_request_t *r)
 		// calc request key from host + uri
 		ngx_md5_init(&md5);
 
-		if (r->headers_in.host != NULL)
+		base_url.len = 0;
+		rc = ngx_http_vod_get_base_url(r, conf->base_url, &empty_string, &base_url);
+		if (rc != NGX_OK)
 		{
-			ngx_md5_update(&md5, r->headers_in.host->value.data, r->headers_in.host->value.len);
+			return rc;
 		}
+		ngx_md5_update(&md5, base_url.data, base_url.len);
 
-		if (conf->https_header_name.len)
+		if (conf->segments_base_url != NULL)
 		{
-			if (ngx_http_vod_header_exists(r, &conf->https_header_name))
+			base_url.len = 0;
+			rc = ngx_http_vod_get_base_url(r, conf->segments_base_url, &empty_string, &base_url);
+			if (rc != NGX_OK)
 			{
-				ngx_md5_update(&md5, "1", sizeof("1") - 1);
+				return rc;
 			}
-			else
-			{
-				ngx_md5_update(&md5, "0", sizeof("0") - 1);
-			}
+			ngx_md5_update(&md5, base_url.data, base_url.len);
 		}
 
 		ngx_md5_update(&md5, r->uri.data, r->uri.len);
+
 		ngx_md5_final(request_key, &md5);
 
 		// try to fetch from cache

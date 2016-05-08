@@ -14,13 +14,11 @@ ngx_int_t ngx_http_vod_status_to_ngx_error(vod_status_t rc);
 
 ngx_flag_t ngx_http_vod_header_exists(ngx_http_request_t* r, ngx_str_t* searched_header);
 
-void ngx_http_vod_get_base_url(
+ngx_int_t ngx_http_vod_get_base_url(
 	ngx_http_request_t* r,
-	ngx_str_t* https_header_name,
-	ngx_str_t* conf_base_url,
-	ngx_flag_t conf_base_url_has_schema,
+	ngx_http_complex_value_t* conf_base_url,
 	ngx_str_t* file_uri,
-	ngx_str_t* base_url);
+	ngx_str_t* result);
 
 ngx_int_t ngx_http_vod_merge_string_parts(
 	ngx_http_request_t* r,

@@ -29,9 +29,8 @@ struct ngx_http_vod_loc_conf_s {
 	ngx_str_t multi_uri_suffix;
 	segmenter_conf_t segmenter;
 	ngx_http_complex_value_t *secret_key;
-	ngx_str_t https_header_name;
-	ngx_str_t segments_base_url;
-	ngx_flag_t segments_base_url_has_scheme;
+	ngx_http_complex_value_t *base_url;
+	ngx_http_complex_value_t *segments_base_url;
 	ngx_buffer_cache_t* metadata_cache;
 	ngx_buffer_cache_t* response_cache[CACHE_TYPE_COUNT];
 	size_t initial_read_size;
