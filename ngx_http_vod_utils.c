@@ -140,7 +140,7 @@ ngx_http_vod_get_base_url(
 {
 	ngx_flag_t use_https;
 	ngx_str_t base_url;
-	ngx_str_t* host_name;
+	ngx_str_t* host_name = NULL;
 	size_t uri_path_len;
 	size_t result_size;
 	u_char* last_slash;

@@ -785,7 +785,7 @@ Sets the base URL (scheme + domain) that should be returned in manifest response
 The parameter value can contain variables, if the parameter evaluates to an empty string, relative URLs will be used.
 If not set, the base URL is determined as follows:
 1. If the request did not contain a host header (HTTP/1.0) relative URLs will be returned
-2. Otherwise, the base URL will be `$scheme://$host`
+2. Otherwise, the base URL will be `$scheme://$http_host`
 The setting currently affects only HLS and DASH. In MSS and HDS, relative URLs are always returned.
 
 #### vod_segments_base_url
