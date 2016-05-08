@@ -909,7 +909,7 @@ mp4_parser_parse_stts_atom(atom_info_t* atom_info, frames_parse_context_t* conte
 				cur_frame->pts_delay = 0;
 			}
 
-			if (accum_duration >= clip_to)
+			if (frame_index >= key_frame_index || accum_duration >= clip_to)
 			{
 				break;
 			}
@@ -931,6 +931,10 @@ mp4_parser_parse_stts_atom(atom_info_t* atom_info, frames_parse_context_t* conte
 		if (key_frame_index != UINT_MAX)
 		{
 			range->end = accum_duration - clip_from_accum_duration;
+			if (clip_to < range->end)
+			{
+				range->end = clip_to;
+			}
 		}
 		else
 		{
