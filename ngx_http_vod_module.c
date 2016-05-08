@@ -3009,7 +3009,7 @@ ngx_http_vod_dump_request_to_fallback(ngx_http_request_t *r)
 	child_params.extra_args = r->args;
 	child_params.extra_header = conf->proxy_header;
 	child_params.proxy_range = 1;
-	child_params.proxy_accept_encoding = 1;
+	child_params.proxy_all_headers = 1;
 
 	return ngx_child_request_start(
 		r,
@@ -3289,7 +3289,7 @@ ngx_http_vod_dump_http_request(ngx_http_vod_ctx_t *ctx)
 	child_params.base_uri = r->uri;
 	child_params.extra_args = ctx->upstream_extra_args;
 	child_params.proxy_range = 1;
-	child_params.proxy_accept_encoding = 1;
+	child_params.proxy_all_headers = 1;
 
 	return ngx_child_request_start(
 		r,
