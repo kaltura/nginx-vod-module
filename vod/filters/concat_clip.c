@@ -419,6 +419,8 @@ concat_clip_concat(
 {
 	media_clip_source_t* dest_clip;
 	media_clip_source_t* src_clip;
+	media_track_t* dest_track;
+	media_track_t* src_track;
 	media_clip_t** cur_source;
 	uint32_t i;
 
@@ -449,23 +451,29 @@ concat_clip_concat(
 		// merge the frame parts
 		for (i = 0; i < src_clip->track_array.total_track_count; i++)
 		{
-			if (src_clip->track_array.first_track[i].frame_count <= 0)
+			src_track = &src_clip->track_array.first_track[i];
+			if (src_track->frame_count <= 0)
 			{
 				continue;
 			}
 
-			if (dest_clip->track_array.first_track[i].frame_count > 0)
+			dest_track = &dest_clip->track_array.first_track[i];
+			if (dest_track->frame_count > 0)
 			{
-				dest_clip->track_array.first_track[i].frames.next = &src_clip->track_array.first_track[i].frames;
+				dest_track->frames.next = &src_track->frames;
 			}
 			else
 			{
-				dest_clip->track_array.first_track[i].frames = src_clip->track_array.first_track[i].frames;
+				dest_track->frames = src_track->frames;
+				dest_track->first_frame_index = src_track->first_frame_index;
+				dest_track->first_frame_time_offset = src_track->first_frame_time_offset;
+				dest_track->clip_start_time = src_track->clip_start_time;
+				dest_track->clip_from_frame_offset = src_track->clip_from_frame_offset;
 			}
-			dest_clip->track_array.first_track[i].frame_count += src_clip->track_array.first_track[i].frame_count;
-			dest_clip->track_array.first_track[i].key_frame_count += src_clip->track_array.first_track[i].key_frame_count;
-			dest_clip->track_array.first_track[i].total_frames_duration += src_clip->track_array.first_track[i].total_frames_duration;
-			dest_clip->track_array.first_track[i].total_frames_size += src_clip->track_array.first_track[i].total_frames_size;
+			dest_track->frame_count += src_track->frame_count;
+			dest_track->key_frame_count += src_track->key_frame_count;
+			dest_track->total_frames_duration += src_track->total_frames_duration;
+			dest_track->total_frames_size += src_track->total_frames_size;
 		}
 	}
 
