@@ -1793,19 +1793,22 @@ ngx_http_vod_update_track_timescale(
 	frame_list_part_t* part;
 	input_frame_t* last_frame;
 	input_frame_t* cur_frame;
-	uint64_t clip_start_dts = 0;
+	uint64_t next_scaled_dts;
 	uint64_t last_frame_dts;
+	uint64_t clip_start_dts;
 	uint64_t clip_end_dts;
 	uint64_t scaled_dts;
-	uint64_t last_dts;
 	uint64_t dts;
 	uint64_t pts;
 	uint32_t cur_timescale = track->media_info.timescale;
 
 	// frames
 	dts = track->first_frame_time_offset;
-	last_dts = rescale_time(dts, cur_timescale, new_timescale);
-	track->first_frame_time_offset = last_dts;
+	scaled_dts = rescale_time(dts, cur_timescale, new_timescale);
+	clip_start_dts = scaled_dts;
+
+	track->first_frame_time_offset = scaled_dts;
+	track->total_frames_duration = 0;
 
 	part = &track->frames;
 	last_frame = part->last_frame;
@@ -1815,13 +1818,13 @@ ngx_http_vod_update_track_timescale(
 		{
 			if (part->first_frame < last_frame && part->clip_to != UINT_MAX)
 			{
-				clip_end_dts = clip_start_dts + rescale_time(part->clip_to, 1000, new_timescale);
-				last_frame_dts = last_dts - cur_frame[-1].duration;
+				clip_end_dts = rescale_time(part->clip_to, 1000, new_timescale);
+				last_frame_dts = scaled_dts - cur_frame[-1].duration;
 
 				if (clip_end_dts > last_frame_dts)
 				{
 					cur_frame[-1].duration = clip_end_dts - last_frame_dts;
-					last_dts = clip_end_dts;
+					scaled_dts = clip_end_dts;
 				}
 				else
 				{
@@ -1830,7 +1833,11 @@ ngx_http_vod_update_track_timescale(
 						last_frame_dts, clip_end_dts);
 				}
 
-				clip_start_dts = last_dts;
+				track->total_frames_duration += scaled_dts - clip_start_dts;
+
+				dts = 0;
+				scaled_dts = 0;
+				clip_start_dts = 0;
 			}
 
 			if (part->next == NULL)
@@ -1844,15 +1851,15 @@ ngx_http_vod_update_track_timescale(
 		}
 
 		pts = dts + cur_frame->pts_delay;
-		cur_frame->pts_delay = rescale_time(pts, cur_timescale, new_timescale) - last_dts;
+		cur_frame->pts_delay = rescale_time(pts, cur_timescale, new_timescale) - scaled_dts;
 
 		dts += cur_frame->duration;
-		scaled_dts = rescale_time(dts, cur_timescale, new_timescale);
-		cur_frame->duration = scaled_dts - last_dts;
-		last_dts = scaled_dts;
+		next_scaled_dts = rescale_time(dts, cur_timescale, new_timescale);
+		cur_frame->duration = next_scaled_dts - scaled_dts;
+		scaled_dts = next_scaled_dts;
 	}
 
-	track->total_frames_duration = last_dts - track->first_frame_time_offset;
+	track->total_frames_duration += scaled_dts - clip_start_dts;
 	track->clip_from_frame_offset = rescale_time(track->clip_from_frame_offset, cur_timescale, new_timescale);
 
 	// media info
