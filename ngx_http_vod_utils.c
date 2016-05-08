@@ -131,35 +131,50 @@ ngx_http_vod_memrchr(const u_char *s, int c, size_t n)
 	return NULL;
 }
 
-void
+ngx_int_t
 ngx_http_vod_get_base_url(
 	ngx_http_request_t* r,
-	ngx_str_t* https_header_name,
-	ngx_str_t* conf_base_url,
-	ngx_flag_t conf_base_url_has_schema,
+	ngx_http_complex_value_t* conf_base_url,
 	ngx_str_t* file_uri,
-	ngx_str_t* base_url)
+	ngx_str_t* result)
 {
 	ngx_flag_t use_https;
+	ngx_str_t base_url;
 	ngx_str_t* host_name;
 	size_t uri_path_len;
 	size_t result_size;
 	u_char* last_slash;
 	u_char* p;
 
-	if (conf_base_url == NULL || conf_base_url->len == 0)
+	if (conf_base_url != NULL)
+	{
+		if (ngx_http_complex_value(
+			r,
+			conf_base_url,
+			&base_url) != NGX_OK)
+		{
+			return NGX_ERROR;
+		}
+
+		if (base_url.len == 0)
+		{
+			// conf base url evaluated to empty string, use relative URLs
+			return NGX_OK;
+		}
+
+		result_size = base_url.len;
+	}
+	else
 	{
 		// when the request has no host header (HTTP 1.0), use relative URLs
 		if (r->headers_in.host == NULL)
 		{
-			return;
+			return NGX_OK;
 		}
 
 		host_name = &r->headers_in.host->value;
-	}
-	else
-	{
-		host_name = conf_base_url;
+
+		result_size = sizeof("https://") - 1 + host_name->len;
 	}
 
 	if (file_uri->len)
@@ -167,7 +182,9 @@ ngx_http_vod_get_base_url(
 		last_slash = ngx_http_vod_memrchr(file_uri->data, '/', file_uri->len);
 		if (last_slash == NULL)
 		{
-			return;
+			vod_log_error(VOD_LOG_ERR, r->connection->log, 0,
+				"ngx_http_vod_get_base_url: no slash found in uri %V", file_uri);
+			return NGX_ERROR;
 		}
 
 		uri_path_len = last_slash + 1 - file_uri->data;
@@ -178,31 +195,29 @@ ngx_http_vod_get_base_url(
 	}
 
 	// allocate the base url
-	result_size = sizeof("https://") - 1 + host_name->len + uri_path_len + sizeof("/");
+	result_size += uri_path_len + sizeof("/");
 	p = ngx_palloc(r->pool, result_size);
 	if (p == NULL)
 	{
-		return;
+		ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+			"ngx_http_vod_get_base_url: ngx_palloc failed");
+		return NGX_ERROR;
 	}
 
 	// build the url
-	base_url->data = p;
+	result->data = p;
 
-	if (!conf_base_url_has_schema)
+	if (conf_base_url != NULL)
 	{
-		// decide whether to use http or https
-		if (https_header_name->len)
-		{
-			use_https = ngx_http_vod_header_exists(r, https_header_name);
-		}
-		else
-		{
+		p = vod_copy(p, base_url.data, base_url.len);
+	}
+	else
+	{
 #if (NGX_HTTP_SSL)
-			use_https = (r->connection->ssl != NULL);
+		use_https = (r->connection->ssl != NULL);
 #else
-			use_https = 0;
+		use_https = 0;
 #endif
-		}
 
 		if (use_https)
 		{
@@ -212,20 +227,24 @@ ngx_http_vod_get_base_url(
 		{
 			p = ngx_copy(p, "http://", sizeof("http://") - 1);
 		}
+
+		p = ngx_copy(p, host_name->data, host_name->len);
 	}
 
-	p = ngx_copy(p, host_name->data, host_name->len);
 	p = ngx_copy(p, file_uri->data, uri_path_len);
 	*p = '\0';
 
-	base_url->len = p - base_url->data;
+	result->len = p - result->data;
 
-	if (base_url->len > result_size)
+	if (result->len > result_size)
 	{
 		vod_log_error(VOD_LOG_ERR, r->connection->log, 0,
 			"ngx_http_vod_get_base_url: result length %uz exceeded allocated length %uz",
-			base_url->len, result_size);
+			result->len, result_size);
+		return NGX_ERROR;
 	}
+
+	return NGX_OK;
 }
 
 ngx_int_t
