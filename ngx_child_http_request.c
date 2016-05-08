@@ -36,6 +36,11 @@ typedef struct {
 
 } ngx_child_request_context_t;
 
+typedef struct {
+	ngx_str_t name;
+	off_t offset;
+} ngx_child_request_hide_header_t;
+
 // constants
 static ngx_str_t ngx_http_vod_head_method = { 4, (u_char *) "HEAD " };
 
@@ -44,15 +49,41 @@ static u_char* range_lowcase_key = (u_char*)"range";
 static ngx_uint_t range_hash =
 	ngx_hash(ngx_hash(ngx_hash(ngx_hash('r', 'a'), 'n'), 'g'), 'e');
 
-static ngx_str_t accept_encoding_key = ngx_string("Accept-Encoding");
-static u_char* accept_encoding_lowcase_key = (u_char*)"accept-encoding";
-static ngx_uint_t accept_encoding_hash =
-	ngx_hash(ngx_hash(ngx_hash(ngx_hash(ngx_hash(ngx_hash(ngx_hash(
-	ngx_hash(ngx_hash(ngx_hash(ngx_hash(ngx_hash(ngx_hash(ngx_hash(
-	'a', 'c'), 'c'), 'e'), 'p'), 't'), '-'), 'e'), 'n'), 'c'), 'o'), 'd'), 'i'), 'n'), 'g');
+static ngx_child_request_hide_header_t hide_headers[] = {
+	{ ngx_string("Accept"), 
+#if (NGX_HTTP_HEADERS)	
+		offsetof(ngx_http_headers_in_t, accept)
+#else
+		-1
+#endif
+	},
+	{ ngx_string("Accept-Charset"), -1 },
+	{ ngx_string("Accept-Datetime"), -1 },
+	{ ngx_string("Accept-Encoding"), 
+#if (NGX_HTTP_GZIP)
+		offsetof(ngx_http_headers_in_t, accept_encoding)
+#else
+		-1
+#endif
+	},
+	{ ngx_string("Accept-Language"), 
+#if (NGX_HTTP_HEADERS)	
+		offsetof(ngx_http_headers_in_t, accept_language)
+#else
+		-1
+#endif
+	},
+	{ ngx_string("If-Match"), offsetof(ngx_http_headers_in_t, if_match) },
+	{ ngx_string("If-Modified-Since"), offsetof(ngx_http_headers_in_t, if_modified_since) },
+	{ ngx_string("If-None-Match"), offsetof(ngx_http_headers_in_t, if_none_match) },
+	{ ngx_string("If-Range"), offsetof(ngx_http_headers_in_t, if_range) },
+	{ ngx_string("If-Unmodified-Since"), offsetof(ngx_http_headers_in_t, if_unmodified_since) },
+	{ ngx_null_string, -1 },
+};
 
 // globals
 static ngx_http_output_header_filter_pt ngx_http_next_header_filter;
+static ngx_hash_t hide_headers_hash;
 
 static void
 ngx_child_request_wev_handler(ngx_http_request_t *r)
@@ -279,6 +310,7 @@ ngx_child_request_copy_headers(
 	ngx_http_headers_in_t* dest,
 	ngx_http_headers_in_t* src)
 {
+	ngx_child_request_hide_header_t *hide_header;
 	ngx_http_core_main_conf_t  *cmcf;
 	ngx_list_part_t *part;
 	ngx_table_elt_t *output;
@@ -338,15 +370,19 @@ ngx_child_request_copy_headers(
 			continue;
 		}
 
-		// remove accept encoding if needed
-		if (ch->hash == accept_encoding_hash && !params->proxy_accept_encoding &&
-			ch->key.len == accept_encoding_key.len &&
-			ngx_memcmp(ch->lowcase_key, accept_encoding_lowcase_key, accept_encoding_key.len) == 0)
+		
+		if (!params->proxy_all_headers)
 		{
-#if (NGX_HTTP_GZIP)
-			dest->accept_encoding = NULL;
-#endif
-			continue;
+			// remove headers from the hide list
+			hide_header = ngx_hash_find(&hide_headers_hash, ch->hash, ch->lowcase_key, ch->key.len);
+			if (hide_header != NULL)
+			{
+				if (hide_header->offset >= 0)
+				{
+					*(ngx_table_elt_t**)((u_char*)dest + hide_header->offset) = NULL;
+				}
+				continue;
+			}
 		}
 
 		// add the header to the output list
@@ -555,11 +591,55 @@ ngx_child_request_header_filter(ngx_http_request_t *r)
 	return ngx_http_next_header_filter(r);
 }
 
-void
-ngx_child_request_init()
+ngx_int_t
+ngx_child_request_init(ngx_conf_t *cf)
 {
+	ngx_child_request_hide_header_t *h;
+	ngx_array_t hide_headers_arr;
+	ngx_hash_key_t  *hk;
+	ngx_hash_init_t hash;
+
 	// Note: need to install a header filter in order to support dumping requests -
 	//	the headers of the parent request need to be sent before any body data is written
 	ngx_http_next_header_filter = ngx_http_top_header_filter;
 	ngx_http_top_header_filter = ngx_child_request_header_filter;
+
+	// initialize hide_headers_hash
+	if (ngx_array_init(
+		&hide_headers_arr,
+		cf->temp_pool, 
+		sizeof(hide_headers) / sizeof(hide_headers[0]), 
+		sizeof(ngx_hash_key_t)) != NGX_OK)
+	{
+		return NGX_ERROR;
+	}
+
+	for (h = hide_headers; h->name.len; h++)
+	{
+		hk = ngx_array_push(&hide_headers_arr);
+		if (hk == NULL) 
+		{
+			return NGX_ERROR;
+		}
+
+		hk->key = h->name;
+		hk->key_hash = ngx_hash_key_lc(h->name.data, h->name.len);
+		hk->value = h;
+	}
+
+	hash.max_size = 512;
+	hash.bucket_size = ngx_align(64, ngx_cacheline_size);
+	hash.name = "vod_hide_headers_hash";
+
+	hash.hash = &hide_headers_hash;
+	hash.key = ngx_hash_key_lc;
+	hash.pool = cf->pool;
+	hash.temp_pool = NULL;
+
+	if (ngx_hash_init(&hash, hide_headers_arr.elts, hide_headers_arr.nelts) != NGX_OK)
+	{
+		return NGX_ERROR;
+	}
+
+	return NGX_OK;
 }

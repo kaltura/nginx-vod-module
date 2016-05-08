@@ -855,6 +855,13 @@ class MemoryUpstreamTestSuite(UpstreamTestSuite):
         response = urllib2.urlopen(request)
         self.validateResponse(response.read(), url)
 
+    def testHideHeadersNotForwardedToUpstream(self):
+        TcpServer(self.serverPort, lambda s: socketExpectHttpHeaderAndHandle(s, None, 'if-range', self.upstreamHandler))
+        url = getUniqueUrl(self.baseUrl, self.urlFile)
+        request = urllib2.Request(url, headers={'if-range':'ukk'})
+        response = urllib2.urlopen(request)
+        self.validateResponse(response.read(), url)
+        
     def testUpstreamHostHeader(self):
         TcpServer(self.serverPort, lambda s: socketExpectHttpHeaderAndHandle(s, 'Host: blabla.com', None, self.upstreamHandler))
         url = getUniqueUrl(self.baseUrl, self.urlFile)
@@ -901,6 +908,13 @@ class DumpUpstreamTestSuite(UpstreamTestSuite):
         TcpServer(self.serverPort, lambda s: socketSendAndShutdown(s, getHttpResponse('blabla', status='402 Payment Required')))
         assertRequestFails(getUniqueUrl(self.baseUrl, self.urlFile), 402, 'blabla')
 
+    def testHideHeadersForwardedToUpstream(self):
+        handler = lambda s, headers: socketSendAndShutdown(s, getHttpResponse('abcde'))
+        TcpServer(self.serverPort, lambda s: socketExpectHttpHeaderAndHandle(s, 'if-range: ukk', None, handler))
+        url = getUniqueUrl(self.baseUrl, self.urlFile)
+        request = urllib2.Request(url, headers={'if-range':'ukk'})
+        assertEquals(urllib2.urlopen(request).read(), 'abcde')
+        
 class FallbackUpstreamTestSuite(DumpUpstreamTestSuite):
     def testLoopPreventionHeaderSent(self):
         TcpServer(self.serverPort, lambda s: socketExpectHttpHeaderAndSend(s, 'X-Kaltura-Proxy: dumpApiRequest', getHttpResponse('abcde')))

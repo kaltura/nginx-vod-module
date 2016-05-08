@@ -15,7 +15,7 @@ typedef struct {
 	off_t range_end;
 	ngx_table_elt_t extra_header;
 	ngx_flag_t proxy_range;
-	ngx_flag_t proxy_accept_encoding;
+	ngx_flag_t proxy_all_headers;
 } ngx_child_request_params_t;
 
 // functions
@@ -34,6 +34,6 @@ ngx_int_t ngx_child_request_start(
 	ngx_child_request_params_t* params,
 	ngx_buf_t* response_buffer);
 
-void ngx_child_request_init();
+ngx_int_t ngx_child_request_init(ngx_conf_t *cf);
 
 #endif // _NGX_CHILD_HTTP_REQUEST_INCLUDED_

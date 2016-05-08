@@ -105,7 +105,13 @@ ngx_http_vod_init_parsers(ngx_conf_t *cf)
 		return NGX_ERROR;
 	}
 
-	ngx_child_request_init();
+	rc = ngx_child_request_init(cf);
+	if (rc != VOD_OK)
+	{
+		ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
+			"failed to initialize hide headers hash %i", rc);
+		return NGX_ERROR;
+	}
 
 	return NGX_OK;
 }
