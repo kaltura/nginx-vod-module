@@ -45,16 +45,16 @@ udrm_parse_response(
 	bool_t base64_decode_pssh,
 	void** output)
 {
-	drm_info_t* result;
-	vod_json_value_t* cur_input_pssh;
+	vod_json_array_part_t* part;
+	vod_json_object_t* cur_input_pssh;
+	vod_json_object_t* element;
 	drm_system_info_t* cur_output_pssh;
 	vod_json_value_t parsed_info;
-	vod_json_value_t* element;
 	vod_json_value_t* drm_info_values[DRM_INFO_PARAM_COUNT];
 	vod_json_value_t* pssh_values[PSSH_PARAM_COUNT];
-	vod_array_t *pssh_array;
+	vod_json_array_t *pssh_array;
+	drm_info_t* result;
 	vod_int_t rc;
-	vod_uint_t i;
 	u_char error[128];
 	
 	// note: drm_info is guaranteed to be null terminated
@@ -66,14 +66,16 @@ udrm_parse_response(
 		return VOD_BAD_DATA;
 	}
 
-	if (parsed_info.type != VOD_JSON_ARRAY || parsed_info.v.arr.nelts != 1)
+	if (parsed_info.type != VOD_JSON_ARRAY || 
+		parsed_info.v.arr.count != 1 || 
+		parsed_info.v.arr.type != VOD_JSON_OBJECT)
 	{
 		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-			"udrm_parse_response: expected a single element array");
+			"udrm_parse_response: expected an array containing a single object");
 		return VOD_BAD_DATA;
 	}
 
-	element = (vod_json_value_t*)parsed_info.v.arr.elts;
+	element = (vod_json_object_t*)parsed_info.v.arr.part.first;
 
 	vod_memzero(drm_info_values, sizeof(drm_info_values));
 	
@@ -138,8 +140,14 @@ udrm_parse_response(
 	}
 
 	pssh_array = &drm_info_values[DRM_INFO_PARAM_PSSH]->v.arr;
+	if (pssh_array->type != VOD_JSON_OBJECT)
+	{
+		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+			"udrm_parse_response: invalid pssh element type %d expected object", pssh_array->type);
+		return VOD_BAD_DATA;
+	}
 
-	result->pssh_array.count = pssh_array->nelts;
+	result->pssh_array.count = pssh_array->count;
 	result->pssh_array.first = vod_alloc(
 		request_context->pool, 
 		sizeof(*result->pssh_array.first) * result->pssh_array.count);
@@ -151,10 +159,21 @@ udrm_parse_response(
 	}
 	result->pssh_array.last = result->pssh_array.first + result->pssh_array.count;
 
-	for (i = 0; i < pssh_array->nelts; i++)
+	part = &pssh_array->part;
+	for (cur_input_pssh = part->first, cur_output_pssh = result->pssh_array.first;
+		;
+		cur_input_pssh++, cur_output_pssh++)
 	{
-		cur_input_pssh = (vod_json_value_t*)pssh_array->elts + i;
-		cur_output_pssh = result->pssh_array.first + i;
+		if ((void*)cur_input_pssh >= part->last)
+		{
+			if (part->next == NULL)
+			{
+				break;
+			}
+
+			part = part->next;
+			cur_input_pssh = part->first;
+		}
 
 		vod_memzero(pssh_values, sizeof(pssh_values));
 		

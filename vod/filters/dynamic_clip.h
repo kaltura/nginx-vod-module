@@ -23,7 +23,7 @@ struct media_clip_dynamic_s {
 // functions
 vod_status_t dynamic_clip_parse(
 	void* context,
-	vod_json_value_t* element,
+	vod_json_object_t* element,
 	void** result);
 
 vod_status_t dynamic_clip_parser_init(

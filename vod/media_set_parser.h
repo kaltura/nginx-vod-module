@@ -48,7 +48,7 @@ vod_status_t media_set_parse_filter_sources(
 
 vod_status_t media_set_parse_clip(
 	void* ctx,
-	vod_json_value_t* element,
+	vod_json_object_t* element,
 	media_clip_t* parent,
 	media_clip_t** result);
 

@@ -65,7 +65,7 @@ static audio_filter_t mix_filter = {
 vod_status_t
 mix_filter_parse(
 	void* ctx,
-	vod_json_value_t* element,
+	vod_json_object_t* element,
 	void** result)
 {
 	media_filter_parse_context_t* context = ctx;

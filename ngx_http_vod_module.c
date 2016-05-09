@@ -1756,7 +1756,7 @@ ngx_http_vod_validate_streams(ngx_http_vod_ctx_t *ctx)
 		if (ctx->submodule_context.media_set.total_track_count != 1)
 		{
 			ngx_log_error(NGX_LOG_ERR, ctx->submodule_context.request_context.log, 0,
-				"ngx_http_vod_validate_streams: got %ui streams while only a single stream is supported",
+				"ngx_http_vod_validate_streams: got %uD streams while only a single stream is supported",
 				ctx->submodule_context.media_set.total_track_count);
 			return NGX_HTTP_BAD_REQUEST;
 		}

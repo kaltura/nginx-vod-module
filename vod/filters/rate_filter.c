@@ -114,7 +114,7 @@ static audio_filter_t rate_filter = {
 vod_status_t
 rate_filter_parse(
 	void* ctx,
-	vod_json_value_t* element,
+	vod_json_object_t* element,
 	void** result)
 {
 	media_filter_parse_context_t* context = ctx;
@@ -200,7 +200,7 @@ rate_filter_parse(
 
 	rc = media_set_parse_clip(
 		context, 
-		source, 
+		&source->v.obj, 
 		&filter->base,
 		&filter->base.sources[0]);
 	if (rc != VOD_JSON_OK)

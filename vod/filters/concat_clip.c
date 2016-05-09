@@ -39,31 +39,35 @@ static vod_hash_t concat_clip_hash;
 vod_status_t
 concat_clip_parse(
 	void* ctx,
-	vod_json_value_t* element,
+	vod_json_object_t* element,
 	void** result)
 {
 	media_filter_parse_context_t* context = ctx;
-	media_clip_concat_t* clip;
+	vod_json_array_part_t* first_part = NULL;
+	vod_json_array_part_t* part;
 	media_clip_source_t* sources_list_head;
 	media_clip_source_t* cur_source;
+	media_clip_source_t* sources_end;
 	media_clip_source_t* sources;
-	vod_json_value_t* array_elts;
+	media_clip_concat_t* clip;
 	vod_json_value_t* params[CONCAT_PARAM_COUNT];
-	vod_json_value_t* duration_elt = NULL;
+	vod_json_array_t* durations;
+	vod_json_array_t* paths;
+	media_range_t* range_cur;
 	media_range_t* range;
-	vod_array_t* paths;
-	vod_array_t* array;
 	vod_str_t* src_str;
-	u_char* end_pos;
 	vod_str_t base_path;
 	vod_str_t dest_str;
+	u_char* end_pos;
+	int64_t* first_duration = NULL;
+	int64_t* cur_duration;
+	int64_t cur_duration_value;
 	uint64_t start;
 	uint64_t end;
 	uint32_t tracks_mask[MEDIA_TYPE_COUNT];
 	uint32_t min_index;
 	uint32_t max_index;
 	uint32_t clip_count;
-	uint32_t cur_duration;
 	int32_t start_offset = 0;
 	int32_t next_offset;
 	int32_t offset;
@@ -98,6 +102,14 @@ concat_clip_parse(
 		return VOD_BAD_MAPPING;
 	}
 
+	if (paths->type != VOD_JSON_STRING)
+	{
+		vod_log_error(VOD_LOG_ERR, context->request_context->log, 0,
+			"concat_clip_parse: invalid type %d of \"paths\" elements, must be string",
+			paths->type);
+		return VOD_BAD_MAPPING;
+	}
+
 	if (params[CONCAT_PARAM_DURATIONS] == NULL)
 	{
 		vod_log_error(VOD_LOG_ERR, context->request_context->log, 0,
@@ -105,27 +117,47 @@ concat_clip_parse(
 		return VOD_BAD_MAPPING;
 	}
 
-	if (paths->nelts != params[CONCAT_PARAM_DURATIONS]->v.arr.nelts)
+	if (paths->count != params[CONCAT_PARAM_DURATIONS]->v.arr.count)
 	{
 		vod_log_error(VOD_LOG_ERR, context->request_context->log, 0,
-			"concat_clip_parse: \"paths\" element count %ui different than \"durations\" element count %ui", 
-			paths->nelts,
-			params[CONCAT_PARAM_DURATIONS]->v.arr.nelts);
+			"concat_clip_parse: \"paths\" element count %uz different than \"durations\" element count %uz", 
+			paths->count,
+			params[CONCAT_PARAM_DURATIONS]->v.arr.count);
 		return VOD_BAD_MAPPING;
 	}
 
-	if (paths->nelts > MAX_CONCAT_ELEMENTS)
+	if (paths->count > MAX_CONCAT_ELEMENTS)
 	{
 		vod_log_error(VOD_LOG_ERR, context->request_context->log, 0,
-			"concat_clip_parse: number of concat elements %ui too big",
-			paths->nelts);
+			"concat_clip_parse: number of concat elements %uz too big",
+			paths->count);
 		return VOD_BAD_MAPPING;
+	}
+
+	// initialize the tracks mask
+	if (params[CONCAT_PARAM_TRACKS] != NULL)
+	{
+		src_str = &params[CONCAT_PARAM_TRACKS]->v.str;
+		end_pos = src_str->data + src_str->len;
+		tracks_mask[MEDIA_TYPE_AUDIO] = 0;
+		tracks_mask[MEDIA_TYPE_VIDEO] = 0;
+		if (parse_utils_extract_track_tokens(src_str->data, end_pos, tracks_mask) != end_pos)
+		{
+			vod_log_error(VOD_LOG_ERR, context->request_context->log, 0,
+				"concat_clip_parse: failed to parse tracks specification");
+			return VOD_BAD_MAPPING;
+		}
+	}
+	else
+	{
+		tracks_mask[MEDIA_TYPE_AUDIO] = 0xffffffff;
+		tracks_mask[MEDIA_TYPE_VIDEO] = 0xffffffff;
 	}
 
 	if (context->range == NULL)
 	{
 		// no range, just use the first clip
-		if (paths->nelts <= 0)
+		if (paths->count <= 0)
 		{
 			vod_log_error(VOD_LOG_ERR, context->request_context->log, 0,
 				"concat_clip_parse: \"paths\" array is empty");
@@ -133,18 +165,36 @@ concat_clip_parse(
 		}
 
 		min_index = 0;
-		max_index = 0;
 		clip_count = 1;
 		range = NULL;
+
+		// allocate the source
+		sources = vod_alloc(context->request_context->pool, sizeof(sources[0]));
+		if (sources == NULL)
+		{
+			vod_log_debug0(VOD_LOG_DEBUG_LEVEL, context->request_context->log, 0,
+				"concat_clip_parse: vod_alloc failed (1)");
+			return VOD_ALLOC_FAILED;
+		}
+		sources_end = sources + 1;
+		vod_memzero(sources, sizeof(sources[0]));
+		sources->clip_to = context->duration;
 	}
 	else
 	{
-		array = &params[CONCAT_PARAM_DURATIONS]->v.arr;
-		array_elts = array->elts;
+		durations = &params[CONCAT_PARAM_DURATIONS]->v.arr;
+		if (durations->type != VOD_JSON_INT)
+		{
+			vod_log_error(VOD_LOG_ERR, context->request_context->log, 0,
+				"concat_clip_parse: invalid type %d of \"durations\" element, must be int",
+				durations->type);
+			return VOD_BAD_MAPPING;
+		}
 
 		start = context->range->start;
 		end = context->range->end;
 
+		// parse the offset
 		if (params[CONCAT_PARAM_OFFSET] != NULL)
 		{
 			if (params[CONCAT_PARAM_OFFSET]->v.num.nom < INT_MIN)
@@ -168,30 +218,42 @@ concat_clip_parse(
 		}
 
 		min_index = UINT_MAX;
-		max_index = array->nelts - 1;
-		for (i = 0; i < array->nelts; i++, offset = next_offset)
+		max_index = durations->count - 1;
+		part = &durations->part;
+		for (i = 0, cur_duration = part->first;
+			; 
+			i++, cur_duration++, offset = next_offset)
 		{
+			if ((void*)cur_duration >= part->last)
+			{
+				if (part->next == NULL)
+				{
+					break;
+				}
+
+				part = part->next;
+				cur_duration = part->first;
+			}
+
 			// validate the current duration element
-			if (array_elts[i].type != VOD_JSON_INT)
+			cur_duration_value = *cur_duration;
+			if (cur_duration_value < 0)
 			{
 				vod_log_error(VOD_LOG_ERR, context->request_context->log, 0,
-					"concat_clip_parse: invalid type %d of \"durations\" element, must be int", 
-					array_elts[i].type);
+					"concat_clip_parse: negative duration value");
 				return VOD_BAD_MAPPING;
 			}
 
-			if (array_elts[i].v.num.nom > INT_MAX - vod_max(offset, 0))
+			if (cur_duration_value > INT_MAX - vod_max(offset, 0))
 			{
 				vod_log_error(VOD_LOG_ERR, context->request_context->log, 0,
 					"concat_clip_parse: duration value %uL too big",
-					array_elts[i].v.num.nom);
+					cur_duration_value);
 				return VOD_BAD_MAPPING;
 			}
 
-			cur_duration = array_elts[i].v.num.nom;
-
 			// update the min/max indexes
-			next_offset = offset + cur_duration;
+			next_offset = offset + cur_duration_value;
 			if (next_offset <= (int64_t)start)
 			{
 				continue;
@@ -201,6 +263,8 @@ concat_clip_parse(
 			{
 				min_index = i;
 				start_offset = offset;
+				first_part = part;
+				first_duration = cur_duration;
 			}
 
 			if (next_offset >= (int64_t)end)
@@ -218,22 +282,38 @@ concat_clip_parse(
 			return VOD_BAD_MAPPING;
 		}
 
-		// initialize the new range
+		// allocate the sources and ranges
 		clip_count = max_index - min_index + 1;
-
-		range = vod_alloc(context->request_context->pool, sizeof(range[0]) * clip_count);
-		if (range == NULL)
+		sources = vod_alloc(context->request_context->pool,
+			(sizeof(sources[0]) + sizeof(range[0])) * clip_count);
+		if (sources == NULL)
 		{
 			vod_log_debug0(VOD_LOG_DEBUG_LEVEL, context->request_context->log, 0,
-				"concat_clip_parse: vod_alloc failed (1)");
+				"concat_clip_parse: vod_alloc failed (2)");
 			return VOD_ALLOC_FAILED;
 		}
+		sources_end = sources + clip_count;
+		vod_memzero(sources, sizeof(sources[0]) * clip_count);
 
-		for (i = 0; i < clip_count; i++)
+		range = (void*)sources_end;
+
+		// initialize the ranges
+		part = first_part;
+		for (cur_source = sources, range_cur = range, cur_duration = first_duration;
+			cur_source < sources_end;
+			cur_source++, range_cur++, cur_duration++)
 		{
-			range[i].start = 0;
-			range[i].end = array_elts[i + min_index].v.num.nom;
-			range[i].timescale = 1000;
+			if ((void*)cur_duration >= part->last)
+			{
+				part = part->next;
+				cur_duration = part->first;
+			}
+
+			range_cur->start = 0;
+			range_cur->end = *cur_duration;
+			range_cur->timescale = 1000;
+
+			cur_source->clip_to = *cur_duration;
 		}
 
 		if ((int64_t)start > start_offset)
@@ -245,86 +325,60 @@ concat_clip_parse(
 		{
 			range[clip_count - 1].end = end - offset;
 		}
-
-		duration_elt = array_elts + min_index;
 	}
 
-	// initialize the tracks mask
-	if (params[CONCAT_PARAM_TRACKS] != NULL)
-	{
-		src_str = &params[CONCAT_PARAM_TRACKS]->v.str;
-		end_pos = src_str->data + src_str->len;
-		tracks_mask[MEDIA_TYPE_AUDIO] = 0;
-		tracks_mask[MEDIA_TYPE_VIDEO] = 0;
-		if (parse_utils_extract_track_tokens(src_str->data, end_pos, tracks_mask) != end_pos)
-		{
-			vod_log_error(VOD_LOG_ERR, context->request_context->log, 0,
-				"concat_clip_parse: failed to parse tracks specification");
-			return VOD_BAD_MAPPING;
-		}
-	}
-	else
-	{
-		tracks_mask[MEDIA_TYPE_AUDIO] = 0xffffffff;
-		tracks_mask[MEDIA_TYPE_VIDEO] = 0xffffffff;
-	}
-
-	// get the base path
+	// decode the base path
+	base_path.len = 0;
 	if (params[CONCAT_PARAM_BASE_PATH] != NULL)
 	{
-		base_path = params[CONCAT_PARAM_BASE_PATH]->v.str;
-	}
-	else
-	{
-		base_path.len = 0;
-	}
-
-	// allocate the sources and source pointers
-	sources = vod_alloc(context->request_context->pool, sizeof(sources[0]) * clip_count);
-	if (sources == NULL)
-	{
-		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, context->request_context->log, 0,
-			"concat_clip_parse: vod_alloc failed (2)");
-		return VOD_ALLOC_FAILED;
-	}
-	vod_memzero(sources, sizeof(sources[0]) * clip_count);
-	cur_source = sources;
-
-	offset = context->sequence_offset + start_offset;
-
-	array_elts = paths->elts;
-	for (i = min_index; i <= max_index; i++)
-	{
-		// decode the path
-		if (array_elts[i].type != VOD_JSON_STRING)
-		{
-			vod_log_error(VOD_LOG_ERR, context->request_context->log, 0,
-				"concat_clip_parse: invalid type %d of \"paths\" element, must be string",
-				array_elts[i].type);
-			return VOD_BAD_MAPPING;
-		}
-
-		src_str = &array_elts[i].v.str;
-
-		dest_str.data = vod_alloc(context->request_context->pool, base_path.len + src_str->len + 1);
-		if (dest_str.data == NULL)
+		base_path.data = vod_alloc(context->request_context->pool, params[CONCAT_PARAM_BASE_PATH]->v.str.len);
+		if (base_path.data == NULL)
 		{
 			vod_log_debug0(VOD_LOG_DEBUG_LEVEL, context->request_context->log, 0,
 				"concat_clip_parse: vod_alloc failed (3)");
 			return VOD_ALLOC_FAILED;
 		}
-		dest_str.len = 0;
 
-		if (base_path.len != 0)
+		rc = vod_json_decode_string(&base_path, &params[CONCAT_PARAM_BASE_PATH]->v.str);
+		if (rc != VOD_JSON_OK)
 		{
-			rc = vod_json_decode_string(&dest_str, &base_path);
-			if (rc != VOD_JSON_OK)
-			{
-				vod_log_error(VOD_LOG_ERR, context->request_context->log, 0,
-					"concat_clip_parse: vod_json_decode_string failed %i", rc);
-				return VOD_BAD_MAPPING;
-			}
+			vod_log_error(VOD_LOG_ERR, context->request_context->log, 0,
+				"concat_clip_parse: vod_json_decode_string failed %i", rc);
+			return VOD_BAD_MAPPING;
 		}
+	}
+
+	// find the first path element
+	i = min_index;
+	part = &paths->part;
+	while (i >= part->count)
+	{
+		i -= part->count;
+		part = part->next;
+	}
+	src_str = (vod_str_t*)part->first + i;
+
+	cur_source = sources;
+	offset = context->sequence_offset + start_offset;
+	for (;;)
+	{
+		if ((void*)src_str >= part->last)
+		{
+			part = part->next;
+			src_str = part->first;
+		}
+
+		// decode the path
+		dest_str.data = vod_alloc(context->request_context->pool, base_path.len + src_str->len + 1);
+		if (dest_str.data == NULL)
+		{
+			vod_log_debug0(VOD_LOG_DEBUG_LEVEL, context->request_context->log, 0,
+				"concat_clip_parse: vod_alloc failed (4)");
+			return VOD_ALLOC_FAILED;
+		}
+
+		vod_memcpy(dest_str.data, base_path.data, base_path.len);
+		dest_str.len = base_path.len;
 
 		rc = vod_json_decode_string(&dest_str, src_str);
 		if (rc != VOD_JSON_OK)
@@ -355,15 +409,12 @@ concat_clip_parse(
 			cur_source->tracks_mask[MEDIA_TYPE_VIDEO],
 			cur_source->tracks_mask[MEDIA_TYPE_AUDIO]);
 
-		if (range == NULL)
+		cur_source++;
+		if (cur_source >= sources_end)
 		{
-			cur_source->clip_to = context->duration;
 			break;
 		}
 
-		cur_source->clip_to = duration_elt->v.num.nom;
-		duration_elt++;
-		cur_source++;
 		offset += range->end;
 		range++;
 	}
@@ -380,7 +431,7 @@ concat_clip_parse(
 	if (clip == NULL)
 	{
 		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, context->request_context->log, 0,
-			"concat_clip_parse: vod_alloc failed (4)");
+			"concat_clip_parse: vod_alloc failed (5)");
 		return VOD_ALLOC_FAILED;
 	}
 

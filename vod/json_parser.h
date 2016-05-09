@@ -31,14 +31,29 @@ typedef struct {
 	uint64_t denom;
 } vod_json_fraction_t;
 
+typedef struct vod_json_array_part_s {
+	void* first;
+	void* last;
+	size_t count;
+	struct vod_json_array_part_s* next;
+} vod_json_array_part_t;
+
+typedef struct {
+	int type;
+	size_t count;
+	vod_json_array_part_t part;
+} vod_json_array_t;
+
+typedef vod_array_t vod_json_object_t;
+
 typedef struct {
 	int type;
 	union {
 		bool_t boolean;
 		vod_json_fraction_t num;
 		vod_str_t str;			// Note: the string is not unescaped (e.g. may contain \n, \t etc.)
-		vod_array_t arr;		// of vod_json_value_t
-		vod_array_t obj;		// of vod_json_key_value_t
+		vod_json_array_t arr;
+		vod_json_object_t obj;	// of vod_json_key_value_t
 	} v;
 } vod_json_value_t;
 
@@ -74,7 +89,7 @@ typedef struct {
 } json_object_key_def_t;
 
 void vod_json_get_object_values(
-	vod_json_value_t* object,
+	vod_json_object_t* object,
 	vod_hash_t* values_hash,
 	vod_json_value_t** result);
 
@@ -92,7 +107,7 @@ typedef struct {
 } json_object_value_def_t;
 
 vod_status_t vod_json_parse_object_values(
-	vod_json_value_t* object,
+	vod_json_object_t* object,
 	vod_hash_t* values_hash,
 	void* context,
 	void* result);
@@ -100,7 +115,7 @@ vod_status_t vod_json_parse_object_values(
 // union parsing
 typedef vod_status_t(*json_parser_union_type_parser_t)(
 	void* context,
-	vod_json_value_t* element,
+	vod_json_object_t* object,
 	void** dest);
 
 typedef struct {
@@ -110,7 +125,7 @@ typedef struct {
 
 vod_status_t vod_json_parse_union(
 	request_context_t* request_context,
-	vod_json_value_t* object,
+	vod_json_object_t* object,
 	vod_str_t* type_field,
 	vod_uint_t type_field_hash,
 	vod_hash_t* union_hash,

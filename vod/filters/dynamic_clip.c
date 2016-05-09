@@ -18,7 +18,7 @@ static vod_hash_t dynamic_clip_hash;
 vod_status_t
 dynamic_clip_parse(
 	void* ctx,
-	vod_json_value_t* element,
+	vod_json_object_t* element,
 	void** result)
 {
 	media_filter_parse_context_t* context = ctx;
@@ -118,6 +118,13 @@ dynamic_clip_apply_mapping_json(
 		return VOD_BAD_MAPPING;
 	}
 
+	if (json.type != VOD_JSON_OBJECT)
+	{
+		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+			"dynamic_clip_apply_mapping_json: invalid root element type %d expected object", json.type);
+		return VOD_BAD_MAPPING;
+	}
+
 	context.request_context = request_context;
 	context.sources_head = media_set->sources_head;
 	context.mapped_sources_head = media_set->mapped_sources_head;
@@ -126,7 +133,7 @@ dynamic_clip_apply_mapping_json(
 	context.duration = clip->duration;
 	context.range = clip->range;
 
-	rc = concat_clip_parse(&context, &json, (void**)&concat_clip);
+	rc = concat_clip_parse(&context, &json.v.obj, (void**)&concat_clip);
 	if (rc != VOD_OK)
 	{
 		vod_log_debug1(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
