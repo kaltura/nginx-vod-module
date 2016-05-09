@@ -950,7 +950,8 @@ mp4_parser_parse_stts_atom(atom_info_t* atom_info, frames_parse_context_t* conte
 	context->first_frame = first_frame;
 	context->last_frame = first_frame + frames_array.nelts;
 
-	if (cur_entry >= last_entry || (accum_duration - clip_from_accum_duration) > clip_to)
+	if (clip_to != ULLONG_MAX &&
+		(cur_entry >= last_entry || (accum_duration - clip_from_accum_duration) > clip_to))
 	{
 		context->clip_to = context->parse_params.clip_to - context->parse_params.clip_from;
 	}
