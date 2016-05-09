@@ -43,7 +43,7 @@ concat_clip_parse(
 	void** result)
 {
 	media_filter_parse_context_t* context = ctx;
-	vod_json_array_part_t* first_part;
+	vod_json_array_part_t* first_part = NULL;
 	vod_json_array_part_t* part;
 	media_clip_source_t* sources_list_head;
 	media_clip_source_t* cur_source;
@@ -59,7 +59,7 @@ concat_clip_parse(
 	vod_str_t base_path;
 	vod_str_t dest_str;
 	u_char* end_pos;
-	int64_t* first_duration;
+	int64_t* first_duration = NULL;
 	int64_t* cur_duration;
 	int64_t cur_duration_value;
 	uint64_t start;
@@ -328,6 +328,7 @@ concat_clip_parse(
 	}
 
 	// decode the base path
+	base_path.len = 0;
 	if (params[CONCAT_PARAM_BASE_PATH] != NULL)
 	{
 		base_path.data = vod_alloc(context->request_context->pool, params[CONCAT_PARAM_BASE_PATH]->v.str.len);
@@ -338,7 +339,6 @@ concat_clip_parse(
 			return VOD_ALLOC_FAILED;
 		}
 
-		base_path.len = 0;
 		rc = vod_json_decode_string(&base_path, &params[CONCAT_PARAM_BASE_PATH]->v.str);
 		if (rc != VOD_JSON_OK)
 		{
@@ -346,11 +346,6 @@ concat_clip_parse(
 				"concat_clip_parse: vod_json_decode_string failed %i", rc);
 			return VOD_BAD_MAPPING;
 		}
-
-	}
-	else
-	{
-		base_path.len = 0;
 	}
 
 	// find the first path element
