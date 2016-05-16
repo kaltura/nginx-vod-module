@@ -43,8 +43,8 @@ concat_clip_parse(
 	void** result)
 {
 	media_filter_parse_context_t* context = ctx;
-	vod_json_array_part_t* first_part = NULL;
-	vod_json_array_part_t* part;
+	vod_array_part_t* first_part = NULL;
+	vod_array_part_t* part;
 	media_clip_source_t* sources_list_head;
 	media_clip_source_t* cur_source;
 	media_clip_source_t* sources_end;

@@ -8,15 +8,43 @@
 	exactly the same encoding parameters (in the case of h264, the SPS/PPS have to be the same).
 */
 
+function getRequestParams()
+{
+        $scriptParts = explode('/', $_SERVER['SCRIPT_NAME']);
+        $pathParts = array();
+        if (isset($_SERVER['PHP_SELF']))
+                $pathParts = explode('/', $_SERVER['PHP_SELF']);
+        $pathParts = array_diff($pathParts, $scriptParts);
+
+        $params = array();
+        reset($pathParts);
+        while(current($pathParts))
+        {
+                $key = each($pathParts);
+                $value = each($pathParts);
+                if (!array_key_exists($key['value'], $params))
+                {
+                        $params[$key['value']] = $value['value'];
+                }
+        }
+        return $params;
+}
+
+$params = getRequestParams();
+$discontinuity = (isset($params['disc']) && $params['disc']) ? true : false;
+$playlistType = isset($params['type']) ? $params['type'] : "live";
+
 // input params
-$playlistType = "live";			// live / vod
-$discontinuity = true;
 $filePaths = array(
 	"/path/to/video1.mp4",
 	"/path/to/video2.mp4",
 	"/path/to/video3.mp4",
 	);
-$ffprobeBin = '/path/to/ffprobe.sh';
+if (!$discontinuity)
+{
+	$filePaths = array($filePaths[0], $filePaths[0]);
+}
+$ffprobeBin = '/web/content/shared/bin/ffmpeg-2.7.2-bin/ffprobe.sh';
 $timeMargin = 10000;		// a safety margin to compensate for clock differences
 
 // nginx conf params
@@ -86,18 +114,19 @@ if ($playlistType == "live")
 	
 	// start the playlist from now() - <dvr window size>
 	$currentTime = time() * 1000 - $timeMargin - $dvrWindowSize;
-	
-	// set the first clip time to now() rounded down to cycle duration
-	$result["firstClipTime"] = floor($currentTime / $cycleDuration) * $cycleDuration;
-	
-	// get the reference time (the first clip time of the first run)
+
+	// get the reference time (the time of the first run)
 	$referenceTime = apc_fetch('reference_time');
 	if (!$referenceTime)
 	{
-		$referenceTime = $result["firstClipTime"];
+		$referenceTime = $currentTime;
 		apc_store('reference_time', $referenceTime);
 	}
-
+	
+	// set the first clip time to now() rounded down to cycle duration
+	$cycleIndex = floor(($currentTime - $referenceTime) / $cycleDuration);
+	$result["firstClipTime"] = $referenceTime + $cycleIndex * $cycleDuration;
+	
 	if ($discontinuity)
 	{
 		// find the total number of segments in each cycle
@@ -108,7 +137,6 @@ if ($playlistType == "live")
 		}
 
 		// find the initial clip index and initial segment index
-		$cycleIndex = floor(($currentTime - $referenceTime) / $cycleDuration);
 		$result["initialClipIndex"] = $cycleIndex * count($durations) + 1;
 		$result["initialSegmentIndex"] = $cycleIndex * $totalSegmentCount + 1;
 	}

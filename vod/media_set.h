@@ -44,11 +44,14 @@ typedef struct {
 struct media_sequence_s {
 	// initialized during parsing
 	uint32_t index;
+	vod_array_part_t* unparsed_clips;
 	media_clip_t** clips;						// [clip_count]
 	vod_str_t stripped_uri;
 	vod_str_t id;
 	vod_str_t label;
 	language_id_t language;
+	int64_t first_key_frame_offset;
+	vod_array_part_t* key_frame_durations;
 
 	// initialized after mapping
 	vod_str_t mapped_uri;

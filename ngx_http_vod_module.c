@@ -986,6 +986,7 @@ ngx_http_vod_parse_metadata(
 	ngx_http_vod_ctx_t *ctx, 
 	ngx_flag_t fetched_from_cache)
 {
+	get_clip_ranges_params_t get_ranges_params;
 	media_parse_params_t parse_params;
 	const ngx_http_vod_request_t* request = ctx->request;
 	media_clip_source_t* cur_source = ctx->cur_source;
@@ -1143,15 +1144,18 @@ ngx_http_vod_parse_metadata(
 			// get the start/end offsets
 			duration_millis = rescale_time(ctx->base_metadata->duration * rate.denom, ctx->base_metadata->timescale * rate.nom, 1000);
 
+			get_ranges_params.request_context = &ctx->submodule_context.request_context,
+			get_ranges_params.conf = segmenter,
+			get_ranges_params.segment_index = ctx->submodule_context.request_params.segment_index,
+			get_ranges_params.clip_durations = &duration_millis,
+			get_ranges_params.total_clip_count = 1,
+			get_ranges_params.start_time = 0,
+			get_ranges_params.end_time = duration_millis,
+			get_ranges_params.last_segment_end = last_segment_end,
+			get_ranges_params.key_frame_durations = NULL;
+
 			rc = segmenter_get_start_end_ranges_no_discontinuity(
-				&ctx->submodule_context.request_context,
-				segmenter,
-				ctx->submodule_context.request_params.segment_index,
-				&duration_millis,
-				1,
-				0,
-				duration_millis,
-				last_segment_end,
+				&get_ranges_params,
 				&clip_ranges);
 			if (rc != VOD_OK)
 			{

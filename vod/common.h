@@ -264,6 +264,13 @@ enum {
 	VOD_ERROR_LAST,
 };
 
+typedef struct vod_array_part_s {
+	void* first;
+	void* last;
+	size_t count;
+	struct vod_array_part_s* next;
+} vod_array_part_t;
+
 typedef vod_status_t(*write_callback_t)(void* context, u_char* buffer, uint32_t size);
 
 typedef struct {
