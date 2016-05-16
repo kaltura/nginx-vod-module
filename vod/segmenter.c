@@ -677,6 +677,7 @@ segmenter_get_segment_durations_estimate_internal(
 	}
 	else
 	{
+		vod_memzero(&align_context, sizeof(align_context));
 		alloc_count = conf->bootstrap_segments_count + 2 * total_clip_count;
 	}
 
