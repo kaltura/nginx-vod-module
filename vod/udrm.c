@@ -45,7 +45,7 @@ udrm_parse_response(
 	bool_t base64_decode_pssh,
 	void** output)
 {
-	vod_json_array_part_t* part;
+	vod_array_part_t* part;
 	vod_json_object_t* cur_input_pssh;
 	vod_json_object_t* element;
 	drm_system_info_t* cur_output_pssh;

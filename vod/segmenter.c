@@ -12,6 +12,13 @@ typedef struct {
 	uint32_t last_boundary;
 } segmenter_boundary_iterator_context_t;
 
+typedef struct {
+	request_context_t* request_context;
+	vod_array_part_t* part;
+	int64_t* cur_pos;
+	int64_t offset;
+} align_to_key_frames_context_t;
+
 vod_status_t 
 segmenter_init_config(segmenter_conf_t* conf, vod_pool_t* pool)
 {
@@ -323,24 +330,63 @@ segmenter_get_segment_index_discontinuity(
 	return VOD_OK;
 }
 
+static int64_t 
+segmenter_align_to_key_frames(
+	align_to_key_frames_context_t* context, 
+	int64_t offset, 
+	int64_t limit)
+{
+	int64_t cur_duration;
+
+	for (;
+		context->offset < offset; 
+		context->cur_pos++)
+	{
+		if ((void*)context->cur_pos >= context->part->last)
+		{
+			if (context->part->next == NULL)
+			{
+				return limit;
+			}
+
+			context->part = context->part->next;
+			context->cur_pos = context->part->first;
+		}
+
+		cur_duration = *context->cur_pos;
+
+		if (cur_duration <= 0 || cur_duration > MAX_CLIP_DURATION)
+		{
+			vod_log_error(VOD_LOG_WARN, context->request_context->log, 0,
+				"segmenter_align_to_key_frames: ignoring invalid key frame duration %L", cur_duration);
+			continue;
+		}
+
+		context->offset += cur_duration;
+		if (context->offset >= limit)
+		{
+			return limit;
+		}
+	}
+
+	return vod_min(context->offset, limit);
+}
+
 vod_status_t
 segmenter_get_start_end_ranges_no_discontinuity(
-	request_context_t* request_context,
-	segmenter_conf_t* conf,
-	uint32_t segment_index,
-	uint32_t* clip_durations,
-	uint32_t total_clip_count,
-	uint64_t start_time,
-	uint64_t end_time,
-	uint64_t last_segment_end,
+	get_clip_ranges_params_t* params,
 	get_clip_ranges_result_t* result)
 {
+	align_to_key_frames_context_t align_context;
+	request_context_t* request_context = params->request_context;
+	uint64_t start_time = params->start_time;
 	uint64_t clip_start_offset = start_time;
 	uint64_t next_start_offset;
 	uint64_t start;
 	uint64_t end;
 	media_range_t* cur_clip_range;
-	uint32_t* end_duration = clip_durations + total_clip_count;
+	uint32_t* clip_durations = params->clip_durations;
+	uint32_t* end_duration = clip_durations + params->total_clip_count;
 	uint32_t* cur_duration;
 	uint32_t segment_count;
 	uint32_t index;
@@ -349,15 +395,15 @@ segmenter_get_start_end_ranges_no_discontinuity(
 	result->first_clip_segment_index = 0;
 
 	// get the segment count
-	segment_count = conf->get_segment_count(conf, end_time);
+	segment_count = params->conf->get_segment_count(params->conf, params->end_time);
 	if (segment_count == INVALID_SEGMENT_COUNT)
 	{
 		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-			"segmenter_get_start_end_ranges_no_discontinuity: segment count is invalid for total duration %uL", end_time);
+			"segmenter_get_start_end_ranges_no_discontinuity: segment count is invalid for total duration %uL", params->end_time);
 		return VOD_BAD_DATA;
 	}
 
-	if (segment_index >= segment_count)
+	if (params->segment_index >= segment_count)
 	{
 		result->clip_count = 0;
 		result->min_clip_index = 1;
@@ -367,8 +413,8 @@ segmenter_get_start_end_ranges_no_discontinuity(
 
 	// get the start / end offsets
 	segmenter_get_start_end_offsets(
-		conf,
-		segment_index,
+		params->conf,
+		params->segment_index,
 		&start,
 		&end);
 
@@ -380,14 +426,24 @@ segmenter_get_start_end_ranges_no_discontinuity(
 		return VOD_BAD_REQUEST;
 	}
 
-	if (segment_index + 1 >= segment_count)
+	if (params->key_frame_durations != NULL)
 	{
-		end = last_segment_end;
+		align_context.request_context = request_context;
+		align_context.part = params->key_frame_durations;
+		align_context.offset = start_time + params->first_key_frame_offset;
+		align_context.cur_pos = align_context.part->first;
+		start = segmenter_align_to_key_frames(&align_context, start, params->last_segment_end);
+		end = segmenter_align_to_key_frames(&align_context, end, params->last_segment_end);
+	}
+
+	if (params->segment_index + 1 >= segment_count)
+	{
+		end = params->last_segment_end;
 	}
 
 	// find min/max clip indexes and initial sequence offset
 	result->min_clip_index = INVALID_CLIP_INDEX;
-	result->max_clip_index = total_clip_count - 1;
+	result->max_clip_index = params->total_clip_count - 1;
 
 	for (cur_duration = clip_durations; cur_duration < end_duration; cur_duration++, clip_start_offset = next_start_offset)
 	{
@@ -413,7 +469,7 @@ segmenter_get_start_end_ranges_no_discontinuity(
 	if (result->min_clip_index == INVALID_CLIP_INDEX)
 	{
 		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-			"segmenter_get_start_end_ranges_no_discontinuity: invalid segment index %uD", segment_index);
+			"segmenter_get_start_end_ranges_no_discontinuity: invalid segment index %uD", params->segment_index);
 		return VOD_BAD_REQUEST;
 	}
 
@@ -455,29 +511,27 @@ segmenter_get_start_end_ranges_no_discontinuity(
 
 vod_status_t
 segmenter_get_start_end_ranges_discontinuity(
-	request_context_t* request_context,
-	segmenter_conf_t* conf,
-	uint32_t clip_index,
-	uint32_t segment_index,
-	uint32_t initial_segment_index,
-	uint32_t* clip_durations,
-	uint32_t total_clip_count,
-	uint64_t total_duration,
+	get_clip_ranges_params_t* params,
 	get_clip_ranges_result_t* result)
 {
+	align_to_key_frames_context_t align_context;
+	request_context_t* request_context = params->request_context;
+	segmenter_conf_t* conf = params->conf;
 	uint64_t clip_start_offset;
 	uint64_t start;
 	uint64_t end;
 	uint64_t ignore;
-	uint32_t* end_duration = clip_durations + total_clip_count;
+	uint32_t* end_duration = params->clip_durations + params->total_clip_count;
 	uint32_t* cur_duration;
-	uint32_t cur_segment_limit;
-	uint32_t last_segment_limit = initial_segment_index;
 	uint32_t clip_index_segment_index = 0;
+	uint32_t last_segment_limit = params->initial_segment_index;
+	uint32_t cur_segment_limit;
+	uint32_t segment_index = params->segment_index;
+	uint32_t clip_index = params->clip_index;
 	media_range_t* cur_clip_range;
 	uint64_t prev_clips_duration = 0;
 
-	for (cur_duration = clip_durations; ; cur_duration++)
+	for (cur_duration = params->clip_durations;; cur_duration++)
 	{
 		if (cur_duration >= end_duration)
 		{
@@ -505,7 +559,7 @@ segmenter_get_start_end_ranges_discontinuity(
 
 		if (clip_index == 1)
 		{
-			clip_index_segment_index = cur_segment_limit - initial_segment_index;
+			clip_index_segment_index = cur_segment_limit - params->initial_segment_index;
 			segment_index += clip_index_segment_index;
 		}
 		
@@ -549,6 +603,17 @@ segmenter_get_start_end_ranges_discontinuity(
 		end -= clip_start_offset;
 	}
 
+	if (params->key_frame_durations != NULL)
+	{
+		align_context.request_context = request_context;
+		align_context.part = params->key_frame_durations;
+		align_context.offset = params->first_key_frame_offset - prev_clips_duration;
+		align_context.cur_pos = align_context.part->first;
+
+		start = segmenter_align_to_key_frames(&align_context, start, *cur_duration);
+		end = segmenter_align_to_key_frames(&align_context, end, *cur_duration);
+	}
+
 	// initialize the clip range
 	cur_clip_range = vod_alloc(request_context->pool, sizeof(cur_clip_range[0]));
 	if (cur_clip_range == NULL)
@@ -564,7 +629,7 @@ segmenter_get_start_end_ranges_discontinuity(
 
 	// initialize the result
 	result->initial_sequence_offset = prev_clips_duration;
-	result->min_clip_index = result->max_clip_index = cur_duration - clip_durations;
+	result->min_clip_index = result->max_clip_index = cur_duration - params->clip_durations;
 	result->clip_count = 1;
 	result->clip_ranges = cur_clip_range;
 	result->clip_index_segment_index = clip_index_segment_index;
@@ -578,25 +643,45 @@ segmenter_get_segment_durations_estimate_internal(
 	request_context_t* request_context,
 	segmenter_conf_t* conf,
 	media_set_t* media_set,
+	media_sequence_t* sequence,
 	uint32_t* clip_durations,
 	uint32_t total_clip_count,
 	uint64_t cur_clip_duration,
 	segment_durations_t* result)
 {
+	align_to_key_frames_context_t align_context;
 	segment_duration_item_t* cur_item;
 	uint64_t clip_start_offset;
 	uint64_t ignore;
-	uint64_t clip_offset;
+	uint64_t next_clip_offset;
+	uint64_t next_aligned_offset;
+	uint64_t aligned_offset = 0;
+	uint64_t clip_offset = 0;
 	uint32_t* end_duration = clip_durations + total_clip_count;
 	uint32_t* cur_duration = clip_durations;
 	uint32_t bootstrap_segment_limit;
 	uint32_t segment_index = media_set->initial_segment_index;
 	uint32_t clip_segment_limit;
 	uint32_t segment_duration;
+	uint32_t alloc_count;
 	bool_t discontinuity;
 
+	if (sequence->key_frame_durations != NULL)
+	{
+		align_context.request_context = request_context;
+		align_context.part = sequence->key_frame_durations;
+		align_context.offset = sequence->first_key_frame_offset;
+		align_context.cur_pos = align_context.part->first;
+		alloc_count = conf->bootstrap_segments_count + total_clip_count + 
+			vod_div_ceil(result->end_time - result->start_time, conf->segment_duration);
+	}
+	else
+	{
+		alloc_count = conf->bootstrap_segments_count + 2 * total_clip_count;
+	}
+
 	// allocate the result buffer
-	result->items = vod_alloc(request_context->pool, sizeof(result->items[0]) * (conf->bootstrap_segments_count + 2 * total_clip_count));
+	result->items = vod_alloc(request_context->pool, sizeof(result->items[0]) * alloc_count);
 	if (result->items == NULL)
 	{
 		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
@@ -626,13 +711,23 @@ segmenter_get_segment_durations_estimate_internal(
 			clip_segment_limit = segment_index + 1;
 		}
 
-		clip_offset = 0;
+		next_clip_offset = clip_offset + cur_clip_duration;
 
 		// bootstrap segments
 		bootstrap_segment_limit = vod_min(clip_segment_limit - 1, conf->bootstrap_segments_count);
 		for (; segment_index < bootstrap_segment_limit; segment_index++)
 		{
 			segment_duration = conf->bootstrap_segments_durations[segment_index];
+
+			clip_offset += segment_duration;
+
+			if (sequence->key_frame_durations != NULL)
+			{
+				next_aligned_offset = segmenter_align_to_key_frames(&align_context, clip_offset, next_clip_offset);
+				segment_duration = next_aligned_offset - aligned_offset;
+				aligned_offset = next_aligned_offset;
+			}
+
 			if (cur_item < result->items || segment_duration != cur_item->duration || discontinuity)
 			{
 				cur_item++;
@@ -643,12 +738,34 @@ segmenter_get_segment_durations_estimate_internal(
 				discontinuity = FALSE;
 			}
 			cur_item->repeat_count++;
-
-			clip_offset += segment_duration;
 		}
 
 		// remaining segments
-		if (segment_index + 1 < clip_segment_limit)
+		if (sequence->key_frame_durations != NULL)
+		{
+			for (; segment_index + 1 < clip_segment_limit; segment_index++)
+			{
+				clip_offset += conf->segment_duration;
+
+				next_aligned_offset = segmenter_align_to_key_frames(&align_context, clip_offset, next_clip_offset);
+				segment_duration = next_aligned_offset - aligned_offset;
+				aligned_offset = next_aligned_offset;
+
+				if (cur_item < result->items || segment_duration != cur_item->duration || discontinuity)
+				{
+					cur_item++;
+					cur_item->repeat_count = 0;
+					cur_item->segment_index = segment_index;
+					cur_item->duration = segment_duration;
+					cur_item->discontinuity = discontinuity;
+					discontinuity = FALSE;
+				}
+				cur_item->repeat_count++;
+			}
+
+			clip_offset = aligned_offset; // the last segment duration should be calcuated according to the aligned offset
+		}
+		else if (segment_index + 1 < clip_segment_limit)
 		{
 			segment_duration = conf->segment_duration;
 			if (cur_item < result->items || segment_duration != cur_item->duration || discontinuity)
@@ -667,9 +784,9 @@ segmenter_get_segment_durations_estimate_internal(
 		}
 
 		// last segment
-		if (segment_index < clip_segment_limit && clip_offset < cur_clip_duration)
+		if (segment_index < clip_segment_limit && clip_offset < next_clip_offset)
 		{
-			segment_duration = cur_clip_duration - clip_offset;
+			segment_duration = next_clip_offset - clip_offset;
 			if (cur_item < result->items || segment_duration != cur_item->duration || discontinuity)
 			{
 				cur_item++;
@@ -690,6 +807,7 @@ segmenter_get_segment_durations_estimate_internal(
 			break;
 		}
 
+		clip_offset = next_clip_offset;
 		cur_clip_duration = *cur_duration;
 
 		// update clip_start_offset
@@ -726,6 +844,16 @@ segmenter_get_segment_durations_estimate(
 	media_sequence_t* cur_sequence;
 	uint64_t duration_millis;
 
+	if (sequence != NULL)
+	{
+		sequences_end = sequence + 1;
+	}
+	else
+	{
+		sequence = media_set->sequences;
+		sequences_end = media_set->sequences_end;
+	}
+
 	if (media_set->durations != NULL)
 	{
 		duration_millis = media_set->total_duration;
@@ -739,6 +867,7 @@ segmenter_get_segment_durations_estimate(
 				request_context,
 				conf,
 				media_set,
+				sequence,
 				media_set->durations,
 				media_set->total_clip_count,
 				media_set->durations[0],
@@ -751,18 +880,7 @@ segmenter_get_segment_durations_estimate(
 	{
 		duration_millis = 0;
 
-		if (sequence != NULL)
-		{
-			cur_sequence = sequence;
-			sequences_end = sequence + 1;
-		}
-		else
-		{
-			cur_sequence = media_set->sequences;
-			sequences_end = media_set->sequences_end;
-		}
-
-		for (; cur_sequence < sequences_end; cur_sequence++)
+		for (cur_sequence = sequence; cur_sequence < sequences_end; cur_sequence++)
 		{
 			longest_track = cur_sequence->filtered_clips[0].longest_track;
 
@@ -789,6 +907,7 @@ segmenter_get_segment_durations_estimate(
 		request_context,
 		conf,
 		media_set,
+		sequence,
 		NULL,
 		1,
 		duration_millis,

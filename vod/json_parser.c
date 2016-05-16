@@ -321,7 +321,7 @@ vod_json_parse_fraction(vod_json_parser_state_t* state, vod_json_fraction_t* res
 static vod_json_status_t
 vod_json_parse_array(vod_json_parser_state_t* state, vod_json_array_t* result)
 {
-	vod_json_array_part_t* part;
+	vod_array_part_t* part;
 	vod_json_type_t* type;
 	size_t initial_part_count;
 	size_t part_size;

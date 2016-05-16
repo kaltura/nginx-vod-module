@@ -31,17 +31,10 @@ typedef struct {
 	uint64_t denom;
 } vod_json_fraction_t;
 
-typedef struct vod_json_array_part_s {
-	void* first;
-	void* last;
-	size_t count;
-	struct vod_json_array_part_s* next;
-} vod_json_array_part_t;
-
 typedef struct {
 	int type;
 	size_t count;
-	vod_json_array_part_t part;
+	vod_array_part_t part;
 } vod_json_array_t;
 
 typedef vod_array_t vod_json_object_t;
