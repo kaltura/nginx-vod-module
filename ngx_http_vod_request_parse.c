@@ -271,7 +271,24 @@ ngx_http_vod_parse_uri_file_name(
 		}
 
 		result->clip_index = clip_index - 1;
-		
+
+		skip_dash(start_pos, end_pos);
+	}
+
+	// sequence id
+	if (*start_pos == 's')
+	{
+		start_pos++;		// skip the s
+
+		result->sequence_id.data = start_pos;
+
+		while (start_pos < end_pos && *start_pos != '-')
+		{
+			start_pos++;
+		}
+
+		result->sequence_id.len = start_pos - result->sequence_id.data;
+
 		skip_dash(start_pos, end_pos);
 	}
 

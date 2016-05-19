@@ -110,6 +110,7 @@ typedef struct {
 	uint32_t segment_index;
 	uint32_t clip_index;
 	uint32_t sequences_mask;
+	vod_str_t sequence_id;
 	uint32_t tracks_mask[MEDIA_TYPE_COUNT];
 	uint32_t* sequence_tracks_mask;	// [MAX_SEQUENCES][MEDIA_TYPE_COUNT]
 	uint8_t* langs_mask;			// [LANG_MASK_SIZE]
