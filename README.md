@@ -163,7 +163,7 @@ The following parameters are supported on the URL path:
 #### Filename structure
 
 The structure of filename is:
-`<basename>[<fileparams>][<trackparams>][<langparams>].<extension>`
+`<basename>[<seqparams>][<fileparams>][<trackparams>][<langparams>].<extension>`
 
 Where:
 * basename + extension - the set of options is packager specific (the list below applies to the default settings):
@@ -172,6 +172,7 @@ Where:
   * hls master playlist - master.m3u8
   * hls media playlist - index.m3u8
   * mss - manifest
+* seqparams - can be used to select specific seqeuences by id, e.g. master-sseq1.m3u8.
 * fileparams - can be used to select specific files (URLs) when using multi URLs.
 	For example, manifest-f1.mpd will return an MPD only from the first URL.
 * trackparams - can be used to select specific audio/video tracks.
@@ -402,9 +403,14 @@ Live fields:
 * `initialSegmentIndex` - integer, mandatory for non-continuous live streams, contains the
 	index of the first segment in the playlist. Whenever a clip is pushed out of the head of
 	the playlist, this value must be incremented by the number of segments in the clip.
-* `presentationEnd` - boolean, optional, set to true to signal the end of the live presentation.
-	The default value is false. In HLS, for example, this parameter controls whether an
-	`#EXT-X-ENDLIST` tag should be included in the media playlist.
+* `presentationEndTime` - integer, optional, when supplied the module will compare the 
+	current time to the supplied value, and signal the end of the live presentation
+	if `presentationEndTime` has passed. In HLS, for example, this parameter controls 
+	whether an `#EXT-X-ENDLIST` tag should be included in the media playlist.
+	When the parameter is not supplied, the module will not signal live presentation end.
+* `liveSegmentCount` - integer, optional, overrides the number of live segments count
+	specified in the configuration (see `vod_live_segment_count`). If the value specified
+	in the mapping exceeds the value specified in nginx.conf, it will be ignored.
 	
 #### Sequence
 
