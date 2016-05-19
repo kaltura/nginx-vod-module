@@ -20,7 +20,8 @@ enum {
 	MEDIA_SET_PARAM_SEGMENT_BASE_TIME,
 	MEDIA_SET_PARAM_PLAYLIST_TYPE,
 	MEDIA_SET_PARAM_REFERENCE_CLIP_INDEX,
-	MEDIA_SET_PARAM_PRESENTATION_END,
+	MEDIA_SET_PARAM_PRESENTATION_END_TIME,
+	MEDIA_SET_PARAM_LIVE_SEGMENT_COUNT,
 
 	MEDIA_SET_PARAM_COUNT
 };
@@ -87,7 +88,8 @@ static json_object_key_def_t media_set_params[] = {
 	{ vod_string("segmentBaseTime"),				VOD_JSON_INT,	MEDIA_SET_PARAM_SEGMENT_BASE_TIME },
 	{ vod_string("playlistType"),					VOD_JSON_STRING,MEDIA_SET_PARAM_PLAYLIST_TYPE },
 	{ vod_string("referenceClipIndex"),				VOD_JSON_INT,	MEDIA_SET_PARAM_REFERENCE_CLIP_INDEX },
-	{ vod_string("presentationEnd"),				VOD_JSON_BOOL,	MEDIA_SET_PARAM_PRESENTATION_END },
+	{ vod_string("presentationEndTime"),			VOD_JSON_INT,	MEDIA_SET_PARAM_PRESENTATION_END_TIME },
+	{ vod_string("liveSegmentCount"),				VOD_JSON_INT,	MEDIA_SET_PARAM_LIVE_SEGMENT_COUNT },
 	{ vod_null_string, 0, 0 }
 };
 
@@ -666,6 +668,13 @@ media_set_parse_sequences(
 			return VOD_BAD_MAPPING;
 		}
 
+		if (request_params->sequence_id.len != 0 &&
+			(cur_output->id.len != request_params->sequence_id.len ||
+			vod_memcmp(cur_output->id.data, request_params->sequence_id.data, cur_output->id.len) != 0))
+		{
+			continue;
+		}
+
 		if (cur_output->language != 0 && cur_output->label.len == 0)
 		{
 			lang_get_native_name(cur_output->language, &cur_output->label);
@@ -974,6 +983,7 @@ media_set_get_live_window(
 	request_context_t* request_context,
 	segmenter_conf_t* segmenter,
 	media_set_t* media_set,
+	int64_t live_segment_count,
 	uint64_t segment_base_time,
 	bool_t parse_all_clips,
 	get_clip_ranges_result_t* clip_ranges)
@@ -990,7 +1000,7 @@ media_set_get_live_window(
 
 	// non-segment request
 
-	if (segmenter->live_segment_count <= 0)
+	if (live_segment_count <= 0)
 	{
 		// find the full range of segments included in the mapping
 		if (media_set->use_discontinuity)
@@ -1027,10 +1037,10 @@ media_set_get_live_window(
 		}
 
 		// if live segment count is negative, output the last N segments
-		if (segmenter->live_segment_count < 0 && 
-			max_segment_index - min_segment_index + 1 > (uintptr_t)(-segmenter->live_segment_count))
+		if (live_segment_count < 0 && 
+			max_segment_index - min_segment_index + 1 > (uintptr_t)(-live_segment_count))
 		{
-			min_segment_index = max_segment_index + (int32_t)(segmenter->live_segment_count + 1);
+			min_segment_index = max_segment_index + (int32_t)(live_segment_count + 1);
 		}
 	}
 	else
@@ -1069,9 +1079,9 @@ media_set_get_live_window(
 		}
 
 		// get the min segment index
-		if (max_segment_index > media_set->initial_segment_index + segmenter->live_segment_count - 1)
+		if (max_segment_index > media_set->initial_segment_index + live_segment_count - 1)
 		{
-			min_segment_index = max_segment_index - segmenter->live_segment_count + 1;
+			min_segment_index = max_segment_index - live_segment_count + 1;
 		}
 		else
 		{
@@ -1203,6 +1213,39 @@ media_set_get_live_window(
 	return VOD_OK;
 }
 
+static int64_t
+media_set_apply_live_segment_count_param(
+	int64_t live_segment_count, 
+	int64_t live_segment_count_param)
+{
+	// ignore the json param if it has a different sign or greater absolute value than the conf
+	if (live_segment_count > 0)
+	{
+		if (live_segment_count_param > 0 &&
+			live_segment_count_param < live_segment_count)
+		{
+			return live_segment_count_param;
+		}
+	}
+	else if (live_segment_count < 0)
+	{
+		if (live_segment_count_param < 0 &&
+			live_segment_count_param > live_segment_count)
+		{
+			return live_segment_count_param;
+		}
+	}
+	else
+	{
+		if (live_segment_count_param < 0)
+		{
+			return live_segment_count_param;
+		}
+	}
+
+	return live_segment_count;
+}
+
 vod_status_t
 media_set_parse_json(
 	request_context_t* request_context, 
@@ -1219,10 +1262,11 @@ media_set_parse_json(
 	vod_json_value_t json;
 	vod_status_t rc;
 	uint64_t segment_base_time;
+	int64_t live_segment_count;
 	uint32_t* cur_duration;
 	uint32_t* duration_end;
 	u_char error[128];
-	
+
 	result->segmenter_conf = segmenter;
 	result->uri = *uri;
 
@@ -1322,8 +1366,8 @@ media_set_parse_json(
 		vod_strncasecmp(params[MEDIA_SET_PARAM_PLAYLIST_TYPE]->v.str.data, playlist_type_live.data, playlist_type_live.len) == 0)
 	{
 		result->type = MEDIA_SET_LIVE;
-		result->presentation_end = params[MEDIA_SET_PARAM_PRESENTATION_END] != NULL &&
-			params[MEDIA_SET_PARAM_PRESENTATION_END]->v.boolean;
+		result->presentation_end = params[MEDIA_SET_PARAM_PRESENTATION_END_TIME] != NULL &&
+			params[MEDIA_SET_PARAM_PRESENTATION_END_TIME]->v.num.nom <= vod_time() * 1000;
 	}
 	else
 	{
@@ -1514,11 +1558,21 @@ media_set_parse_json(
 
 			if (result->type == MEDIA_SET_LIVE)
 			{
-				// trim the playlist to a smaller window according to the current time
+				// trim the playlist to a smaller window if needed
+				live_segment_count = segmenter->live_segment_count;
+
+				if (params[MEDIA_SET_PARAM_LIVE_SEGMENT_COUNT] != NULL)
+				{
+					live_segment_count = media_set_apply_live_segment_count_param(
+						live_segment_count,
+						params[MEDIA_SET_PARAM_LIVE_SEGMENT_COUNT]->v.num.nom);
+				}
+
 				rc = media_set_get_live_window(
 					request_context,
 					segmenter,
 					result,
+					live_segment_count,
 					segment_base_time,
 					parse_all_clips,
 					&context.clip_ranges);
