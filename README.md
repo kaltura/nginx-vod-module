@@ -409,7 +409,7 @@ Live fields:
 	whether an `#EXT-X-ENDLIST` tag should be included in the media playlist.
 	When the parameter is not supplied, the module will not signal live presentation end.
 * `liveWindowDuration` - integer, optional, provides a way to override the number of live segments count
-	specified in the configuration. The value specified	in the mapping is first translated to segment 
+	specified in the configuration. The value specified in the mapping is first translated to segment 
 	count by dividing it with `vod_segment_duration`.
 	If the result exceeds the absolute value specified in `vod_live_segment_count`, it will be ignored.
 	If the result is lower than 3 segments, it will be bumped up to 3.
