@@ -8,6 +8,9 @@
 #include "filters/dynamic_clip.h"
 #include "parse_utils.h"
 
+// constants
+#define MIN_LIVE_SEGMENT_COUNT (3)
+
 // typedefs
 enum {
 	MEDIA_SET_PARAM_DISCONTINUITY,
@@ -21,7 +24,7 @@ enum {
 	MEDIA_SET_PARAM_PLAYLIST_TYPE,
 	MEDIA_SET_PARAM_REFERENCE_CLIP_INDEX,
 	MEDIA_SET_PARAM_PRESENTATION_END_TIME,
-	MEDIA_SET_PARAM_LIVE_SEGMENT_COUNT,
+	MEDIA_SET_PARAM_LIVE_WINDOW_DURATION,
 
 	MEDIA_SET_PARAM_COUNT
 };
@@ -89,7 +92,7 @@ static json_object_key_def_t media_set_params[] = {
 	{ vod_string("playlistType"),					VOD_JSON_STRING,MEDIA_SET_PARAM_PLAYLIST_TYPE },
 	{ vod_string("referenceClipIndex"),				VOD_JSON_INT,	MEDIA_SET_PARAM_REFERENCE_CLIP_INDEX },
 	{ vod_string("presentationEndTime"),			VOD_JSON_INT,	MEDIA_SET_PARAM_PRESENTATION_END_TIME },
-	{ vod_string("liveSegmentCount"),				VOD_JSON_INT,	MEDIA_SET_PARAM_LIVE_SEGMENT_COUNT },
+	{ vod_string("liveWindowDuration"),				VOD_JSON_INT,	MEDIA_SET_PARAM_LIVE_WINDOW_DURATION },
 	{ vod_null_string, 0, 0 }
 };
 
@@ -1214,33 +1217,44 @@ media_set_get_live_window(
 }
 
 static int64_t
-media_set_apply_live_segment_count_param(
+media_set_apply_live_window_duration_param(
 	int64_t live_segment_count, 
-	int64_t live_segment_count_param)
+	int64_t live_window_duration,
+	uintptr_t segment_duration)
 {
-	// ignore the json param if it has a different sign or greater absolute value than the conf
+	int64_t live_segment_count_param;
+
+	// ignore values that are not positive
+	if (live_window_duration <= 0)
+	{
+		return live_segment_count;
+	}
+
+	// translate the duration to segment count
+	live_segment_count_param = vod_div_ceil(live_window_duration, segment_duration);
+	if (live_segment_count_param < MIN_LIVE_SEGMENT_COUNT)
+	{
+		live_segment_count_param = MIN_LIVE_SEGMENT_COUNT;
+	}
+
+	// ignore the json param if it has a greater absolute value than the conf
 	if (live_segment_count > 0)
 	{
-		if (live_segment_count_param > 0 &&
-			live_segment_count_param < live_segment_count)
+		if (live_segment_count_param < live_segment_count)
 		{
 			return live_segment_count_param;
 		}
 	}
 	else if (live_segment_count < 0)
 	{
-		if (live_segment_count_param < 0 &&
-			live_segment_count_param > live_segment_count)
+		if (live_segment_count_param < -live_segment_count)
 		{
-			return live_segment_count_param;
+			return -live_segment_count_param;
 		}
 	}
 	else
 	{
-		if (live_segment_count_param < 0)
-		{
-			return live_segment_count_param;
-		}
+		return -live_segment_count_param;
 	}
 
 	return live_segment_count;
@@ -1561,11 +1575,12 @@ media_set_parse_json(
 				// trim the playlist to a smaller window if needed
 				live_segment_count = segmenter->live_segment_count;
 
-				if (params[MEDIA_SET_PARAM_LIVE_SEGMENT_COUNT] != NULL)
+				if (params[MEDIA_SET_PARAM_LIVE_WINDOW_DURATION] != NULL)
 				{
-					live_segment_count = media_set_apply_live_segment_count_param(
+					live_segment_count = media_set_apply_live_window_duration_param(
 						live_segment_count,
-						params[MEDIA_SET_PARAM_LIVE_SEGMENT_COUNT]->v.num.nom);
+						params[MEDIA_SET_PARAM_LIVE_WINDOW_DURATION]->v.num.nom,
+						segmenter->segment_duration);
 				}
 
 				rc = media_set_get_live_window(
