@@ -471,6 +471,7 @@ manifest_utils_get_muxed_adaptation_set(
 				cur_track_ptr[MEDIA_TYPE_VIDEO] = NULL;
 				cur_track_ptr[MEDIA_TYPE_AUDIO] = cur_track;
 			}
+			cur_track_ptr[MEDIA_TYPE_SUBTITLE] = NULL;
 
 			cur_track_ptr += MEDIA_TYPE_COUNT;
 

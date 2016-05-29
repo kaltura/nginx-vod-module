@@ -102,6 +102,18 @@
 #define VOD_DASH_MANIFEST_ADAPTATION_FOOTER										\
 	"    </AdaptationSet>\n"
 
+#define VOD_DASH_MANIFEST_ADAPTATION_SUBTITLE									\
+	"    <AdaptationSet\n"														\
+	"        contentType=\"text\"\n"											\
+	"        lang=\"%s\"\n"														\
+	"        mimeType=\"text/vtt\">\n"											\
+	"      <Representation\n"													\
+	"          id=\"textstream_%s_%uD\"\n"										\
+	"          bandwidth=\"0\">\n"												\
+	"        <BaseURL>%V%V-%V.vtt</BaseURL>\n"									\
+	"      </Representation>\n"													\
+	"    </AdaptationSet>\n"
+
 // SegmentTemplate
 #define VOD_DASH_MANIFEST_SEGMENT_TEMPLATE_FIXED								\
 	"        <SegmentTemplate\n"												\
@@ -426,7 +438,16 @@ dash_packager_get_track_spec(
 		p = vod_sprintf(p, "f%uD-", sequence_index + 1);
 	}
 
-	p = vod_sprintf(p, "%c%uD", media_type == MEDIA_TYPE_VIDEO ? 'v' : 'a', track_index + 1);
+	switch (media_type)
+	{
+	case MEDIA_TYPE_VIDEO:
+		p = vod_sprintf(p, "v%uD", track_index + 1);
+		break;
+
+	case MEDIA_TYPE_AUDIO:
+		p = vod_sprintf(p, "a%uD", track_index + 1);
+		break;
+	}
 
 	result->len = p - result->data;
 }
@@ -691,6 +712,7 @@ dash_packager_write_mpd_period(
 	media_track_t** cur_track_ptr;
 	media_track_t* cur_track;
 	media_set_t* media_set = context->media_set;
+	const char* lang_code;
 	vod_str_t representation_id;
 	vod_str_t frame_rate;
 	u_char representation_id_buffer[MAX_TRACK_SPEC_LENGTH];
@@ -703,6 +725,7 @@ dash_packager_write_mpd_period(
 	uint32_t start_number;
 	uint32_t media_type;
 	uint32_t audio_adapt_id = 2;
+	uint32_t subtitle_adapt_id = 0;
 
 	frame_rate.data = frame_rate_buffer;
 	representation_id.data = representation_id_buffer;
@@ -806,6 +829,33 @@ dash_packager_write_mpd_period(
 				p = vod_copy(p, VOD_DASH_MANIFEST_ADAPTATION_HEADER_AUDIO, sizeof(VOD_DASH_MANIFEST_ADAPTATION_HEADER_AUDIO) - 1);
 			}
 			break;
+
+		case MEDIA_TYPE_SUBTITLE:
+			cur_track = (*adaptation_set->first) + filtered_clip_offset;
+			cur_sequence = cur_track->file_info.source->sequence;
+
+			dash_packager_get_track_spec(
+				&representation_id,
+				media_set,
+				context->clip_index,
+				cur_sequence->index,
+				cur_track->index,
+				cur_track->media_info.media_type);
+
+			if (representation_id.len > 0 && representation_id.data[representation_id.len - 1] == '-')
+			{
+				representation_id.len--;
+			}
+
+			lang_code = lang_get_iso639_1_name(cur_track->media_info.language);
+			p = vod_sprintf(p, VOD_DASH_MANIFEST_ADAPTATION_SUBTITLE, 
+				lang_code,
+				lang_code,
+				subtitle_adapt_id++, 
+				context->base_url,
+				&context->conf->subtitle_file_name_prefix,
+				&representation_id);
+			continue;
 		}
 
 		// get the segment index start number
@@ -956,7 +1006,7 @@ dash_packager_get_segment_list_total_size(
 	size_t base_url_len = 0;
 	size_t result = 0;
 
-	for (media_type = 0; media_type < MEDIA_TYPE_COUNT; media_type++)
+	for (media_type = 0; media_type < MEDIA_TYPE_SUBTITLE; media_type++)
 	{
 		if (media_set->track_count[media_type] == 0)
 		{
@@ -1152,6 +1202,10 @@ dash_packager_build_mpd(
 			// audio representations
 			(sizeof(VOD_DASH_MANIFEST_REPRESENTATION_HEADER_AUDIO) - 1 + MAX_TRACK_SPEC_LENGTH + MAX_MIME_TYPE_SIZE + MAX_CODEC_NAME_SIZE + 2 * VOD_INT32_LEN +
 			sizeof(VOD_DASH_MANIFEST_REPRESENTATION_FOOTER) - 1) * media_set->track_count[MEDIA_TYPE_AUDIO] +
+			// subtitle adaptations
+			(sizeof(VOD_DASH_MANIFEST_ADAPTATION_SUBTITLE) - 1 + 2 * LANG_ISO639_1_LEN + VOD_INT32_LEN + 
+			base_url->len + conf->subtitle_file_name_prefix.len + MAX_TRACK_SPEC_LENGTH) * 
+			context.adaptation_sets.count[ADAPTATION_TYPE_SUBTITLE] +
 		sizeof(VOD_DASH_MANIFEST_PERIOD_FOOTER) - 1 +
 		representation_tags_size;
 
@@ -1173,11 +1227,12 @@ dash_packager_build_mpd(
 	case FORMAT_SEGMENT_TEMPLATE:
 		result_size += 
 			(sizeof(VOD_DASH_MANIFEST_SEGMENT_TEMPLATE_FIXED) - 1 + VOD_INT32_LEN + VOD_INT64_LEN + urls_length) * 
-			context.adaptation_sets.total_count * period_count;
+			(context.adaptation_sets.count[MEDIA_TYPE_VIDEO] + context.adaptation_sets.count[MEDIA_TYPE_AUDIO]) *
+			period_count;
 		break;
 
 	case FORMAT_SEGMENT_TIMELINE:
-		for (media_type = 0; media_type < MEDIA_TYPE_COUNT; media_type++)
+		for (media_type = 0; media_type < MEDIA_TYPE_SUBTITLE; media_type++)
 		{
 			if (context.adaptation_sets.count[media_type] == 0)
 			{

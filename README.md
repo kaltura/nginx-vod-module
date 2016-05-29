@@ -43,6 +43,8 @@ without the overhead of short segments for the whole duration of the video
 
 * Decryption of CENC-encrypted MP4 files (it is possible to create such files with MP4Box)
 
+* WebVTT captions support (HLS / DASH)
+
 * DASH: common encryption (CENC) support
 
 * MSS: PlayReady encryption support
@@ -50,8 +52,6 @@ without the overhead of short segments for the whole duration of the video
 * HLS: Generation of I-frames playlist (EXT-X-I-FRAMES-ONLY)
 
 * HLS: support for AES-128 / SAMPLE-AES encryption
-
-* HLS: support for WebVTT captions
 
 ### Limitations
 
