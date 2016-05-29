@@ -512,6 +512,7 @@ hds_packager_build_manifest(
 
 	// bootstrap tags
 	muxed_tracks = initial_muxed_tracks;
+	tracks_array[MEDIA_TYPE_SUBTITLE] = NULL;
 	index = 0;
 	for (adaptation_set = adaptation_sets.first; adaptation_set < adaptation_sets.last; adaptation_set++)
 	{

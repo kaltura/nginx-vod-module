@@ -5,6 +5,7 @@
 #include "vod/dash/dash_packager.h"
 #include "vod/dash/edash_packager.h"
 #include "vod/mkv/mkv_builder.h"
+#include "vod/webvtt/webvtt_builder.h"
 #include "vod/udrm.h"
 
 // constants
@@ -25,12 +26,14 @@ static u_char mp4_audio_content_type[] = "audio/mp4";
 static u_char mp4_video_content_type[] = "video/mp4";
 static u_char webm_audio_content_type[] = "audio/webm";
 static u_char webm_video_content_type[] = "video/webm";
+static u_char vtt_content_type[] = "text/vtt";
 
 // file extensions
 static const u_char manifest_file_ext[] = ".mpd";
 static const u_char init_segment_file_ext[] = ".mp4";
 static const u_char fragment_file_ext[] = ".m4s";
 static const u_char webm_file_ext[] = ".webm";
+static const u_char vtt_file_ext[] = ".vtt";
 
 static ngx_int_t 
 ngx_http_vod_dash_handle_manifest(
@@ -341,11 +344,36 @@ ngx_http_vod_dash_webm_init_frame_processor(
 	return NGX_OK;
 }
 
+static ngx_int_t
+ngx_http_vod_dash_handle_vtt_file(
+	ngx_http_vod_submodule_context_t* submodule_context,
+	ngx_str_t* response,
+	ngx_str_t* content_type)
+{
+	vod_status_t rc;
+	
+	rc = webvtt_builder_build(
+		&submodule_context->request_context,
+		&submodule_context->media_set,
+		response);
+	if (rc != VOD_OK)
+	{
+		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, submodule_context->request_context.log, 0,
+			"ngx_http_vod_dash_handle_vtt_file: webvtt_builder_build failed %i", rc);
+		return ngx_http_vod_status_to_ngx_error(rc);
+	}
+
+	content_type->len = sizeof(vtt_content_type) - 1;
+	content_type->data = (u_char *)vtt_content_type;
+
+	return NGX_OK;
+}
+
 static const ngx_http_vod_request_t dash_manifest_request = {
 	REQUEST_FLAG_TIME_DEPENDENT_ON_LIVE,
 	PARSE_FLAG_DURATION_LIMITS_AND_TOTAL_SIZE | PARSE_FLAG_CODEC_NAME,
 	REQUEST_CLASS_MANIFEST,
-	SUPPORTED_CODECS,
+	SUPPORTED_CODECS | VOD_CODEC_FLAG(WEBVTT),
 	DASH_TIMESCALE,
 	ngx_http_vod_dash_handle_manifest,
 	NULL,
@@ -401,6 +429,16 @@ static const ngx_http_vod_request_t dash_webm_fragment_request = {
 	ngx_http_vod_dash_webm_init_frame_processor,
 };
 
+static const ngx_http_vod_request_t dash_webvtt_file_request = {
+	REQUEST_FLAG_SINGLE_TRACK,
+	PARSE_FLAG_FRAMES_ALL | PARSE_FLAG_EXTRA_DATA,
+	REQUEST_CLASS_OTHER,
+	VOD_CODEC_FLAG(WEBVTT),
+	WEBVTT_TIMESCALE,
+	ngx_http_vod_dash_handle_vtt_file,
+	NULL,
+};
+
 static void
 ngx_http_vod_dash_create_loc_conf(
 	ngx_conf_t *cf,
@@ -424,6 +462,7 @@ ngx_http_vod_dash_merge_loc_conf(
 	ngx_conf_merge_str_value(conf->mpd_config.profiles, prev->mpd_config.profiles, "urn:mpeg:dash:profile:isoff-main:2011");
 	ngx_conf_merge_str_value(conf->mpd_config.init_file_name_prefix, prev->mpd_config.init_file_name_prefix, "init");
 	ngx_conf_merge_str_value(conf->mpd_config.fragment_file_name_prefix, prev->mpd_config.fragment_file_name_prefix, "fragment");
+	ngx_conf_merge_str_value(conf->mpd_config.subtitle_file_name_prefix, prev->mpd_config.subtitle_file_name_prefix, "sub");
 	ngx_conf_merge_uint_value(conf->mpd_config.manifest_format, prev->mpd_config.manifest_format, FORMAT_SEGMENT_TIMELINE);
 	ngx_conf_merge_uint_value(conf->mpd_config.duplicate_bitrate_threshold, prev->mpd_config.duplicate_bitrate_threshold, 4096);
 
@@ -487,6 +526,14 @@ ngx_http_vod_dash_parse_uri_file_name(
 		end_pos -= (sizeof(manifest_file_ext) - 1);
 		*request = &dash_manifest_request;
 		flags = PARSE_FILE_NAME_MULTI_STREAMS_PER_TYPE;
+	}
+	// webvtt file
+	else if (ngx_http_vod_match_prefix_postfix(start_pos, end_pos, &conf->dash.mpd_config.subtitle_file_name_prefix, vtt_file_ext))
+	{
+		start_pos += conf->dash.mpd_config.subtitle_file_name_prefix.len;
+		end_pos -= (sizeof(vtt_file_ext) - 1);
+		*request = &dash_webvtt_file_request;
+		flags = 0;
 	}
 	else
 	{

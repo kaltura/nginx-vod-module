@@ -34,6 +34,7 @@ typedef struct {
 	vod_str_t profiles;
 	vod_str_t init_file_name_prefix;
 	vod_str_t fragment_file_name_prefix;
+	vod_str_t subtitle_file_name_prefix;
 	vod_uint_t manifest_format;
 	vod_uint_t duplicate_bitrate_threshold;
 } dash_manifest_config_t;

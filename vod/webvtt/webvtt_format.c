@@ -44,7 +44,7 @@ webvtt_reader_init(
 	}
 
 	state->first_time = TRUE;
-	state->size_limit = 1 * 1024 * 1024;			// XXXXX support configuring different metadata size limits per format
+	state->size_limit = 2 * 1024 * 1024;			// XXXXX support configuring different metadata size limits per format
 
 	*ctx = state;
 	return VOD_OK;

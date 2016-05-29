@@ -327,13 +327,9 @@ ngx_http_vod_hls_init_ts_frame_processor(
 }
 
 static ngx_int_t
-ngx_http_vod_hls_init_vtt_frame_processor(
+ngx_http_vod_hls_handle_vtt_segment(
 	ngx_http_vod_submodule_context_t* submodule_context,
-	segment_writer_t* segment_writer,
-	ngx_http_vod_frame_processor_t* frame_processor,
-	void** frame_processor_state,
-	ngx_str_t* output_buffer,
-	size_t* response_size,
+	ngx_str_t* response,
 	ngx_str_t* content_type)
 {
 	vod_status_t rc;
@@ -341,17 +337,13 @@ ngx_http_vod_hls_init_vtt_frame_processor(
 	rc = webvtt_builder_build(
 		&submodule_context->request_context,
 		&submodule_context->media_set,
-		output_buffer);
+		response);
 	if (rc != VOD_OK)
 	{
 		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, submodule_context->request_context.log, 0,
-			"ngx_http_vod_hls_init_vtt_frame_processor: webvtt_builder_build failed %i", rc);
+			"ngx_http_vod_hls_handle_vtt_segment: webvtt_builder_build failed %i", rc);
 		return ngx_http_vod_status_to_ngx_error(rc);
 	}
-
-	*response_size = output_buffer->len;
-
-	*frame_processor_state = NULL;
 
 	content_type->len = sizeof(vtt_content_type) - 1;
 	content_type->data = (u_char *)vtt_content_type;
@@ -411,12 +403,12 @@ static const ngx_http_vod_request_t hls_ts_segment_request = {
 
 static const ngx_http_vod_request_t hls_vtt_segment_request = {
 	REQUEST_FLAG_SINGLE_TRACK,
-	PARSE_FLAG_FRAMES_ALL | PARSE_FLAG_PARSED_EXTRA_DATA,
+	PARSE_FLAG_FRAMES_ALL | PARSE_FLAG_EXTRA_DATA,
 	REQUEST_CLASS_SEGMENT,
 	VOD_CODEC_FLAG(WEBVTT),
 	WEBVTT_TIMESCALE,
+	ngx_http_vod_hls_handle_vtt_segment,
 	NULL,
-	ngx_http_vod_hls_init_vtt_frame_processor,
 };
 
 void
