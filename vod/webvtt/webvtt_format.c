@@ -438,8 +438,8 @@ webvtt_parse_frames(
 	uint64_t start;
 	uint64_t end;
 	int64_t last_start_time;
-	int64_t start_time;
-	int64_t end_time;
+	int64_t start_time = 0;
+	int64_t end_time = 0;
 	u_char* timings_end;
 	u_char* cur_pos = source->data;
 	u_char* cue_start;
