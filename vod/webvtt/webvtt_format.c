@@ -434,7 +434,7 @@ webvtt_parse_frames(
 	vod_array_t frames;
 	vod_str_t* source = &metadata->source;
 	vod_str_t* header = &track->media_info.extra_data;
-	vod_str_t cue_id;
+	vod_str_t cue_id = vod_null_string;
 	uint64_t start;
 	uint64_t end;
 	int64_t last_start_time = 0;
