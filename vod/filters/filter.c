@@ -98,22 +98,18 @@ filter_init_filtered_clip_from_source(
 	filters_init_state_t* state, 
 	media_clip_source_t* source)
 {
+	uint32_t media_type;
 	media_track_t* cur_track;
 
-	// copy video tracks then audio tracks so that video tracks will appear first
-	for (cur_track = source->track_array.first_track; cur_track < source->track_array.last_track; cur_track++)
+	// copy tracks in media type order (video first then audio)
+	for (media_type = 0; media_type < MEDIA_TYPE_COUNT; media_type++)
 	{
-		if (cur_track->media_info.media_type == MEDIA_TYPE_VIDEO)
+		for (cur_track = source->track_array.first_track; cur_track < source->track_array.last_track; cur_track++)
 		{
-			filter_copy_track_to_clip(state, cur_track);
-		}
-	}
-
-	for (cur_track = source->track_array.first_track; cur_track < source->track_array.last_track; cur_track++)
-	{
-		if (cur_track->media_info.media_type == MEDIA_TYPE_AUDIO)
-		{
-			filter_copy_track_to_clip(state, cur_track);
+			if (cur_track->media_info.media_type == media_type)
+			{
+				filter_copy_track_to_clip(state, cur_track);
+			}
 		}
 	}
 }
@@ -142,14 +138,6 @@ filter_scale_video_tracks(filters_init_state_t* state, media_clip_t* clip, uint3
 		{
 			switch (cur_track->media_info.media_type)
 			{
-			case MEDIA_TYPE_VIDEO:
-				new_track = filter_copy_track_to_clip(state, cur_track);
-				if (speed_nom != speed_denom)
-				{
-					rate_filter_scale_track_timestamps(new_track, speed_nom, speed_denom);
-				}
-				break;
-
 			case MEDIA_TYPE_AUDIO:
 				if (state->audio_reference_track == NULL)
 				{
@@ -160,6 +148,14 @@ filter_scale_video_tracks(filters_init_state_t* state, media_clip_t* clip, uint3
 				if (cur_track->frame_count > 0)
 				{
 					state->has_audio_frames = TRUE;
+				}
+				break;
+
+			default:
+				new_track = filter_copy_track_to_clip(state, cur_track);
+				if (speed_nom != speed_denom)
+				{
+					rate_filter_scale_track_timestamps(new_track, speed_nom, speed_denom);
 				}
 				break;
 			}
@@ -242,11 +238,13 @@ filter_init_filtered_clips(
 	uint32_t track_count[MEDIA_TYPE_COUNT];
 	uint32_t max_duration = 0;
 	uint32_t clip_index;
+	uint32_t media_type;
+	uint32_t cur_count;
 	vod_status_t rc;
 
 	media_set->audio_filtering_needed = FALSE;
-	media_set->track_count[MEDIA_TYPE_VIDEO] = 0;
-	media_set->track_count[MEDIA_TYPE_AUDIO] = 0;
+	vod_memzero(media_set->track_count, sizeof(media_set->track_count));
+	media_set->total_track_count = 0;
 
 	// allocate the filtered clips
 	output_clip = vod_alloc(
@@ -269,14 +267,12 @@ filter_init_filtered_clips(
 		sequence->total_frame_count = 0;
 
 		// get max number of tracks in the clips of the sequence
-		sequence->track_count[MEDIA_TYPE_VIDEO] = 0;
-		sequence->track_count[MEDIA_TYPE_AUDIO] = 0;
+		vod_memzero(sequence->track_count, sizeof(sequence->track_count));
 
 		clips_end = sequence->clips + media_set->clip_count;
 		for (cur_clip = sequence->clips; cur_clip < clips_end; cur_clip++)
 		{
-			track_count[MEDIA_TYPE_VIDEO] = 0;
-			track_count[MEDIA_TYPE_AUDIO] = 0;
+			vod_memzero(track_count, sizeof(track_count));
 			filter_get_clip_track_count(*cur_clip, track_count);
 
 			if (cur_clip[0]->type != MEDIA_CLIP_SOURCE && track_count[MEDIA_TYPE_AUDIO] > 1)
@@ -286,22 +282,38 @@ filter_init_filtered_clips(
 
 			if (cur_clip == sequence->clips)
 			{
-				sequence->track_count[MEDIA_TYPE_VIDEO] = track_count[MEDIA_TYPE_VIDEO];
-				sequence->track_count[MEDIA_TYPE_AUDIO] = track_count[MEDIA_TYPE_AUDIO];
+				vod_memcpy(sequence->track_count, track_count, sizeof(sequence->track_count));
+				continue;
 			}
-			else if (sequence->track_count[MEDIA_TYPE_VIDEO] != track_count[MEDIA_TYPE_VIDEO] ||
-				sequence->track_count[MEDIA_TYPE_AUDIO] != track_count[MEDIA_TYPE_AUDIO])
+
+			for (media_type = 0; media_type < MEDIA_TYPE_COUNT; media_type++)
 			{
-				vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-					"filter_init_filtered_clips: track count mismatch, first clip had v=%uD,a=%uD current clip has v=%uD,a=%uD",
-					sequence->track_count[MEDIA_TYPE_VIDEO], sequence->track_count[MEDIA_TYPE_AUDIO],
-					track_count[MEDIA_TYPE_VIDEO], track_count[MEDIA_TYPE_AUDIO]);
-				return VOD_BAD_MAPPING;
+				if (sequence->track_count[media_type] != track_count[media_type])
+				{
+					vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+						"filter_init_filtered_clips: track count mismatch, first clip had %uD current clip has %uD media type %uD",
+						sequence->track_count[media_type], track_count[media_type], media_type);
+					return VOD_BAD_MAPPING;
+				}
 			}
 		}
 
-		// set the sequence media type
-		sequence->total_track_count = sequence->track_count[MEDIA_TYPE_VIDEO] + sequence->track_count[MEDIA_TYPE_AUDIO];
+		// update track counts
+		sequence->total_track_count = 0;
+		for (media_type = 0; media_type < MEDIA_TYPE_COUNT; media_type++)
+		{
+			cur_count = sequence->track_count[media_type];
+			if (cur_count <= 0)
+			{
+				continue;
+			}
+
+			sequence->total_track_count += cur_count;
+			media_set->track_count[media_type] += cur_count;
+			sequence->media_type = media_type;
+		}
+		media_set->total_track_count += sequence->total_track_count;
+
 		switch (sequence->total_track_count)
 		{
 		case 0:
@@ -312,17 +324,13 @@ filter_init_filtered_clips(
 			continue;
 
 		case 1:
-			sequence->media_type = sequence->track_count[MEDIA_TYPE_VIDEO] > 0 ? MEDIA_TYPE_VIDEO : MEDIA_TYPE_AUDIO;
+			// sequence->media_type already set
 			break;
 
 		default:
 			sequence->media_type = MEDIA_TYPE_NONE;
 			break;
 		}
-
-		// update the media set track count
-		media_set->track_count[MEDIA_TYPE_VIDEO] += sequence->track_count[MEDIA_TYPE_VIDEO];
-		media_set->track_count[MEDIA_TYPE_AUDIO] += sequence->track_count[MEDIA_TYPE_AUDIO];
 
 		// initialize the filtered clips array
 		sequence->filtered_clips = output_clip;
@@ -331,10 +339,9 @@ filter_init_filtered_clips(
 	}
 
 	// allocate the output tracks
-	media_set->total_track_count = media_set->track_count[MEDIA_TYPE_VIDEO] + media_set->track_count[MEDIA_TYPE_AUDIO];
 	init_state.output_track = vod_alloc(
 		request_context->pool,
-		sizeof(*init_state.output_track)* media_set->total_track_count * media_set->clip_count);
+		sizeof(*init_state.output_track) * media_set->total_track_count * media_set->clip_count);
 	if (init_state.output_track == NULL)
 	{
 		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
@@ -356,8 +363,7 @@ filter_init_filtered_clips(
 
 			output_clip->first_track = init_state.output_track;
 
-			output_clip->longest_track[MEDIA_TYPE_VIDEO] = NULL;
-			output_clip->longest_track[MEDIA_TYPE_AUDIO] = NULL;
+			vod_memzero(output_clip->longest_track, sizeof(output_clip->longest_track));
 
 			// initialize the state
 			init_state.sequence = sequence;
@@ -391,8 +397,8 @@ filter_init_filtered_clips(
 				if (init_state.audio_reference_track_speed_nom != init_state.audio_reference_track_speed_denom)
 				{
 					rate_filter_scale_track_timestamps(
-						new_track, 
-						init_state.audio_reference_track_speed_nom, 
+						new_track,
+						init_state.audio_reference_track_speed_nom,
 						init_state.audio_reference_track_speed_denom);
 				}
 
@@ -416,19 +422,18 @@ filter_init_filtered_clips(
 				{
 					return rc;
 				}
+
+				continue;
 			}
 
 			// calculate the max duration, only relevant in case of single clip
-			if (output_clip->longest_track[MEDIA_TYPE_VIDEO] != NULL &&
-				output_clip->longest_track[MEDIA_TYPE_VIDEO]->media_info.duration_millis > max_duration)
+			for (media_type = 0; media_type < MEDIA_TYPE_COUNT; media_type++)
 			{
-				max_duration = output_clip->longest_track[MEDIA_TYPE_VIDEO]->media_info.duration_millis;
-			}
-
-			if (output_clip->longest_track[MEDIA_TYPE_AUDIO] != NULL &&
-				output_clip->longest_track[MEDIA_TYPE_AUDIO]->media_info.duration_millis > max_duration)
-			{
-				max_duration = output_clip->longest_track[MEDIA_TYPE_AUDIO]->media_info.duration_millis;
+				if (output_clip->longest_track[media_type] != NULL &&
+					output_clip->longest_track[media_type]->media_info.duration_millis > max_duration)
+				{
+					max_duration = output_clip->longest_track[media_type]->media_info.duration_millis;
+				}
 			}
 		}
 	}

@@ -159,6 +159,8 @@ NGX_ADDON_DEPS="$NGX_ADDON_DEPS                                     \
                 $ngx_addon_dir/vod/mp4/mp4_parser_base.h            \
                 $ngx_addon_dir/vod/mss/mss_packager.h               \
                 $ngx_addon_dir/vod/mss/mss_playready.h              \
+                $ngx_addon_dir/vod/webvtt/webvtt_builder.h          \
+                $ngx_addon_dir/vod/webvtt/webvtt_format.h           \
                 $ngx_addon_dir/vod/parse_utils.h                    \
                 $ngx_addon_dir/vod/read_stream.h                    \
                 $ngx_addon_dir/vod/segmenter.h                      \
@@ -234,6 +236,8 @@ NGX_ADDON_SRCS="$NGX_ADDON_SRCS                                     \
                 $ngx_addon_dir/vod/mp4/mp4_parser_base.c            \
                 $ngx_addon_dir/vod/mss/mss_packager.c               \
                 $ngx_addon_dir/vod/mss/mss_playready.c              \
+                $ngx_addon_dir/vod/webvtt/webvtt_builder.c          \
+                $ngx_addon_dir/vod/webvtt/webvtt_format.c           \
                 $ngx_addon_dir/vod/parse_utils.c                    \
                 $ngx_addon_dir/vod/segmenter.c                      \
                 $ngx_addon_dir/vod/udrm.c                           \

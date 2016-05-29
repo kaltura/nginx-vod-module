@@ -163,8 +163,10 @@ parse_utils_extract_track_tokens(u_char* start_pos, u_char* end_pos, uint32_t* r
 	// by default use the first audio and first video streams
 	if (start_pos >= end_pos || (*start_pos != 'a' && *start_pos != 'v'))
 	{
-		result[MEDIA_TYPE_VIDEO] = 1;
-		result[MEDIA_TYPE_AUDIO] = 1;
+		for (media_type = 0; media_type < MEDIA_TYPE_COUNT; media_type++)
+		{
+			result[media_type] = 1;
+		}
 		return start_pos;
 	}
 

@@ -26,8 +26,8 @@
 
 #define ngx_http_vod_match_prefix_postfix(start_pos, end_pos, prefix, postfix)				\
 	((end_pos) - (start_pos) >= (int)(prefix)->len + (int)sizeof(postfix) - 1 &&			\
-	ngx_memcmp((start_pos), (prefix)->data, (prefix)->len) == 0	&&							\
-	ngx_memcmp((end_pos) - (sizeof(postfix) - 1), (postfix), sizeof(postfix) - 1) == 0)
+	ngx_memcmp((end_pos) - (sizeof(postfix) - 1), (postfix), sizeof(postfix) - 1) == 0 &&	\
+	ngx_memcmp((start_pos), (prefix)->data, (prefix)->len) == 0)
 
 // typedefs
 struct ngx_http_vod_request_s;

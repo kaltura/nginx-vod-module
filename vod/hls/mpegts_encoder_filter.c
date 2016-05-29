@@ -516,7 +516,7 @@ mpegts_encoder_add_stream(
 	default:
 		vod_log_error(VOD_LOG_ERR, stream_state->request_context->log, 0,
 			"mpegts_encoder_add_stream: invalid media type %d", stream_info->media_type);
-		return VOD_UNEXPECTED;
+		return VOD_BAD_REQUEST;
 	}
 
 	if (stream_state->pmt_packet_pos + pmt_entry_size + sizeof(uint32_t) >= 

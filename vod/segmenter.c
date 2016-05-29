@@ -844,6 +844,7 @@ segmenter_get_segment_durations_estimate(
 	media_sequence_t* sequences_end;
 	media_sequence_t* cur_sequence;
 	uint64_t duration_millis;
+	uint32_t cur_media_type;
 
 	if (sequence != NULL)
 	{
@@ -885,18 +886,23 @@ segmenter_get_segment_durations_estimate(
 		{
 			longest_track = cur_sequence->filtered_clips[0].longest_track;
 
-			if (longest_track[MEDIA_TYPE_VIDEO] != NULL && 
-				longest_track[MEDIA_TYPE_VIDEO]->media_info.duration_millis > duration_millis &&
-				(media_type == MEDIA_TYPE_NONE || media_type == MEDIA_TYPE_VIDEO))
+			if (media_type != MEDIA_TYPE_NONE)
 			{
-				duration_millis = longest_track[MEDIA_TYPE_VIDEO]->media_info.duration_millis;
+				if (longest_track[media_type] != NULL &&
+					longest_track[media_type]->media_info.duration_millis > duration_millis)
+				{
+					duration_millis = longest_track[media_type]->media_info.duration_millis;
+				}
+				continue;
 			}
 
-			if (longest_track[MEDIA_TYPE_AUDIO] != NULL &&
-				longest_track[MEDIA_TYPE_AUDIO]->media_info.duration_millis > duration_millis &&
-				(media_type == MEDIA_TYPE_NONE || media_type == MEDIA_TYPE_AUDIO))
+			for (cur_media_type = 0; cur_media_type < MEDIA_TYPE_COUNT; cur_media_type++)
 			{
-				duration_millis = longest_track[MEDIA_TYPE_AUDIO]->media_info.duration_millis;
+				if (longest_track[cur_media_type] != NULL &&
+					longest_track[cur_media_type]->media_info.duration_millis > duration_millis)
+				{
+					duration_millis = longest_track[cur_media_type]->media_info.duration_millis;
+				}
 			}
 		}
 	}
@@ -1025,8 +1031,7 @@ segmenter_get_segment_durations_accurate(
 			}
 
 			if (main_track == NULL || 
-				(main_track->media_info.media_type == MEDIA_TYPE_AUDIO && 
-				 cur_track->media_info.media_type == MEDIA_TYPE_VIDEO))
+				(cur_track->media_info.media_type < main_track->media_info.media_type))
 			{
 				main_track = cur_track;
 			}
@@ -1046,9 +1051,19 @@ segmenter_get_segment_durations_accurate(
 		return VOD_UNEXPECTED;
 	}
 
-	if (main_track->media_info.media_type == MEDIA_TYPE_AUDIO && media_set->audio_filtering_needed)
+	// if the main track is not audio/video, or main track is audio and requires filtering, fall back to estimate
+	switch (main_track->media_info.media_type)
 	{
-		// the main track is audio and the filters were not applied to it, fall back to estimate
+	case MEDIA_TYPE_VIDEO:
+		break;
+
+	case MEDIA_TYPE_AUDIO:
+		if (!media_set->audio_filtering_needed)
+		{
+			break;
+		}
+
+	default:
 		return segmenter_get_segment_durations_estimate(
 			request_context,
 			conf,

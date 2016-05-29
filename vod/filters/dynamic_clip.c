@@ -429,8 +429,7 @@ dynamic_clip_apply_mapping_string_clip(
 
 		cur_source->base.type = MEDIA_CLIP_SOURCE;
 
-		cur_source->tracks_mask[MEDIA_TYPE_AUDIO] = 0xffffffff;
-		cur_source->tracks_mask[MEDIA_TYPE_VIDEO] = 0xffffffff;
+		vod_memset(cur_source->tracks_mask, 0xff, sizeof(cur_source->tracks_mask));
 		cur_source->sequence = clip->sequence;
 		cur_source->range = range;
 		cur_source->sequence_offset = clip->sequence_offset + offset;

@@ -7,7 +7,7 @@
 // constants
 #define LANG_ISO639_1_LEN (2)
 #define LANG_ISO639_2_LEN (3)
-#define LANG_MASK_SIZE ((LANG_COUNT + 7) >> 3)
+#define LANG_MASK_SIZE ((VOD_LANG_COUNT + 7) >> 3)
 
 // macros
 #define iso639_2_str_to_int(x) \
@@ -17,11 +17,11 @@
 
 // typedefs
 enum {
-#define LANG(id, iso639_1, iso639_2t, iso639_2b, name, native_name) LANG_##id, 
+#define LANG(id, iso639_1, iso639_2t, iso639_2b, name, native_name) VOD_LANG_##id, 
 #include "languages_x.h"
 #undef LANG
 
-	LANG_COUNT
+	VOD_LANG_COUNT
 };
 
 typedef uint8_t language_id_t;

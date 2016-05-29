@@ -139,8 +139,7 @@ concat_clip_parse(
 	{
 		src_str = &params[CONCAT_PARAM_TRACKS]->v.str;
 		end_pos = src_str->data + src_str->len;
-		tracks_mask[MEDIA_TYPE_AUDIO] = 0;
-		tracks_mask[MEDIA_TYPE_VIDEO] = 0;
+		vod_memzero(tracks_mask, sizeof(tracks_mask));
 		if (parse_utils_extract_track_tokens(src_str->data, end_pos, tracks_mask) != end_pos)
 		{
 			vod_log_error(VOD_LOG_ERR, context->request_context->log, 0,
@@ -150,8 +149,7 @@ concat_clip_parse(
 	}
 	else
 	{
-		tracks_mask[MEDIA_TYPE_AUDIO] = 0xffffffff;
-		tracks_mask[MEDIA_TYPE_VIDEO] = 0xffffffff;
+		vod_memset(tracks_mask, 0xff, sizeof(tracks_mask));
 	}
 
 	if (context->range == NULL)
@@ -396,8 +394,7 @@ concat_clip_parse(
 
 		cur_source->base.type = MEDIA_CLIP_SOURCE;
 
-		cur_source->tracks_mask[MEDIA_TYPE_AUDIO] = tracks_mask[MEDIA_TYPE_AUDIO];
-		cur_source->tracks_mask[MEDIA_TYPE_VIDEO] = tracks_mask[MEDIA_TYPE_VIDEO];
+		vod_memcpy(cur_source->tracks_mask, tracks_mask, sizeof(tracks_mask));
 		cur_source->sequence = context->sequence;
 		cur_source->range = range;
 		cur_source->sequence_offset = offset;
@@ -417,6 +414,7 @@ concat_clip_parse(
 
 		offset += range->end;
 		range++;
+		src_str++;
 	}
 
 	// in case of a single clip, just return the first source (no need for a concat clip)
@@ -473,6 +471,7 @@ concat_clip_concat(
 	media_track_t* dest_track;
 	media_track_t* src_track;
 	media_clip_t** cur_source;
+	uint32_t media_type;
 	uint32_t i;
 
 	for (cur_source = clip->sources + clip->source_count - 2; cur_source >= clip->sources; cur_source--)
@@ -481,21 +480,18 @@ concat_clip_concat(
 		src_clip = (media_clip_source_t*)cur_source[1];
 
 		// verify the number of video/audio tracks match
-		if (src_clip->track_array.track_count[MEDIA_TYPE_VIDEO] != dest_clip->track_array.track_count[MEDIA_TYPE_VIDEO])
+		for (media_type = 0; media_type < MEDIA_TYPE_COUNT; media_type++)
 		{
-			vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-				"concat_clip_concat: concatenated sources have a different number of video tracks %uD vs %uD",
-				src_clip->track_array.track_count[MEDIA_TYPE_VIDEO],
-				dest_clip->track_array.track_count[MEDIA_TYPE_VIDEO]);
-			return VOD_BAD_MAPPING;
-		}
+			if (src_clip->track_array.track_count[media_type] == dest_clip->track_array.track_count[media_type])
+			{
+				continue;
+			}
 
-		if (src_clip->track_array.track_count[MEDIA_TYPE_AUDIO] != dest_clip->track_array.track_count[MEDIA_TYPE_AUDIO])
-		{
 			vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-				"concat_clip_concat: concatenated sources have a different number of audio tracks %uD vs %uD",
-				src_clip->track_array.track_count[MEDIA_TYPE_AUDIO],
-				dest_clip->track_array.track_count[MEDIA_TYPE_AUDIO]);
+				"concat_clip_concat: concatenated sources have a different number of %uD tracks %uD vs %uD",
+				media_type,
+				src_clip->track_array.track_count[media_type],
+				dest_clip->track_array.track_count[media_type]);
 			return VOD_BAD_MAPPING;
 		}
 
