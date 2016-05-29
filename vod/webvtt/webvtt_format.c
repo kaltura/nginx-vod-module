@@ -437,7 +437,7 @@ webvtt_parse_frames(
 	vod_str_t cue_id;
 	uint64_t start;
 	uint64_t end;
-	int64_t last_start_time;
+	int64_t last_start_time = 0;
 	int64_t start_time = 0;
 	int64_t end_time = 0;
 	u_char* timings_end;
