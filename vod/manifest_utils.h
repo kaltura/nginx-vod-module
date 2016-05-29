@@ -17,6 +17,7 @@
 enum {		// Note: must match media type in order
 	ADAPTATION_TYPE_VIDEO,
 	ADAPTATION_TYPE_AUDIO,
+	ADAPTATION_TYPE_SUBTITLE,
 	ADAPTATION_TYPE_MUXED,
 	ADAPTATION_TYPE_COUNT,
 };
@@ -32,6 +33,7 @@ typedef struct {
 typedef struct {
 	adaptation_set_t* first;	// [total_count]
 	adaptation_set_t* last;
+	adaptation_set_t* first_by_type[ADAPTATION_TYPE_COUNT];
 	uint32_t count[ADAPTATION_TYPE_COUNT];
 	uint32_t total_count;
 } adaptation_sets_t;
@@ -44,6 +46,7 @@ vod_status_t manifest_utils_build_request_params_string(
 	uint32_t sequences_mask,
 	uint32_t* sequence_tracks_mask,
 	uint32_t* tracks_mask,
+	vod_str_t* suffix,
 	vod_str_t* result);
 
 u_char* manifest_utils_append_tracks_spec(u_char* p, media_track_t** tracks, bool_t write_sequence_index);

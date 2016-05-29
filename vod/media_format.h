@@ -69,12 +69,16 @@ enum {
 	VOD_CODEC_ID_VORBIS,
 	VOD_CODEC_ID_OPUS,
 
+	// captions
+	VOD_CODEC_ID_WEBVTT,
+
 	VOD_CODEC_ID_COUNT
 };
 
 enum {
 	FORMAT_ID_MP4,
 	FORMAT_ID_MKV,
+	FORMAT_ID_WEBVTT,
 };
 
 enum {			// mp4 only
@@ -137,7 +141,7 @@ typedef struct media_info_s {
 	uint64_t duration;
 	uint32_t duration_millis;
 	uint32_t bitrate;
-	uint32_t min_frame_duration;	// valid only for video
+	uint32_t min_frame_duration;	// valid only for video		XXXXX move to video_media_info_t
 	uint32_t codec_id;
 	vod_str_t codec_name;
 	vod_str_t extra_data;
@@ -168,6 +172,15 @@ struct input_frame_s {
 
 typedef struct input_frame_s input_frame_t;
 
+typedef struct frame_list_part_s {
+	struct frame_list_part_s* next;
+	input_frame_t* first_frame;
+	input_frame_t* last_frame;
+	uint32_t clip_to;
+	frames_source_t* frames_source;
+	void* frames_source_context;
+} frame_list_part_t;
+
 typedef struct {		// mp4 only
 	u_char* auxiliary_info;
 	u_char* auxiliary_info_end;
@@ -175,15 +188,6 @@ typedef struct {		// mp4 only
 	u_char* auxiliary_sample_sizes;		// [frame_count]
 	bool_t use_subsamples;
 } media_encryption_t;
-
-typedef struct frame_list_part_s {
-	input_frame_t* first_frame;
-	input_frame_t* last_frame;
-	uint32_t clip_to;
-	frames_source_t* frames_source;
-	void* frames_source_context;
-	struct frame_list_part_s* next;
-} frame_list_part_t;
 
 typedef struct {
 	media_info_t media_info;

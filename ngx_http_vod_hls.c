@@ -1,6 +1,7 @@
 #include <ngx_http.h>
 #include "ngx_http_vod_submodule.h"
 #include "ngx_http_vod_utils.h"
+#include "vod/webvtt/webvtt_builder.h"
 #include "vod/hls/hls_muxer.h"
 #include "vod/udrm.h"
 
@@ -8,11 +9,13 @@
 #define SUPPORTED_CODECS (VOD_CODEC_FLAG(AVC) | VOD_CODEC_FLAG(HEVC) | VOD_CODEC_FLAG(AAC) | VOD_CODEC_FLAG(MP3))
 
 // content types
-static u_char mpeg_ts_content_type[] = "video/MP2T";
 static u_char m3u8_content_type[] = "application/vnd.apple.mpegurl";
 static u_char encryption_key_content_type[] = "application/octet-stream";
+static u_char mpeg_ts_content_type[] = "video/MP2T";
+static u_char vtt_content_type[] = "text/vtt";
 
 static const u_char ts_file_ext[] = ".ts";
+static const u_char vtt_file_ext[] = ".vtt";
 static const u_char m3u8_file_ext[] = ".m3u8";
 static const u_char key_file_ext[] = ".key";
 
@@ -280,7 +283,7 @@ ngx_http_vod_hls_handle_encryption_key(
 }
 
 static ngx_int_t
-ngx_http_vod_hls_init_frame_processor(
+ngx_http_vod_hls_init_ts_frame_processor(
 	ngx_http_vod_submodule_context_t* submodule_context,
 	segment_writer_t* segment_writer,
 	ngx_http_vod_frame_processor_t* frame_processor,
@@ -310,7 +313,7 @@ ngx_http_vod_hls_init_frame_processor(
 	if (rc != VOD_OK)
 	{
 		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, submodule_context->request_context.log, 0,
-			"ngx_http_vod_hls_init_frame_processor: hls_muxer_init failed %i", rc);
+			"ngx_http_vod_hls_init_ts_frame_processor: hls_muxer_init failed %i", rc);
 		return ngx_http_vod_status_to_ngx_error(rc);
 	}
 
@@ -323,11 +326,44 @@ ngx_http_vod_hls_init_frame_processor(
 	return NGX_OK;
 }
 
+static ngx_int_t
+ngx_http_vod_hls_init_vtt_frame_processor(
+	ngx_http_vod_submodule_context_t* submodule_context,
+	segment_writer_t* segment_writer,
+	ngx_http_vod_frame_processor_t* frame_processor,
+	void** frame_processor_state,
+	ngx_str_t* output_buffer,
+	size_t* response_size,
+	ngx_str_t* content_type)
+{
+	vod_status_t rc;
+	
+	rc = webvtt_builder_build(
+		&submodule_context->request_context,
+		&submodule_context->media_set,
+		output_buffer);
+	if (rc != VOD_OK)
+	{
+		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, submodule_context->request_context.log, 0,
+			"ngx_http_vod_hls_init_vtt_frame_processor: webvtt_builder_build failed %i", rc);
+		return ngx_http_vod_status_to_ngx_error(rc);
+	}
+
+	*response_size = output_buffer->len;
+
+	*frame_processor_state = NULL;
+
+	content_type->len = sizeof(vtt_content_type) - 1;
+	content_type->data = (u_char *)vtt_content_type;
+
+	return NGX_OK;
+}
+
 static const ngx_http_vod_request_t hls_master_request = {
 	0,
 	PARSE_FLAG_TOTAL_SIZE_ESTIMATE | PARSE_FLAG_CODEC_NAME,
 	REQUEST_CLASS_OTHER,
-	SUPPORTED_CODECS,
+	SUPPORTED_CODECS | VOD_CODEC_FLAG(WEBVTT),
 	HLS_TIMESCALE,
 	ngx_http_vod_hls_handle_master_playlist,
 	NULL,
@@ -337,7 +373,7 @@ static const ngx_http_vod_request_t hls_index_request = {
 	REQUEST_FLAG_SINGLE_TRACK_PER_MEDIA_TYPE | REQUEST_FLAG_TIME_DEPENDENT_ON_LIVE,
 	PARSE_BASIC_METADATA_ONLY,
 	REQUEST_CLASS_MANIFEST,
-	SUPPORTED_CODECS,
+	SUPPORTED_CODECS | VOD_CODEC_FLAG(WEBVTT),
 	HLS_TIMESCALE,
 	ngx_http_vod_hls_handle_index_playlist,
 	NULL,
@@ -363,14 +399,24 @@ static const ngx_http_vod_request_t hls_enc_key_request = {
 	NULL,
 };
 
-static const ngx_http_vod_request_t hls_segment_request = {
+static const ngx_http_vod_request_t hls_ts_segment_request = {
 	REQUEST_FLAG_SINGLE_TRACK_PER_MEDIA_TYPE,
 	PARSE_FLAG_FRAMES_ALL | PARSE_FLAG_PARSED_EXTRA_DATA,
 	REQUEST_CLASS_SEGMENT,
 	SUPPORTED_CODECS,
 	HLS_TIMESCALE,
 	NULL,
-	ngx_http_vod_hls_init_frame_processor,
+	ngx_http_vod_hls_init_ts_frame_processor,
+};
+
+static const ngx_http_vod_request_t hls_vtt_segment_request = {
+	REQUEST_FLAG_SINGLE_TRACK,
+	PARSE_FLAG_FRAMES_ALL | PARSE_FLAG_PARSED_EXTRA_DATA,
+	REQUEST_CLASS_SEGMENT,
+	VOD_CODEC_FLAG(WEBVTT),
+	WEBVTT_TIMESCALE,
+	NULL,
+	ngx_http_vod_hls_init_vtt_frame_processor,
 };
 
 void
@@ -452,12 +498,20 @@ ngx_http_vod_hls_parse_uri_file_name(
 	uint32_t flags;
 	ngx_int_t rc;
 
-	// segment
+	// ts segment
 	if (ngx_http_vod_match_prefix_postfix(start_pos, end_pos, &conf->hls.m3u8_config.segment_file_name_prefix, ts_file_ext))
 	{
 		start_pos += conf->hls.m3u8_config.segment_file_name_prefix.len;
 		end_pos -= (sizeof(ts_file_ext) - 1);
-		*request = &hls_segment_request;
+		*request = &hls_ts_segment_request;
+		flags = PARSE_FILE_NAME_EXPECT_SEGMENT_INDEX;
+	}
+	// vtt segment
+	else if (ngx_http_vod_match_prefix_postfix(start_pos, end_pos, &conf->hls.m3u8_config.segment_file_name_prefix, vtt_file_ext))
+	{
+		start_pos += conf->hls.m3u8_config.segment_file_name_prefix.len;
+		end_pos -= (sizeof(vtt_file_ext) - 1);
+		*request = &hls_vtt_segment_request;
 		flags = PARSE_FILE_NAME_EXPECT_SEGMENT_INDEX;
 	}
 	// manifest

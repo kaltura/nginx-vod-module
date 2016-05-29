@@ -142,8 +142,7 @@ ngx_http_vod_extract_track_tokens(u_char* start_pos, u_char* end_pos, uint32_t* 
 	uint32_t stream_index;
 	int media_type;
 
-	result[MEDIA_TYPE_VIDEO] = 0;
-	result[MEDIA_TYPE_AUDIO] = 0;
+	ngx_memzero(result, sizeof(result[0]) * MEDIA_TYPE_COUNT);
 
 	for (;;)
 	{
@@ -229,11 +228,14 @@ ngx_http_vod_parse_uri_file_name(
 	uint32_t masks_per_sequence;
 	uint32_t sequence_index;
 	uint32_t clip_index;
+	uint32_t media_type;
 	language_id_t lang_id;
 
 	default_tracks_mask = (flags & PARSE_FILE_NAME_MULTI_STREAMS_PER_TYPE) ? 0xffffffff : 1;
-	result->tracks_mask[MEDIA_TYPE_VIDEO] = default_tracks_mask;
-	result->tracks_mask[MEDIA_TYPE_AUDIO] = default_tracks_mask;
+	for (media_type = 0; media_type < MEDIA_TYPE_COUNT; media_type++)
+	{
+		result->tracks_mask[media_type] = default_tracks_mask;
+	}
 	result->sequences_mask = 0xffffffff;
 	result->clip_index = INVALID_CLIP_INDEX;
 
@@ -372,12 +374,13 @@ ngx_http_vod_parse_uri_file_name(
 
 			// copy the currently parsed mask to its place
 			tracks_mask = result->sequence_tracks_mask + sequence_index * MEDIA_TYPE_COUNT;
-			tracks_mask[MEDIA_TYPE_VIDEO] = result->tracks_mask[MEDIA_TYPE_VIDEO];
-			tracks_mask[MEDIA_TYPE_AUDIO] = result->tracks_mask[MEDIA_TYPE_AUDIO];
+			ngx_memcpy(tracks_mask, result->tracks_mask, sizeof(tracks_mask[0]) * MEDIA_TYPE_COUNT);
 
 			// restore the global mask to the default
-			result->tracks_mask[MEDIA_TYPE_VIDEO] = default_tracks_mask;
-			result->tracks_mask[MEDIA_TYPE_AUDIO] = default_tracks_mask;
+			for (media_type = 0; media_type < MEDIA_TYPE_COUNT; media_type++)
+			{
+				result->tracks_mask[media_type] = default_tracks_mask;
+			}
 
 			// from now on, parse directly to the sequence tracks mask
 			tracks_mask = result->sequence_tracks_mask;
@@ -553,8 +556,7 @@ ngx_http_vod_parse_tracks_param(ngx_str_t* value, void* output, int offset)
 	uint32_t* tracks_mask = (uint32_t*)((u_char*)output + offset);
 	u_char* end_pos;
 
-	tracks_mask[MEDIA_TYPE_AUDIO] = 0;
-	tracks_mask[MEDIA_TYPE_VIDEO] = 0;
+	ngx_memzero(tracks_mask, sizeof(tracks_mask[0]) * MEDIA_TYPE_COUNT);
 	end_pos = parse_utils_extract_track_tokens(value->data, value->data + value->len, tracks_mask);
 	if (end_pos != value->data + value->len)
 	{
@@ -692,14 +694,13 @@ ngx_http_vod_extract_uri_params(
 	u_char* p;
 
 	// set the source defaults
-	vod_memzero(source_clip, sizeof(*source_clip));
+	ngx_memzero(source_clip, sizeof(*source_clip));
 
 	source_clip->base.type = MEDIA_CLIP_SOURCE;
 	source_clip->base.id = (*clip_id)++;
 
 	source_clip->clip_to = UINT_MAX;
-	source_clip->tracks_mask[MEDIA_TYPE_AUDIO] = 0xffffffff;
-	source_clip->tracks_mask[MEDIA_TYPE_VIDEO] = 0xffffffff;
+	ngx_memset(source_clip->tracks_mask, 0xff, sizeof(source_clip->tracks_mask));
 	source_clip->uri = *uri;
 	source_clip->sequence = sequence;
 	
@@ -831,8 +832,10 @@ ngx_http_vod_parse_uri_path(
 	ngx_int_t rc;
 	uint32_t sequences_mask;
 	uint32_t parts_mask;
+	uint32_t media_type;
 	uint32_t clip_id = 1;
 	uint32_t i;
+	bool_t has_tracks;
 	int uri_count;
 
 	media_set->uri = *uri;		// must save the uri before calling ngx_http_vod_parse_multi_uri as it may change
@@ -908,8 +911,17 @@ ngx_http_vod_parse_uri_path(
 			return rc;
 		}
 
-		if ((cur_source->tracks_mask[MEDIA_TYPE_AUDIO] & request_params->tracks_mask[MEDIA_TYPE_AUDIO]) == 0 &&
-			(cur_source->tracks_mask[MEDIA_TYPE_VIDEO] & request_params->tracks_mask[MEDIA_TYPE_VIDEO]) == 0)
+		has_tracks = FALSE;
+		for (media_type = 0; media_type < MEDIA_TYPE_COUNT; media_type++)
+		{
+			if ((cur_source->tracks_mask[media_type] & request_params->tracks_mask[media_type]) != 0)
+			{
+				has_tracks = TRUE;
+				break;
+			}
+		}
+
+		if (!has_tracks)
 		{
 			continue;
 		}

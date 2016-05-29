@@ -51,6 +51,8 @@ without the overhead of short segments for the whole duration of the video
 
 * HLS: support for AES-128 / SAMPLE-AES encryption
 
+* HLS: support for WebVTT captions
+
 ### Limitations
 
 * Only AAC audio is supported (MP3 audio is not)

@@ -311,8 +311,7 @@ media_set_parse_tracks_spec(
 	uint32_t* tracks_mask = dest;
 	u_char* end_pos = value->v.str.data + value->v.str.len;
 
-	tracks_mask[MEDIA_TYPE_AUDIO] = 0;
-	tracks_mask[MEDIA_TYPE_VIDEO] = 0;
+	vod_memzero(tracks_mask, sizeof(tracks_mask[0]) * MEDIA_TYPE_COUNT);
 	if (parse_utils_extract_track_tokens(value->v.str.data, end_pos, tracks_mask) != end_pos)
 	{
 		vod_log_error(VOD_LOG_ERR, context->request_context->log, 0,
@@ -440,8 +439,7 @@ media_set_parse_source(
 
 	source->base.type = MEDIA_CLIP_SOURCE;
 
-	source->tracks_mask[MEDIA_TYPE_AUDIO] = 0xffffffff;
-	source->tracks_mask[MEDIA_TYPE_VIDEO] = 0xffffffff;
+	vod_memset(source->tracks_mask, 0xff, sizeof(source->tracks_mask));
 	source->sequence = context->base.sequence;
 	source->range = context->base.range;
 	source->sequence_offset = context->base.sequence_offset;

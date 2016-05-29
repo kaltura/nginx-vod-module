@@ -16,6 +16,7 @@
 #include "ngx_buffer_cache.h"
 #include "vod/mp4/mp4_format.h"
 #include "vod/mkv/mkv_format.h"
+#include "vod/webvtt/webvtt_format.h"
 #include "vod/input/read_cache.h"
 #include "vod/filters/audio_filter.h"
 #include "vod/filters/dynamic_clip.h"
@@ -189,6 +190,7 @@ static ngx_str_t empty_string = ngx_null_string;
 static media_format_t* media_formats[] = {
 	&mp4_format,
 	// XXXXX add &mkv_format,
+	&webvtt_format,
 	NULL
 };
 
@@ -399,6 +401,7 @@ ngx_http_vod_set_request_params_var(ngx_http_request_t *r, ngx_http_variable_val
 		request_params->sequences_mask,
 		request_params->sequence_tracks_mask,
 		request_params->tracks_mask,
+		&empty_string,
 		&value);
 	if (rc != VOD_OK)
 	{
@@ -767,7 +770,7 @@ ngx_http_vod_alloc_read_buffer(ngx_http_vod_ctx_t *ctx, size_t size, int alloc_p
 	ngx_http_vod_alloc_params_t* alloc_params = ctx->alloc_params + alloc_params_index;
 	u_char* start = ctx->read_buffer.start;
 
-	size += alloc_params->extra_size;
+	size += alloc_params->extra_size + 1;		// + 1 for null termination
 
 	if (start == NULL ||										// no buffer
 		start + size > ctx->read_buffer.end ||					// buffer too small
@@ -1000,6 +1003,7 @@ ngx_http_vod_parse_metadata(
 	uint32_t* request_tracks_mask;
 	uint32_t tracks_mask[MEDIA_TYPE_COUNT];
 	uint32_t duration_millis;
+	uint32_t media_type;
 	vod_fraction_t rate;
 
 	if (request == NULL)
@@ -1057,8 +1061,11 @@ ngx_http_vod_parse_metadata(
 	{
 		request_tracks_mask = ctx->submodule_context.request_params.tracks_mask;
 	}
-	tracks_mask[MEDIA_TYPE_VIDEO] = cur_source->tracks_mask[MEDIA_TYPE_VIDEO] & request_tracks_mask[MEDIA_TYPE_VIDEO];
-	tracks_mask[MEDIA_TYPE_AUDIO] = cur_source->tracks_mask[MEDIA_TYPE_AUDIO] & request_tracks_mask[MEDIA_TYPE_AUDIO];
+
+	for (media_type = 0; media_type < MEDIA_TYPE_COUNT; media_type++)
+	{
+		tracks_mask[media_type] = cur_source->tracks_mask[media_type] & request_tracks_mask[media_type];
+	}
 	parse_params.required_tracks_mask = tracks_mask;
 	parse_params.langs_mask = ctx->submodule_context.request_params.langs_mask;
 	parse_params.clip_from = cur_source->clip_from;
@@ -1392,6 +1399,16 @@ ngx_http_vod_get_async_read_result(ngx_http_vod_ctx_t* ctx, vod_str_t* read_buff
 			buffer_size, buffer_offset);
 		return ngx_http_vod_status_to_ngx_error(VOD_BAD_DATA);
 	}
+
+	// null terminate the buffer
+	if (ctx->read_buffer.last >= ctx->read_buffer.end)
+	{
+		ngx_log_error(NGX_LOG_ERR, ctx->submodule_context.request_context.log, 0,
+			"ngx_http_vod_get_async_read_result: not enough room for null terminator");
+		return NGX_HTTP_INTERNAL_SERVER_ERROR;
+	}
+
+	*ctx->read_buffer.last = '\0';
 
 	read_buffer->data = ctx->read_buffer.pos + buffer_offset;
 	read_buffer->len = buffer_size - buffer_offset;
@@ -1781,6 +1798,14 @@ ngx_http_vod_validate_streams(ngx_http_vod_ctx_t *ctx)
 				"ngx_http_vod_validate_streams: one stream at most per media type is allowed video=%uD audio=%uD",
 				ctx->submodule_context.media_set.track_count[MEDIA_TYPE_VIDEO],
 				ctx->submodule_context.media_set.track_count[MEDIA_TYPE_AUDIO]);
+			return NGX_HTTP_BAD_REQUEST;
+		}
+
+		if (ctx->submodule_context.media_set.track_count[MEDIA_TYPE_SUBTITLE] > 0 &&
+			ctx->submodule_context.media_set.total_track_count != 1)
+		{
+			ngx_log_error(NGX_LOG_ERR, ctx->submodule_context.request_context.log, 0,
+				"ngx_http_vod_validate_streams: cannot have more than a single subtitle track and it cannot be mixed with other track types");
 			return NGX_HTTP_BAD_REQUEST;
 		}
 	}
