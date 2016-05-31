@@ -1177,6 +1177,17 @@ ngx_http_vod_parse_metadata(
 				return VOD_OK;
 			}
 
+			if (clip_ranges.clip_ranges->end == ULLONG_MAX)
+			{
+				ctx->submodule_context.media_set.segment_duration =
+					duration_millis - clip_ranges.clip_ranges->start;
+			}
+			else
+			{
+				ctx->submodule_context.media_set.segment_duration =
+					clip_ranges.clip_ranges->end - clip_ranges.clip_ranges->start;
+			}
+
 			parse_params.range = clip_ranges.clip_ranges;
 			parse_params.range->start = (parse_params.range->start * rate.nom) / rate.denom;
 			if (parse_params.range->end != ULLONG_MAX)

@@ -407,6 +407,7 @@ webvtt_parse(
 	track->media_info.duration_millis = duration;
 	track->media_info.label = label;
 	track->media_info.language = lang_id;
+	track->media_info.bitrate = (source->len * 1000 * 8) / full_duration;
 	track->clip_start_time = parse_params->clip_start_time;
 	track->file_info = *file_info;
 
@@ -435,6 +436,8 @@ webvtt_parse_frames(
 	vod_str_t* source = &metadata->source;
 	vod_str_t* header = &track->media_info.extra_data;
 	vod_str_t cue_id = vod_null_string;
+	uint64_t base_time;
+	uint64_t clip_to;
 	uint64_t start;
 	uint64_t end;
 	int64_t last_start_time = 0;
@@ -556,7 +559,19 @@ webvtt_parse_frames(
 	}
 
 	start = parse_params->range->start + parse_params->clip_from;
-	end = parse_params->range->end;		// Note: not adding clip_from, since end is checked after the clipping is applied to the timestamps
+
+	if ((parse_params->parse_type & PARSE_FLAG_RELATIVE_TIMESTAMPS) != 0)
+	{
+		base_time = start;
+		clip_to = parse_params->range->end - parse_params->range->start;
+		end = clip_to;
+	}
+	else
+	{
+		base_time = parse_params->clip_from;
+		clip_to = parse_params->clip_to;
+		end = parse_params->range->end;		// Note: not adding clip_from, since end is checked after the clipping is applied to the timestamps
+	}
 
 	for (;;)
 	{
@@ -598,19 +613,23 @@ webvtt_parse_frames(
 		}
 
 		// apply clipping
-		if (start_time >= (int64_t)parse_params->clip_from)
+		if (start_time >= (int64_t)base_time)
 		{
-			start_time -= parse_params->clip_from;
+			start_time -= base_time;
+			if ((uint64_t)start_time > clip_to)
+			{
+				start_time = clip_to;
+			}
 		}
 		else
 		{
 			start_time = 0;
 		}
 
-		end_time -= parse_params->clip_from;
-		if ((uint64_t)end_time > parse_params->clip_to)
+		end_time -= base_time;
+		if ((uint64_t)end_time > clip_to)
 		{
-			end_time = parse_params->clip_to;
+			end_time = clip_to;
 		}
 
 		// adjust the duration of the previous frame

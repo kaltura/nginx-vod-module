@@ -37,7 +37,7 @@ webvtt_builder_build(
 	result_size = first_track->media_info.extra_data.len;
 	for (cur_track = first_track; cur_track < media_set->filtered_tracks_end; cur_track++)
 	{
-		result_size = cur_track->total_frames_size + WEBVTT_CUE_TIMINGS_MAX_SIZE * cur_track->frame_count;
+		result_size += cur_track->total_frames_size + WEBVTT_CUE_TIMINGS_MAX_SIZE * cur_track->frame_count;
 	}
 
 	// allocate the buffer

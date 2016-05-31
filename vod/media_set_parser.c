@@ -1527,6 +1527,9 @@ media_set_parse_json(
 		if (context.clip_ranges.clip_count > 0)
 		{
 			result->segment_start_time += context.clip_ranges.clip_ranges[0].start;
+			result->segment_duration = 
+				context.clip_ranges.clip_ranges[context.clip_ranges.clip_count - 1].end -
+				context.clip_ranges.clip_ranges[0].start;
 		}
 
 		// in case a clip index was passed on the request, adjust the segment index 

@@ -26,6 +26,9 @@
 #define MSS_STREAM_INDEX_HEADER_LABEL \
 	"  <StreamIndex Type=\"%s\" Name=\"%V\" QualityLevels=\"%uD\" Chunks=\"%uD\" Url=\"QualityLevels({bitrate})/Fragments(%s={start time})\">\n"
 
+#define MSS_STREAM_INDEX_HEADER_SUBTITLE \
+	"  <StreamIndex Type=\"text\" Name=\"%V\" QualityLevels=\"%uD\" Chunks=\"%uD\" Subtype=\"CAPT\" Url=\"QualityLevels({bitrate})/Fragments(text={start time})\">\n"
+
 #define MSS_VIDEO_QUALITY_LEVEL_HEADER \
 	"    <QualityLevel Index=\"%uD\" Bitrate=\"%uD\" FourCC=\"H264\" MaxWidth=\"%uD\" MaxHeight=\"%uD\" " \
 	"CodecPrivateData=\""
@@ -35,6 +38,9 @@
 	" Channels=\"%uD\" BitsPerSample=\"%uD\" PacketSize=\"%uD\" AudioTag=\"%uD\" CodecPrivateData=\""
 
 #define MSS_QUALITY_LEVEL_FOOTER "\"></QualityLevel>\n"
+
+#define MSS_SUBTITLE_QUALITY_LEVEL \
+	"    <QualityLevel Index=\"%uD\" Bitrate=\"%uD\" FourCC=\"TTML\"></QualityLevel>\n"
 
 #define MSS_CHUNK_TAG \
 	"    <c n=\"%uD\" d=\"%uL\"></c>\n"
@@ -103,6 +109,7 @@ static vod_str_t mss_fourcc_mp3 = vod_string("WMAP");
 static const char* stream_type_by_media_type[] = {
 	MSS_STREAM_TYPE_VIDEO,
 	MSS_STREAM_TYPE_AUDIO,
+	MSS_STREAM_TYPE_TEXT
 };
 
 static u_char*
@@ -387,8 +394,12 @@ mss_packager_build_manifest(
 	}
 
 	result_size +=
-		(sizeof(MSS_STREAM_INDEX_HEADER_LABEL) - 1 + 2 * sizeof(MSS_STREAM_TYPE_VIDEO) + 2 * VOD_INT32_LEN +
-		sizeof(MSS_STREAM_INDEX_FOOTER)) * adaptation_sets.total_count;
+		(sizeof(MSS_STREAM_INDEX_HEADER) - 1 + 2 * sizeof(MSS_STREAM_TYPE_VIDEO) + 2 * VOD_INT32_LEN +
+		sizeof(MSS_STREAM_INDEX_FOOTER)) * adaptation_sets.count[ADAPTATION_TYPE_VIDEO] + 
+		(sizeof(MSS_STREAM_INDEX_HEADER_LABEL) - 1 + 2 * sizeof(MSS_STREAM_TYPE_AUDIO) + 2 * VOD_INT32_LEN +
+		sizeof(MSS_STREAM_INDEX_FOOTER)) * adaptation_sets.count[ADAPTATION_TYPE_AUDIO] + 
+		(sizeof(MSS_STREAM_INDEX_HEADER_SUBTITLE) - 1 + 2 * VOD_INT32_LEN +
+		sizeof(MSS_STREAM_INDEX_FOOTER)) * adaptation_sets.count[ADAPTATION_TYPE_SUBTITLE];
 
 	// add the quality levels
 	cur_track = media_set->filtered_tracks;
@@ -402,7 +413,9 @@ mss_packager_build_manifest(
 		(sizeof(MSS_VIDEO_QUALITY_LEVEL_HEADER) - 1 + 4 * VOD_INT32_LEN + 
 		sizeof(MSS_QUALITY_LEVEL_FOOTER) - 1) * media_set->track_count[MEDIA_TYPE_VIDEO] + 
 		(sizeof(MSS_AUDIO_QUALITY_LEVEL_HEADER) - 1 + 7 * VOD_INT32_LEN + mss_fourcc_aac.len + 
-		sizeof(MSS_QUALITY_LEVEL_FOOTER) - 1) * media_set->track_count[MEDIA_TYPE_AUDIO];
+		sizeof(MSS_QUALITY_LEVEL_FOOTER) - 1) * media_set->track_count[MEDIA_TYPE_AUDIO] + 
+		(sizeof(MSS_SUBTITLE_QUALITY_LEVEL) - 1 + 2 * VOD_INT32_LEN) * 
+		media_set->track_count[MEDIA_TYPE_SUBTITLE];
 
 	// allocate the result
 	result->data = vod_alloc(request_context->pool, result_size);
@@ -440,27 +453,40 @@ mss_packager_build_manifest(
 		media_type = adaptation_set->type;
 
 		// print the stream index
-		if (adaptation_sets.count[ADAPTATION_TYPE_AUDIO] > 1 && 
-			media_type == MEDIA_TYPE_AUDIO)
+		switch (media_type)
 		{
-			cur_track = *adaptation_set->first;
+		case MEDIA_TYPE_AUDIO:
+			if (adaptation_sets.count[ADAPTATION_TYPE_AUDIO] > 1)
+			{
+				cur_track = *adaptation_set->first;
+				p = vod_sprintf(p,
+					MSS_STREAM_INDEX_HEADER_LABEL,
+					MSS_STREAM_TYPE_AUDIO,
+					&cur_track->media_info.label,
+					adaptation_set->count,
+					segment_durations[adaptation_set->type].segment_count,
+					MSS_STREAM_TYPE_AUDIO);
+				break;
+			}
+			// fallthrough
 
-			p = vod_sprintf(p,
-				MSS_STREAM_INDEX_HEADER_LABEL,
-				MSS_STREAM_TYPE_AUDIO,
-				&cur_track->media_info.label,
-				adaptation_set->count,
-				segment_durations[adaptation_set->type].segment_count,
-				MSS_STREAM_TYPE_AUDIO);
-		}
-		else
-		{
+		case MEDIA_TYPE_VIDEO:
 			p = vod_sprintf(p,
 				MSS_STREAM_INDEX_HEADER,
 				stream_type_by_media_type[media_type],
 				adaptation_set->count,
 				segment_durations[adaptation_set->type].segment_count,
 				stream_type_by_media_type[media_type]);
+			break;
+
+		case MEDIA_TYPE_SUBTITLE:
+			cur_track = *adaptation_set->first;
+			p = vod_sprintf(p,
+				MSS_STREAM_INDEX_HEADER_SUBTITLE,
+				&cur_track->media_info.label,
+				adaptation_set->count,
+				segment_durations[adaptation_set->type].segment_count);
+			break;
 		}
 
 		stream_index = 0;
@@ -510,6 +536,12 @@ mss_packager_build_manifest(
 					(uint32_t)cur_track->media_info.u.audio.packet_size,
 					audio_tag);
 				break;
+
+			case MEDIA_TYPE_SUBTITLE:
+				p = vod_sprintf(p, MSS_SUBTITLE_QUALITY_LEVEL,
+					stream_index++,
+					bitrate);
+				continue;
 			}
 
 			p = mss_append_hex_string(p, cur_track->media_info.extra_data.data, cur_track->media_info.extra_data.len);

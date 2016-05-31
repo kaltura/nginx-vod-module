@@ -93,6 +93,7 @@ typedef struct {
 	uint32_t initial_clip_index;
 	uint64_t first_clip_time;
 	uint64_t segment_start_time;
+	uint32_t segment_duration;
 	uint32_t type;
 	bool_t presentation_end;
 	vod_str_t uri;

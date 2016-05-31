@@ -20,7 +20,12 @@
   
 * Video codecs: H264, H265 (DASH/HLS)
 
-* Audio codecs: AAC
+* Audio codecs: AAC, MP3
+
+* WebVTT captions support:
+  1. DASH - served as is
+  2. HLS - segmented WebVTT (m3u8)
+  3. MSS - converted to TTML and packaged in fragmented MP4 (no support for styling)
 
 * Audio only/video only files
 
@@ -43,8 +48,6 @@ without the overhead of short segments for the whole duration of the video
 
 * Decryption of CENC-encrypted MP4 files (it is possible to create such files with MP4Box)
 
-* WebVTT captions support (HLS / DASH)
-
 * DASH: common encryption (CENC) support
 
 * MSS: PlayReady encryption support
@@ -54,8 +57,6 @@ without the overhead of short segments for the whole duration of the video
 * HLS: support for AES-128 / SAMPLE-AES encryption
 
 ### Limitations
-
-* Only AAC audio is supported (MP3 audio is not)
 
 * Track selection and playback rate change are not supported in progressive download
 
