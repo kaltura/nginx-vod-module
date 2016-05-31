@@ -11,6 +11,7 @@
 // constants
 #define MSS_STREAM_TYPE_VIDEO "video"
 #define MSS_STREAM_TYPE_AUDIO "audio"
+#define MSS_STREAM_TYPE_TEXT "text"
 #define MSS_TIMESCALE (10000000)
 
 // macros

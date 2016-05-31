@@ -3,6 +3,7 @@
 #include "ngx_http_vod_utils.h"
 #include "vod/mss/mss_packager.h"
 #include "vod/mss/mss_playready.h"
+#include "vod/webvtt/ttml_builder.h"
 #include "vod/udrm.h"
 
 // constants
@@ -173,11 +174,38 @@ ngx_http_vod_mss_init_frame_processor(
 	return NGX_OK;
 }
 
+static ngx_int_t
+ngx_http_vod_mss_handle_ttml_fragment(
+	ngx_http_vod_submodule_context_t* submodule_context,
+	ngx_str_t* response,
+	ngx_str_t* content_type)
+{
+	vod_status_t rc;
+
+	rc = ttml_build_mp4(
+		&submodule_context->request_context,
+		&submodule_context->media_set,
+		submodule_context->request_params.segment_index,
+		MSS_TIMESCALE,
+		response);
+	if (rc != VOD_OK)
+	{
+		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, submodule_context->request_context.log, 0,
+			"ngx_http_vod_mss_handle_ttml_fragment: ttml_build_mp4 failed %i", rc);
+		return ngx_http_vod_status_to_ngx_error(rc);
+	}
+
+	content_type->len = sizeof(mp4_video_content_type) - 1;
+	content_type->data = (u_char *)mp4_video_content_type;
+
+	return NGX_OK;
+}
+
 static const ngx_http_vod_request_t mss_manifest_request = {
 	REQUEST_FLAG_TIME_DEPENDENT_ON_LIVE,
 	PARSE_FLAG_TOTAL_SIZE_ESTIMATE | PARSE_FLAG_PARSED_EXTRA_DATA,
 	REQUEST_CLASS_MANIFEST,
-	SUPPORTED_CODECS,
+	SUPPORTED_CODECS | VOD_CODEC_FLAG(WEBVTT),
 	MSS_TIMESCALE,
 	ngx_http_vod_mss_handle_manifest,
 	NULL,
@@ -203,6 +231,15 @@ static const ngx_http_vod_request_t mss_playready_fragment_request = {
 	ngx_http_vod_mss_init_frame_processor,
 };
 
+static const ngx_http_vod_request_t mss_ttml_request = {
+	REQUEST_FLAG_SINGLE_TRACK,
+	PARSE_FLAG_FRAMES_ALL | PARSE_FLAG_EXTRA_DATA | PARSE_FLAG_RELATIVE_TIMESTAMPS,
+	REQUEST_CLASS_SEGMENT,
+	VOD_CODEC_FLAG(WEBVTT),
+	TTML_TIMESCALE,
+	ngx_http_vod_mss_handle_ttml_fragment,
+	NULL,
+};
 void
 ngx_http_vod_mss_create_loc_conf(
 	ngx_conf_t *cf,
@@ -261,22 +298,31 @@ ngx_http_vod_mss_parse_uri_file_name(
 			return NGX_HTTP_BAD_REQUEST;
 		}
 
-		if (fragment_params.media_type.len != sizeof(MSS_STREAM_TYPE_VIDEO) - 1)
-		{
-			ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
-				"ngx_http_vod_mss_parse_uri_file_name: invalid media type length %uz", fragment_params.media_type.len);
-			return NGX_HTTP_BAD_REQUEST;
-		}
-
 		request_params->sequences_mask = (1 << mss_sequence_index(fragment_params.bitrate));
 
-		if (ngx_memcmp(fragment_params.media_type.data, MSS_STREAM_TYPE_VIDEO, sizeof(MSS_STREAM_TYPE_VIDEO) - 1) == 0)
+		request_params->segment_time = fragment_params.time / 10000;
+
+		// Note: assuming no discontinuity, if this changes the segment index will be recalculated
+		request_params->segment_index = segmenter_get_segment_index_no_discontinuity(
+			&conf->segmenter,
+			request_params->segment_time + SEGMENT_FROM_TIMESTAMP_MARGIN);
+
+		if (fragment_params.media_type.len == sizeof(MSS_STREAM_TYPE_VIDEO) - 1 && 
+			ngx_memcmp(fragment_params.media_type.data, MSS_STREAM_TYPE_VIDEO, sizeof(MSS_STREAM_TYPE_VIDEO) - 1) == 0)
 		{
 			request_params->tracks_mask[MEDIA_TYPE_VIDEO] = (1 << mss_track_index(fragment_params.bitrate));
 		}
-		else if (ngx_memcmp(fragment_params.media_type.data, MSS_STREAM_TYPE_AUDIO, sizeof(MSS_STREAM_TYPE_AUDIO) - 1) == 0)
+		else if (fragment_params.media_type.len == sizeof(MSS_STREAM_TYPE_AUDIO) - 1 &&
+			ngx_memcmp(fragment_params.media_type.data, MSS_STREAM_TYPE_AUDIO, sizeof(MSS_STREAM_TYPE_AUDIO) - 1) == 0)
 		{
 			request_params->tracks_mask[MEDIA_TYPE_AUDIO] = (1 << mss_track_index(fragment_params.bitrate));
+		}
+		else if (fragment_params.media_type.len == sizeof(MSS_STREAM_TYPE_TEXT) - 1 &&
+			ngx_memcmp(fragment_params.media_type.data, MSS_STREAM_TYPE_TEXT, sizeof(MSS_STREAM_TYPE_TEXT) - 1) == 0)
+		{
+			request_params->tracks_mask[MEDIA_TYPE_SUBTITLE] = 1;
+			*request = &mss_ttml_request;
+			return NGX_OK;
 		}
 		else
 		{
@@ -284,13 +330,6 @@ ngx_http_vod_mss_parse_uri_file_name(
 				"ngx_http_vod_mss_parse_uri_file_name: invalid media type %V", &fragment_params.media_type);
 			return NGX_HTTP_BAD_REQUEST;
 		}
-
-		request_params->segment_time = fragment_params.time / 10000;
-
-		// Note: assuming no discontinuity, if this changes the segment index will be recalculated
-		request_params->segment_index = segmenter_get_segment_index_no_discontinuity(
-			&conf->segmenter, 
-			request_params->segment_time + SEGMENT_FROM_TIMESTAMP_MARGIN);
 
 		*request = conf->drm_enabled ? &mss_playready_fragment_request : &mss_fragment_request;
 
