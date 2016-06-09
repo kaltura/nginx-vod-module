@@ -429,7 +429,7 @@ mss_packager_build_manifest(
 	// header
 	if (media_set->type != MEDIA_SET_LIVE)
 	{
-		duration_100ns = mss_rescale_millis(media_set->total_duration);
+		duration_100ns = mss_rescale_millis(media_set->timing.total_duration);
 	}
 	else
 	{

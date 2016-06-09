@@ -15,7 +15,7 @@ struct media_clip_dynamic_s {
 	vod_str_t id;
 	struct media_sequence_s* sequence;
 	media_range_t* range;
-	int64_t sequence_offset;
+	int64_t clip_time;
 	uint32_t duration;
 	media_clip_dynamic_t* next;
 };

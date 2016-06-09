@@ -738,8 +738,8 @@ dash_packager_write_mpd_period(
 			p = vod_sprintf(p,
 				VOD_DASH_MANIFEST_PERIOD_HEADER_DURATION,
 				media_set->initial_clip_index + context->clip_index,
-				media_set->durations[context->clip_index] / 1000,
-				media_set->durations[context->clip_index] % 1000);
+				media_set->timing.durations[context->clip_index] / 1000,
+				media_set->timing.durations[context->clip_index] % 1000);
 			break;
 
 		case MEDIA_SET_LIVE:
@@ -859,19 +859,17 @@ dash_packager_write_mpd_period(
 		}
 
 		// get the segment index start number
-		if (context->clip_index == 0)
-		{
-			start_number = media_set->initial_segment_index - media_set->initial_clip_segment_index;
-		}
-		else
-		{
-			start_number = 0;
-		}
+		start_number = (*cur_duration_items)[0].segment_index;
 
 		// print the segment template
 		switch (context->conf->manifest_format)
 		{
 		case FORMAT_SEGMENT_TEMPLATE:
+			// increment cur_duration_items (don't really need the count)
+			dash_packager_get_cur_clip_segment_count(
+				&context->segment_durations[media_type],
+				cur_duration_items);
+
 			p = dash_packager_write_segment_template(
 				p,
 				context->conf,
@@ -999,7 +997,7 @@ dash_packager_get_segment_list_total_size(
 	media_track_t* last_track;
 	media_track_t* cur_track;
 	uint32_t filtered_clip_offset;
-	uint32_t period_count = media_set->use_discontinuity ? media_set->total_clip_count : 1;
+	uint32_t period_count = media_set->use_discontinuity ? media_set->timing.total_count : 1;
 	uint32_t segment_count;
 	uint32_t clip_index;
 	uint32_t media_type;
@@ -1145,7 +1143,7 @@ dash_packager_build_mpd(
 	size_t urls_length;
 	uint32_t min_update_period;
 	uint32_t window_size;
-	uint32_t period_count = media_set->use_discontinuity ? media_set->total_clip_count : 1;
+	uint32_t period_count = media_set->use_discontinuity ? media_set->timing.total_count : 1;
 	uint32_t media_type;
 	vod_status_t rc;
 	u_char* p = NULL;
@@ -1292,8 +1290,8 @@ dash_packager_build_mpd(
 	case MEDIA_SET_VOD:
 		p = vod_sprintf(result->data,
 			VOD_DASH_MANIFEST_HEADER_VOD,
-			(uint32_t)(media_set->total_duration / 1000),
-			(uint32_t)(media_set->total_duration % 1000),
+			(uint32_t)(media_set->timing.total_duration / 1000),
+			(uint32_t)(media_set->timing.total_duration % 1000),
 			(uint32_t)(segmenter_conf->max_segment_duration / 1000),
 			&conf->profiles);
 		break;
@@ -1301,7 +1299,14 @@ dash_packager_build_mpd(
 	case MEDIA_SET_LIVE:
 		media_type = media_set->track_count[MEDIA_TYPE_VIDEO] != 0 ? MEDIA_TYPE_VIDEO : MEDIA_TYPE_AUDIO;
 
-		window_size = context.segment_durations[media_type].end_time - context.segment_durations[media_type].start_time;
+		if (media_set->live_window_duration > 0)
+		{
+			window_size = media_set->live_window_duration;
+		}
+		else
+		{
+			window_size = context.segment_durations[media_type].duration;
+		}
 		min_update_period = segmenter_conf->segment_duration / 2;
 
 		vod_gmtime(context.segment_durations[media_type].start_time / 1000, &start_time_gmt);
@@ -1342,7 +1347,7 @@ dash_packager_build_mpd(
 			break;
 		}
 
-		context.clip_start_offset += media_set->durations[context.clip_index - 1];
+		context.clip_start_offset += media_set->timing.durations[context.clip_index - 1];
 	}
 
 	p = vod_copy(p, VOD_DASH_MANIFEST_FOOTER, sizeof(VOD_DASH_MANIFEST_FOOTER) - 1);
@@ -1370,7 +1375,7 @@ dash_packager_get_track_sizes(media_set_t* media_set, media_track_t* cur_track, 
 	size_t mdhd_atom_size;
 	size_t hdlr_atom_size = 0;
 
-	if (media_set->type != MEDIA_SET_LIVE && dash_rescale_millis(media_set->total_duration) > UINT_MAX)
+	if (media_set->type != MEDIA_SET_LIVE && dash_rescale_millis(media_set->timing.total_duration) > UINT_MAX)
 	{
 		tkhd_atom_size = ATOM_HEADER_SIZE + sizeof(tkhd64_atom_t);
 		mdhd_atom_size = ATOM_HEADER_SIZE + sizeof(mdhd64_atom_t);
@@ -1751,7 +1756,7 @@ dash_packager_init_mp4_calc_size(
 		result->track_sizes.track_trak_size +
 		result->mvex_atom_size;
 
-	if (media_set->type != MEDIA_SET_LIVE && dash_rescale_millis(media_set->total_duration) > UINT_MAX)
+	if (media_set->type != MEDIA_SET_LIVE && dash_rescale_millis(media_set->timing.total_duration) > UINT_MAX)
 	{
 		result->moov_atom_size += ATOM_HEADER_SIZE + sizeof(mvhd64_atom_t);
 	}
@@ -1778,7 +1783,7 @@ dash_packager_init_mp4_write(
 	atom_writer_t* stsd_atom_writer)
 {
 	media_track_t* first_track = media_set->sequences[0].filtered_clips[0].first_track;
-	uint64_t duration = media_set->type == MEDIA_SET_LIVE ? 0 : dash_rescale_millis(media_set->total_duration);
+	uint64_t duration = media_set->type == MEDIA_SET_LIVE ? 0 : dash_rescale_millis(media_set->timing.total_duration);
 
 	// ftyp
 	p = vod_copy(p, ftyp_atom, sizeof(ftyp_atom));

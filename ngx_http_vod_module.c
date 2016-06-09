@@ -1041,7 +1041,7 @@ ngx_http_vod_parse_metadata(
 	// init the parsing params
 	parse_params.parse_type = request->parse_type;
 	if (request->request_class == REQUEST_CLASS_MANIFEST && 
-		ctx->submodule_context.media_set.durations == NULL)
+		ctx->submodule_context.media_set.timing.durations == NULL)
 	{
 		parse_params.parse_type |= segmenter->parse_type;
 	}
@@ -1070,7 +1070,7 @@ ngx_http_vod_parse_metadata(
 	parse_params.langs_mask = ctx->submodule_context.request_params.langs_mask;
 	parse_params.clip_from = cur_source->clip_from;
 	parse_params.clip_to = cur_source->clip_to;
-	parse_params.clip_start_time = ctx->submodule_context.media_set.first_clip_time + cur_source->sequence_offset;
+	parse_params.clip_start_time = cur_source->clip_time;
 	
 	file_info.source = cur_source;
 	file_info.uri = cur_source->uri;
@@ -1151,15 +1151,16 @@ ngx_http_vod_parse_metadata(
 			// get the start/end offsets
 			duration_millis = rescale_time(ctx->base_metadata->duration * rate.denom, ctx->base_metadata->timescale * rate.nom, 1000);
 
-			get_ranges_params.request_context = &ctx->submodule_context.request_context,
-			get_ranges_params.conf = segmenter,
-			get_ranges_params.segment_index = ctx->submodule_context.request_params.segment_index,
-			get_ranges_params.clip_durations = &duration_millis,
-			get_ranges_params.total_clip_count = 1,
-			get_ranges_params.start_time = 0,
-			get_ranges_params.end_time = duration_millis,
-			get_ranges_params.last_segment_end = last_segment_end,
+			get_ranges_params.request_context = &ctx->submodule_context.request_context;
+			get_ranges_params.conf = segmenter;
+			get_ranges_params.segment_index = ctx->submodule_context.request_params.segment_index;
+			get_ranges_params.last_segment_end = last_segment_end;
 			get_ranges_params.key_frame_durations = NULL;
+
+			ngx_memzero(&get_ranges_params.timing, sizeof(get_ranges_params.timing));
+			get_ranges_params.timing.durations = &duration_millis;
+			get_ranges_params.timing.total_count = 1;
+			get_ranges_params.timing.total_duration = duration_millis;
 
 			rc = segmenter_get_start_end_ranges_no_discontinuity(
 				&get_ranges_params,
@@ -3955,7 +3956,7 @@ ngx_http_vod_map_media_set_apply(ngx_http_vod_ctx_t *ctx, ngx_str_t* mapping, in
 	ngx_perf_counter_end(ctx->perf_counters, perf_counter_context, PC_PARSE_MEDIA_SET);
 
 	if (mapped_media_set.sequence_count == 1 &&
-		mapped_media_set.durations == NULL &&
+		mapped_media_set.timing.durations == NULL &&
 		mapped_media_set.sequences[0].clips[0]->type == MEDIA_CLIP_SOURCE &&
 		!mapped_media_set.has_multi_sequences)
 	{

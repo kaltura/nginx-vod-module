@@ -9,7 +9,7 @@ typedef struct {
 	request_context_t* request_context;
 	media_sequence_t* sequence;
 	media_range_t* range;
-	int64_t sequence_offset;
+	int64_t clip_time;
 	uint32_t duration;
 	media_clip_source_t* sources_head;
 	media_clip_source_t* mapped_sources_head;

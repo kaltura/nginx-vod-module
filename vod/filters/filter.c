@@ -440,9 +440,9 @@ filter_init_filtered_clips(
 
 	media_set->filtered_tracks_end = init_state.output_track;
 
-	if (media_set->durations == NULL)
+	if (media_set->timing.durations == NULL)
 	{
-		media_set->total_duration = max_duration;
+		media_set->timing.total_duration = max_duration;
 	}
 
 	return VOD_OK;

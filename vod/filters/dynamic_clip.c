@@ -63,7 +63,7 @@ dynamic_clip_parse(
 	context->dynamic_clips_head = filter;
 
 	filter->sequence = context->sequence;
-	filter->sequence_offset = context->sequence_offset;
+	filter->clip_time = context->clip_time;
 	filter->duration = context->duration;
 	filter->range = context->range;
 
@@ -129,7 +129,7 @@ dynamic_clip_apply_mapping_json(
 	context.sources_head = media_set->sources_head;
 	context.mapped_sources_head = media_set->mapped_sources_head;
 	context.sequence = clip->sequence;
-	context.sequence_offset = clip->sequence_offset;
+	context.clip_time = clip->clip_time;
 	context.duration = clip->duration;
 	context.range = clip->range;
 
@@ -230,7 +230,7 @@ dynamic_clip_get_mapping_string(
 		p = vod_sprintf(p, "%V-%uD-%uL", 
 			&cur_clip->id, 
 			cur_clip->base.source_count, 
-			cur_source->sequence_offset - cur_clip->sequence_offset);
+			cur_source->clip_time - cur_clip->clip_time);
 
 		for (i = 0; i < cur_clip->base.source_count; i++)
 		{
@@ -432,7 +432,7 @@ dynamic_clip_apply_mapping_string_clip(
 		vod_memset(cur_source->tracks_mask, 0xff, sizeof(cur_source->tracks_mask));
 		cur_source->sequence = clip->sequence;
 		cur_source->range = range;
-		cur_source->sequence_offset = clip->sequence_offset + offset;
+		cur_source->clip_time = clip->clip_time + offset;
 		cur_source->stripped_uri = cur_source->mapped_uri = clip_id;
 		cur_source->clip_to = duration;
 

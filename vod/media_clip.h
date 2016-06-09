@@ -40,7 +40,7 @@ struct media_clip_source_s {
 	uint32_t clip_to;
 	uint32_t clip_from;
 	uint32_t tracks_mask[MEDIA_TYPE_COUNT];
-	int64_t sequence_offset;
+	int64_t clip_time;
 	u_char* encryption_key;
 
 	// derived params

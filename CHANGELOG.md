@@ -3,6 +3,11 @@
 Note: the list of changes below may not include all changes, it will include mostly "breaking" changes.
 	Usually, these are changes that require some update to nginx.conf in order to retain the existing behavior.
 
+## 2016/06/09 - live timing enhancements
+
+The following configuration settings were removed:
+* vod_live_segment_count - use vod_live_window_duration instead, multiply by vod_segment_duration.
+	
 ## 2016/05/08 - provide more control of the domain of returned URLs
 
 The following configuration settings were removed:
