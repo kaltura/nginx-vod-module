@@ -731,6 +731,8 @@ media_set_parse_sequence_clips(
 
 	if (context->media_set->timing.durations == NULL)
 	{
+		cur_duration = NULL;
+		cur_clip_time = NULL;
 		context->base.duration = UINT_MAX;
 	}
 	else
