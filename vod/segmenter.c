@@ -841,6 +841,7 @@ segmenter_get_live_window(
 		// set the end time to current time
 		end_time = (uint64_t)vod_time() * 1000;
 		end_clip_index = UINT_MAX;
+		end_clip_offset = 0;
 	}
 
 	if (end_clip_index == UINT_MAX)
