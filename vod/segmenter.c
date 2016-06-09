@@ -792,7 +792,7 @@ segmenter_get_live_window(
 	}
 	else
 	{
-		align_context.part = NULL;
+		vod_memzero(&align_context, sizeof(align_context));
 	}
 
 	// find the end time
@@ -1144,7 +1144,7 @@ segmenter_get_segment_durations_estimate_internal(
 	}
 	else
 	{
-		context.align.part = NULL;
+		vod_memzero(&context.align, sizeof(context.align));
 		alloc_count = conf->bootstrap_segments_count + 3 * timing->total_count;
 	}
 
