@@ -989,6 +989,7 @@ mp4_encrypt_video_get_fragment_writer(
 	request_context_t* request_context,
 	media_set_t* media_set,
 	uint32_t segment_index,
+	bool_t single_nalu_per_frame,
 	mp4_encrypt_video_build_fragment_header_t build_fragment_header,
 	segment_writer_t* segment_writer,
 	const u_char* iv, 
