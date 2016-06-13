@@ -1036,6 +1036,12 @@ segmenter_get_live_window(
 		timing->total_duration += *durations_cur;
 	}
 
+	// adjust the first key frame offsets
+	for (sequence = media_set->sequences; sequence < media_set->sequences_end; sequence++)
+	{
+		sequence->first_key_frame_offset -= start_time - timing->first_time;
+	}
+
 	// trim the clip times array
 	timing->times += start_clip_index;
 	timing->times[0] = start_time;
