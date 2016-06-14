@@ -2,7 +2,7 @@
 #include "../manifest_utils.h"
 
 // macros
-#define M3U8_HEADER_PART1 "#EXTM3U\n#EXT-X-TARGETDURATION:%d\n#EXT-X-ALLOW-CACHE:YES\n"
+#define M3U8_HEADER_PART1 "#EXTM3U\n#EXT-X-TARGETDURATION:%uL\n#EXT-X-ALLOW-CACHE:YES\n"
 #define M3U8_HEADER_VOD "#EXT-X-PLAYLIST-TYPE:VOD\n"
 #define M3U8_HEADER_PART2 "#EXT-X-VERSION:%d\n#EXT-X-MEDIA-SEQUENCE:%uD\n"
 
@@ -286,6 +286,7 @@ m3u8_builder_build_index_playlist(
 	hls_encryption_type_t encryption_type;
 	segmenter_conf_t* segmenter_conf = media_set->segmenter_conf;
 	uint64_t duration_millis;
+	uint64_t max_segment_duration;
 	uint32_t sequences_mask;
 	vod_str_t extinf;
 	uint32_t segment_index;
@@ -398,11 +399,26 @@ m3u8_builder_build_index_playlist(
 		return VOD_ALLOC_FAILED;
 	}
 
+	// find the max segment duration
+	max_segment_duration = 0;
+	for (cur_item = segment_durations.items; cur_item < last_item; cur_item++)
+	{
+		if (cur_item->duration > max_segment_duration)
+		{
+			max_segment_duration = cur_item->duration;
+		}
+	}
+
+	// Note: scaling first to 'scale' so that target duration will always be round(max(manifest durations))
+	scale = conf->m3u8_version >= 3 ? 1000 : 1;
+	max_segment_duration = rescale_time(max_segment_duration, segment_durations.timescale, scale);
+	max_segment_duration = rescale_time(max_segment_duration, scale, 1);
+
 	// write the header
 	p = vod_sprintf(
 		result->data,
 		M3U8_HEADER_PART1,
-		(segmenter_conf->max_segment_duration + 500) / 1000);
+		max_segment_duration);
 
 	if (media_set->type == MEDIA_SET_VOD)
 	{
@@ -467,7 +483,6 @@ m3u8_builder_build_index_playlist(
 		segment_durations.items[0].segment_index + 1);
 
 	// write the segments
-	scale = conf->m3u8_version >= 3 ? 1000 : 1;
 	for (cur_item = segment_durations.items; cur_item < last_item; cur_item++)
 	{
 		segment_index = cur_item->segment_index;
@@ -476,6 +491,12 @@ m3u8_builder_build_index_playlist(
 		if (cur_item->discontinuity)
 		{
 			p = vod_copy(p, m3u8_discontinuity, sizeof(m3u8_discontinuity) - 1);
+		}
+
+		// ignore zero duration segments (caused by alignment to keyframes)
+		if (cur_item->duration == 0)
+		{
+			continue;
 		}
 
 		// write the first segment
