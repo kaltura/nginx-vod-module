@@ -69,7 +69,7 @@ webvtt_reader_read(
 
 	// read up to the limit
 	state->first_time = FALSE;
-	result->read_req.realloc_buffer = FALSE;
+	result->read_req.flags = MEDIA_READ_FLAG_ALLOW_EMPTY_READ;
 	result->read_req.read_offset = 0;
 	result->read_req.read_size = state->size_limit;
 	return VOD_AGAIN;
@@ -253,10 +253,8 @@ webvtt_read_timestamp(u_char* cur_pos, u_char** end_pos)
 }
 
 static u_char*
-webvtt_find_next_empty_line(u_char* cur_pos)
+webvtt_find_next_empty_line(u_char* cur_pos, bool_t is_empty)
 {
-	bool_t is_empty = TRUE;
-
 	for (; *cur_pos; cur_pos++)
 	{
 		switch (*cur_pos)
@@ -661,7 +659,7 @@ webvtt_parse_frames(
 		}
 
 		// find the end of the cue
-		cur_pos = webvtt_find_next_empty_line(timings_end);
+		cur_pos = webvtt_find_next_empty_line(timings_end, FALSE);
 		if (cur_pos == NULL)
 		{
 			cur_pos = source->data + source->len;

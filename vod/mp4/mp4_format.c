@@ -182,7 +182,7 @@ mp4_metadata_reader_read(
 		// perform another read attempt
 		result->read_req.read_offset = offset + moov_offset;
 		result->read_req.read_size = 0;
-		result->read_req.realloc_buffer = FALSE;
+		result->read_req.flags = 0;
 
 		return VOD_AGAIN;
 	}
@@ -210,7 +210,7 @@ mp4_metadata_reader_read(
 	state->state = STATE_READ_MOOV_DATA;
 	result->read_req.read_offset = offset + moov_offset;
 	result->read_req.read_size = moov_size;
-	result->read_req.realloc_buffer = FALSE;
+	result->read_req.flags = 0;
 
 	return VOD_AGAIN;
 

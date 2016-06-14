@@ -124,9 +124,9 @@ struct ngx_http_vod_ctx_s {
 
 	// read metadata state
 	ngx_buf_t read_buffer;
+	uint32_t read_flags;
 	media_format_t* format;
 	ngx_buf_t prefix_buffer;
-	bool_t free_prefix;
 	off_t requested_offset;
 	off_t read_offset;
 	void* metadata_reader_context;
@@ -1328,10 +1328,9 @@ ngx_http_vod_async_read(ngx_http_vod_ctx_t* ctx, media_format_read_request_t* re
 		prefix_size = ctx->read_offset + buffer_size - read_offset;
 		ctx->prefix_buffer = ctx->read_buffer;
 		ctx->prefix_buffer.pos = ctx->prefix_buffer.last - prefix_size;
-		ctx->free_prefix = !read_req->realloc_buffer;		// should not free the buffer if there are references to it
 		ctx->read_buffer.start = NULL;
 	}
-	else if (read_req->realloc_buffer)
+	else if ((read_req->flags & MEDIA_READ_FLAG_REALLOC_BUFFER) != 0)
 	{
 		ctx->read_buffer.start = NULL;
 	}
@@ -1353,6 +1352,7 @@ ngx_http_vod_async_read(ngx_http_vod_ctx_t* ctx, media_format_read_request_t* re
 	// perform the read
 	ctx->read_offset = read_offset;
 	ctx->requested_offset = read_req->read_offset;
+	ctx->read_flags = read_req->flags;
 
 	ngx_perf_counter_start(ctx->perf_counter_context);
 
@@ -1393,7 +1393,7 @@ ngx_http_vod_get_async_read_result(ngx_http_vod_ctx_t* ctx, vod_str_t* read_buff
 		ctx->read_buffer.pos -= prefix_size;
 		ngx_memcpy(ctx->read_buffer.pos, ctx->prefix_buffer.pos, prefix_size);
 
-		if (ctx->free_prefix)
+		if ((ctx->read_flags & MEDIA_READ_FLAG_REALLOC_BUFFER) == 0)	// should not free the buffer if there are references to it
 		{
 			ngx_pfree(ctx->submodule_context.r->pool, ctx->prefix_buffer.start);
 		}
@@ -1632,6 +1632,7 @@ ngx_http_vod_state_machine_parse_metadata(ngx_http_vod_ctx_t *ctx)
 
 			ctx->read_offset = 0;
 			ctx->requested_offset = 0;
+			ctx->read_flags = 0;
 
 			cur_source = ctx->cur_source;
 
@@ -2795,12 +2796,26 @@ ngx_http_vod_handle_read_completed(void* context, ngx_int_t rc, ngx_buf_t* buf, 
 			goto finalize_request;
 		}
 	}
-	else if (bytes_read <= 0 && ctx->state != STATE_MAP_READ)		// Note: the mapping state machine handles the case of empty mapping
+	else if (bytes_read <= 0)
 	{
-		ngx_log_error(NGX_LOG_ERR, ctx->submodule_context.request_context.log, 0,
-			"ngx_http_vod_handle_read_completed: bytes read is zero");
-		rc = ngx_http_vod_status_to_ngx_error(VOD_BAD_DATA);
-		goto finalize_request;
+		switch (ctx->state)
+		{
+		case STATE_MAP_READ:		// the mapping state machine handles the case of empty mapping
+			break;
+
+		case STATE_READ_METADATA_READ:
+			if ((ctx->read_flags & MEDIA_READ_FLAG_ALLOW_EMPTY_READ) != 0)
+			{
+				break;
+			}
+			// fallthrough
+
+		default:
+			ngx_log_error(NGX_LOG_ERR, ctx->submodule_context.request_context.log, 0,
+				"ngx_http_vod_handle_read_completed: bytes read is zero");
+			rc = ngx_http_vod_status_to_ngx_error(VOD_BAD_DATA);
+			goto finalize_request;
+		}
 	}
 
 	ngx_perf_counter_end(ctx->perf_counters, ctx->perf_counter_context, ctx->perf_counter_async_read);
