@@ -62,6 +62,7 @@ concat_clip_parse(
 	int64_t* first_duration = NULL;
 	int64_t* cur_duration;
 	int64_t cur_duration_value;
+	int64_t clip_time;
 	uint64_t start;
 	uint64_t end;
 	uint32_t tracks_mask[MEDIA_TYPE_COUNT];
@@ -357,7 +358,7 @@ concat_clip_parse(
 	src_str = (vod_str_t*)part->first + i;
 
 	cur_source = sources;
-	offset = context->sequence_offset + start_offset;
+	clip_time = context->clip_time + start_offset;
 	for (;;)
 	{
 		if ((void*)src_str >= part->last)
@@ -397,7 +398,7 @@ concat_clip_parse(
 		vod_memcpy(cur_source->tracks_mask, tracks_mask, sizeof(tracks_mask));
 		cur_source->sequence = context->sequence;
 		cur_source->range = range;
-		cur_source->sequence_offset = offset;
+		cur_source->clip_time = clip_time;
 		cur_source->stripped_uri = cur_source->mapped_uri = dest_str;
 
 		vod_log_debug3(VOD_LOG_DEBUG_LEVEL, context->request_context->log, 0,
@@ -412,7 +413,7 @@ concat_clip_parse(
 			break;
 		}
 
-		offset += range->end;
+		clip_time += range->end;
 		range++;
 		src_str++;
 	}

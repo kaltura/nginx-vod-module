@@ -485,8 +485,8 @@ hds_packager_build_manifest(
 	{
 	case MEDIA_SET_VOD:
 		p = vod_sprintf(p, HDS_MANIFEST_HEADER_VOD, 
-			(uint32_t)(media_set->total_duration / 1000),
-			(uint32_t)(media_set->total_duration % 1000));
+			(uint32_t)(media_set->timing.total_duration / 1000),
+			(uint32_t)(media_set->timing.total_duration % 1000));
 		break;
 
 	case MEDIA_SET_LIVE:

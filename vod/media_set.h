@@ -8,6 +8,7 @@
 #include "json_parser.h"
 
 // constants
+#define SEGMENT_BASE_TIME_RELATIVE (ULLONG_MAX)
 #define INVALID_SEQUENCE_INDEX (UINT_MAX)
 #define INVALID_SEGMENT_INDEX (UINT_MAX)
 #define INVALID_SEGMENT_TIME (ULLONG_MAX)
@@ -74,28 +75,39 @@ struct media_sequence_s {
 };
 
 typedef struct {
+	uint32_t* durations;				// [total_count] clip durations in millis
+	uint32_t total_count;				// number of clips in the whole set
+	uint64_t* times;					// [total_count] clip timestamps in miilis
+	uint64_t segment_base_time;			// the time of segment 0
+	uint64_t total_duration;			// = sum(durations)
+	uint64_t first_time;				// = times[0]
+} media_clip_timing_t;
+
+typedef struct {
 	// initialized during parsing
 	struct segmenter_conf_s* segmenter_conf;
-	uint32_t total_clip_count;				// number of clips in the whole set
+
+	uint32_t type;
+	media_clip_timing_t timing;
+	bool_t use_discontinuity;
+	bool_t presentation_end;
+
 	uint32_t clip_count;					// number of clips relevant to serve the current request
-	uint32_t* durations;					// [total_clip_count], in millis
-	uint64_t total_duration;
 	uint32_t sequence_count;
 	media_sequence_t* sequences;			// [sequence_count]
 	media_sequence_t* sequences_end;
 	bool_t has_multi_sequences;
+
 	media_clip_source_t* sources_head;
 	media_clip_source_t* mapped_sources_head;
 	struct media_clip_dynamic_s* dynamic_clips_head;
-	bool_t use_discontinuity;
-	uint32_t initial_segment_index;			// the index of the first segment in the playlist
-	uint32_t initial_clip_segment_index;	// the index of the first segment of the first playlist clip (can be less than initial_segment_index when the beginning of the clip is outside the live window)
-	uint32_t initial_clip_index;
-	uint64_t first_clip_time;
+
 	uint64_t segment_start_time;
 	uint32_t segment_duration;
-	uint32_t type;
-	bool_t presentation_end;
+	int64_t live_window_duration;
+
+	uint32_t initial_segment_index;
+	uint32_t initial_clip_index;
 	vod_str_t uri;
 
 	// initialized while applying filters

@@ -134,7 +134,7 @@ ngx_http_vod_create_loc_conf(ngx_conf_t *cf)
 	conf->submodule.parse_uri_file_name = NGX_CONF_UNSET_PTR;
 	conf->request_handler = NGX_CONF_UNSET_PTR;
 	conf->segmenter.segment_duration = NGX_CONF_UNSET_UINT;
-	conf->segmenter.live_segment_count = NGX_CONF_UNSET;
+	conf->segmenter.live_window_duration = NGX_CONF_UNSET;
 	conf->segmenter.bootstrap_segments = NGX_CONF_UNSET_PTR;
 	conf->segmenter.align_to_key_frames = NGX_CONF_UNSET;
 	conf->segmenter.get_segment_count = NGX_CONF_UNSET_PTR;
@@ -197,7 +197,7 @@ ngx_http_vod_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child)
 	ngx_conf_merge_str_value(conf->multi_uri_suffix, prev->multi_uri_suffix, ".urlset");
 
 	ngx_conf_merge_uint_value(conf->segmenter.segment_duration, prev->segmenter.segment_duration, 10000);
-	ngx_conf_merge_value(conf->segmenter.live_segment_count, prev->segmenter.live_segment_count, 3);
+	ngx_conf_merge_value(conf->segmenter.live_window_duration, prev->segmenter.live_window_duration, 30000);
 	ngx_conf_merge_ptr_value(conf->segmenter.bootstrap_segments, prev->segmenter.bootstrap_segments, NULL);
 	ngx_conf_merge_value(conf->segmenter.align_to_key_frames, prev->segmenter.align_to_key_frames, 0);
 	ngx_conf_merge_ptr_value(conf->segmenter.get_segment_count, prev->segmenter.get_segment_count, segmenter_get_segment_count_last_short);
@@ -872,11 +872,11 @@ ngx_command_t ngx_http_vod_commands[] = {
 	offsetof(ngx_http_vod_loc_conf_t, segmenter.segment_duration),
 	NULL },
 
-	{ ngx_string("vod_live_segment_count"),
+	{ ngx_string("vod_live_window_duration"),
 	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1,
 	ngx_http_vod_set_signed_slot,
 	NGX_HTTP_LOC_CONF_OFFSET,
-	offsetof(ngx_http_vod_loc_conf_t, segmenter.live_segment_count),
+	offsetof(ngx_http_vod_loc_conf_t, segmenter.live_window_duration),
 	NULL },
 
 	{ ngx_string("vod_bootstrap_segment_durations"),

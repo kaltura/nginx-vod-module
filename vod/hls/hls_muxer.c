@@ -430,9 +430,9 @@ hls_muxer_init_base(
 
 	mpegts_encoder_finalize_streams(&init_streams_state, response_header);
 
-	if (media_set->durations != NULL)
+	if (media_set->timing.durations != NULL)
 	{
-		state->video_duration = media_set->total_duration;
+		state->video_duration = media_set->timing.total_duration;
 	}
 
 	return VOD_OK;
@@ -530,7 +530,7 @@ hls_muxer_reinit_tracks(hls_muxer_state_t* state)
 	state->first_time = TRUE;
 
 	track = state->first_clip_track;
-	for (cur_stream = state->first_stream; cur_stream < state->last_stream; cur_stream++, track++)
+	for (cur_stream = state->first_stream; cur_stream < state->last_stream; cur_stream++)
 	{
 		if (cur_stream->media_type == MEDIA_TYPE_NONE)		// id3 track
 		{
@@ -542,6 +542,8 @@ hls_muxer_reinit_tracks(hls_muxer_state_t* state)
 		{
 			return rc;
 		}
+
+		track++;
 	}
 	state->first_clip_track = track;
 
@@ -1207,6 +1209,15 @@ hls_muxer_simulation_reset(hls_muxer_state_t* state)
 		{
 			vod_log_error(VOD_LOG_ERR, state->request_context->log, 0,
 				"hls_muxer_simulation_reset: unexpected - hls_muxer_reinit_tracks failed %i", rc);
+		}
+
+		// need to explicitly reset the id3 stream since reinit tracks skips it
+		cur_stream = state->last_stream - 1;
+		if (cur_stream->media_type == MEDIA_TYPE_NONE)
+		{
+			cur_stream->cur_frame_part = *cur_stream->first_frame_part;
+			cur_stream->cur_frame = cur_stream->cur_frame_part.first_frame;
+			cur_stream->next_frame_time_offset = cur_stream->first_frame_time_offset;
 		}
 	}
 	else

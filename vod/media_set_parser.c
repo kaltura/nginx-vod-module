@@ -8,9 +8,6 @@
 #include "filters/dynamic_clip.h"
 #include "parse_utils.h"
 
-// constants
-#define MIN_LIVE_SEGMENT_COUNT (3)
-
 // typedefs
 enum {
 	MEDIA_SET_PARAM_DISCONTINUITY,
@@ -20,6 +17,7 @@ enum {
 	MEDIA_SET_PARAM_INITIAL_SEGMENT_INDEX,
 	MEDIA_SET_PARAM_INITIAL_CLIP_INDEX,
 	MEDIA_SET_PARAM_FIRST_CLIP_TIME,
+	MEDIA_SET_PARAM_CLIP_TIMES,
 	MEDIA_SET_PARAM_SEGMENT_BASE_TIME,
 	MEDIA_SET_PARAM_PLAYLIST_TYPE,
 	MEDIA_SET_PARAM_REFERENCE_CLIP_INDEX,
@@ -88,6 +86,7 @@ static json_object_key_def_t media_set_params[] = {
 	{ vod_string("initialSegmentIndex"),			VOD_JSON_INT,	MEDIA_SET_PARAM_INITIAL_SEGMENT_INDEX },
 	{ vod_string("initialClipIndex"),				VOD_JSON_INT,	MEDIA_SET_PARAM_INITIAL_CLIP_INDEX },
 	{ vod_string("firstClipTime"),					VOD_JSON_INT,	MEDIA_SET_PARAM_FIRST_CLIP_TIME },
+	{ vod_string("clipTimes"),						VOD_JSON_ARRAY,	MEDIA_SET_PARAM_CLIP_TIMES },
 	{ vod_string("segmentBaseTime"),				VOD_JSON_INT,	MEDIA_SET_PARAM_SEGMENT_BASE_TIME },
 	{ vod_string("playlistType"),					VOD_JSON_STRING,MEDIA_SET_PARAM_PLAYLIST_TYPE },
 	{ vod_string("referenceClipIndex"),				VOD_JSON_INT,	MEDIA_SET_PARAM_REFERENCE_CLIP_INDEX },
@@ -134,7 +133,7 @@ media_set_parse_durations(
 		return VOD_BAD_MAPPING;
 	}
 
-	output_cur = vod_alloc(request_context->pool, sizeof(media_set->durations[0]) * array->count);
+	output_cur = vod_alloc(request_context->pool, sizeof(media_set->timing.durations[0]) * array->count);
 	if (output_cur == NULL)
 	{
 		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
@@ -142,7 +141,7 @@ media_set_parse_durations(
 		return VOD_ALLOC_FAILED;
 	}
 
-	media_set->durations = output_cur;
+	media_set->timing.durations = output_cur;
 
 	part = &array->part;
 	for (cur_pos = part->first; ; cur_pos++, output_cur++)
@@ -184,8 +183,8 @@ media_set_parse_durations(
 		return VOD_BAD_MAPPING;
 	}
 
-	media_set->total_clip_count = array->count;
-	media_set->total_duration = total_duration;
+	media_set->timing.total_count = array->count;
+	media_set->timing.total_duration = total_duration;
 
 	return VOD_OK;
 }
@@ -442,7 +441,7 @@ media_set_parse_source(
 	vod_memset(source->tracks_mask, 0xff, sizeof(source->tracks_mask));
 	source->sequence = context->base.sequence;
 	source->range = context->base.range;
-	source->sequence_offset = context->base.sequence_offset;
+	source->clip_time = context->base.clip_time;
 	source->mapped_uri.len = (size_t)-1;
 
 	rc = vod_json_parse_object_values(element, &media_clip_source_hash, context, source);
@@ -623,7 +622,7 @@ media_set_parse_sequences(
 	media_set->sequences = cur_output;
 
 	context.request_context = request_context;
-	context.expected_clip_count = media_set->total_clip_count;
+	context.expected_clip_count = media_set->timing.total_count;
 
 	index = 0;
 	part = &array->part;
@@ -711,6 +710,7 @@ media_set_parse_sequence_clips(
 	media_clip_t** output_cur;
 	media_clip_t** output_end;
 	vod_status_t rc;
+	uint64_t* cur_clip_time;
 	uint32_t* cur_duration;
 	uint32_t index;
 
@@ -725,29 +725,37 @@ media_set_parse_sequence_clips(
 	output_end = output_cur + context->clip_ranges.clip_count;
 	*clips = output_cur;
 
-	context->base.sequence_offset = context->clip_ranges.initial_sequence_offset;
+	index = context->clip_ranges.min_clip_index;
+	context->base.clip_time = context->clip_ranges.clip_time;
 	context->base.range = context->clip_ranges.clip_ranges;
-	cur_duration = context->media_set->durations + context->clip_ranges.min_clip_index;
+
+	if (context->media_set->timing.durations == NULL)
+	{
+		cur_duration = NULL;
+		cur_clip_time = NULL;
+		context->base.duration = UINT_MAX;
+	}
+	else
+	{
+		cur_duration = context->media_set->timing.durations + index;
+		cur_clip_time = context->media_set->timing.times + index;
+		context->base.duration = *cur_duration;
+	}
 
 	// find the first element
-	index = context->clip_ranges.min_clip_index;
 	while (index >= part->count)
 	{
 		index -= part->count;
 		part = part->next;
 	}
 
-	for (cur_pos = (vod_json_object_t*)part->first + index; 
-		output_cur < output_end; 
-		output_cur++, cur_pos++)
+	for (cur_pos = (vod_json_object_t*)part->first + index; ; cur_pos++)
 	{
 		if ((void*)cur_pos >= part->last)
 		{
 			part = part->next;
 			cur_pos = part->first;
 		}
-
-		context->base.duration = cur_duration != NULL ? *cur_duration : UINT_MAX;
 
 		rc = media_set_parse_clip(
 			context, 
@@ -759,14 +767,20 @@ media_set_parse_sequence_clips(
 			return rc;
 		}
 
-		// Note: in case the durations are null, sequence_offset and cur_duration become corrupted,
-		//		but since there is always a single clip in this case, they won't be used
-		context->base.sequence_offset += context->base.duration;
+		output_cur++;
+		if (output_cur >= output_end)
+		{
+			break;
+		}
+
+		cur_clip_time++;
+		context->base.clip_time = *cur_clip_time;
+		cur_duration++;
+		context->base.duration = *cur_duration;
 		if (context->base.range != NULL)
 		{
 			context->base.range++;
 		}
-		cur_duration++;
 	}
 
 	return VOD_OK;
@@ -894,66 +908,207 @@ media_set_parser_init(
 }
 
 static vod_status_t
+media_set_init_continuous_clip_times(
+	request_context_t* request_context,
+	media_clip_timing_t* timing)
+{
+	uint32_t* cur_duration;
+	uint64_t* dest;
+	uint64_t* dest_end;
+	uint64_t last_end_time;
+
+	// optimization for the common case
+	if (timing->total_count == 1)
+	{
+		timing->times = &timing->first_time;
+		return VOD_OK;
+	}
+
+	// allocate the array
+	dest = vod_alloc(request_context->pool, sizeof(timing->times[0]) * timing->total_count);
+	if (dest == NULL)
+	{
+		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
+			"media_set_init_continuous_clip_times: vod_alloc failed");
+		return VOD_ALLOC_FAILED;
+	}
+
+	timing->times = dest;
+	dest_end = dest + timing->total_count;
+
+	// generate continuous times
+	last_end_time = timing->first_time;
+	for (cur_duration = timing->durations; 
+		dest < dest_end; 
+		dest++, cur_duration++)
+	{
+		*dest = last_end_time;
+		last_end_time += *cur_duration;
+	}
+
+	return VOD_OK;
+}
+
+static vod_status_t
+media_set_live_init_clip_times(
+	request_context_t* request_context,
+	media_set_t* media_set, 
+	vod_json_value_t** params)
+{
+	vod_json_array_t* array;
+	vod_array_part_t* part;
+	int64_t* src;
+	uint64_t* dest;
+	uint64_t* dest_end;
+	int64_t last_end_time;
+	int64_t cur_clip_time;
+	uint32_t* cur_duration;
+
+	if (params[MEDIA_SET_PARAM_CLIP_TIMES] == NULL ||
+		!media_set->use_discontinuity)
+	{
+		// first clip time
+		if (params[MEDIA_SET_PARAM_FIRST_CLIP_TIME] == NULL)
+		{
+			vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+				"media_set_live_init_clip_times: firstClipTime missing in live playlist");
+			return VOD_BAD_MAPPING;
+		}
+
+		media_set->timing.first_time = params[MEDIA_SET_PARAM_FIRST_CLIP_TIME]->v.num.nom;
+
+		return media_set_init_continuous_clip_times(request_context, &media_set->timing);
+	}
+
+	// allocate the clip times
+	dest = vod_alloc(request_context->pool, sizeof(media_set->timing.times[0]) * media_set->timing.total_count);
+	if (dest == NULL)
+	{
+		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
+			"media_set_live_init_clip_times: vod_alloc failed");
+		return VOD_ALLOC_FAILED;
+	}
+
+	media_set->timing.times = dest;
+	dest_end = dest + media_set->timing.total_count;
+
+	// validate the clip times array
+	array = &params[MEDIA_SET_PARAM_CLIP_TIMES]->v.arr;
+
+	if (array->type != VOD_JSON_INT)
+	{
+		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+			"media_set_live_init_clip_times: clipTimes must be an array of integers");
+		return VOD_BAD_MAPPING;
+	}
+
+	if (array->count != media_set->timing.total_count)
+	{
+		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+			"media_set_live_init_clip_times: clipTimes element count %uz does not match clip count %uD",
+			array->count, media_set->timing.total_count);
+		return VOD_BAD_MAPPING;
+	}
+
+	// copy the clip times
+	part = &array->part;
+	src = part->first;
+
+	media_set->timing.first_time = *src;
+
+	last_end_time = 0;
+
+	for (cur_duration = media_set->timing.durations; 
+		dest < dest_end; 
+		dest++, src++, cur_duration++)
+	{
+		if ((void*)src >= part->last)
+		{
+			part = part->next;
+			src = part->first;
+		}
+
+		cur_clip_time = *src;
+
+		if (cur_clip_time < last_end_time)
+		{
+			vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+				"media_set_live_init_clip_times: bad clip time %L last clip ended at %L",
+				cur_clip_time, last_end_time);
+			return VOD_BAD_MAPPING;
+		}
+
+		*dest = cur_clip_time;
+
+		last_end_time = cur_clip_time + *cur_duration;
+	}
+
+	return VOD_OK;
+}
+
+static vod_status_t
 media_set_parse_live_params(
 	request_context_t* request_context,
 	request_params_t* request_params,
 	segmenter_conf_t* segmenter,
 	vod_json_value_t** params,
-	media_set_t* media_set, 
-	uint64_t* segment_base_time)
+	media_set_t* media_set)
 {
-	// first clip time
-	if (params[MEDIA_SET_PARAM_FIRST_CLIP_TIME] == NULL)
-	{
-		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-			"media_set_parse_live_params: firstClipTime missing in live playlist");
-		return VOD_BAD_MAPPING;
-	}
+	vod_status_t rc;
 
-	media_set->first_clip_time = params[MEDIA_SET_PARAM_FIRST_CLIP_TIME]->v.num.nom;
+	// clip times
+	rc = media_set_live_init_clip_times(request_context, media_set, params);
+	if (rc != VOD_OK)
+	{
+		return rc;
+	}
 
 	if (media_set->use_discontinuity)
 	{
-		// non-continuous - the upstream server has to keep state in order to have sequential segment/clip indexes
-		//	(it is not possible to calculate the segment index without knowing all past clip durations)
-		if (params[MEDIA_SET_PARAM_INITIAL_SEGMENT_INDEX] == NULL)
+		if (params[MEDIA_SET_PARAM_INITIAL_SEGMENT_INDEX] != NULL)
 		{
-			vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-				"media_set_parse_live_params: initialSegmentIndex missing in non-continuous live playlist");
-			return VOD_BAD_MAPPING;
+			media_set->initial_segment_index = params[MEDIA_SET_PARAM_INITIAL_SEGMENT_INDEX]->v.num.nom - 1;
 		}
 
-		if (params[MEDIA_SET_PARAM_INITIAL_CLIP_INDEX] == NULL)
+		// Note: initial_clip_index must be supplied when the clips have different encoding parameters
+		if (params[MEDIA_SET_PARAM_INITIAL_CLIP_INDEX] != NULL)
 		{
-			vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-				"media_set_parse_live_params: initialClipIndex missing in non-continuous live playlist");
-			return VOD_BAD_MAPPING;
+			media_set->initial_clip_index = params[MEDIA_SET_PARAM_INITIAL_CLIP_INDEX]->v.num.nom - 1;
+
+			if (request_params->clip_index != INVALID_CLIP_INDEX)
+			{
+				if (request_params->clip_index < media_set->initial_clip_index)
+				{
+					vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+						"media_set_parse_live_params: clip index %uD is smaller than the initial clip index %uD",
+						request_params->clip_index, media_set->initial_clip_index);
+					return VOD_BAD_REQUEST;
+				}
+				request_params->clip_index -= media_set->initial_clip_index;
+			}
 		}
-
-		media_set->initial_segment_index = params[MEDIA_SET_PARAM_INITIAL_SEGMENT_INDEX]->v.num.nom - 1;
-		media_set->initial_clip_segment_index = media_set->initial_segment_index;
-
-		media_set->initial_clip_index = params[MEDIA_SET_PARAM_INITIAL_CLIP_INDEX]->v.num.nom - 1;
-		if (request_params->clip_index != INVALID_CLIP_INDEX)
+		else
 		{
-			if (request_params->clip_index < media_set->initial_clip_index)
+			media_set->initial_clip_index = INVALID_CLIP_INDEX;
+
+			if (request_params->clip_index != INVALID_CLIP_INDEX &&
+				request_params->clip_index != 0)
 			{
 				vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-					"media_set_parse_live_params: clip index %uD is smaller than the initial clip index %uD",
-					request_params->clip_index, media_set->initial_clip_index);
+					"media_set_parse_live_params: invalid clip index %uD with single clip", request_params->clip_index);
 				return VOD_BAD_REQUEST;
-			}
-			request_params->clip_index -= media_set->initial_clip_index;
-
-			// adjust the segment index to the first clip, 
-			// it will be further adjusted after the start/end ranges get calculated
-			if (request_params->segment_index != INVALID_SEGMENT_INDEX)
-			{
-				request_params->segment_index += media_set->initial_segment_index;
 			}
 		}
 
-		*segment_base_time = media_set->first_clip_time;
+		// segment base time
+		if (params[MEDIA_SET_PARAM_SEGMENT_BASE_TIME] != NULL)
+		{
+			media_set->timing.segment_base_time = params[MEDIA_SET_PARAM_SEGMENT_BASE_TIME]->v.num.nom;
+		}
+		else
+		{
+			media_set->timing.segment_base_time = SEGMENT_BASE_TIME_RELATIVE;
+		}
 	}
 	else
 	{
@@ -965,297 +1120,71 @@ media_set_parse_live_params(
 			return VOD_BAD_MAPPING;
 		}
 
-		*segment_base_time = params[MEDIA_SET_PARAM_SEGMENT_BASE_TIME]->v.num.nom;
-
-		if (*segment_base_time > media_set->first_clip_time)
-		{
-			vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-				"media_set_parse_live_params: segment base time %uL is larger than first clip time %uL",
-				*segment_base_time, media_set->first_clip_time);
-			return VOD_BAD_MAPPING;
-		}
+		media_set->timing.segment_base_time = params[MEDIA_SET_PARAM_SEGMENT_BASE_TIME]->v.num.nom;
 	}
 
-	return VOD_OK;
-}
-
-static vod_status_t
-media_set_get_live_window(
-	request_context_t* request_context,
-	segmenter_conf_t* segmenter,
-	media_set_t* media_set,
-	int64_t live_segment_count,
-	uint64_t segment_base_time,
-	bool_t parse_all_clips,
-	get_clip_ranges_result_t* clip_ranges)
-{
-	get_clip_ranges_result_t max_clip_ranges;
-	get_clip_ranges_result_t min_clip_ranges;
-	get_clip_ranges_params_t get_ranges_params;
-	vod_status_t rc;
-	uint64_t current_time;
-	uint32_t* durations_end;
-	uint32_t* durations_cur;
-	uint32_t min_segment_index;
-	uint32_t max_segment_index;
-
-	// non-segment request
-
-	if (live_segment_count <= 0)
-	{
-		// find the full range of segments included in the mapping
-		if (media_set->use_discontinuity)
-		{
-			min_segment_index = media_set->initial_segment_index;
-
-			rc = segmenter_get_segment_index_discontinuity(
-				request_context,
-				segmenter,
-				media_set->initial_segment_index,
-				media_set->durations,
-				media_set->total_clip_count,
-				media_set->total_duration - 1,
-				&max_segment_index);
-			if (rc != VOD_OK)
-			{
-				return rc;
-			}
-		}
-		else
-		{
-			min_segment_index = segmenter_get_segment_index_no_discontinuity_round_up(
-				segmenter,
-				media_set->first_clip_time - segment_base_time);
-
-			max_segment_index = segmenter_get_segment_index_no_discontinuity(
-				segmenter,
-				media_set->first_clip_time + media_set->total_duration - segment_base_time - 1);
-
-			if (!media_set->presentation_end)
-			{
-				max_segment_index--;
-			}
-		}
-
-		// if live segment count is negative, output the last N segments
-		if (live_segment_count < 0 && 
-			max_segment_index - min_segment_index + 1 > (uintptr_t)(-live_segment_count))
-		{
-			min_segment_index = max_segment_index + (int32_t)(live_segment_count + 1);
-		}
-	}
-	else
-	{
-		// output live_segment_count segments (at maximum) according to the current time
-		current_time = vod_time() * 1000;
-		if (media_set->first_clip_time > current_time)
-		{
-			vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-				"media_set_get_live_window: first clip time %uL is larger than current time %uL",
-				media_set->first_clip_time, current_time);
-			return VOD_BAD_MAPPING;
-		}
-
-		// get the max segment index
-		if (media_set->use_discontinuity)
-		{
-			rc = segmenter_get_segment_index_discontinuity(
-				request_context,
-				segmenter,
-				media_set->initial_segment_index,
-				media_set->durations,
-				media_set->total_clip_count,
-				current_time - segment_base_time,
-				&max_segment_index);
-			if (rc != VOD_OK)
-			{
-				return rc;
-			}
-		}
-		else
-		{
-			max_segment_index = segmenter_get_segment_index_no_discontinuity(
-				segmenter,
-				current_time - segment_base_time);
-		}
-
-		// get the min segment index
-		if (max_segment_index > media_set->initial_segment_index + live_segment_count - 1)
-		{
-			min_segment_index = max_segment_index - live_segment_count + 1;
-		}
-		else
-		{
-			min_segment_index = media_set->initial_segment_index;
-		}
-	}
-
-	// get the ranges of the first and last segments
-	get_ranges_params.request_context = request_context;
-	get_ranges_params.conf = segmenter;
-	get_ranges_params.segment_index = min_segment_index;
-	get_ranges_params.clip_durations = media_set->durations;
-	get_ranges_params.total_clip_count = media_set->total_clip_count;
-	get_ranges_params.first_key_frame_offset = media_set->sequences[0].first_key_frame_offset;
-	get_ranges_params.key_frame_durations = media_set->sequences[0].key_frame_durations;
-
-	if (media_set->use_discontinuity)
-	{
-		get_ranges_params.clip_index = 0;
-		get_ranges_params.initial_segment_index = media_set->initial_segment_index;
-
-		// TODO: consider optimizing this by creating dedicated segmenter functions
-		rc = segmenter_get_start_end_ranges_discontinuity(
-			&get_ranges_params,
-			&min_clip_ranges);
-		if (rc != VOD_OK)
-		{
-			return rc;
-		}
-
-		get_ranges_params.segment_index = max_segment_index;
-
-		rc = segmenter_get_start_end_ranges_discontinuity(
-			&get_ranges_params,
-			&max_clip_ranges);
-		if (rc != VOD_OK)
-		{
-			return rc;
-		}
-	}
-	else
-	{
-		get_ranges_params.start_time = media_set->first_clip_time - segment_base_time;
-		get_ranges_params.end_time = get_ranges_params.start_time + media_set->total_duration;
-		get_ranges_params.last_segment_end = get_ranges_params.end_time;
-
-		rc = segmenter_get_start_end_ranges_no_discontinuity(
-			&get_ranges_params,
-			&min_clip_ranges);
-		if (rc != VOD_OK)
-		{
-			return rc;
-		}
-
-		get_ranges_params.segment_index = max_segment_index;
-
-		rc = segmenter_get_start_end_ranges_no_discontinuity(
-			&get_ranges_params,
-			&max_clip_ranges);
-		if (rc != VOD_OK)
-		{
-			return rc;
-		}
-	}
-
-	if (min_clip_ranges.clip_count <= 0)
+	if (media_set->timing.segment_base_time != SEGMENT_BASE_TIME_RELATIVE &&
+		media_set->timing.segment_base_time > media_set->timing.first_time)
 	{
 		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-			"media_set_get_live_window: no clips found for the min segment %uD", min_segment_index);
+			"media_set_parse_live_params: segment base time %uL is larger than first clip time %uL",
+			media_set->timing.segment_base_time, media_set->timing.first_time);
 		return VOD_BAD_MAPPING;
 	}
-
-	if (max_clip_ranges.clip_count <= 0)
-	{
-		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-			"media_set_get_live_window: no clips found for the max segment %uD", max_segment_index);
-		return VOD_BAD_MAPPING;
-	}
-
-	// trim the durations array
-	// Note: min_clip_index and max_clip_index can be identical
-	media_set->durations[max_clip_ranges.max_clip_index] = max_clip_ranges.clip_ranges[max_clip_ranges.clip_count - 1].end;
-	media_set->durations[min_clip_ranges.min_clip_index] -= min_clip_ranges.clip_ranges[0].start;
-	media_set->durations += min_clip_ranges.min_clip_index;
-
-	media_set->total_clip_count = max_clip_ranges.max_clip_index + 1 - min_clip_ranges.min_clip_index;
-
-	// recalculate the total duration
-	media_set->total_duration = 0;
-	durations_end = media_set->durations + media_set->total_clip_count;
-	for (durations_cur = media_set->durations; durations_cur < durations_end; durations_cur++)
-	{
-		media_set->total_duration += *durations_cur;
-	}
-
-	// update live params
-	media_set->first_clip_time += min_clip_ranges.initial_sequence_offset + min_clip_ranges.clip_ranges[0].start;
-	media_set->initial_segment_index = min_segment_index;
-	media_set->initial_clip_segment_index = min_clip_ranges.first_clip_segment_index;
-
-	if (media_set->use_discontinuity)
-	{
-		media_set->initial_clip_index += min_clip_ranges.min_clip_index;
-	}
-
-	if (parse_all_clips)
-	{
-		// parse all clips
-		if (media_set->total_clip_count > MAX_CLIPS_PER_REQUEST)
-		{
-			vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-				"media_set_get_live_window: clip count %uD exceeds the limit per request", media_set->total_clip_count);
-			return VOD_BAD_REQUEST;
-		}
-
-		clip_ranges->clip_count = media_set->total_clip_count;
-		clip_ranges->max_clip_index = max_clip_ranges.max_clip_index;
-	}
-	else
-	{
-		// parse only the first clip in each sequence, assume subsequent clips have the same media info
-		clip_ranges->clip_count = 1;
-		clip_ranges->max_clip_index = min_clip_ranges.min_clip_index;
-	}
-
-	clip_ranges->min_clip_index = min_clip_ranges.min_clip_index;
-	clip_ranges->initial_sequence_offset = 0;
 
 	return VOD_OK;
 }
 
 static int64_t
 media_set_apply_live_window_duration_param(
-	int64_t live_segment_count, 
-	int64_t live_window_duration,
-	uintptr_t segment_duration)
+	int64_t live_window_duration, 
+	int64_t live_window_duration_param)
 {
-	int64_t live_segment_count_param;
-
 	// ignore values that are not positive
-	if (live_window_duration <= 0)
+	if (live_window_duration_param <= 0)
 	{
-		return live_segment_count;
+		return live_window_duration;
 	}
 
-	// translate the duration to segment count
-	live_segment_count_param = vod_div_ceil(live_window_duration, segment_duration);
-	if (live_segment_count_param < MIN_LIVE_SEGMENT_COUNT)
+	// ignore the json param if it has a greater absolute value than the conf,
+	// retain the sign of the conf value (0 is treated like -inf)
+	if (live_window_duration > 0)
 	{
-		live_segment_count_param = MIN_LIVE_SEGMENT_COUNT;
-	}
-
-	// ignore the json param if it has a greater absolute value than the conf
-	if (live_segment_count > 0)
-	{
-		if (live_segment_count_param < live_segment_count)
+		if (live_window_duration_param < live_window_duration)
 		{
-			return live_segment_count_param;
+			return live_window_duration_param;
 		}
 	}
-	else if (live_segment_count < 0)
+	else if (live_window_duration < 0)
 	{
-		if (live_segment_count_param < -live_segment_count)
+		if (live_window_duration_param < -live_window_duration)
 		{
-			return -live_segment_count_param;
+			return -live_window_duration_param;
 		}
 	}
 	else
 	{
-		return -live_segment_count_param;
+		return -live_window_duration_param;
 	}
 
-	return live_segment_count;
+	return live_window_duration;
+}
+
+static bool_t
+media_set_is_clip_start(media_clip_timing_t* timing, uint64_t time)
+{
+	uint64_t* times_cur = timing->times;
+	uint64_t* times_end = times_cur + timing->total_count;
+
+	for (; times_cur < times_end; times_cur++)
+	{
+		if (time == *times_cur)
+		{
+			return TRUE;
+		}
+	}
+
+	return FALSE;
 }
 
 vod_status_t
@@ -1273,10 +1202,7 @@ media_set_parse_json(
 	vod_json_value_t* params[MEDIA_SET_PARAM_COUNT];
 	vod_json_value_t json;
 	vod_status_t rc;
-	uint64_t segment_base_time;
-	int64_t live_segment_count;
-	uint32_t* cur_duration;
-	uint32_t* duration_end;
+	uint32_t margin;
 	u_char error[128];
 
 	result->segmenter_conf = segmenter;
@@ -1312,9 +1238,10 @@ media_set_parse_json(
 		return VOD_BAD_MAPPING;
 	}
 
-	result->first_clip_time = 0;
+	result->timing.times = NULL;
+	result->timing.first_time = 0;
+	result->timing.segment_base_time = 0;
 	result->initial_segment_index = 0;
-	result->initial_clip_segment_index = 0;
 	result->initial_clip_index = 0;
 
 	if (params[MEDIA_SET_PARAM_DURATIONS] == NULL)
@@ -1328,9 +1255,9 @@ media_set_parse_json(
 			return VOD_BAD_REQUEST;
 		}
 
-		result->total_clip_count = 1;
+		result->timing.total_count = 1;
+		result->timing.durations = NULL;
 		result->clip_count = 1;
-		result->durations = NULL;
 		result->use_discontinuity = FALSE;
 		result->type = MEDIA_SET_VOD;
 		result->presentation_end = TRUE;
@@ -1351,7 +1278,7 @@ media_set_parse_json(
 		context.clip_ranges.clip_count = 1;
 		context.clip_ranges.min_clip_index = 0;
 		context.clip_ranges.max_clip_index = 0;
-		context.clip_ranges.initial_sequence_offset = 0;
+		context.clip_ranges.clip_time = 0;
 
 		context.media_set = result;
 		context.base.request_context = request_context;
@@ -1379,7 +1306,7 @@ media_set_parse_json(
 	{
 		result->type = MEDIA_SET_LIVE;
 		result->presentation_end = params[MEDIA_SET_PARAM_PRESENTATION_END_TIME] != NULL &&
-			params[MEDIA_SET_PARAM_PRESENTATION_END_TIME]->v.num.nom <= vod_time() * 1000;
+			params[MEDIA_SET_PARAM_PRESENTATION_END_TIME]->v.num.nom <= (int64_t)vod_time() * 1000;
 	}
 	else
 	{
@@ -1437,8 +1364,7 @@ media_set_parse_json(
 			request_params,
 			segmenter,
 			params,
-			result, 
-			&segment_base_time);
+			result);
 		if (rc != VOD_OK)
 		{
 			return rc;
@@ -1446,7 +1372,18 @@ media_set_parse_json(
 	}
 	else
 	{
-		segment_base_time = 0;
+		rc = media_set_init_continuous_clip_times(
+			request_context,
+			&result->timing);
+		if (rc != VOD_OK)
+		{
+			return rc;
+		}
+
+		if (result->use_discontinuity)
+		{
+			result->timing.segment_base_time = SEGMENT_BASE_TIME_RELATIVE;
+		}
 	}
 
 	if (request_params->segment_index != INVALID_SEGMENT_INDEX)
@@ -1454,23 +1391,15 @@ media_set_parse_json(
 		// recalculate the segment index if it was determined according to timestamp
 		if (request_params->segment_time != INVALID_SEGMENT_TIME)
 		{
-			if (request_params->segment_time < result->first_clip_time)
-			{
-				vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-					"media_set_parse_json: segment time %uL is smaller than first clip time %uL",
-					request_params->segment_time, result->first_clip_time);
-				return VOD_BAD_REQUEST;
-			}
-
-			if (result->use_discontinuity)
+			// recalculate the segment index if it was determined according to timestamp
+			if (result->use_discontinuity && result->timing.segment_base_time == SEGMENT_BASE_TIME_RELATIVE)
 			{
 				rc = segmenter_get_segment_index_discontinuity(
 					request_context,
 					segmenter,
 					result->initial_segment_index,
-					result->durations,
-					result->total_clip_count,
-					request_params->segment_time - segment_base_time + SEGMENT_FROM_TIMESTAMP_MARGIN,
+					&result->timing,
+					request_params->segment_time + SEGMENT_FROM_TIMESTAMP_MARGIN,
 					&request_params->segment_index);
 				if (rc != VOD_OK)
 				{
@@ -1479,10 +1408,20 @@ media_set_parse_json(
 			}
 			else
 			{
-				// recalculate the segment index if it was determined according to timestamp
+				if (request_params->segment_time < result->timing.first_time)
+				{
+					vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+						"media_set_parse_json: segment time %uL is smaller than first clip time %uL",
+						request_params->segment_time, result->timing.first_time);
+					return VOD_BAD_REQUEST;
+				}
+
+				margin = media_set_is_clip_start(&result->timing, request_params->segment_time) ?
+					0 : SEGMENT_FROM_TIMESTAMP_MARGIN;
+
 				request_params->segment_index = segmenter_get_segment_index_no_discontinuity(
 					segmenter,
-					request_params->segment_time - segment_base_time + SEGMENT_FROM_TIMESTAMP_MARGIN);
+					request_params->segment_time - result->timing.segment_base_time + margin);
 			}
 		}
 
@@ -1490,14 +1429,12 @@ media_set_parse_json(
 		get_ranges_params.request_context = request_context;
 		get_ranges_params.conf = segmenter;
 		get_ranges_params.segment_index = request_params->segment_index;
-		get_ranges_params.clip_durations = result->durations;
-		get_ranges_params.total_clip_count = result->total_clip_count;
+		get_ranges_params.timing = result->timing;
 		get_ranges_params.first_key_frame_offset = result->sequences[0].first_key_frame_offset;
 		get_ranges_params.key_frame_durations = result->sequences[0].key_frame_durations;
 
 		if (result->use_discontinuity)
 		{
-			get_ranges_params.clip_index = request_params->clip_index;
 			get_ranges_params.initial_segment_index = result->initial_segment_index;
 
 			rc = segmenter_get_start_end_ranges_discontinuity(
@@ -1506,9 +1443,7 @@ media_set_parse_json(
 		}
 		else
 		{
-			get_ranges_params.start_time = result->first_clip_time - segment_base_time;
-			get_ranges_params.end_time = get_ranges_params.start_time + result->total_duration;
-			get_ranges_params.last_segment_end = get_ranges_params.end_time;
+			get_ranges_params.last_segment_end = 0;		// 0 = use the end time
 
 			rc = segmenter_get_start_end_ranges_no_discontinuity(
 				&get_ranges_params,
@@ -1520,21 +1455,17 @@ media_set_parse_json(
 			return rc;
 		}
 
-		result->segment_start_time = 
-			result->first_clip_time + 
-			context.clip_ranges.initial_sequence_offset;
+		// set the segment_start_time & segment_duration
+		result->segment_start_time = context.clip_ranges.clip_time;
 
 		if (context.clip_ranges.clip_count > 0)
 		{
 			result->segment_start_time += context.clip_ranges.clip_ranges[0].start;
 			result->segment_duration = 
-				context.clip_ranges.clip_ranges[context.clip_ranges.clip_count - 1].end -
-				context.clip_ranges.clip_ranges[0].start;
+				(result->timing.times[context.clip_ranges.max_clip_index] + 
+					context.clip_ranges.clip_ranges[context.clip_ranges.clip_count - 1].end) -
+				result->segment_start_time;
 		}
-
-		// in case a clip index was passed on the request, adjust the segment index 
-		//	to count from the beginning of the sequence
-		request_params->segment_index += context.clip_ranges.clip_index_segment_index;
 	}
 	else
 	{
@@ -1543,24 +1474,18 @@ media_set_parse_json(
 		if (request_params->clip_index != INVALID_CLIP_INDEX)
 		{
 			// clip index specified on the request
-			if (request_params->clip_index >= result->total_clip_count)
+			if (request_params->clip_index >= result->timing.total_count)
 			{
 				vod_log_error(VOD_LOG_ERR, request_context->log, 0,
 					"media_set_parse_json: invalid clip index %uD greater than clip count %uD", 
-					request_params->clip_index, result->total_clip_count);
+					request_params->clip_index, result->timing.total_count);
 				return VOD_BAD_REQUEST;
 			}
 
 			context.clip_ranges.clip_count = 1;
 			context.clip_ranges.min_clip_index = request_params->clip_index;
 			context.clip_ranges.max_clip_index = request_params->clip_index;
-
-			duration_end = result->durations + request_params->clip_index;
-			context.clip_ranges.initial_sequence_offset = 0;
-			for (cur_duration = result->durations; cur_duration < duration_end; cur_duration++)
-			{
-				context.clip_ranges.initial_sequence_offset += *cur_duration;
-			}
+			context.clip_ranges.clip_time = result->timing.times[request_params->clip_index];
 		}
 		else
 		{
@@ -1574,22 +1499,19 @@ media_set_parse_json(
 			if (result->type == MEDIA_SET_LIVE)
 			{
 				// trim the playlist to a smaller window if needed
-				live_segment_count = segmenter->live_segment_count;
+				result->live_window_duration = segmenter->live_window_duration;
 
 				if (params[MEDIA_SET_PARAM_LIVE_WINDOW_DURATION] != NULL)
 				{
-					live_segment_count = media_set_apply_live_window_duration_param(
-						live_segment_count,
-						params[MEDIA_SET_PARAM_LIVE_WINDOW_DURATION]->v.num.nom,
-						segmenter->segment_duration);
+					result->live_window_duration = media_set_apply_live_window_duration_param(
+						result->live_window_duration,
+						params[MEDIA_SET_PARAM_LIVE_WINDOW_DURATION]->v.num.nom);
 				}
 
-				rc = media_set_get_live_window(
+				rc = segmenter_get_live_window(
 					request_context,
 					segmenter,
 					result,
-					live_segment_count,
-					segment_base_time,
 					parse_all_clips,
 					&context.clip_ranges);
 				if (rc != VOD_OK)
@@ -1600,28 +1522,32 @@ media_set_parse_json(
 			else if (parse_all_clips)
 			{
 				// parse all clips
-				if (result->total_clip_count > MAX_CLIPS_PER_REQUEST)
+				if (result->timing.total_count > MAX_CLIPS_PER_REQUEST)
 				{
 					vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-						"media_set_parse_json: clip count %uD exceeds the limit per request", result->total_clip_count);
+						"media_set_parse_json: clip count %uD exceeds the limit per request", result->timing.total_count);
 					return VOD_BAD_REQUEST;
 				}
 
-				context.clip_ranges.clip_count = result->total_clip_count;
+				context.clip_ranges.clip_count = result->timing.total_count;
 				context.clip_ranges.min_clip_index = 0;
-				context.clip_ranges.max_clip_index = result->total_clip_count - 1;
-				context.clip_ranges.initial_sequence_offset = 0;
+				context.clip_ranges.max_clip_index = result->timing.total_count - 1;
+				context.clip_ranges.clip_time = result->timing.first_time;
 			}
 			else
 			{
 				if (params[MEDIA_SET_PARAM_REFERENCE_CLIP_INDEX] != NULL)
 				{
-					context.clip_ranges.min_clip_index = params[MEDIA_SET_PARAM_REFERENCE_CLIP_INDEX]->v.num.nom - 1 - result->initial_clip_index;
-					if (context.clip_ranges.min_clip_index >= result->total_clip_count)
+					context.clip_ranges.min_clip_index = params[MEDIA_SET_PARAM_REFERENCE_CLIP_INDEX]->v.num.nom - 1;
+					if (result->initial_clip_index != INVALID_CLIP_INDEX)
+					{
+						context.clip_ranges.min_clip_index -= result->initial_clip_index;
+					}
+					if (context.clip_ranges.min_clip_index >= result->timing.total_count)
 					{
 						vod_log_error(VOD_LOG_ERR, request_context->log, 0,
 							"media_set_parse_json: reference clip index %uD exceeds the total number of clips %uD", 
-							context.clip_ranges.min_clip_index, result->total_clip_count);
+							context.clip_ranges.min_clip_index, result->timing.total_count);
 						return VOD_BAD_MAPPING;
 					}
 
@@ -1635,7 +1561,7 @@ media_set_parse_json(
 
 				// parse only the first clip in each sequence, assume subsequent clips have the same media info
 				context.clip_ranges.clip_count = 1;
-				context.clip_ranges.initial_sequence_offset = 0;
+				context.clip_ranges.clip_time = result->timing.first_time;
 			}
 		}
 	}

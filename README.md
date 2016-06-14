@@ -395,27 +395,34 @@ Optional fields:
 	to read the media info of all clips included in the mapping in order to generate the MPD)
 
 Live fields:
-* `firstClipTime` - integer, mandatory for all live playlists, contains the absolute 
-	time of the first clip in the playlist, in milliseconds since the epoch (unixtime x 1000)
+* `firstClipTime` - integer, mandatory for all live playlists unless `clipTimes` is specified.
+	Contains the absolute time of the first clip in the playlist, in milliseconds since the epoch (unixtime x 1000)
+* `clipTimes` - array of integers, sets the absolute time of all the clips in the playlist, 
+	in milliseconds since the epoch (unixtime x 1000). This field can be used only when 
+	`discontinuity` is set to true. The timestamps may contain gaps, but they are not allowed to overlap
+	(`clipTimes[n + 1] >= clipTimes[n] + durations[n]`)
 * `segmentBaseTime` - integer, mandatory for continuous live streams, contains the absolute
-	time of the first segment of the stream, in milliseconds since the epoch (unixtime x 1000)
+	time of the first segment of the stream, in milliseconds since the epoch (unixtime x 1000).
 	This value must not change during playback.
-* `initialClipIndex` - integer, mandatory for non-continuous live streams, contains the
-	index of the first clip in the playlist. Whenever a clip is pushed out of the head of
-	the playlist, this value must be incremented by one.
-* `initialSegmentIndex` - integer, mandatory for non-continuous live streams, contains the
-	index of the first segment in the playlist. Whenever a clip is pushed out of the head of
+	For discontinuous live streams, this field is optional:
+	* if not set, sequential segment indexes will be used throughout the playlist.
+		In this case, the upsteam server generating the mapping json has to maintain state,
+		and update initialSegmentIndex every time a clip is removed from the playlist.
+	* if set, the timing gaps between clips must not be lower than `vod_segment_duration`.
+* `initialClipIndex` - integer, mandatory for non-continuous live streams that mix videos having
+	different encoding parameters (SPS/PPS), contains the index of the first clip in the playlist. 
+	Whenever a clip is pushed out of the head of the playlist, this value must be incremented by one.
+* `initialSegmentIndex` - integer, mandatory for live streams that do not set `segmentBaseTime`, 
+	contains the index of the first segment in the playlist. Whenever a clip is pushed out of the head of
 	the playlist, this value must be incremented by the number of segments in the clip.
 * `presentationEndTime` - integer, optional, when supplied the module will compare the 
 	current time to the supplied value, and signal the end of the live presentation
 	if `presentationEndTime` has passed. In HLS, for example, this parameter controls 
 	whether an `#EXT-X-ENDLIST` tag should be included in the media playlist.
 	When the parameter is not supplied, the module will not signal live presentation end.
-* `liveWindowDuration` - integer, optional, provides a way to override the number of live segments count
-	specified in the configuration. The value specified in the mapping is first translated to segment 
-	count by dividing it with `vod_segment_duration`.
-	If the result exceeds the absolute value specified in `vod_live_segment_count`, it will be ignored.
-	If the result is lower than 3 segments, it will be bumped up to 3.
+* `liveWindowDuration` - integer, optional, provides a way to override `vod_live_window_duration`
+	specified in the configuration. If the value exceeds the absolute value specified in 
+	`vod_live_window_duration`, it is ignored.
 	
 #### Sequence
 
@@ -729,15 +736,15 @@ If the segment duration is not a multiple of GOP duration, and `vod_align_segmen
 differences between the segment duration that is reported in the manifest and the actual segment duration. This could also lead to
 the appearance of empty segments within the stream.
 
-#### vod_live_segment_count
-* **syntax**: `vod_live_segment_count count`
-* **default**: `3`
+#### vod_live_window_duration
+* **syntax**: `vod_live_window_duration duration`
+* **default**: `30000`
 * **context**: `http`, `server`, `location`
 
-Sets the number of segments that should be returned in a live manifest.
-If the value is positive, nginx vod returns at most vod_live_segment_count segments, the last of which contains the current server time.
+Sets the total duration in milliseconds of the segments that should be returned in a live manifest.
+If the value is positive, nginx vod returns a range of maximum `vod_live_window_duration` milliseconds, ending at the current server time.
+If the value is negative, nginx vod returns a range of maximum `-vod_live_window_duration` milliseconds from the end of the mapping json.
 If the value is set to zero, the live manifest will contain all the segments that are fully contained in the mapping json time frame.
-If the value is negative, nginx vod will return the last -vod_live_segment_count segments contained in the mapping json.
 
 #### vod_bootstrap_segment_durations
 * **syntax**: `vod_bootstrap_segment_durations duration`

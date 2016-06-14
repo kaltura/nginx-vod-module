@@ -251,7 +251,7 @@ TEST_CASES = [
         ('', 'clipTo/10000/a.mp4', 200, None),
     ]),
     ('BAD_MEDIA_TYPE', lambda: applyPatch(getAtomDataPos('moov.trak.mdia.hdlr') + 8, 'blah'), [
-        ('/hls', 'index.m3u8', 200, 'unsupported format - media type 3'),
+        ('/hls', 'index.m3u8', 200, 'unsupported format - media type 4'),
         ('', 'clipTo/10000/a.mp4', 200, None),
     ]),
     # mdhd

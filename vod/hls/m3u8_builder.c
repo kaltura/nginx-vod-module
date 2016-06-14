@@ -214,7 +214,7 @@ m3u8_builder_build_iframe_playlist(
 		return rc;
 	}
 
-	duration_millis = segment_durations.end_time - segment_durations.start_time;
+	duration_millis = segment_durations.duration;
 	iframe_length = sizeof("#EXTINF:.000,\n") - 1 + vod_get_int_print_len(vod_div_ceil(duration_millis, 1000)) +
 		sizeof(byte_range_tag_format) + VOD_INT32_LEN + vod_get_int_print_len(MAX_FRAME_SIZE) - (sizeof("%uD%uD") - 1) +
 		base_url->len + conf->segment_file_name_prefix.len + 1 + vod_get_int_print_len(segment_durations.segment_count) + ctx.name_suffix.len;
@@ -338,10 +338,11 @@ m3u8_builder_build_index_playlist(
 	{
 		return rc;
 	}
+	last_item = segment_durations.items + segment_durations.item_count;
 
 	// get the required buffer length
-	duration_millis = segment_durations.end_time - segment_durations.start_time;
-	last_segment_index = media_set->initial_segment_index + segment_durations.segment_count;
+	duration_millis = segment_durations.duration;
+	last_segment_index = last_item[-1].segment_index + last_item[-1].repeat_count;
 	segment_length = sizeof("#EXTINF:.000,\n") - 1 + vod_get_int_print_len(vod_div_ceil(duration_millis, 1000)) +
 		segments_base_url->len + conf->segment_file_name_prefix.len + 1 + vod_get_int_print_len(last_segment_index) + name_suffix.len;
 
@@ -463,12 +464,10 @@ m3u8_builder_build_index_playlist(
 		p,
 		M3U8_HEADER_PART2,
 		conf->m3u8_version, 
-		media_set->initial_segment_index + 1);
+		segment_durations.items[0].segment_index + 1);
 
 	// write the segments
 	scale = conf->m3u8_version >= 3 ? 1000 : 1;
-	last_item = segment_durations.items + segment_durations.item_count;
-
 	for (cur_item = segment_durations.items; cur_item < last_item; cur_item++)
 	{
 		segment_index = cur_item->segment_index;

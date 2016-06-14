@@ -606,7 +606,7 @@ class MssTestSuite(ProtocolTestSuite):
 
     def testBadFragmentRequestMediaTypeLength(self):
         assertRequestFails(self.getUrl('/QualityLevels(2364883)/Fragments(videox=0)'), 400)
-        self.logTracker.assertContains('invalid media type length 6')
+        self.logTracker.assertContains('invalid media type videox')
 
     def testBadFragmentRequestMediaType(self):
         assertRequestFails(self.getUrl('/QualityLevels(2364883)/Fragments(xideo=0)'), 400)
