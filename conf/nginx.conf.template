@@ -1,8 +1,7 @@
+user  kaltura;
+worker_processes  auto;
 
-#user  nobody;
-worker_processes  4;
-
-error_log  @LOG_DIR@/error_log;
+error_log  @LOG_DIR@/kaltura_nginx_errors.log;
 
 pid		/var/run/nginx.pid;
 
@@ -27,7 +26,7 @@ http {
 		'"$http_x_forwarded_server" "$http_x_forwarded_host" "$sent_http_cache_control" '
 		'$connection ';
 
-	access_log @LOG_DIR@/access_log main;
+	access_log @LOG_DIR@/kaltura_nginx_access.log main;
 
 	sendfile on;
 	tcp_nopush on;
