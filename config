@@ -2,12 +2,14 @@ ngx_addon_name=ngx_http_vod_module
 
 # openssl evp
 #
+LIB_CRYPTO=${LIB_CRYPTO:--lcrypto}
+
 ngx_feature="OpenSSL EVP library"
 ngx_feature_name="NGX_HAVE_OPENSSL_EVP"
 ngx_feature_run=no
 ngx_feature_incs="#include <openssl/evp.h>"
 ngx_feature_path=
-ngx_feature_libs="-lcrypto"
+ngx_feature_libs="$LIB_CRYPTO"
 ngx_feature_test="EVP_CIPHER_CTX cipher; EVP_CIPHER_CTX_init(&cipher);"
 . auto/feature
 
@@ -38,20 +40,27 @@ if [ $ngx_found != yes ]; then
 fi
 
 # libavcodec
+#
+LIB_AV_UTIL=${LIB_AV_UTIL:--lavutil}
+LIB_AV_CODEC=${LIB_AV_CODEC:--lavcodec}
+
 ngx_feature="libavcodec"
 ngx_feature_name="NGX_HAVE_LIB_AV_CODEC"
 ngx_feature_run=no
 ngx_feature_incs="#include <libavcodec/avcodec.h>"
 ngx_feature_path=
-ngx_feature_libs="-lavcodec"
+ngx_feature_libs="$LIB_AV_CODEC"
 ngx_feature_test="avcodec_register_all()"
 . auto/feature
 
 if [ $ngx_found = yes ]; then
-    CORE_LIBS="$CORE_LIBS -lavcodec -lavutil"
+    CORE_LIBS="$CORE_LIBS $LIB_AV_CODEC $LIB_AV_UTIL"
 fi
 
 # libavfilter
+#
+LIB_AV_FILTER=${LIB_AV_FILTER:--lavfilter}
+
 ngx_feature="libavfilter"
 ngx_feature_name="NGX_HAVE_LIB_AV_FILTER"
 ngx_feature_run=no
@@ -59,12 +68,12 @@ ngx_feature_incs="#include <libavfilter/avfilter.h>
                   #include <libavfilter/buffersrc.h>
                   #include <libavfilter/buffersink.h>"
 ngx_feature_path=
-ngx_feature_libs="-lavfilter"
+ngx_feature_libs="$LIB_AV_FILTER"
 ngx_feature_test="avfilter_register_all()"
 . auto/feature
 
 if [ $ngx_found = yes ]; then
-    CORE_LIBS="$CORE_LIBS -lavfilter -lavutil"
+    CORE_LIBS="$CORE_LIBS $LIB_AV_FILTER $LIB_AV_UTIL"
 fi
 
 HTTP_AUX_FILTER_MODULES="$HTTP_AUX_FILTER_MODULES ngx_http_vod_module"
