@@ -517,7 +517,7 @@ mkv_metadata_reader_read(
 		}
 	}
 
-	result->read_req.realloc_buffer = FALSE;
+	result->read_req.flags = 0;
 
 	for (; state->section < SECTION_FILE_COUNT; state->section++)
 	{
@@ -605,7 +605,7 @@ mkv_metadata_reader_read(
 		state->sections[position->index].data = buffer->data + data_pos - offset;
 		state->sections[position->index].len = size;
 		state->size_limit -= size;
-		result->read_req.realloc_buffer = TRUE;
+		result->read_req.flags = MEDIA_READ_FLAG_REALLOC_BUFFER;
 	}
 
 	state->sections[SECTION_LAYOUT].data = (u_char*)&state->layout.base;
@@ -937,7 +937,7 @@ mkv_get_read_frames_request(
 	end_time = metadata->end_time + rescale_time(end_margin, 1000, metadata->base.timescale);
 
 	read_req->read_offset = ULLONG_MAX;
-	read_req->realloc_buffer = FALSE;
+	read_req->flags = 0;
 
 	prev_cluster_pos = ULLONG_MAX;
 

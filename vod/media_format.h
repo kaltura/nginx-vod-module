@@ -19,6 +19,10 @@
 #define MAX_CLIP_DURATION (86400000)		// 1 day
 #define MAX_SEQUENCE_DURATION (864000000)		// 10 days
 
+// read flags
+#define MEDIA_READ_FLAG_REALLOC_BUFFER	(0x1)
+#define MEDIA_READ_FLAG_ALLOW_EMPTY_READ (0x2)
+
 // parse flags
 
 // media info
@@ -218,7 +222,7 @@ typedef struct {
 typedef struct {
 	uint64_t read_offset;
 	size_t read_size;
-	bool_t realloc_buffer;
+	uint32_t flags;
 } media_format_read_request_t;
 
 typedef struct {
