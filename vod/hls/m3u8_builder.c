@@ -287,6 +287,7 @@ m3u8_builder_build_index_playlist(
 	segmenter_conf_t* segmenter_conf = media_set->segmenter_conf;
 	uint64_t duration_millis;
 	uint64_t max_segment_duration;
+	uint32_t conf_max_segment_duration;
 	uint32_t sequences_mask;
 	vod_str_t extinf;
 	uint32_t segment_index;
@@ -413,6 +414,13 @@ m3u8_builder_build_index_playlist(
 	scale = conf->m3u8_version >= 3 ? 1000 : 1;
 	max_segment_duration = rescale_time(max_segment_duration, segment_durations.timescale, scale);
 	max_segment_duration = rescale_time(max_segment_duration, scale, 1);
+
+	// make sure segment duration is not lower than the value set in the conf
+	conf_max_segment_duration = (segmenter_conf->max_segment_duration + 500) / 1000;
+	if (conf_max_segment_duration > max_segment_duration)
+	{
+		max_segment_duration = conf_max_segment_duration;
+	}
 
 	// write the header
 	p = vod_sprintf(
