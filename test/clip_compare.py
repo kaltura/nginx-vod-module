@@ -1,6 +1,4 @@
-from httplib import BadStatusLine
-import urllib2
-import socket
+import http_utils
 import time
 
 # note: run once with moov cache enabled and once with moov cache disabled
@@ -148,32 +146,11 @@ def buildUrl(urlFormat, fileBase, start, end):
 
 def getUrl(url):
 	startTime = time.time()
-	try:
-		r = urllib2.urlopen(urllib2.Request(url))
-	except urllib2.HTTPError, e:
-		return e.getcode(), ''
-	except urllib2.URLError, e:
-		print ('Error: request failed %s %s' % (url, e))
-		return 0, ''
-	except BadStatusLine, e:
-		print ('Error: bad status line %s' % (url))
-		return 0, ''
-	except socket.error, e:
-		print ('Error: got socket error %s %s' % (url, e))
-		return 0, ''
-
-	code = r.getcode()
-	try:
-		result = r.read()
-	except socket.error, e:
-		print ('Error: got socket error %s %s' % (url, e))
-		return 0, ''
-
+	code, headers, body = http_utils.getUrl(url)
 	print ('Info: get %s took %s' % (url, time.time() - startTime))
-	if r.info().getheader('content-length') != '%s' % len(result):
-		print ('Error: %s content-length %s is different than the resulting file size %s' % (url, r.info().getheader('content-length'), len(result)))
-		return 0, ''
-	return (code, result)
+	if code == 0:
+		print body
+	return (code, body)
 
 def runSingleTest(fileBase, start, end):
 	if start == 0 and end == 0:

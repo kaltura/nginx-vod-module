@@ -1,3 +1,4 @@
+from test_base import *
 import urllib2
 import httplib
 import sys
@@ -7,26 +8,6 @@ import os
 
 NGINX_LOG_PATH = '/var/log/nginx/error.log'
 BASE_URL = 'http://localhost:8001/mapped'
-
-### Log tracker - used to verify certain lines appear in nginx log
-class LogTracker:
-    def __init__(self):
-        self.initialSize = os.path.getsize(NGINX_LOG_PATH)
-
-    def assertContains(self, logLine):
-        f = file(NGINX_LOG_PATH, 'rb')
-        f.seek(self.initialSize, os.SEEK_SET)
-        buffer = f.read()
-        f.close()
-        if type(logLine) == list:
-            found = False
-            for curLine in logLine:
-                if curLine in buffer:
-                    found = True
-                    break
-            assert(found)
-        else:
-            assert(logLine in buffer)
 
 for curLine in sys.stdin:
     curLine = curLine.strip()

@@ -1,6 +1,7 @@
 from httplib import BadStatusLine
 import email.utils as eut
 import stress_base
+import http_utils
 import urlparse
 import hashlib
 import urllib2
@@ -8,7 +9,6 @@ import random
 import base64
 import socket
 import time
-import hmac
 import re
 
 from uri_compare_params import *
@@ -28,33 +28,7 @@ IGNORE_HEADER_VALUES = set([
 
 
 class TestThread(stress_base.TestThreadBase):
-	def getG2OHeaders(self, url):
-		if not 'G2O_KEY' in globals():
-			return {}
-	
-		parsedUrl = urlparse.urlsplit(url)
-		uri = urlparse.urlunsplit(urlparse.SplitResult('', '', parsedUrl.path, parsedUrl.query, parsedUrl.fragment))
-		
-		expiry = '%s' % (int(time.time()) + 29)
-		dataFields = [G2O_VERSION, G2O_GHOST_IP, G2O_CLIENT_IP, expiry, G2O_UNIQUE_ID, G2O_NONCE]
-		data = ', '.join(dataFields)
-		dig = hmac.new(G2O_KEY, msg=data + uri, digestmod=hashlib.sha256).digest()
-		sign = base64.b64encode(dig)
-		return {
-			G2O_DATA_HEADER_NAME: data, 
-			G2O_SIGN_HEADER_NAME: sign,
-			}
 
-	def parseHttpHeaders(self, headers):
-		result = {}
-		for header in headers:
-			header = map(lambda y: y.strip(), header.split(':', 1))
-			headerName = header[0].lower()
-			headerValue = header[1] if len(header) > 1 else ''
-			result.setdefault(headerName, [])
-			result[headerName].append(headerValue)
-		return result
-		
 	@staticmethod
 	def parseHttpTime(timeStr):
 		return time.mktime(eut.parsedate(timeStr))
@@ -87,24 +61,13 @@ class TestThread(stress_base.TestThreadBase):
 		return True
 
 	def getURL(self, hostHeader, url):
-		headers = self.getG2OHeaders(url)
+		headers = {}
 		headers.update(EXTRA_HEADERS)
 		headers['Host'] = hostHeader
-		request = urllib2.Request(url, headers=headers)
-		try:
-			f = urllib2.urlopen(request)
-			return f.getcode(), self.parseHttpHeaders(f.info().headers), f.read()
-		except urllib2.HTTPError, e:
-			return e.getcode(), self.parseHttpHeaders(e.info().headers), e.read()			
-		except urllib2.URLError, e:
-			self.writeOutput('Error: request failed %s %s' % (url, e))
-			return 0, {}, ''
-		except BadStatusLine, e:
-			self.writeOutput('Error: request failed %s %s' % (url, e))
-			return 0, {}, ''
-		except socket.error, e:
-			self.writeOutput('Error: got socket error %s %s' % (url, e))
-			return 0, {}, ''
+		code, headers, body = http_utils.getUrl(url, headers)
+		if code == 0:
+			self.writeOutput(body)
+		return code, headers, body
 		
 	def runTest(self, uri):
 		hostHeader, uri = uri.split(' ')

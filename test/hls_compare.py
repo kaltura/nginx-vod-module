@@ -1,7 +1,6 @@
-from Crypto.Cipher import AES
-from StringIO import StringIO
-from httplib import BadStatusLine
+from ts_utils import decryptTsSegment
 import stress_base
+import http_utils
 import urlparse
 import commands
 import tempfile
@@ -154,53 +153,12 @@ class TestThread(stress_base.TestThreadBase):
 		
 	def retrieveUrl(self, url):
 		startTime = time.time()
-		try:
-			r = urllib2.urlopen(urllib2.Request(url, headers={'Accept-encoding': 'gzip'}))
-		except urllib2.HTTPError, e:
-			return e.getcode(), ''
-		except urllib2.URLError, e:
-			self.writeOutput('Error: request failed %s %s' % (url, e))
-			return 0, ''
-		except BadStatusLine, e:
-			self.writeOutput('Error: bad status line %s' % (url))
-			return 0, ''
-		except socket.error, e:
-			self.writeOutput('Error: socket error %s' % (url))
-			return 0, ''
-			
-		data = r.read()
+		code, headers, data = http_utils.getUrl(url)
+		if code == 0:
+			self.writeOutput(data)
 		self.writeOutput('Info: get %s took %s, size %s cksum %s' % (url, time.time() - startTime, len(data), self.md5sum(data)))
-		
-		contentLength = r.info().getheader('content-length')
-		if contentLength != None and contentLength != '%s' % len(data):
-			self.writeOutput('Error: %s content-length %s is different than body size %s' % (url, r.info().getheader('content-length'), len(data)))
-			return 0, ''
-			
-		if r.info().get('Content-Encoding') == 'gzip':
-			gzipFile = gzip.GzipFile(fileobj=StringIO(data))
-			try:
-				data = gzipFile.read()
-			except IOError, e:
-				self.writeOutput('Error: failed to decode gzip %s' % url)
-				data = ''
-		return r.getcode(), data
+		return code, data
 
-	def decryptTsSegment(self, fileData, aesKey, segmentIndex):
-		cipher = AES.new(aesKey, AES.MODE_CBC, '\0' * 12 + struct.pack('>L', segmentIndex))
-		try:
-			decryptedTS = cipher.decrypt(fileData)
-		except ValueError:
-			self.writeOutput('Error: cipher.decrypt failed')
-			return None
-		padLength = ord(decryptedTS[-1])
-		if padLength > 16:
-			self.writeOutput('Error: invalid pad length %s' % padLength)
-			return None
-		if decryptedTS[-padLength:] != chr(padLength) * padLength:
-			self.writeOutput('Error: invalid padding')
-			return None
-		return decryptedTS[:-padLength]
-		
 	def compareTsUris(self, url1, url2, segmentIndex, aesKey, continuityCounters):
 		result = True
 		self.writeOutput('Info: comparing %s %s' % (url1, url2))
@@ -208,8 +166,9 @@ class TestThread(stress_base.TestThreadBase):
 		code1, tsData1 = self.retrieveUrl(url1)
 		if code1 == 200:
 			if aesKey != None:
-				tsData1 = self.decryptTsSegment(self.tsData1, aesKey, segmentIndex)
+				tsData1, error = decryptTsSegment(self.tsData1, aesKey, segmentIndex)
 				if tsData1 == None:
+					self.writeOutput(error)
 					return False
 			
 			if not self.testContinuity(tsData1, continuityCounters):

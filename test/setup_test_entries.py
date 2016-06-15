@@ -1,9 +1,9 @@
 from KalturaClient import *
 from KalturaClient.Plugins.Core import *
+from mp4_utils import *
+import http_utils
 import logging
-import urllib2
 import struct
-import shutil
 import sys
 import os
 import re
@@ -28,75 +28,17 @@ def GetConfig():
     config.setLogger(KalturaLogger())
     return config
 
-# http utilities
-def retrieveUrl(url, fileName):
-    r = urllib2.urlopen(urllib2.Request(url))
-    with file(fileName, 'wb') as w:
-        shutil.copyfileobj(r,w)
-    r.close()
-
-# mp4 parsing
-def isContainerAtom(inputData, startOffset, endOffset):
-    if endOffset - startOffset < 8:
-        return False
-    if not re.match('^[0-9a-zA-Z]+$', inputData[(startOffset + 4):(startOffset + 8)]):
-        return False
-    atomSize = struct.unpack('>L', inputData[startOffset:(startOffset + 4)])[0]
-    if atomSize > endOffset - startOffset:
-        return False
-    return True
-
-def parseAtoms(inputData, startOffset, endOffset, indent):
-    result = {}
-    curPos = startOffset
-    while curPos + 8 <= endOffset:
-        # get atom size and atom name
-        atomSize = struct.unpack('>L', inputData[curPos:(curPos + 4)])[0]
-        atomName = inputData[(curPos + 4):(curPos + 8)]
-        if atomSize == 1:
-            atomSize = struct.unpack('>Q', inputData[(curPos + 8):(curPos + 16)])[0]
-            atomHeaderSize = 16
-        else:
-            atomHeaderSize = 8
-            if atomSize == 0:
-                atomSize = endOffset - curPos
-
-        # get child atoms
-        childAtoms = {}
-        if isContainerAtom(inputData, curPos + atomHeaderSize, curPos + atomSize):
-            childAtoms = parseAtoms(inputData, curPos + atomHeaderSize, curPos + atomSize, indent + '  ')
-
-        # add the result
-        result.setdefault(atomName, [])
-        result[atomName].append((curPos, atomHeaderSize, curPos + atomSize, childAtoms))
-        curPos += atomSize
-    return result
-
-def getAtomInternal(splittedPath, baseAtom):
-    if not baseAtom.has_key(splittedPath[0]):
-        return None
-    for curAtom in baseAtom[splittedPath[0]][::-1]:
-        if len(splittedPath) == 1:
-            return curAtom
-        result = getAtomInternal(splittedPath[1:], curAtom[3])
-        if result != None:
-            return result
-    return None
-
-def getAtom(path):
-    return getAtomInternal(path.split('.'), inputAtoms)
-
 def atomExists(path):
-    return getAtom(path) != None
+    return getAtom(inputAtoms, path) != None
 
 def getAtomPos(path):
-    return getAtom(path)[0]
+    return getAtom(inputAtoms, path)[0]
 
 def getAtomEndPos(path):
-    return getAtom(path)[2]
+    return getAtom(inputAtoms, path)[2]
 
 def getAtomDataPos(path):
-    atom = getAtom(path)
+    atom = getAtom(inputAtoms, path)
     return atom[0] + atom[1]
 
 # string reader (for uploading a string as a file)
@@ -141,7 +83,7 @@ def truncateFile(size):
     return StringReader(inputData[:size])
 
 def truncateAtom(name, newSize):
-    atomPos, atomHeaderSize, atomEndPos, _ = getAtom(name)
+    atomPos, atomHeaderSize, atomEndPos, _ = getAtom(inputAtoms, name)
     if atomHeaderSize != 8:
         raise Exception('only supported for atoms with 32 bit size')
     newAtomEndPos = atomPos + atomHeaderSize + newSize
@@ -152,7 +94,7 @@ def truncateAtom(name, newSize):
 
 # download and read the input file
 if not os.path.exists(TEMP_DOWNLOAD_PATH):
-    retrieveUrl(TEST_FLAVOR_URL, TEMP_DOWNLOAD_PATH)
+    http_utils.downloadUrl(TEST_FLAVOR_URL, TEMP_DOWNLOAD_PATH)
 
 inputData = file(TEMP_DOWNLOAD_PATH, 'rb').read()
 
