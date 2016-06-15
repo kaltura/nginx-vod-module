@@ -1,0 +1,10 @@
+
+G2O_VERSION = '5'
+G2O_GHOST_IP = '1.2.3.4'
+G2O_CLIENT_IP = '5.6.7.8'
+G2O_UNIQUE_ID = 'xxx'
+G2O_NONCE = 'token'
+G2O_KEY = ''
+G2O_DATA_HEADER_NAME = 'X-Akamai-G2O-Auth-Data'
+G2O_SIGN_HEADER_NAME = 'X-Akamai-G2O-Auth-Sign'
+G2O_WINDOW = 29

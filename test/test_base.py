@@ -17,9 +17,18 @@ def assertIn(needle, haystack):
 	print 'Assertion failed - %s in %s' % (needle, haystack)
 	assert(False)
 
+def assertNotIn(needle, haystack):
+    if not needle in haystack:
+        return
+    print 'Assertion failed - %s not in %s' % (needle, haystack)
+    assert(False)
+    
 def assertInIgnoreCase(needle, haystack):
 	assertIn(needle.lower(), haystack.lower())
 
+def assertNotInIgnoreCase(needle, haystack):
+    assertNotIn(needle.lower(), haystack.lower())
+    
 def assertStartsWith(buffer, prefix):
 	if buffer.startswith(prefix):
 		return

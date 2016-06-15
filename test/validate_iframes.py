@@ -1,6 +1,7 @@
 from httplib import BadStatusLine
-from mpegTsDefs import *
+from mpeg_ts_defs import *
 import stress_base
+import http_utils
 import commands
 import urllib2
 import socket
@@ -173,32 +174,11 @@ class TestThread(stress_base.TestThreadBase):
 		
 	def getUrl(self, url):
 		startTime = time.time()
-		try:
-			r = urllib2.urlopen(urllib2.Request(url))
-		except urllib2.HTTPError, e:
-			return e.getcode(), ''
-		except urllib2.URLError, e:
-			self.writeOutput('Error: request failed %s %s' % (url, e))
-			return 0, ''
-		except BadStatusLine, e:
-			self.writeOutput('Error: bad status line %s' % (url))
-			return 0, ''
-		except socket.error, e:
-			self.writeOutput('Error: got socket error %s %s' % (url, e))
-			return 0, ''
-
-		code = r.getcode()
-		try:
-			result = r.read()
-		except socket.error, e:
-			self.writeOutput('Error: got socket error %s %s' % (url, e))
-			return 0, ''
-
+		code, headers, body = http_utils.getUrl(url)
+		if code == 0:
+			self.writeOutput(body)
 		self.writeOutput('Info: get %s took %s' % (url, time.time() - startTime))
-		if r.info().getheader('content-length') != '%s' % len(result):
-			self.writeOutput('Error: %s content-length %s is different than the resulting file size %s' % (url, r.info().getheader('content-length'), len(result)))
-			return 0, ''
-		return (code, result)
+		return (code, body)
 		
 	def runTest(self, serveFlavorUri):
 		iframesUrl = '%s%s%s' % (SERVER_URL, serveFlavorUri, IFRAMES_URI)
