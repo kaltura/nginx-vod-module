@@ -1105,10 +1105,6 @@ media_set_parse_live_params(
 		{
 			media_set->timing.segment_base_time = params[MEDIA_SET_PARAM_SEGMENT_BASE_TIME]->v.num.nom;
 		}
-		else
-		{
-			media_set->timing.segment_base_time = SEGMENT_BASE_TIME_RELATIVE;
-		}
 	}
 	else
 	{
@@ -1240,7 +1236,8 @@ media_set_parse_json(
 
 	result->timing.times = NULL;
 	result->timing.first_time = 0;
-	result->timing.segment_base_time = 0;
+	result->timing.segment_base_time = SEGMENT_BASE_TIME_RELATIVE;
+	result->timing.first_segment_alignment_offset = 0;
 	result->initial_segment_index = 0;
 	result->initial_clip_index = 0;
 
@@ -1306,7 +1303,7 @@ media_set_parse_json(
 	{
 		result->type = MEDIA_SET_LIVE;
 		result->presentation_end = params[MEDIA_SET_PARAM_PRESENTATION_END_TIME] != NULL &&
-			params[MEDIA_SET_PARAM_PRESENTATION_END_TIME]->v.num.nom <= (int64_t)vod_time() * 1000;
+			params[MEDIA_SET_PARAM_PRESENTATION_END_TIME]->v.num.nom <= (int64_t)vod_time(request_context) * 1000;
 	}
 	else
 	{
@@ -1378,11 +1375,6 @@ media_set_parse_json(
 		if (rc != VOD_OK)
 		{
 			return rc;
-		}
-
-		if (result->use_discontinuity)
-		{
-			result->timing.segment_base_time = SEGMENT_BASE_TIME_RELATIVE;
 		}
 	}
 

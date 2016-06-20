@@ -146,7 +146,12 @@ void vod_log_error(vod_uint_t level, vod_log_t *log, int err,
 #define vod_hash_find(hash, key, name, len) ngx_hash_find(hash, key, name, len)
 
 // time functions
-#define vod_time() ngx_time()
+#if (NGX_DEBUG)
+#define vod_time(request_context) (request_context->time > 0 ? request_context->time : ngx_time())
+#else
+#define vod_time(request_context) ngx_time()
+#endif
+
 #define vod_gmtime(t, tp) ngx_gmtime(t, tp)
 #define vod_tm_sec   ngx_tm_sec
 #define vod_tm_min   ngx_tm_min
@@ -287,6 +292,9 @@ typedef struct {
 	vod_log_t *log;
 	buffer_pool_t* output_buffer_pool;
 	bool_t simulation_only;
+#if (NGX_DEBUG)
+	time_t time;
+#endif
 } request_context_t;
 
 enum {

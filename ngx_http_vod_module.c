@@ -3885,6 +3885,7 @@ ngx_http_vod_map_media_set_apply(ngx_http_vod_ctx_t *ctx, ngx_str_t* mapping, in
 	media_clip_source_t* mapped_source;
 	media_sequence_t* sequence;
 	media_set_t mapped_media_set;
+	ngx_str_t src_path;
 	ngx_str_t path;
 	ngx_int_t rc;
 	bool_t parse_all_clips;
@@ -3897,8 +3898,8 @@ ngx_http_vod_map_media_set_apply(ngx_http_vod_ctx_t *ctx, ngx_str_t* mapping, in
 		memchr(mapping->data + conf->path_response_prefix.len, '"',
 		mapping->len - conf->path_response_prefix.len - conf->path_response_postfix.len) == NULL)
 	{
-		path.len = mapping->len - conf->path_response_prefix.len - conf->path_response_postfix.len;
-		if (path.len <= 0)
+		src_path.len = mapping->len - conf->path_response_prefix.len - conf->path_response_postfix.len;
+		if (src_path.len <= 0)
 		{
 			// file not found
 			ngx_log_error(NGX_LOG_ERR, ctx->submodule_context.request_context.log, 0,
@@ -3914,15 +3915,27 @@ ngx_http_vod_map_media_set_apply(ngx_http_vod_ctx_t *ctx, ngx_str_t* mapping, in
 			return rc;
 		}
 
-		// copy the path to make it null terminated
-		path.data = ngx_palloc(ctx->submodule_context.request_context.pool, path.len + 1);
+		src_path.data = mapping->data + conf->path_response_prefix.len;
+
+		// copy the path to decode it and make it null terminated
+		path.data = ngx_palloc(ctx->submodule_context.request_context.pool, src_path.len + 1);
 		if (path.data == NULL)
 		{
 			ngx_log_debug0(NGX_LOG_DEBUG_HTTP, ctx->submodule_context.request_context.log, 0,
 				"ngx_http_vod_map_media_set_apply: ngx_palloc failed");
 			return NGX_HTTP_INTERNAL_SERVER_ERROR;
 		}
-		ngx_memcpy(path.data, mapping->data + conf->path_response_prefix.len, path.len);
+
+		path.len = 0;
+
+		rc = vod_json_decode_string(&path, &src_path);
+		if (rc != VOD_JSON_OK)
+		{
+			vod_log_error(VOD_LOG_ERR, ctx->submodule_context.request_context.log, 0,
+				"ngx_http_vod_map_media_set_apply: vod_json_decode_string failed %i", rc);
+			return NGX_HTTP_SERVICE_UNAVAILABLE;
+		}
+
 		path.data[path.len] = '\0';
 
 		// move to the next suburi
@@ -4250,6 +4263,9 @@ ngx_http_vod_handler(ngx_http_request_t *r)
 	ngx_str_t base_url;
 	ngx_int_t rc;
 	int cache_type;
+#if (NGX_DEBUG)
+	ngx_str_t time_str;
+#endif
 
 	ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0, "ngx_http_vod_handler: started");
 
@@ -4273,7 +4289,7 @@ ngx_http_vod_handler(ngx_http_request_t *r)
 	}
 
 	// we respond to 'GET' and 'HEAD' requests only
-	if (!(r->method & (NGX_HTTP_GET | NGX_HTTP_HEAD))) 
+	if (!(r->method & (NGX_HTTP_GET | NGX_HTTP_HEAD)))
 	{
 		ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
 			"ngx_http_vod_handler: unsupported method %ui", r->method);
@@ -4283,7 +4299,7 @@ ngx_http_vod_handler(ngx_http_request_t *r)
 
 	// discard request body, since we don't need it here
 	rc = ngx_http_discard_request_body(r);
-	if (rc != NGX_OK) 
+	if (rc != NGX_OK)
 	{
 		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
 			"ngx_http_vod_handler: ngx_http_discard_request_body failed %i", rc);
@@ -4311,11 +4327,11 @@ ngx_http_vod_handler(ngx_http_request_t *r)
 		request_params.tracks_mask[MEDIA_TYPE_AUDIO] = 0xffffffff;
 
 		rc = ngx_http_vod_parse_uri_path(
-			r, 
-			&conf->multi_uri_suffix, 
-			&conf->pd_uri_params_hash, 
-			&r->uri, 
-			&request_params, 
+			r,
+			&conf->multi_uri_suffix,
+			&conf->pd_uri_params_hash,
+			&r->uri,
+			&request_params,
 			&media_set);
 		if (rc != NGX_OK)
 		{
@@ -4333,7 +4349,7 @@ ngx_http_vod_handler(ngx_http_request_t *r)
 		}
 	}
 
-	if (request != NULL && 
+	if (request != NULL &&
 		request->handle_metadata_request != NULL)
 	{
 		// calc request key from host + uri
@@ -4413,7 +4429,7 @@ ngx_http_vod_handler(ngx_http_request_t *r)
 
 	// initialize the context
 	ctx = ngx_pcalloc(r->pool, sizeof(ngx_http_vod_ctx_t));
-	if (ctx == NULL) 
+	if (ctx == NULL)
 	{
 		ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
 			"ngx_http_vod_handler: ngx_pcalloc failed");
@@ -4434,6 +4450,14 @@ ngx_http_vod_handler(ngx_http_request_t *r)
 	ctx->submodule_context.request_context.output_buffer_pool = conf->output_buffer_pool;
 	ctx->perf_counters = perf_counters;
 	ngx_perf_counter_copy(ctx->total_perf_counter_context, pcctx);
+
+#if (NGX_DEBUG)
+	// in debug builds allow overriding the server time
+	if (ngx_http_arg(r, (u_char *) "time", sizeof("time") - 1, &time_str) == NGX_OK)
+	{
+		ctx->submodule_context.request_context.time = ngx_atotm(time_str.data, time_str.len);
+	}
+#endif
 
 	clcf = ngx_http_get_module_loc_conf(r, ngx_http_core_module);
 	ctx->alloc_params[READER_FILE].alignment = clcf->directio_alignment;

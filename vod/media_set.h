@@ -81,6 +81,7 @@ typedef struct {
 	uint64_t segment_base_time;			// the time of segment 0
 	uint64_t total_duration;			// = sum(durations)
 	uint64_t first_time;				// = times[0]
+	uint32_t first_segment_alignment_offset;	// difference between unaligned first segment time and first_time
 } media_clip_timing_t;
 
 typedef struct {
