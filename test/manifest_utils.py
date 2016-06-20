@@ -82,39 +82,45 @@ def getDashManifestUrls(baseUrl, urlContent, headers):
 		mediaDuration = float(atts['mediaPresentationDuration'][2:-1])
 	
 	# get the url templates and segment duration
-	segmentDuration = None
-	for node in parsed.getElementsByTagName('SegmentTemplate'):
-		atts = getAttributesDict(node)
-		urls.add(atts['media'])
-		urls.add(atts['initialization'])
-		if atts.has_key('duration'):
-			segmentDuration = int(atts['duration'])
-
-	# get the representation ids
-	repIds = set([])
-	for node in parsed.getElementsByTagName('Representation'):
-		atts = getAttributesDict(node)
-		repIds.add(atts['id'])
-		
-	# get the segment count from SegmentTimeline
-	segmentCount = None
-	for node in parsed.getElementsByTagName('SegmentTimeline'):
-		segmentCount = 0
-		for childNode in node.childNodes:
-			if childNode.nodeType == node.ELEMENT_NODE and childNode.nodeName == 'S':
-				atts = getAttributesDict(childNode)
-				if atts.has_key('r'):
-					segmentCount += int(atts['r'])
-				segmentCount += 1
-
-	if segmentCount == None:
-		segmentCount = int(math.ceil(mediaDuration * 1000 / segmentDuration))
-	
 	result = []
-	for url in urls:
-		for curSeg in xrange(segmentCount):
-			for repId in repIds:
-				result.append(getAbsoluteUrl(url.replace('$Number$', '%s' % (curSeg + 1)).replace('$RepresentationID$', repId)))
+	for base in parsed.getElementsByTagName('AdaptationSet'):
+	
+		segmentDuration = None
+		for node in base.getElementsByTagName('SegmentTemplate'):
+			atts = getAttributesDict(node)
+			urls.add(atts['media'])
+			urls.add(atts['initialization'])
+			if atts.has_key('duration'):
+				segmentDuration = int(atts['duration'])
+
+		# get the representation ids
+		repIds = set([])
+		for node in base.getElementsByTagName('Representation'):
+			atts = getAttributesDict(node)
+			repIds.add(atts['id'])
+			
+		# get the segment count from SegmentTimeline
+		segmentCount = None
+		for node in base.getElementsByTagName('SegmentTimeline'):
+			segmentCount = 0
+			for childNode in node.childNodes:
+				if childNode.nodeType == node.ELEMENT_NODE and childNode.nodeName == 'S':
+					atts = getAttributesDict(childNode)
+					if atts.has_key('r'):
+						segmentCount += int(atts['r'])
+					segmentCount += 1
+
+		if segmentCount == None:
+			if segmentDuration == None:
+				for curBaseUrl in base.getElementsByTagName('BaseURL'):
+					result.append(getAbsoluteUrl(curBaseUrl.firstChild.nodeValue))
+				continue
+			segmentCount = int(math.ceil(mediaDuration * 1000 / segmentDuration))
+		
+		for url in urls:
+			for curSeg in xrange(segmentCount):
+				for repId in repIds:
+					result.append(getAbsoluteUrl(url.replace('$Number$', '%s' % (curSeg + 1)).replace('$RepresentationID$', repId)))
 	return result
 
 def getHdsManifestUrls(baseUrl, urlContent, headers):
