@@ -113,7 +113,8 @@ if ($playlistType == "live")
 	}
 	
 	// start the playlist from now() - <dvr window size>
-	$currentTime = time() * 1000 - $timeMargin - $dvrWindowSize;
+	$time = isset($params['time']) ? $params['time'] : time();
+	$currentTime = $time * 1000 - $timeMargin - $dvrWindowSize;
 
 	// get the reference time (the time of the first run)
 	$referenceTime = apc_fetch('reference_time');

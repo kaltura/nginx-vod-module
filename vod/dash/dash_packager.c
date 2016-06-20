@@ -428,7 +428,8 @@ dash_packager_get_track_spec(
 {
 	u_char* p = result->data;
 
-	if (media_set->use_discontinuity)
+	if (media_set->use_discontinuity && 
+		media_set->initial_clip_index != INVALID_CLIP_INDEX)
 	{
 		p = vod_sprintf(p, "c%uD-", media_set->initial_clip_index + clip_index + 1);
 	}

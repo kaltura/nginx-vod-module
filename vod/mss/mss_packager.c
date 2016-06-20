@@ -747,7 +747,6 @@ mss_packager_build_fragment_header(
 		sequence,
 		moof_atom_size + ATOM_HEADER_SIZE);
 
-
 	if (media_set->type == MEDIA_SET_LIVE)
 	{
 		// using only estimate timing info in live, since we don't have the accurate timing

@@ -1,0 +1,6 @@
+
+STOP_FILE = '/tmp/stream_compare_stop'
+URL1_BASE = ['http://localhost:8001']
+URL2_BASE = ['http://localhost:8001']
+
+EXTRA_HEADERS = {}

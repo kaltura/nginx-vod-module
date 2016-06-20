@@ -1,64 +1,13 @@
-from httplib import BadStatusLine
-import email.utils as eut
+import compare_utils
 import stress_base
 import http_utils
-import urlparse
-import hashlib
-import urllib2
 import random
-import base64
-import socket
 import time
 import re
 
 from uri_compare_params import *
 
-INGORED_HEADERS = set([
-	'x-vod-me','x-vod-session',
-	'x-me', 'x-kaltura-session', 
-	'x-varnish', 
-])
-
-IGNORE_HEADER_VALUES = set([
-	'server',
-	'date',
-	'content-length',		# ignore content length since we compare the buffer, the content length may be different due to different host name lengths
-	'etag',					# derived from content length
-])
-
-
 class TestThread(stress_base.TestThreadBase):
-
-	@staticmethod
-	def parseHttpTime(timeStr):
-		return time.mktime(eut.parsedate(timeStr))
-		
-	def compareHeaders(self, headers1, headers2):
-		for headerName in INGORED_HEADERS:
-			headers1.pop(headerName, None)
-			headers2.pop(headerName, None)
-		
-		onlyIn1 = set(headers1.keys()) - set(headers2.keys())
-		if len(onlyIn1) != 0:
-			self.writeOutput('Error: headers %s found only in headers1' % (','.join(onlyIn1)))
-			return False
-		onlyIn2 = set(headers2.keys()) - set(headers1.keys())
-		if len(onlyIn2) != 0 and onlyIn2 != set(['access-control-allow-origin']):		# allow CORS to be added
-			self.writeOutput('Error: headers %s found only in headers2' % (','.join(onlyIn2)))
-			return False
-		for curHeader in headers1.keys():
-			if curHeader in IGNORE_HEADER_VALUES:
-				continue
-			value1 = headers1[curHeader]
-			value2 = headers2[curHeader]
-			if value1 == value2:
-				continue
-			if curHeader in set(['expires', 'last-modified']):
-				if abs(self.parseHttpTime(value1[0]) - self.parseHttpTime(value2[0])) < 10:
-					continue
-			self.writeOutput('Error: different value for header %s - %s vs %s' % (curHeader, value1, value2))
-			return False
-		return True
 
 	def getURL(self, hostHeader, url):
 		headers = {}
@@ -94,9 +43,10 @@ class TestThread(stress_base.TestThreadBase):
 			self.writeOutput('Error: got different status codes %s vs %s' % (code1, code2))
 			return False
 		
-		if not self.compareHeaders(headers1, headers2):
-			self.writeOutput('Error: got different headers %s vs %s' % (headers1, headers2))
-			return False			
+		headerCompare = compare_utils.compareHeaders(headers1, headers2)
+		if headerCompare != None:
+			self.writeOutput(headerCompare)
+			return False
 		
 		if str(code1) != '200':
 			self.writeOutput('Notice: got status code %s' % (code1))
