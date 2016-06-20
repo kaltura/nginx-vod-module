@@ -148,6 +148,9 @@ hds_get_abst_atom_size(media_set_t* media_set, segment_durations_t* segment_dura
 		base_size += sizeof(u_char);		// discontinuity indicator
 	}
 
+	fragment_run_entries += segment_durations->discontinuities;			// zero entry
+	base_size += sizeof(u_char) * segment_durations->discontinuities;	// discontinuity indicator
+
 	return base_size + fragment_run_entries * sizeof(afrt_entry_t);
 }
 
@@ -162,21 +165,26 @@ hds_write_abst_atom(
 	uint64_t start_offset = 0;
 	uint64_t timestamp;
 	uint32_t fragment_run_entries;
+	uint32_t segment_index;
 	uint32_t duration;
 	size_t afrt_atom_size = AFRT_BASE_ATOM_SIZE;
 	size_t asrt_atom_size = ASRT_ATOM_SIZE;
 	size_t abst_atom_size = ABST_BASE_ATOM_SIZE;
+	size_t extra_afrt_size = 0;
 
 	fragment_run_entries = segment_durations->item_count;
 	if (media_set->presentation_end)
 	{
 		fragment_run_entries++;					// zero entry
-		afrt_atom_size += sizeof(u_char);		// discontinuity indicator
-		abst_atom_size += sizeof(u_char);		// discontinuity indicator
+		extra_afrt_size += sizeof(u_char);		// discontinuity indicator
 	}
 
-	afrt_atom_size += fragment_run_entries * sizeof(afrt_entry_t);
-	abst_atom_size += fragment_run_entries * sizeof(afrt_entry_t);
+	fragment_run_entries += segment_durations->discontinuities;			// zero entry
+	extra_afrt_size += fragment_run_entries * sizeof(afrt_entry_t) +
+		sizeof(u_char) * segment_durations->discontinuities;			// discontinuity indicator
+
+	afrt_atom_size += extra_afrt_size;
+	abst_atom_size += extra_afrt_size;
 
 	// abst
 	write_atom_header(p, abst_atom_size, 'a', 'b', 's', 't');
@@ -215,14 +223,25 @@ hds_write_abst_atom(
 	// write the afrt entries
 	for (cur_item = segment_durations->items; cur_item < last_item; cur_item++)
 	{
+		segment_index = cur_item->segment_index + 1;
 		timestamp = hds_rescale_millis(segment_durations->start_time) +
 			rescale_time(start_offset, segment_durations->timescale, HDS_TIMESCALE);
 		duration = rescale_time(cur_item->duration, segment_durations->timescale, HDS_TIMESCALE);
 
-		write_be32(p, cur_item->segment_index + 1);		// first fragment
+		write_be32(p, segment_index);	// first fragment
 		write_be64(p, timestamp);		// first fragment timestamp
 		write_be32(p, duration);		// fragment duration
 		start_offset += cur_item->duration * cur_item->repeat_count;
+
+		if (cur_item + 1 < last_item && cur_item[1].discontinuity)
+		{
+			segment_index += cur_item->repeat_count;
+			timestamp += duration * cur_item->repeat_count;
+			write_be32(p, segment_index);		// first fragment
+			write_be64(p, timestamp);			// first fragment timestamp
+			write_be32(p, 0);					// fragment duration
+			*p++ = 3;							// discontinuity indicator (3 = discontinuity in both timestamps and fragment numbering)
+		}
 	}
 
 	if (media_set->presentation_end)
