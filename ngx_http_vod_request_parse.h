@@ -13,6 +13,7 @@
 
 #define PARSE_FILE_NAME_EXPECT_SEGMENT_INDEX	(0x1)
 #define PARSE_FILE_NAME_MULTI_STREAMS_PER_TYPE	(0x2)
+#define PARSE_FILE_NAME_ALLOW_CLIP_INDEX		(0x4)
 
 // macros
 #define ngx_http_vod_starts_with(start_pos, end_pos, prefix)	\

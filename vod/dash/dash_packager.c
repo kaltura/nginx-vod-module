@@ -110,7 +110,7 @@
 	"      <Representation\n"													\
 	"          id=\"textstream_%s_%uD\"\n"										\
 	"          bandwidth=\"0\">\n"												\
-	"        <BaseURL>%V%V-%V.vtt</BaseURL>\n"									\
+	"        <BaseURL>%V%V-%s%V.vtt</BaseURL>\n"									\
 	"      </Representation>\n"													\
 	"    </AdaptationSet>\n"
 
@@ -119,7 +119,7 @@
 	"        <SegmentTemplate\n"												\
 	"            timescale=\"1000\"\n"											\
 	"            media=\"%V%V-$Number$-$RepresentationID$.%V\"\n"				\
-	"            initialization=\"%V%V-$RepresentationID$.%V\"\n"				\
+	"            initialization=\"%V%V-%s$RepresentationID$.%V\"\n"				\
 	"            duration=\"%ui\"\n"											\
 	"            startNumber=\"%uD\">\n"										\
 	"        </SegmentTemplate>\n"
@@ -128,7 +128,7 @@
 	"        <SegmentTemplate\n"												\
 	"            timescale=\"1000\"\n"											\
 	"            media=\"%V%V-$Number$-$RepresentationID$.%V\"\n"				\
-	"            initialization=\"%V%V-$RepresentationID$.%V\"\n"				\
+	"            initialization=\"%V%V-%s$RepresentationID$.%V\"\n"				\
 	"            startNumber=\"%uD\">\n"										\
 	"            <SegmentTimeline>\n"
 
@@ -151,7 +151,7 @@
 // SegmentList
 #define VOD_DASH_MANIFEST_SEGMENT_LIST_HEADER									\
 	"        <SegmentList timescale=\"1000\" duration=\"%ui\">\n"				\
-	"          <Initialization sourceURL=\"%V%V-%V.%V\"/>\n"
+	"          <Initialization sourceURL=\"%V%V-%s%V.%V\"/>\n"
 
 #define VOD_DASH_MANIFEST_SEGMENT_URL											\
 	"          <SegmentURL media=\"%V%V-%uD-%V.%V\"/>\n"
@@ -165,7 +165,8 @@
 #define VOD_DASH_MANIFEST_FOOTER												\
     "</MPD>\n"
 
-#define MAX_TRACK_SPEC_LENGTH (sizeof("c-f-v") + 3 * VOD_INT32_LEN)
+#define MAX_TRACK_SPEC_LENGTH (sizeof("f-v") + 2 * VOD_INT32_LEN)
+#define MAX_CLIP_SPEC_LENGTH (sizeof("c-") + VOD_INT32_LEN)
 #define MAX_MIME_TYPE_SIZE (sizeof("video/webm") - 1)
 #define MAX_FILE_EXT_SIZE (sizeof("webm") - 1)
 
@@ -418,21 +419,31 @@ dash_packager_compare_tracks(uintptr_t bitrate_threshold, const media_info_t* mi
 }
 
 static void
+dash_packager_get_clip_spec(
+	u_char* result,
+	media_set_t* media_set,
+	uint32_t clip_index)
+{
+	if (media_set->use_discontinuity &&
+		media_set->initial_clip_index != INVALID_CLIP_INDEX)
+	{
+		vod_sprintf(result, "c%uD-%Z", media_set->initial_clip_index + clip_index + 1);
+	}
+	else
+	{
+		result[0] = '\0';
+	}
+}
+
+static void
 dash_packager_get_track_spec(
 	vod_str_t* result,
 	media_set_t* media_set,
-	uint32_t clip_index,
 	uint32_t sequence_index,
 	uint32_t track_index,
 	uint32_t media_type)
 {
 	u_char* p = result->data;
-
-	if (media_set->use_discontinuity && 
-		media_set->initial_clip_index != INVALID_CLIP_INDEX)
-	{
-		p = vod_sprintf(p, "c%uD-", media_set->initial_clip_index + clip_index + 1);
-	}
 
 	if (media_set->has_multi_sequences && sequence_index != INVALID_SEQUENCE_INDEX)
 	{
@@ -486,6 +497,7 @@ dash_packager_write_segment_template(
 	u_char* p,
 	dash_manifest_config_t* conf,
 	uint32_t start_number,
+	u_char* clip_spec,
 	media_set_t* media_set,
 	media_track_t* reference_track,
 	vod_str_t* base_url)
@@ -499,6 +511,7 @@ dash_packager_write_segment_template(
 		&dash_codecs[reference_track->media_info.codec_id].frag_file_ext,
 		base_url,
 		&conf->init_file_name_prefix,
+		clip_spec,
 		&dash_codecs[reference_track->media_info.codec_id].init_file_ext,
 		media_set->segmenter_conf->segment_duration,
 		start_number + 1);
@@ -512,6 +525,7 @@ dash_packager_write_segment_timeline(
 	dash_manifest_config_t* conf,
 	uint32_t start_number,
 	uint64_t clip_start_offset,
+	u_char* clip_spec,
 	media_track_t* reference_track,
 	segment_durations_t* segment_durations,
 	segment_duration_item_t** cur_item_ptr,
@@ -534,6 +548,7 @@ dash_packager_write_segment_timeline(
 		&dash_codecs[reference_track->media_info.codec_id].frag_file_ext,
 		base_url,
 		&conf->init_file_name_prefix,
+		clip_spec,
 		&dash_codecs[reference_track->media_info.codec_id].init_file_ext,
 		start_number + 1);
 
@@ -590,7 +605,7 @@ dash_packager_write_segment_list(
 	media_set_t* media_set,
 	vod_str_t* base_url,
 	u_char* base_url_temp_buffer,
-	uint32_t clip_index,
+	u_char* clip_spec,
 	media_sequence_t* cur_sequence,
 	media_track_t* cur_track,
 	uint32_t segment_count)
@@ -630,7 +645,6 @@ dash_packager_write_segment_list(
 	dash_packager_get_track_spec(
 		&track_spec,
 		media_set,
-		clip_index,
 		sequence_index,
 		cur_track->index,
 		cur_track->media_info.media_type);
@@ -641,6 +655,7 @@ dash_packager_write_segment_list(
 		media_set->segmenter_conf->segment_duration,
 		&cur_base_url,
 		&conf->init_file_name_prefix,
+		clip_spec,
 		&track_spec, 
 		&dash_codecs[cur_track->media_info.codec_id].init_file_ext);
 
@@ -718,6 +733,7 @@ dash_packager_write_mpd_period(
 	vod_str_t frame_rate;
 	u_char representation_id_buffer[MAX_TRACK_SPEC_LENGTH];
 	u_char frame_rate_buffer[VOD_DASH_MAX_FRAME_RATE_LEN];
+	u_char clip_spec[MAX_CLIP_SPEC_LENGTH];
 	uint32_t filtered_clip_offset;
 	uint32_t max_width = 0;
 	uint32_t max_height = 0;
@@ -769,6 +785,8 @@ dash_packager_write_mpd_period(
 	// Note: clip_index can be greater than clip count when consistentSequenceMediaInfo is true
 	filtered_clip_offset = context->clip_index < media_set->clip_count ? 
 		context->clip_index * media_set->total_track_count : 0;
+
+	dash_packager_get_clip_spec(clip_spec, media_set, context->clip_index);
 
 	// print the adaptation sets
 	for (adaptation_set = context->adaptation_sets.first, cur_duration_items = context->cur_duration_items;
@@ -838,7 +856,6 @@ dash_packager_write_mpd_period(
 			dash_packager_get_track_spec(
 				&representation_id,
 				media_set,
-				context->clip_index,
 				cur_sequence->index,
 				cur_track->index,
 				cur_track->media_info.media_type);
@@ -855,6 +872,7 @@ dash_packager_write_mpd_period(
 				subtitle_adapt_id++, 
 				context->base_url,
 				&context->conf->subtitle_file_name_prefix,
+				clip_spec,
 				&representation_id);
 			continue;
 		}
@@ -875,6 +893,7 @@ dash_packager_write_mpd_period(
 				p,
 				context->conf,
 				start_number,
+				clip_spec,
 				media_set,
 				reference_track,
 				context->base_url);
@@ -886,6 +905,7 @@ dash_packager_write_mpd_period(
 				context->conf,
 				start_number,
 				context->clip_start_offset,
+				clip_spec,
 				reference_track,
 				&context->segment_durations[media_type],
 				cur_duration_items,
@@ -917,7 +937,6 @@ dash_packager_write_mpd_period(
 			dash_packager_get_track_spec(
 				&representation_id, 
 				media_set, 
-				context->clip_index, 
 				cur_sequence->index, 
 				cur_track->index, 
 				cur_track->media_info.media_type);
@@ -962,7 +981,7 @@ dash_packager_write_mpd_period(
 					media_set,
 					context->base_url,
 					context->base_url_temp_buffer,
-					context->clip_index,
+					clip_spec,
 					cur_sequence,
 					cur_track,
 					segment_count);
@@ -1057,7 +1076,7 @@ dash_packager_get_segment_list_total_size(
 				}
 
 				result += 
-					sizeof(VOD_DASH_MANIFEST_SEGMENT_LIST_HEADER) - 1 + VOD_INT64_LEN + base_url_len + conf->init_file_name_prefix.len + MAX_TRACK_SPEC_LENGTH + MAX_FILE_EXT_SIZE + 
+					sizeof(VOD_DASH_MANIFEST_SEGMENT_LIST_HEADER) - 1 + VOD_INT64_LEN + base_url_len + conf->init_file_name_prefix.len + MAX_CLIP_SPEC_LENGTH + MAX_TRACK_SPEC_LENGTH + MAX_FILE_EXT_SIZE + 
 					(sizeof(VOD_DASH_MANIFEST_SEGMENT_URL) - 1 + base_url_len + conf->fragment_file_name_prefix.len + VOD_INT32_LEN + MAX_TRACK_SPEC_LENGTH + MAX_FILE_EXT_SIZE) * segment_count + 
 					sizeof(VOD_DASH_MANIFEST_SEGMENT_LIST_FOOTER) - 1;
 			}
@@ -1184,7 +1203,7 @@ dash_packager_build_mpd(
 
 	// calculate the total size
 	urls_length = 2 * base_url->len + 2 * MAX_FILE_EXT_SIZE +
-		conf->init_file_name_prefix.len + 
+		conf->init_file_name_prefix.len + MAX_CLIP_SPEC_LENGTH +
 		conf->fragment_file_name_prefix.len;
 
 	base_period_size =
@@ -1203,7 +1222,7 @@ dash_packager_build_mpd(
 			sizeof(VOD_DASH_MANIFEST_REPRESENTATION_FOOTER) - 1) * media_set->track_count[MEDIA_TYPE_AUDIO] +
 			// subtitle adaptations
 			(sizeof(VOD_DASH_MANIFEST_ADAPTATION_SUBTITLE) - 1 + 2 * LANG_ISO639_1_LEN + VOD_INT32_LEN + 
-			base_url->len + conf->subtitle_file_name_prefix.len + MAX_TRACK_SPEC_LENGTH) * 
+			base_url->len + conf->subtitle_file_name_prefix.len + MAX_CLIP_SPEC_LENGTH + MAX_TRACK_SPEC_LENGTH) *
 			context.adaptation_sets.count[ADAPTATION_TYPE_SUBTITLE] +
 		sizeof(VOD_DASH_MANIFEST_PERIOD_FOOTER) - 1 +
 		representation_tags_size;
