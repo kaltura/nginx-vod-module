@@ -260,7 +260,7 @@ ngx_http_vod_parse_uri_file_name(
 	skip_dash(start_pos, end_pos);
 
 	// clip index
-	if (*start_pos == 'c')
+	if (*start_pos == 'c' && (flags & PARSE_FILE_NAME_ALLOW_CLIP_INDEX) != 0)
 	{
 		start_pos++;		// skip the c
 

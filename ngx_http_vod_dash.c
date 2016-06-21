@@ -501,7 +501,7 @@ ngx_http_vod_dash_parse_uri_file_name(
 		start_pos += conf->dash.mpd_config.init_file_name_prefix.len;
 		end_pos -= (sizeof(init_segment_file_ext) - 1);
 		*request = &dash_mp4_init_request;
-		flags = 0;
+		flags = PARSE_FILE_NAME_ALLOW_CLIP_INDEX;
 	}
 	// webm fragment
 	else if (ngx_http_vod_match_prefix_postfix(start_pos, end_pos, &conf->dash.mpd_config.fragment_file_name_prefix, webm_file_ext))
@@ -517,7 +517,7 @@ ngx_http_vod_dash_parse_uri_file_name(
 		start_pos += conf->dash.mpd_config.init_file_name_prefix.len;
 		end_pos -= (sizeof(webm_file_ext) - 1);
 		*request = &dash_webm_init_request;
-		flags = 0;
+		flags = PARSE_FILE_NAME_ALLOW_CLIP_INDEX;
 	}
 	// manifest
 	else if (ngx_http_vod_match_prefix_postfix(start_pos, end_pos, &conf->dash.manifest_file_name_prefix, manifest_file_ext))
