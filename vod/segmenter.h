@@ -16,6 +16,7 @@ typedef struct segmenter_conf_s segmenter_conf_t;
 typedef struct {
 	uint32_t segment_index;
 	uint32_t repeat_count;
+	uint64_t time;
 	uint64_t duration;
 	bool_t discontinuity;
 } segment_duration_item_t;
@@ -122,10 +123,6 @@ vod_status_t segmenter_get_segment_durations_accurate(
 
 // get segment index
 uint32_t segmenter_get_segment_index_no_discontinuity(
-	segmenter_conf_t* conf,
-	uint64_t time_millis);
-
-uint32_t segmenter_get_segment_index_no_discontinuity_round_up(
 	segmenter_conf_t* conf,
 	uint64_t time_millis);
 
