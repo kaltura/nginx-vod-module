@@ -134,22 +134,50 @@ typedef struct {
 	u_char fragment_duration[4];
 } afrt_entry_t;
 
+typedef struct {
+	segment_durations_t durations;
+	uint32_t zero_segments;
+} hds_segment_durations_t;
+
+static void
+hds_scale_segment_durations(hds_segment_durations_t* segments)
+{
+	segment_durations_t* segment_durations = &segments->durations;
+	segment_duration_item_t* last_item = segment_durations->items + segment_durations->item_count;
+	segment_duration_item_t* cur_item;
+
+	segments->zero_segments = 0;
+
+	segment_durations->end_time = hds_rescale_millis(segment_durations->end_time);
+	for (cur_item = segment_durations->items; cur_item < last_item; cur_item++)
+	{
+		cur_item->time = segment_durations->timescale == 1000 ? hds_rescale_millis(cur_item->time) :				// special case for 1000 to prevent overflow in time
+			rescale_time(cur_item->time, segment_durations->timescale, HDS_TIMESCALE);
+		cur_item->duration = rescale_time(cur_item->duration, segment_durations->timescale, HDS_TIMESCALE);
+
+		if (cur_item->duration == 0)
+		{
+			segments->zero_segments++;
+		}
+	}
+}
+
 static size_t
-hds_get_abst_atom_size(media_set_t* media_set, segment_durations_t* segment_durations)
+hds_get_abst_atom_size(media_set_t* media_set, hds_segment_durations_t* segments)
 {
 	uint32_t fragment_run_entries;
 	uint32_t base_size;
 
 	base_size = ABST_BASE_ATOM_SIZE;
-	fragment_run_entries = segment_durations->item_count;
+	fragment_run_entries = segments->durations.item_count;
 	if (media_set->presentation_end)
 	{
 		fragment_run_entries++;				// zero entry
 		base_size += sizeof(u_char);		// discontinuity indicator
 	}
 
-	fragment_run_entries += segment_durations->discontinuities;			// zero entry
-	base_size += sizeof(u_char) * segment_durations->discontinuities;	// discontinuity indicator
+	fragment_run_entries += segments->durations.discontinuities;			// zero entry
+	base_size += sizeof(u_char) * (segments->durations.discontinuities + segments->zero_segments);	// discontinuity indicator
 
 	return base_size + fragment_run_entries * sizeof(afrt_entry_t);
 }
@@ -158,11 +186,11 @@ static u_char*
 hds_write_abst_atom(
 	u_char* p,
 	media_set_t* media_set,
-	segment_durations_t* segment_durations)
+	hds_segment_durations_t* segments)
 {
+	segment_durations_t* segment_durations = &segments->durations;
 	segment_duration_item_t* cur_item;
 	segment_duration_item_t* last_item = segment_durations->items + segment_durations->item_count;
-	uint64_t start_offset = 0;
 	uint64_t timestamp;
 	uint32_t fragment_run_entries;
 	uint32_t segment_index;
@@ -179,9 +207,9 @@ hds_write_abst_atom(
 		extra_afrt_size += sizeof(u_char);		// discontinuity indicator
 	}
 
-	fragment_run_entries += segment_durations->discontinuities;			// zero entry
+	fragment_run_entries += segment_durations->discontinuities;					// zero entry
 	extra_afrt_size += fragment_run_entries * sizeof(afrt_entry_t) +
-		sizeof(u_char) * segment_durations->discontinuities;			// discontinuity indicator
+		sizeof(u_char) * (segment_durations->discontinuities + segments->zero_segments);	// discontinuity indicator
 
 	afrt_atom_size += extra_afrt_size;
 	abst_atom_size += extra_afrt_size;
@@ -192,7 +220,7 @@ hds_write_abst_atom(
 	write_be32(p, 1);					// bootstrap info version
 	*p++ = (media_set->type == MEDIA_SET_LIVE ? 0x20 : 0);	// profile, live, update
 	write_be32(p, HDS_TIMESCALE);		// timescale
-	write_be64(p, hds_rescale_millis(segment_durations->end_time));	// current media time
+	write_be64(p, segment_durations->end_time);	// current media time
 	write_be64(p, 0LL);					// smpte offset
 	*p++ = 0;							// movie identifier
 	*p++ = 0;							// server entries
@@ -224,14 +252,16 @@ hds_write_abst_atom(
 	for (cur_item = segment_durations->items; cur_item < last_item; cur_item++)
 	{
 		segment_index = cur_item->segment_index + 1;
-		timestamp = hds_rescale_millis(segment_durations->start_time) +
-			rescale_time(start_offset, segment_durations->timescale, HDS_TIMESCALE);
-		duration = rescale_time(cur_item->duration, segment_durations->timescale, HDS_TIMESCALE);
+		timestamp = cur_item->time;
+		duration = cur_item->duration;
 
 		write_be32(p, segment_index);	// first fragment
 		write_be64(p, timestamp);		// first fragment timestamp
 		write_be32(p, duration);		// fragment duration
-		start_offset += cur_item->duration * cur_item->repeat_count;
+		if (duration == 0)
+		{
+			*p++ = 1;					// discontinuity indicator (1 = discontinuity in fragment numbering)
+		}
 
 		if (cur_item + 1 < last_item && cur_item[1].discontinuity)
 		{
@@ -257,7 +287,7 @@ hds_write_abst_atom(
 }
 
 static u_char*
-hds_write_base64_abst_atom(u_char* p, u_char* temp_buffer, media_set_t* media_set, segment_durations_t* segment_durations)
+hds_write_base64_abst_atom(u_char* p, u_char* temp_buffer, media_set_t* media_set, hds_segment_durations_t* segment_durations)
 {
 	vod_str_t binary;
 	vod_str_t base64;
@@ -278,7 +308,7 @@ hds_packager_build_bootstrap(
 	media_set_t* media_set,
 	vod_str_t* result)
 {
-	segment_durations_t segment_durations;
+	hds_segment_durations_t segment_durations;
 	segmenter_conf_t* segmenter_conf = media_set->segmenter_conf;
 	vod_status_t rc;
 	size_t result_size;
@@ -289,11 +319,13 @@ hds_packager_build_bootstrap(
 		media_set,
 		NULL,
 		MEDIA_TYPE_NONE,
-		&segment_durations);
+		&segment_durations.durations);
 	if (rc != VOD_OK)
 	{
 		return rc;
 	}
+
+	hds_scale_segment_durations(&segment_durations);
 
 	result_size = hds_get_abst_atom_size(media_set, &segment_durations);
 
@@ -327,7 +359,7 @@ hds_packager_build_manifest(
 	bool_t drm_enabled,
 	vod_str_t* result)
 {
-	segment_durations_t* segment_durations;
+	hds_segment_durations_t* segment_durations;
 	adaptation_sets_t adaptation_sets;
 	adaptation_set_t* adaptation_set;
 	segmenter_conf_t* segmenter_conf = media_set->segmenter_conf;
@@ -451,11 +483,13 @@ hds_packager_build_manifest(
 					media_set,
 					cur_sequence,		// XXXXX change to work with tracks instead of sequence
 					MEDIA_TYPE_NONE,
-					&segment_durations[index]);
+					&segment_durations[index].durations);
 				if (rc != VOD_OK)
 				{
 					return rc;
 				}
+
+				hds_scale_segment_durations(&segment_durations[index]);
 
 				abst_atom_size = hds_get_abst_atom_size(media_set, &segment_durations[index]);
 				if (abst_atom_size > max_abst_atom_size)

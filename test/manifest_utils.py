@@ -123,26 +123,61 @@ def getDashManifestUrls(baseUrl, urlContent, headers):
 					result.append(getAbsoluteUrl(url.replace('$Number$', '%s' % (curSeg + 1)).replace('$RepresentationID$', repId)))
 	return result
 
-def getHdsManifestUrls(baseUrl, urlContent, headers):
-	parsed = parseString(urlContent)
+def getHdsSegmentIndexes(data):
+    result = []
+    mediaTime = struct.unpack('>Q', data[0x15:0x1d])[0]
+    curPos = 0x5a
+    prevDuration = 0
+    while curPos < len(data):
+        index, timestamp, duration = struct.unpack('>LQL', data[curPos:(curPos + 0x10)])
 
-	# get the media base urls
-	urls = set([])
+        curPos += 0x10
+        if duration == 0:
+            curPos += 1
+
+        if prevDuration != 0:
+            if (index, timestamp, duration) == (0, 0, 0):
+                repeatCount = (mediaTime - prevTimestamp) / prevDuration
+            else:
+                repeatCount = index - prevIndex
+            result += range(prevIndex, prevIndex + repeatCount)
+        (prevIndex, prevTimestamp, prevDuration) = (index, timestamp, duration)
+    return result
+	
+def getHdsManifestUrls(baseUrl, urlContent, headers):
+	result = []
+	
+	# parse the xml
+	parsed = parseString(urlContent)
+	
+	# get the bootstraps
+	segmentIndexes = {}
+	for node in parsed.getElementsByTagName('bootstrapInfo'):
+		atts = getAttributesDict(node)
+		if atts.has_key('url'):
+			curUrl = getAbsoluteUrl(atts['url'], baseUrl)
+			result.append(curUrl)
+			
+			# get the bootstrap info
+			code, _, bootstrapInfo = http_utils.getUrl(curUrl, headers)
+			if code != 200 or len(bootstrapInfo) == 0:
+				continue
+		else:
+			bootstrapInfo = base64.b64decode(node.firstChild.nodeValue)
+		bootstrapId = atts['id']
+		segmentIndexes[bootstrapId] = getHdsSegmentIndexes(bootstrapInfo)
+	
+	# add the media urls
 	for node in parsed.getElementsByTagName('media'):
 		atts = getAttributesDict(node)
-		urls.add(atts['url'])
+		bootstrapId = atts['bootstrapInfoId']
+		if not segmentIndexes.has_key(bootstrapId):
+			continue
+		
+		url = atts['url']
+		for curSeg in segmentIndexes[bootstrapId]:
+			result.append(getAbsoluteUrl('%s/%sSeg1-Frag%s' % (baseUrl, url, curSeg)))
 
-	# get the bootstrap info
-	segmentCount = None
-	for node in parsed.getElementsByTagName('bootstrapInfo'):
-		bootstrapInfo = base64.b64decode(node.firstChild.nodeValue)
-		segmentCount = struct.unpack('>L', bootstrapInfo[0x40:0x44])[0]
-	
-	# generate the segment urls
-	result = []
-	for url in urls:
-		for curSeg in xrange(segmentCount):
-			result.append(getAbsoluteUrl('%s/%sSeg1-Frag%s' % (baseUrl, url, curSeg + 1)))
 	return result
 
 def getMssManifestUrls(baseUrl, urlContent, headers):
