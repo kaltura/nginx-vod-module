@@ -34,6 +34,7 @@
 #define ATOM_NAME_SINF (0x666e6973)		// protection scheme information
 #define ATOM_NAME_AVCC (0x43637661)		// advanced video codec configuration
 #define ATOM_NAME_HVCC (0x43637668)		// high efficiency video codec configuration
+#define ATOM_NAME_VPCC (0x43637076)		// vp9 codec configuration
 #define ATOM_NAME_ESDS (0x73647365)		// elementary stream description
 #define ATOM_NAME_WAVE (0x65766177)		// 
 #define ATOM_NAME_DINF (0x666e6964)		// data information
@@ -62,6 +63,9 @@
 // h265 4cc tags
 #define FORMAT_HEV1	   (0x31766568)
 #define FORMAT_HVC1	   (0x31637668)
+
+// vp9 4cc tags
+#define FORMAT_VP09    (0x39307076)
 
 // aac 4cc tag
 #define FORMAT_MP4A    (0x6134706d)

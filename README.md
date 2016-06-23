@@ -18,7 +18,7 @@
 
 * Fallback support for file not found in local/mapped modes (useful in multi-datacenter environments)
   
-* Video codecs: H264, H265 (DASH/HLS)
+* Video codecs: H264, H265 (DASH/HLS), VP9 (DASH)
 
 * Audio codecs: AAC, MP3
 

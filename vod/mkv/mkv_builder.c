@@ -669,6 +669,7 @@ mkv_builder_frame_writer_process(void* context)
 	u_char* read_buffer;
 	uint32_t read_size;
 	vod_status_t rc;
+	bool_t processed_data = FALSE;
 	bool_t frame_done;
 
 	if (!state->frame_started)
@@ -697,7 +698,7 @@ mkv_builder_frame_writer_process(void* context)
 				return rc;
 			}
 
-			if (!state->first_time)
+			if (!processed_data && !state->first_time)
 			{
 				vod_log_error(VOD_LOG_ERR, state->request_context->log, 0,
 					"mkv_builder_frame_writer_process: no data was handled, probably a truncated file");
@@ -707,6 +708,8 @@ mkv_builder_frame_writer_process(void* context)
 			state->first_time = FALSE;
 			return VOD_AGAIN;
 		}
+
+		processed_data = TRUE;
 
 		rc = state->write_callback(state->write_context, read_buffer, read_size);
 		if (rc != VOD_OK)
