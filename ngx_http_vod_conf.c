@@ -352,10 +352,12 @@ ngx_http_vod_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child)
 		return NGX_CONF_ERROR;
 	}
 
+#if (NGX_HAVE_LIB_AV_CODEC)
 	if (conf->submodule.name == thumb.name)
 	{
 		conf->segmenter.align_to_key_frames = 1;
 	}
+#endif //(NGX_HAVE_LIB_AV_CODEC)
 
 	rc = segmenter_init_config(&conf->segmenter, cf->pool);
 	if (rc != VOD_OK)
