@@ -25,6 +25,7 @@
 #include "vod/filters/filter.h"
 #include "vod/media_set_parser.h"
 #include "vod/manifest_utils.h"
+#include "vod/thumb/thumb_grabber.h"
 
 enum {
 	// mapping state machine
@@ -770,7 +771,7 @@ ngx_http_vod_alloc_read_buffer(ngx_http_vod_ctx_t *ctx, size_t size, int alloc_p
 	ngx_http_vod_alloc_params_t* alloc_params = ctx->alloc_params + alloc_params_index;
 	u_char* start = ctx->read_buffer.start;
 
-	size += alloc_params->extra_size + 1;		// + 1 for null termination
+	size += alloc_params->extra_size + VOD_BUFFER_PADDING_SIZE;		// for null termination / ffmpeg padding
 
 	if (start == NULL ||										// no buffer
 		start + size > ctx->read_buffer.end ||					// buffer too small
@@ -1097,7 +1098,8 @@ ngx_http_vod_parse_metadata(
 		return VOD_OK;
 	}
 
-	if (request->request_class != REQUEST_CLASS_SEGMENT)
+	if (request->request_class == REQUEST_CLASS_MANIFEST ||
+		request->request_class == REQUEST_CLASS_OTHER)
 	{
 		request_context->simulation_only = TRUE;
 
@@ -1153,7 +1155,6 @@ ngx_http_vod_parse_metadata(
 
 			get_ranges_params.request_context = &ctx->submodule_context.request_context;
 			get_ranges_params.conf = segmenter;
-			get_ranges_params.segment_index = ctx->submodule_context.request_params.segment_index;
 			get_ranges_params.last_segment_end = last_segment_end;
 			get_ranges_params.key_frame_durations = NULL;
 
@@ -1161,10 +1162,27 @@ ngx_http_vod_parse_metadata(
 			get_ranges_params.timing.durations = &duration_millis;
 			get_ranges_params.timing.total_count = 1;
 			get_ranges_params.timing.total_duration = duration_millis;
+			get_ranges_params.timing.times = &get_ranges_params.timing.first_time;
 
-			rc = segmenter_get_start_end_ranges_no_discontinuity(
-				&get_ranges_params,
-				&clip_ranges);
+			if (ctx->submodule_context.request_params.segment_index != INVALID_SEGMENT_INDEX)
+			{
+				// segment request
+				get_ranges_params.segment_index = ctx->submodule_context.request_params.segment_index;
+
+				rc = segmenter_get_start_end_ranges_no_discontinuity(
+					&get_ranges_params,
+					&clip_ranges);
+			}
+			else
+			{
+				// thumbnail request
+				get_ranges_params.time = ctx->submodule_context.request_params.segment_time;
+
+				rc = segmenter_get_start_end_ranges_gop(
+					&get_ranges_params,
+					&clip_ranges);
+			}
+
 			if (rc != VOD_OK)
 			{
 				ngx_log_debug1(NGX_LOG_DEBUG_HTTP, request_context->log, 0,
@@ -2439,6 +2457,10 @@ ngx_http_vod_process_init(ngx_cycle_t *cycle)
 
 	audio_filter_process_init(cycle->log);
 	
+#if (VOD_HAVE_LIB_AV_CODEC)
+	thumb_grabber_process_init(cycle->log);
+#endif // (VOD_HAVE_LIB_AV_CODEC)
+
 	rc = language_code_process_init(cycle->pool, cycle->log);
 	if (rc != VOD_OK)
 	{

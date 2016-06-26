@@ -29,6 +29,7 @@
 enum {
 	REQUEST_CLASS_MANIFEST,
 	REQUEST_CLASS_SEGMENT,
+	REQUEST_CLASS_THUMB,
 	REQUEST_CLASS_OTHER,		// dash init segment, hls iframes manifest, hls master manifest, hls encryption key
 };
 

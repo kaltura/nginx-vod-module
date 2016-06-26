@@ -101,6 +101,9 @@ NGX_ADDON_DEPS="$NGX_ADDON_DEPS                                     \
                 $ngx_addon_dir/ngx_http_vod_request_parse.h         \
                 $ngx_addon_dir/ngx_http_vod_status.h                \
                 $ngx_addon_dir/ngx_http_vod_submodule.h             \
+                $ngx_addon_dir/ngx_http_vod_thumb.h                 \
+                $ngx_addon_dir/ngx_http_vod_thumb_commands.h        \
+                $ngx_addon_dir/ngx_http_vod_thumb_conf.h            \
                 $ngx_addon_dir/ngx_http_vod_utils.h                 \
                 $ngx_addon_dir/ngx_perf_counters.h                  \
                 $ngx_addon_dir/ngx_perf_counters_x.h                \
@@ -168,6 +171,7 @@ NGX_ADDON_DEPS="$NGX_ADDON_DEPS                                     \
                 $ngx_addon_dir/vod/mp4/mp4_parser_base.h            \
                 $ngx_addon_dir/vod/mss/mss_packager.h               \
                 $ngx_addon_dir/vod/mss/mss_playready.h              \
+                $ngx_addon_dir/vod/thumb/thumb_grabber.h            \
                 $ngx_addon_dir/vod/webvtt/ttml_builder.h            \
                 $ngx_addon_dir/vod/webvtt/webvtt_builder.h          \
                 $ngx_addon_dir/vod/webvtt/webvtt_format.h           \
@@ -194,6 +198,7 @@ NGX_ADDON_SRCS="$NGX_ADDON_SRCS                                     \
                 $ngx_addon_dir/ngx_http_vod_request_parse.c         \
                 $ngx_addon_dir/ngx_http_vod_status.c                \
                 $ngx_addon_dir/ngx_http_vod_submodule.c             \
+                $ngx_addon_dir/ngx_http_vod_thumb.c                 \
                 $ngx_addon_dir/ngx_http_vod_utils.c                 \
                 $ngx_addon_dir/ngx_perf_counters.c                  \
                 $ngx_addon_dir/vod/buffer_pool.c                    \
@@ -246,6 +251,7 @@ NGX_ADDON_SRCS="$NGX_ADDON_SRCS                                     \
                 $ngx_addon_dir/vod/mp4/mp4_parser_base.c            \
                 $ngx_addon_dir/vod/mss/mss_packager.c               \
                 $ngx_addon_dir/vod/mss/mss_playready.c              \
+                $ngx_addon_dir/vod/thumb/thumb_grabber.c            \
                 $ngx_addon_dir/vod/webvtt/ttml_builder.c            \
                 $ngx_addon_dir/vod/webvtt/webvtt_builder.c          \
                 $ngx_addon_dir/vod/webvtt/webvtt_format.c           \

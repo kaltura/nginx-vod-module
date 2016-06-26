@@ -233,7 +233,7 @@ mp4_decrypt_read(void* ctx, u_char** buffer, uint32_t* size, bool_t* frame_done)
 					"mp4_decrypt_read: vod_alloc failed");
 				return VOD_ALLOC_FAILED;
 			}
-			state->output_end = state->output_start + buffer_size;
+			state->output_end = state->output_start + buffer_size - VOD_BUFFER_PADDING_SIZE;
 		}
 
 		state->output_pos = state->output_start;

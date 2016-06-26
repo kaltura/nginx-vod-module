@@ -46,6 +46,8 @@ without the overhead of short segments for the whole duration of the video
 
 * Clipping of MP4 files for progressive download playback
 
+* Thumbnail capture (requires libavcodec)
+
 * Decryption of CENC-encrypted MP4 files (it is possible to create such files with MP4Box)
 
 * DASH: common encryption (CENC) support
@@ -175,6 +177,7 @@ Where:
   * hls master playlist - master.m3u8
   * hls media playlist - index.m3u8
   * mss - manifest
+  * thumb - `thumb-<offset>.jpg` (offset is the thumbnail video offset in milliseconds)
 * seqparams - can be used to select specific seqeuences by id, e.g. master-sseq1.m3u8.
 * fileparams - can be used to select specific files (URLs) when using multi URLs.
 	For example, manifest-f1.mpd will return an MPD only from the first URL.
@@ -696,11 +699,12 @@ Following is a list of configurations that were tested and found working:
 Enables the nginx-vod module on the enclosing location. 
 Currently the allowed values for `segmenter` are:
 
-1. `none` - serves the MP4 files as is
+1. `none` - serves the MP4 files as is / clipped
 2. `dash` - Dynamic Adaptive Streaming over HTTP packetizer
 3. `hds` - Adobe HTTP Dynamic Streaming packetizer
 4. `hls` - Apple HTTP Live Streaming packetizer
 5. `mss` - Microsoft Smooth Streaming packetizer
+6. `thumb` - thumbnail capture
 
 #### vod_mode
 * **syntax**: `vod_mode mode`
@@ -1346,6 +1350,32 @@ The timestamp is measured in milliseconds since the epoch (unixtime x 1000), the
 * **context**: `http`, `server`, `location`
 
 The name of the manifest file (has no extension).
+
+### Configuration directives - thumbnail capture
+
+#### vod_thumb_file_name_prefix
+* **syntax**: `vod_thumb_file_name_prefix name`
+* **default**: `thumb`
+* **context**: `http`, `server`, `location`
+
+The name of the thumbnail file (a jpg extension is implied).
+
+#### vod_gop_look_behind
+* **syntax**: `vod_gop_look_behind millis`
+* **default**: `10000`
+* **context**: `http`, `server`, `location`
+
+Sets the interval (in milliseconds) before the thumbnail offset that should be loaded.
+This setting should be set to the maximum GOP size, setting it to a lower value may result in capture failure.
+Note that the metadata of all frames between `offset - vod_gop_look_behind` and `offset + vod_gop_look_ahead`
+is loaded, however only the frames of the minimum GOP containing `offset` will be read and decoded.
+
+#### vod_gop_look_ahead
+* **syntax**: `vod_gop_look_ahead millis`
+* **default**: `1000`
+* **context**: `http`, `server`, `location`
+
+Sets the interval (in milliseconds) after the thumbnail offset that should be loaded.
 
 ### Nginx variables
 

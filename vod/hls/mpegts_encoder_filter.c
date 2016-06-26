@@ -20,8 +20,13 @@
 
 #define NO_TIMESTAMP ((uint64_t)-1)
 
+#ifndef FF_PROFILE_AAC_HE
 #define FF_PROFILE_AAC_HE   (4)
+#endif
+
+#ifndef FF_PROFILE_AAC_HE_V2
 #define FF_PROFILE_AAC_HE_V2 (28)
+#endif
 
 // sample aes structs
 typedef struct {
