@@ -2,7 +2,7 @@
 #include <ctype.h>
 
 // constants
-#define MAX_JSON_ELEMENTS (1024)
+#define MAX_JSON_ELEMENTS (65536)
 #define MAX_RECURSION_DEPTH (32)
 #define FIRST_PART_COUNT (1)		// XXXXX increase this ! only for testing purpose
 #define MAX_PART_SIZE (65536)
@@ -378,6 +378,7 @@ vod_json_parse_array(vod_json_parser_state_t* state, vod_json_array_t* result)
 			vod_snprintf(state->error, state->error_size, "array elements count exceeds the limit%Z");
 			return VOD_JSON_BAD_DATA;
 		}
+
 		if (cur_item >= part->last)
 		{
 			// update the part count
