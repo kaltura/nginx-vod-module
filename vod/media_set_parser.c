@@ -1378,10 +1378,10 @@ media_set_parse_json(
 		}
 	}
 
-	if (request_params->segment_index != INVALID_SEGMENT_INDEX)
+	if (request_params->segment_index != INVALID_SEGMENT_INDEX || request_params->segment_time != INVALID_SEGMENT_TIME)
 	{
 		// recalculate the segment index if it was determined according to timestamp
-		if (request_params->segment_time != INVALID_SEGMENT_TIME)
+		if (request_params->segment_time != INVALID_SEGMENT_TIME && request_params->segment_index != INVALID_SEGMENT_INDEX)
 		{
 			// recalculate the segment index if it was determined according to timestamp
 			if (result->use_discontinuity && result->timing.segment_base_time == SEGMENT_BASE_TIME_RELATIVE)
@@ -1425,19 +1425,32 @@ media_set_parse_json(
 		get_ranges_params.first_key_frame_offset = result->sequences[0].first_key_frame_offset;
 		get_ranges_params.key_frame_durations = result->sequences[0].key_frame_durations;
 
-		if (result->use_discontinuity)
+		if (request_params->segment_index != INVALID_SEGMENT_INDEX)
 		{
-			get_ranges_params.initial_segment_index = result->initial_segment_index;
+			// segment
+			if (result->use_discontinuity)
+			{
+				get_ranges_params.initial_segment_index = result->initial_segment_index;
 
-			rc = segmenter_get_start_end_ranges_discontinuity(
-				&get_ranges_params,
-				&context.clip_ranges);
+				rc = segmenter_get_start_end_ranges_discontinuity(
+					&get_ranges_params,
+					&context.clip_ranges);
+			}
+			else
+			{
+				get_ranges_params.last_segment_end = 0;		// 0 = use the end time
+
+				rc = segmenter_get_start_end_ranges_no_discontinuity(
+					&get_ranges_params,
+					&context.clip_ranges);
+			}
 		}
 		else
 		{
-			get_ranges_params.last_segment_end = 0;		// 0 = use the end time
+			// thumb
+			get_ranges_params.time = request_params->segment_time;
 
-			rc = segmenter_get_start_end_ranges_no_discontinuity(
+			rc = segmenter_get_start_end_ranges_gop(
 				&get_ranges_params,
 				&context.clip_ranges);
 		}

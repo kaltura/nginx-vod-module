@@ -97,6 +97,19 @@ void vod_log_error(vod_uint_t level, vod_log_t *log, int err,
 #define VOD_HAVE_LIB_AV_FILTER NGX_HAVE_LIB_AV_FILTER
 #define VOD_HAVE_OPENSSL_EVP NGX_HAVE_OPENSSL_EVP
 
+#if (VOD_HAVE_LIB_AV_CODEC)
+#include <libavcodec/avcodec.h>
+
+#ifdef AV_INPUT_BUFFER_PADDING_SIZE
+#define VOD_BUFFER_PADDING_SIZE (AV_INPUT_BUFFER_PADDING_SIZE)
+#else
+#define VOD_BUFFER_PADDING_SIZE (32)
+#endif
+
+#else
+#define VOD_BUFFER_PADDING_SIZE (1)
+#endif
+
 // macros
 #define vod_container_of(ptr, type, member) (type *)((char *)(ptr) - offsetof(type, member))
 #define vod_min(x, y) ngx_min(x, y)

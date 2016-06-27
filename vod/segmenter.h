@@ -45,6 +45,9 @@ typedef struct {
 
 	// discontinuity
 	uint32_t initial_segment_index;
+
+	// gop
+	uint64_t time;
 } get_clip_ranges_params_t;
 
 typedef struct {
@@ -73,6 +76,8 @@ struct segmenter_conf_s {
 	intptr_t live_window_duration;
 	segmenter_get_segment_count_t get_segment_count;			// last short / last long / last rounded
 	segmenter_get_segment_durations_t get_segment_durations;	// estimate / accurate
+	uintptr_t gop_look_behind;
+	uintptr_t gop_look_ahead;
 
 	// derived fields
 	uint32_t parse_type;
@@ -135,6 +140,10 @@ vod_status_t segmenter_get_segment_index_discontinuity(
 	uint32_t* result);
 
 // get start end ranges
+vod_status_t segmenter_get_start_end_ranges_gop(
+	get_clip_ranges_params_t* params,
+	get_clip_ranges_result_t* result);
+
 vod_status_t segmenter_get_start_end_ranges_no_discontinuity(
 	get_clip_ranges_params_t* params,
 	get_clip_ranges_result_t* result);

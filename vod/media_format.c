@@ -100,7 +100,7 @@ media_format_finalize_track(
 		else if ((parse_type & PARSE_FLAG_EXTRA_DATA) != 0)
 		{
 			// copy the extra data, we should not reference the moov buffer after we finish parsing
-			new_extra_data = vod_alloc(request_context->pool, media_info->extra_data.len);
+			new_extra_data = vod_alloc(request_context->pool, media_info->extra_data.len + VOD_BUFFER_PADDING_SIZE);
 			if (new_extra_data == NULL)
 			{
 				vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
@@ -108,6 +108,7 @@ media_format_finalize_track(
 				return VOD_ALLOC_FAILED;
 			}
 			vod_memcpy(new_extra_data, media_info->extra_data.data, media_info->extra_data.len);
+			vod_memzero(new_extra_data + media_info->extra_data.len, VOD_BUFFER_PADDING_SIZE);
 			media_info->extra_data.data = new_extra_data;
 		}
 		else

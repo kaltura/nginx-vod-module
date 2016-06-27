@@ -4,6 +4,7 @@
 #include "ngx_http_vod_submodule.h"
 #include "ngx_http_vod_module.h"
 #include "ngx_http_vod_status.h"
+#include "ngx_http_vod_thumb.h"
 #include "ngx_perf_counters.h"
 #include "ngx_buffer_cache.h"
 #include "vod/media_set_parser.h"
@@ -139,6 +140,8 @@ ngx_http_vod_create_loc_conf(ngx_conf_t *cf)
 	conf->segmenter.align_to_key_frames = NGX_CONF_UNSET;
 	conf->segmenter.get_segment_count = NGX_CONF_UNSET_PTR;
 	conf->segmenter.get_segment_durations = NGX_CONF_UNSET_PTR;
+	conf->segmenter.gop_look_ahead = NGX_CONF_UNSET_UINT;
+	conf->segmenter.gop_look_behind = NGX_CONF_UNSET_UINT;
 	conf->initial_read_size = NGX_CONF_UNSET_SIZE;
 	conf->max_metadata_size = NGX_CONF_UNSET_SIZE;
 	conf->max_frames_size = NGX_CONF_UNSET_SIZE;
@@ -202,6 +205,8 @@ ngx_http_vod_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child)
 	ngx_conf_merge_value(conf->segmenter.align_to_key_frames, prev->segmenter.align_to_key_frames, 0);
 	ngx_conf_merge_ptr_value(conf->segmenter.get_segment_count, prev->segmenter.get_segment_count, segmenter_get_segment_count_last_short);
 	ngx_conf_merge_ptr_value(conf->segmenter.get_segment_durations, prev->segmenter.get_segment_durations, segmenter_get_segment_durations_estimate);
+	ngx_conf_merge_uint_value(conf->segmenter.gop_look_ahead, prev->segmenter.gop_look_ahead, 1000);
+	ngx_conf_merge_uint_value(conf->segmenter.gop_look_behind, prev->segmenter.gop_look_behind, 10000);
 
 	if (conf->secret_key == NULL)
 	{
@@ -346,6 +351,13 @@ ngx_http_vod_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child)
 			"\"vod_segment_duration\" must be positive");
 		return NGX_CONF_ERROR;
 	}
+
+#if (NGX_HAVE_LIB_AV_CODEC)
+	if (conf->submodule.name == thumb.name)
+	{
+		conf->segmenter.align_to_key_frames = 1;
+	}
+#endif //(NGX_HAVE_LIB_AV_CODEC)
 
 	rc = segmenter_init_config(&conf->segmenter, cf->pool);
 	if (rc != VOD_OK)
@@ -891,6 +903,20 @@ ngx_command_t ngx_http_vod_commands[] = {
 	ngx_conf_set_flag_slot,
 	NGX_HTTP_LOC_CONF_OFFSET,
 	offsetof(ngx_http_vod_loc_conf_t, segmenter.align_to_key_frames),
+	NULL },
+
+	{ ngx_string("vod_gop_look_ahead"),
+	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1,
+	ngx_conf_set_num_slot,
+	NGX_HTTP_LOC_CONF_OFFSET,
+	offsetof(ngx_http_vod_loc_conf_t, segmenter.gop_look_ahead),
+	NULL },
+
+	{ ngx_string("vod_gop_look_behind"),
+	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1,
+	ngx_conf_set_num_slot,
+	NGX_HTTP_LOC_CONF_OFFSET,
+	offsetof(ngx_http_vod_loc_conf_t, segmenter.gop_look_behind),
 	NULL },
 
 	{ ngx_string("vod_segment_count_policy"),

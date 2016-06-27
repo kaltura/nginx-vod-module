@@ -39,6 +39,7 @@ typedef struct
 {
 	frame_list_part_t cur_frame_part;
 	input_frame_t* cur_frame;
+	uint64_t dts;
 
 	AVCodecContext *decoder;
 	AVFilterContext *buffer_src;
@@ -201,11 +202,11 @@ typedef struct {
 	media_sequence_t* sequence;
 	media_track_t* output;
 	vod_array_t frames_array;
-	uint64_t dts;
 
 	// processing state
 	audio_filter_source_t* cur_source;
 	u_char* frame_buffer;
+	uint32_t max_frame_size;
 	uint32_t cur_frame_pos;
 	bool_t first_time;
 } audio_filter_state_t;
@@ -600,6 +601,7 @@ audio_filter_init_sources_and_graph_desc(audio_filter_init_context_t* state, med
 
 		cur_source->cur_frame_part = audio_track->frames;
 		cur_source->cur_frame = audio_track->frames.first_frame;
+		cur_source->dts = 0;
 
 		cur_source->cur_frame_part.frames_source->set_cache_slot_id(
 			cur_source->cur_frame_part.frames_source_context,
@@ -819,16 +821,6 @@ audio_filter_alloc_state(
 		return VOD_ALLOC_FAILED;
 	}
 
-	// allocate the frame buffer
-	state->frame_buffer = vod_alloc(request_context->pool, init_context.max_frame_size);
-	if (state->frame_buffer == NULL)
-	{
-		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
-			"audio_filter_alloc_state: vod_alloc failed (2)");
-		rc = VOD_ALLOC_FAILED;
-		goto end;
-	}
-
 	// initialize the output arrays
 	initial_alloc_size = init_context.output_frame_count + 10;
 
@@ -842,9 +834,11 @@ audio_filter_alloc_state(
 	state->request_context = request_context;
 	state->sequence = sequence;
 	state->output = output_track;
+	state->max_frame_size = init_context.max_frame_size;
 	state->cur_frame_pos = 0;
 	state->first_time = TRUE;
 	state->cur_source = NULL;
+	state->frame_buffer = NULL;
 
 	*cache_buffer_count = init_context.cache_slot_id;
 	*result = state;
@@ -1159,6 +1153,8 @@ audio_filter_process_frame(audio_filter_state_t* state, u_char* buffer)
 	audio_filter_source_t* source = state->cur_source;
 	input_frame_t* frame = source->cur_frame;
 	AVPacket input_packet;
+	u_char original_pad[VOD_BUFFER_PADDING_SIZE];
+	u_char* frame_end;
 	int got_frame;
 	int avrc;
 #ifdef AUDIO_FILTER_DEBUG
@@ -1172,15 +1168,20 @@ audio_filter_process_frame(audio_filter_state_t* state, u_char* buffer)
 	vod_memzero(&input_packet, sizeof(input_packet));
 	input_packet.data = buffer;
 	input_packet.size = frame->size;
-	input_packet.dts = state->dts;
-	input_packet.pts = state->dts + frame->pts_delay;
+	input_packet.dts = source->dts;
+	input_packet.pts = source->dts + frame->pts_delay;
 	input_packet.duration = frame->duration;
 	input_packet.flags = AV_PKT_FLAG_KEY;
-	state->dts += frame->duration;
+	source->dts += frame->duration;
 	
 	av_frame_unref(state->decoded_frame);
 
 	got_frame = 0;
+
+	frame_end = buffer + frame->size;
+	vod_memcpy(original_pad, frame_end, sizeof(original_pad));
+	vod_memzero(frame_end, sizeof(original_pad));
+
 	avrc = avcodec_decode_audio4(source->decoder, state->decoded_frame, &got_frame, &input_packet);
 	if (avrc < 0) 
 	{
@@ -1188,6 +1189,8 @@ audio_filter_process_frame(audio_filter_state_t* state, u_char* buffer)
 			"audio_filter_process_frame: avcodec_decode_audio4 failed %d", avrc);
 		return VOD_BAD_DATA;
 	}
+
+	vod_memcpy(frame_end, original_pad, sizeof(original_pad));
 
 	if (!got_frame)
 	{
@@ -1349,6 +1352,19 @@ audio_filter_process(void* context)
 		if (!frame_done)
 		{
 			// didn't finish the frame, append to the frame buffer
+			if (state->frame_buffer == NULL)
+			{
+				state->frame_buffer = vod_alloc(
+					state->request_context->pool, 
+					state->max_frame_size + VOD_BUFFER_PADDING_SIZE);
+				if (state->frame_buffer == NULL)
+				{
+					vod_log_debug0(VOD_LOG_DEBUG_LEVEL, state->request_context->log, 0,
+						"audio_filter_process: vod_alloc failed");
+					return VOD_ALLOC_FAILED;
+				}
+			}
+
 			vod_memcpy(state->frame_buffer + state->cur_frame_pos, read_buffer, read_size);
 			state->cur_frame_pos += read_size;
 			continue;

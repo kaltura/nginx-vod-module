@@ -402,6 +402,109 @@ segmenter_get_segment_index_discontinuity(
 }
 
 vod_status_t
+segmenter_get_start_end_ranges_gop(
+	get_clip_ranges_params_t* params,
+	get_clip_ranges_result_t* result)
+{
+	align_to_key_frames_context_t align_context;
+	request_context_t* request_context = params->request_context;
+	segmenter_conf_t* conf = params->conf;
+	media_range_t* cur_clip_range;
+	uint64_t clip_time;
+	uint64_t start;
+	uint64_t end;
+	uint64_t* cur_clip_time;
+	uint32_t* clip_durations = params->timing.durations;
+	uint32_t* end_duration = clip_durations + params->timing.total_count;
+	uint32_t* cur_duration;
+	uint64_t segment_base_time;
+	uint64_t time = params->time;
+	uint32_t clip_duration;
+
+	segment_base_time = params->timing.segment_base_time;
+	if (segment_base_time != SEGMENT_BASE_TIME_RELATIVE)
+	{
+		time += segment_base_time;
+	}
+
+	for (cur_duration = clip_durations, cur_clip_time = params->timing.times;
+		;
+		cur_duration++, cur_clip_time++)
+	{
+		if (cur_duration >= end_duration)
+		{
+			vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+				"segmenter_get_start_end_ranges_gop: invalid time %uL (1)", time);
+			return VOD_BAD_REQUEST;
+		}
+
+		clip_time = *cur_clip_time;
+		if (time < clip_time)
+		{
+			vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+				"segmenter_get_start_end_ranges_gop: invalid time %uL (2)", time);
+			return VOD_BAD_REQUEST;
+		}
+
+		clip_duration = *cur_duration;
+		if (time < clip_time + clip_duration)
+		{
+			break;
+		}
+	}
+
+	start = time - clip_time;
+	if (start > conf->gop_look_behind)
+	{
+		start -= conf->gop_look_behind;
+	}
+	else
+	{
+		start = 0;
+	}
+
+	end = time - clip_time + conf->gop_look_ahead;
+	if (end > clip_duration)
+	{
+		end = clip_duration;
+	}
+
+	if (params->key_frame_durations != NULL)
+	{
+		align_context.request_context = request_context;
+		align_context.part = params->key_frame_durations;
+		align_context.offset = params->timing.first_time + params->first_key_frame_offset - clip_time;
+		align_context.cur_pos = align_context.part->first;
+		if (start > 0)
+		{
+			start = segmenter_align_to_key_frames(&align_context, start, clip_duration);
+		}
+		end = segmenter_align_to_key_frames(&align_context, end, clip_duration);
+	}
+
+	// initialize the clip range
+	cur_clip_range = vod_alloc(request_context->pool, sizeof(cur_clip_range[0]));
+	if (cur_clip_range == NULL)
+	{
+		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
+			"segmenter_get_start_end_ranges_gop: vod_alloc failed");
+		return VOD_ALLOC_FAILED;
+	}
+
+	cur_clip_range->timescale = 1000;
+	cur_clip_range->start = start;
+	cur_clip_range->end = end;
+
+	// initialize the result
+	result->clip_time = clip_time;
+	result->min_clip_index = result->max_clip_index = cur_duration - clip_durations;
+	result->clip_count = 1;
+	result->clip_ranges = cur_clip_range;
+
+	return VOD_OK;
+}
+
+vod_status_t
 segmenter_get_start_end_ranges_no_discontinuity(
 	get_clip_ranges_params_t* params,
 	get_clip_ranges_result_t* result)
