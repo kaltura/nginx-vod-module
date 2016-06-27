@@ -17,6 +17,7 @@ typedef struct
 	AVCodecContext *encoder;
 	AVFrame *decoded_frame;
 	AVPacket output_packet;
+	int has_frame;
 
 	// frame state
 	frame_list_part_t cur_frame_part;
@@ -252,7 +253,7 @@ thumb_grabber_truncate_frames(
 		// find the closest frame
 		pts = dts + cur_frame->pts_delay;
 		cur_diff = (pts >= requested_time) ? (pts - requested_time) : (requested_time - pts);
-		if (cur_diff < min_diff && last_key_frame != NULL)
+		if (cur_diff <= min_diff && last_key_frame != NULL)
 		{
 			min_index = index - last_key_frame_index;
 			min_diff = cur_diff;
@@ -371,6 +372,7 @@ thumb_grabber_init_state(
 	state->frame_started = FALSE;
 	state->missing_frames = 0;
 	state->dts = 0;
+	state->has_frame = 0;
 
 	*result = state;
 
@@ -381,6 +383,7 @@ static vod_status_t
 thumb_grabber_decode_flush(thumb_grabber_state_t* state)
 {
 	AVPacket input_packet;
+	AVFrame* decoded_frame;
 	int got_frame;
 	int avrc;
 
@@ -388,9 +391,20 @@ thumb_grabber_decode_flush(thumb_grabber_state_t* state)
 
 	for (; state->missing_frames > 0; state->missing_frames--)
 	{
-		avrc = avcodec_decode_video2(state->decoder, state->decoded_frame, &got_frame, &input_packet);
+		decoded_frame = av_frame_alloc();
+		if (decoded_frame == NULL)
+		{
+			vod_log_error(VOD_LOG_ERR, state->request_context->log, 0,
+				"thumb_grabber_decode_flush: av_frame_alloc failed");
+			return VOD_ALLOC_FAILED;
+		}
+
+		got_frame = 0;
+
+		avrc = avcodec_decode_video2(state->decoder, decoded_frame, &got_frame, &input_packet);
 		if (avrc < 0)
 		{
+			av_frame_free(&decoded_frame);
 			vod_log_error(VOD_LOG_ERR, state->request_context->log, 0,
 				"thumb_grabber_decode_flush: avcodec_decode_video2 failed %d", avrc);
 			return VOD_BAD_DATA;
@@ -398,10 +412,13 @@ thumb_grabber_decode_flush(thumb_grabber_state_t* state)
 
 		if (!got_frame)
 		{
-			vod_log_error(VOD_LOG_ERR, state->request_context->log, 0,
-				"thumb_grabber_decode_flush: avcodec_decode_video2 did not return a frame");
-			return VOD_UNEXPECTED;
+			av_frame_free(&decoded_frame);
+			break;
 		}
+
+		av_frame_free(&state->decoded_frame);
+		state->decoded_frame = decoded_frame;
+		state->has_frame = 1;
 	}
 
 	return VOD_OK;
@@ -414,7 +431,6 @@ thumb_grabber_decode_frame(thumb_grabber_state_t* state, u_char* buffer)
 	AVPacket input_packet;
 	u_char original_pad[VOD_BUFFER_PADDING_SIZE];
 	u_char* frame_end;
-	int got_frame;
 	int avrc;
 	
 	vod_memzero(&input_packet, sizeof(input_packet));
@@ -428,13 +444,13 @@ thumb_grabber_decode_frame(thumb_grabber_state_t* state, u_char* buffer)
 	
 	av_frame_unref(state->decoded_frame);
 
-	got_frame = 0;
+	state->has_frame = 0;
 
 	frame_end = buffer + frame->size;
 	vod_memcpy(original_pad, frame_end, sizeof(original_pad));
 	vod_memzero(frame_end, sizeof(original_pad));
 
-	avrc = avcodec_decode_video2(state->decoder, state->decoded_frame, &got_frame, &input_packet);
+	avrc = avcodec_decode_video2(state->decoder, state->decoded_frame, &state->has_frame, &input_packet);
 	if (avrc < 0) 
 	{
 		vod_log_error(VOD_LOG_ERR, state->request_context->log, 0,
@@ -444,7 +460,7 @@ thumb_grabber_decode_frame(thumb_grabber_state_t* state, u_char* buffer)
 
 	vod_memcpy(frame_end, original_pad, sizeof(original_pad));
 
-	if (!got_frame)
+	if (!state->has_frame)
 	{
 		state->missing_frames++;
 	}
@@ -466,6 +482,13 @@ thumb_grabber_write_frame(thumb_grabber_state_t* state)
 		{
 			return rc;
 		}
+	}
+
+	if (!state->has_frame)
+	{
+		vod_log_error(VOD_LOG_ERR, state->request_context->log, 0,
+			"thumb_grabber_write_frame: no frames were decoded");
+		return VOD_UNEXPECTED;
 	}
 
 	avrc = avcodec_encode_video2(state->encoder, &state->output_packet, state->decoded_frame, &got_packet);
