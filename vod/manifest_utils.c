@@ -38,6 +38,7 @@ manifest_utils_build_request_params_string_per_sequence_tracks(
 	uint32_t segment_index,
 	uint32_t sequences_mask,
 	uint32_t* sequence_tracks_mask,
+	vod_str_t* suffix,
 	vod_str_t* result)
 {
 	u_char* p;
@@ -45,7 +46,7 @@ manifest_utils_build_request_params_string_per_sequence_tracks(
 	uint32_t* tracks_mask;
 	uint32_t i;
 
-	result_size = 0;
+	result_size = suffix->len;
 
 	// segment index
 	if (segment_index != INVALID_SEGMENT_INDEX)
@@ -144,6 +145,8 @@ manifest_utils_build_request_params_string_per_sequence_tracks(
 		}
 	}
 
+	p = vod_copy(p, suffix->data, suffix->len);
+
 	result->len = p - result->data;
 
 	if (result->len > result_size)
@@ -178,6 +181,7 @@ manifest_utils_build_request_params_string(
 			segment_index,
 			sequences_mask,
 			sequence_tracks_mask,
+			suffix,
 			result);
 	}
 
