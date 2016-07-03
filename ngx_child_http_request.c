@@ -303,6 +303,27 @@ ngx_child_request_initial_wev_handler(ngx_http_request_t *r)
 	u->headers_in.headers.last = &u->headers_in.headers.part;
 }
 
+static void
+ngx_child_request_update_multi_header(
+	ngx_array_t* arr, 
+	ngx_table_elt_t* cur_value, 
+	ngx_table_elt_t* new_value)
+{
+	ngx_table_elt_t** cur = arr->elts;
+	ngx_table_elt_t** last = cur + arr->nelts;
+
+	for (; cur < last; cur++)
+	{
+		if (*cur != cur_value)
+		{
+			continue;
+		}
+
+		*cur = new_value;
+		break;
+	}
+}
+
 static ngx_int_t
 ngx_child_request_copy_headers(
 	ngx_http_request_t* r,
@@ -389,13 +410,28 @@ ngx_child_request_copy_headers(
 		*output = *ch;
 
 		// update the header pointer, if exists
-		hh = ngx_hash_find(&cmcf->headers_in_hash, h[i].hash,
-			h[i].lowcase_key, h[i].key.len);
+		hh = ngx_hash_find(&cmcf->headers_in_hash, ch->hash,
+			ch->lowcase_key, ch->key.len);
 		if (hh)
 		{
-			ph = (ngx_table_elt_t **)((char *)dest + hh->offset);
+			if ((ch->key.len == sizeof("cookie") - 1 &&
+				ngx_memcmp(ch->lowcase_key, "cookie", sizeof("cookie") - 1) == 0) ||
+				(ch->key.len == sizeof("x-forwarded-for") - 1 &&
+				ngx_memcmp(ch->lowcase_key, "x-forwarded-for", sizeof("x-forwarded-for") - 1) == 0))
+			{
+				// multi header
+				ngx_child_request_update_multi_header(
+					(ngx_array_t*)((char *)dest + hh->offset),
+					ch,
+					output);
+			}
+			else
+			{
+				// single header
+				ph = (ngx_table_elt_t **)((char *)dest + hh->offset);
 
-			*ph = output;
+				*ph = output;
+			}
 		}
 
 		output++;
