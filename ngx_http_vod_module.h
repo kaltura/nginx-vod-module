@@ -5,7 +5,7 @@
 #include <ngx_http.h>
 
 // macros
-#define NGINX_VOD_VERSION "1.0"
+#define NGINX_VOD_VERSION "1.9"
 
 // globals
 extern ngx_module_t  ngx_http_vod_module;
