@@ -650,6 +650,7 @@ media_set_parse_sequences(
 		cur_output->label.len = 0;
 		cur_output->first_key_frame_offset = 0;
 		cur_output->key_frame_durations = NULL;
+		cur_output->drm_info = NULL;
 
 		rc = vod_json_parse_object_values(
 			cur_pos,

@@ -309,7 +309,25 @@ ngx_http_vod_dash_webm_init_frame_processor(
 	size_t* response_size,
 	ngx_str_t* content_type)
 {
+	ngx_http_vod_loc_conf_t* conf = submodule_context->conf;
+	mkv_encryption_type_t encryption_type;
 	vod_status_t rc;
+
+	if (conf->drm_enabled)
+	{
+		if (submodule_context->request_params.segment_index >= conf->drm_clear_lead_segment_count)
+		{
+			encryption_type = MKV_ENCRYPTED;
+		}
+		else
+		{
+			encryption_type = MKV_CLEAR_LEAD;
+		}
+	}
+	else
+	{
+		encryption_type = MKV_CLEAR;
+	}
 
 	rc = mkv_builder_frame_writer_init(
 		&submodule_context->request_context,
@@ -317,6 +335,8 @@ ngx_http_vod_dash_webm_init_frame_processor(
 		segment_writer->write_tail,
 		segment_writer->context,
 		FALSE,
+		encryption_type,
+		submodule_context->media_set.sequences[0].encryption_key,
 		output_buffer,
 		response_size,
 		frame_processor_state);

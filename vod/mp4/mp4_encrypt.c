@@ -8,7 +8,6 @@
 #include "../udrm.h"
 
 #define MAX_FRAME_RATE (60)
-#define MIN_ALLOC_SIZE (16)
 
 // Note: SNPF = Single Nalu Per Frame
 
@@ -153,42 +152,6 @@ mp4_encrypt_start_frame(mp4_encrypt_state_t* state)
 	// set and increment the iv
 	mp4_aes_ctr_set_iv(&state->cipher, state->iv);
 	mp4_aes_ctr_increment_be64(state->iv);
-
-	return VOD_OK;
-}
-
-static vod_status_t
-mp4_encrypt_write_encrypted(
-	mp4_encrypt_state_t* state,
-	u_char* cur_pos, 
-	uint32_t write_size)
-{
-	uint32_t cur_write_size;
-	size_t alloc_size;
-	u_char* write_end;
-	u_char* output;
-	vod_status_t rc;
-
-	write_end = cur_pos + write_size;
-	while (cur_pos < write_end)
-	{
-		rc = write_buffer_get_bytes(&state->write_buffer, MIN_ALLOC_SIZE, &alloc_size, &output);
-		if (rc != VOD_OK)
-		{
-			return rc;
-		}
-
-		cur_write_size = write_end - cur_pos;
-		cur_write_size = vod_min(cur_write_size, alloc_size);
-
-		rc = mp4_aes_ctr_process(&state->cipher, output, cur_pos, cur_write_size);
-		if (rc != VOD_OK)
-		{
-			return rc;
-		}
-		cur_pos += cur_write_size;
-		state->write_buffer.cur_pos += cur_write_size;
-	}
 
 	return VOD_OK;
 }
@@ -374,7 +337,7 @@ mp4_encrypt_video_snpf_write_buffer(void* context, u_char* buffer, uint32_t size
 			write_size = (uint32_t)(buffer_end - cur_pos);
 			write_size = vod_min(write_size, state->base.frame_size_left);
 
-			rc = mp4_encrypt_write_encrypted(&state->base, cur_pos, write_size);
+			rc = mp4_aes_ctr_write_encrypted(&state->base.cipher, &state->base.write_buffer, cur_pos, write_size);
 			if (rc != VOD_OK)
 			{
 				return rc;
@@ -641,7 +604,7 @@ mp4_encrypt_video_write_buffer(void* context, u_char* buffer, uint32_t size)
 			write_size = (uint32_t)(buffer_end - cur_pos);
 			write_size = vod_min(write_size, state->packet_size_left);
 			
-			rc = mp4_encrypt_write_encrypted(&state->base, cur_pos, write_size);
+			rc = mp4_aes_ctr_write_encrypted(&state->base.cipher, &state->base.write_buffer, cur_pos, write_size);
 			if (rc != VOD_OK)
 			{
 				return rc;
@@ -909,7 +872,7 @@ mp4_encrypt_audio_write_buffer(void* context, u_char* buffer, uint32_t size)
 		write_size = (uint32_t)(buffer_end - cur_pos);
 		write_size = vod_min(write_size, state->frame_size_left);
 		
-		rc = mp4_encrypt_write_encrypted(state, cur_pos, write_size);
+		rc = mp4_aes_ctr_write_encrypted(&state->cipher, &state->write_buffer, cur_pos, write_size);
 		if (rc != VOD_OK)
 		{
 			return rc;

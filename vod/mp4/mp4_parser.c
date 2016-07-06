@@ -1938,7 +1938,7 @@ mp4_parser_parse_stsd_atom(atom_info_t* atom_info, metadata_parse_context_t* con
 	
 		context->media_info.format = parse_le32(((stsd_entry_header_t*)cur_pos)->format);
 		size = parse_be32(((stsd_entry_header_t*)cur_pos)->size);
-		if (size > end_pos - cur_pos)
+		if (size > (uint32_t)(end_pos - cur_pos))
 		{
 			vod_log_error(VOD_LOG_ERR, context->request_context->log, 0,
 				"mp4_parser_parse_stsd_atom: stsd entry overflow the stream");
