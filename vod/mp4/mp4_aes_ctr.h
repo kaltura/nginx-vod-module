@@ -2,6 +2,7 @@
 #define __MP4_AES_CTR_H__
 
 // includes
+#include "../write_buffer.h"
 #include "../aes_defs.h"
 
 #define MP4_AES_CTR_KEY_SIZE (16)
@@ -38,5 +39,11 @@ vod_status_t mp4_aes_ctr_process(
 
 void mp4_aes_ctr_increment_be64(
 	u_char* counter);
+
+vod_status_t mp4_aes_ctr_write_encrypted(
+	mp4_aes_ctr_state_t* state,
+	write_buffer_state_t* write_buffer,
+	u_char* cur_pos,
+	uint32_t write_size);
 
 #endif //__MP4_AES_CTR_H__
