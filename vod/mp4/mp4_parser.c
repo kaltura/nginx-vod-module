@@ -1,9 +1,7 @@
-#include <limits.h>
-#include <zlib.h>
+#include "mp4_parser.h"
 #include "mp4_builder.h"
 #include "mp4_decrypt.h"
 #include "mp4_format.h"
-#include "mp4_parser.h"
 #include "mp4_defs.h"
 #include "../media_format.h"
 #include "../input/frames_source_cache.h"
@@ -12,6 +10,9 @@
 #include "../media_clip.h"
 #include "../segmenter.h"
 #include "../common.h"
+
+#include <limits.h>
+#include <zlib.h>
 
 // TODO: use iterators from mp4_parser_base.c to reduce code duplication
 
