@@ -220,6 +220,12 @@ ngx_child_request_finished_handler(
 
 	// save the completed upstream and error code in the context for the write event handler
 	ctx = ngx_http_get_module_ctx(r, ngx_http_vod_module);
+	if (ctx == NULL)
+	{
+		ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
+			"ngx_child_request_finished_handler: unexpected, context is null");
+		return NGX_ERROR;
+	}
 
 	ctx->upstream = r->upstream;
 	ctx->error_code = rc;
@@ -296,6 +302,12 @@ ngx_child_request_initial_wev_handler(ngx_http_request_t *r)
 
 	// initialize the upstream buffer
 	ctx = ngx_http_get_module_ctx(r, ngx_http_vod_module);
+	if (ctx == NULL)
+	{
+		ngx_log_error(NGX_LOG_WARN, r->connection->log, 0,
+			"ngx_child_request_initial_wev_handler: context is null");
+		return;
+	}
 	u->buffer = *ctx->response_buffer;
 
 	// initialize the headers list
