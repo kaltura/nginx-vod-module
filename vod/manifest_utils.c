@@ -38,7 +38,6 @@ manifest_utils_build_request_params_string_per_sequence_tracks(
 	uint32_t segment_index,
 	uint32_t sequences_mask,
 	uint32_t* sequence_tracks_mask,
-	vod_str_t* suffix,
 	vod_str_t* result)
 {
 	u_char* p;
@@ -46,7 +45,7 @@ manifest_utils_build_request_params_string_per_sequence_tracks(
 	uint32_t* tracks_mask;
 	uint32_t i;
 
-	result_size = suffix->len;
+	result_size = 0;
 
 	// segment index
 	if (segment_index != INVALID_SEGMENT_INDEX)
@@ -145,8 +144,6 @@ manifest_utils_build_request_params_string_per_sequence_tracks(
 		}
 	}
 
-	p = vod_copy(p, suffix->data, suffix->len);
-
 	result->len = p - result->data;
 
 	if (result->len > result_size)
@@ -168,7 +165,6 @@ manifest_utils_build_request_params_string(
 	uint32_t sequences_mask,
 	uint32_t* sequence_tracks_mask,
 	uint32_t* tracks_mask,
-	vod_str_t* suffix,
 	vod_str_t* result)
 {
 	u_char* p;
@@ -181,11 +177,10 @@ manifest_utils_build_request_params_string(
 			segment_index,
 			sequences_mask,
 			sequence_tracks_mask,
-			suffix,
 			result);
 	}
 
-	result_size = suffix->len;
+	result_size = 0;
 	
 	// segment index
 	if (segment_index != INVALID_SEGMENT_INDEX)
@@ -266,8 +261,6 @@ manifest_utils_build_request_params_string(
 		}
 	}
 
-	p = vod_copy(p, suffix->data, suffix->len);
-	
 	result->len = p - result->data;
 
 	if (result->len > result_size)
@@ -282,38 +275,44 @@ manifest_utils_build_request_params_string(
 }
 
 u_char*
-manifest_utils_append_tracks_spec(u_char* p, media_track_t** tracks, bool_t write_sequence_index)
+manifest_utils_append_tracks_spec(
+	u_char* p, 
+	media_track_t** tracks, 
+	uint32_t track_count, 
+	bool_t write_sequence_index)
 {
-	media_sequence_t* video_sequence = NULL;
 	media_sequence_t* cur_sequence;
+	media_track_t** last_track_ptr = tracks + track_count;
+	media_track_t** cur_track_ptr;
+	media_track_t* cur_track;
+	uint32_t last_sequence_index = INVALID_SEQUENCE_INDEX;
+	u_char media_type_letter[] = { 'v', 'a' };		// must match MEDIA_TYPE_xxx in order
 
-	if (tracks[MEDIA_TYPE_VIDEO] != NULL)
+	for (cur_track_ptr = tracks; cur_track_ptr < last_track_ptr; cur_track_ptr++)
 	{
-		if (write_sequence_index)
+		cur_track = *cur_track_ptr;
+		if (cur_track == NULL)
 		{
-			video_sequence = tracks[MEDIA_TYPE_VIDEO]->file_info.source->sequence;
-			p = vod_sprintf(p, "-f%uD", video_sequence->index + 1);
+			continue;
 		}
-		p = vod_sprintf(p, "-v%uD", tracks[MEDIA_TYPE_VIDEO]->index + 1);
-	}
 
-	if (tracks[MEDIA_TYPE_AUDIO] != NULL)
-	{
 		if (write_sequence_index)
 		{
-			cur_sequence = tracks[MEDIA_TYPE_AUDIO]->file_info.source->sequence;
-			if (video_sequence == NULL || cur_sequence->index != video_sequence->index)
+			cur_sequence = cur_track->file_info.source->sequence;
+
+			if (cur_sequence->index != last_sequence_index)
 			{
-				p = vod_sprintf(p, "-f%uD", cur_sequence->index + 1);
+				last_sequence_index = cur_sequence->index;
+				p = vod_sprintf(p, "-f%uD", last_sequence_index + 1);
 			}
 		}
-		p = vod_sprintf(p, "-a%uD", tracks[MEDIA_TYPE_AUDIO]->index + 1);
-	}
 
-	if (tracks[MEDIA_TYPE_SUBTITLE] != NULL && write_sequence_index)
-	{
-		cur_sequence = tracks[MEDIA_TYPE_SUBTITLE]->file_info.source->sequence;
-		p = vod_sprintf(p, "-f%uD", cur_sequence->index + 1);
+		if (cur_track->media_info.media_type <= MEDIA_TYPE_AUDIO)
+		{
+			*p++ = '-';
+			*p++ = media_type_letter[cur_track->media_info.media_type];
+			p = vod_sprintf(p, "%uD", cur_track->index + 1);
+		}
 	}
 
 	return p;
