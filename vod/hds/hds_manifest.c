@@ -602,7 +602,7 @@ hds_packager_build_manifest(
 
 				p = vod_sprintf(p, HDS_BOOTSTRAP_LIVE_PREFIX, index);
 				p = vod_copy(p, conf->bootstrap_file_name_prefix.data, conf->bootstrap_file_name_prefix.len);
-				p = manifest_utils_append_tracks_spec(p, tracks, media_set->has_multi_sequences);
+				p = manifest_utils_append_tracks_spec(p, tracks, MEDIA_TYPE_COUNT, media_set->has_multi_sequences);
 				p = vod_copy(p, HDS_BOOTSTRAP_LIVE_SUFFIX, sizeof(HDS_BOOTSTRAP_LIVE_SUFFIX) - 1);
 				break;
 			}
@@ -702,7 +702,7 @@ hds_packager_build_manifest(
 
 			// url
 			p = vod_copy(p, conf->fragment_file_name_prefix.data, conf->fragment_file_name_prefix.len);
-			p = manifest_utils_append_tracks_spec(p, tracks, media_set->has_multi_sequences);
+			p = manifest_utils_append_tracks_spec(p, tracks, MEDIA_TYPE_COUNT, media_set->has_multi_sequences);
 			*p++ = '-';
 
 			if (drm_enabled)
