@@ -215,6 +215,7 @@ mp4_builder_frame_writer_process(fragment_writer_state_t* state)
 	u_char* write_buffer = NULL;
 	uint32_t write_buffer_size = 0;
 	vod_status_t rc;
+	bool_t processed_data = FALSE;
 	bool_t frame_done;
 
 	if (!state->frame_started)
@@ -253,7 +254,7 @@ mp4_builder_frame_writer_process(fragment_writer_state_t* state)
 					return rc;
 				}
 			}
-			else if (!state->first_time)
+			else if (!processed_data && !state->first_time)
 			{
 				vod_log_error(VOD_LOG_ERR, state->request_context->log, 0,
 					"mp4_builder_frame_writer_process: no data was handled, probably a truncated file");
@@ -264,10 +265,20 @@ mp4_builder_frame_writer_process(fragment_writer_state_t* state)
 			return VOD_AGAIN;
 		}
 
-		if (write_buffer != NULL)
+		processed_data = TRUE;
+
+		if (state->reuse_buffers)
+		{
+			rc = state->write_callback(state->write_context, read_buffer, read_size);
+			if (rc != VOD_OK)
+			{
+				return rc;
+			}
+		}
+		else if (write_buffer != NULL)
 		{
 			// if the buffers are contiguous, just increment the size
-			if (!state->reuse_buffers && write_buffer + write_buffer_size == read_buffer)
+			if (write_buffer + write_buffer_size == read_buffer)
 			{
 				write_buffer_size += read_size;
 			}
