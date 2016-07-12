@@ -47,6 +47,7 @@ struct ngx_http_vod_loc_conf_s {
 	ngx_str_t path_response_prefix;
 	ngx_str_t path_response_postfix;
 	size_t max_mapping_response_size;
+	ngx_http_complex_value_t* notification_uri;
 	ngx_http_complex_value_t* dynamic_clip_map_uri;
 	ngx_http_complex_value_t* source_clip_map_uri;
 	ngx_http_complex_value_t* redirect_segments_url;

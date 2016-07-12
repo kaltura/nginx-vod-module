@@ -14,6 +14,7 @@ typedef struct {
 	media_clip_source_t* sources_head;
 	media_clip_source_t* mapped_sources_head;
 	struct media_clip_dynamic_s* dynamic_clips_head;
+	media_notification_t* notifications_head;
 } media_filter_parse_context_t;
 
 // main functions
@@ -51,5 +52,12 @@ vod_status_t media_set_parse_clip(
 	vod_json_object_t* element,
 	media_clip_t* parent,
 	media_clip_t** result);
+
+vod_status_t media_set_parse_notifications(
+	request_context_t* request_context,
+	vod_json_array_t* array,
+	int64_t min_offset,
+	int64_t max_offset,
+	media_notification_t** result);
 
 #endif //__MEDIA_SET_PARSER_H__

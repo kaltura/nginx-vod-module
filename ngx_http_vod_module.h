@@ -20,6 +20,7 @@ ngx_int_t ngx_http_vod_set_sequence_id_var(ngx_http_request_t *r, ngx_http_varia
 ngx_int_t ngx_http_vod_set_clip_id_var(ngx_http_request_t *r, ngx_http_variable_value_t *v, uintptr_t data);
 ngx_int_t ngx_http_vod_set_dynamic_mapping_var(ngx_http_request_t *r, ngx_http_variable_value_t *v, uintptr_t data);
 ngx_int_t ngx_http_vod_set_request_params_var(ngx_http_request_t *r, ngx_http_variable_value_t *v, uintptr_t data);
+ngx_int_t ngx_http_vod_set_notification_id_var(ngx_http_request_t *r, ngx_http_variable_value_t *v, uintptr_t data);
 
 // handlers
 ngx_int_t ngx_http_vod_local_request_handler(ngx_http_request_t *r);

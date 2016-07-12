@@ -128,6 +128,7 @@ dynamic_clip_apply_mapping_json(
 	context.request_context = request_context;
 	context.sources_head = media_set->sources_head;
 	context.mapped_sources_head = media_set->mapped_sources_head;
+	context.notifications_head = media_set->notifications_head;
 	context.sequence = clip->sequence;
 	context.clip_time = clip->clip_time;
 	context.duration = clip->duration;
@@ -143,6 +144,7 @@ dynamic_clip_apply_mapping_json(
 
 	media_set->sources_head = context.sources_head;
 	media_set->mapped_sources_head = context.mapped_sources_head;
+	media_set->notifications_head = context.notifications_head;
 
 	clip->base.type = MEDIA_CLIP_CONCAT;
 	if (concat_clip->type == MEDIA_CLIP_SOURCE)

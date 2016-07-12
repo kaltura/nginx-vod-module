@@ -163,11 +163,13 @@ struct ngx_http_vod_ctx_s {
 	void* frame_processor_state;
 	ngx_chain_t out;
 	ngx_http_vod_write_segment_context_t write_segment_buffer_context;
+	media_notification_t* notification;
 };
 
 // forward declarations
 static ngx_int_t ngx_http_vod_run_state_machine(ngx_http_vod_ctx_t *ctx);
 static ngx_int_t ngx_http_vod_process_init(ngx_cycle_t *cycle);
+static ngx_int_t ngx_http_vod_send_notification(ngx_http_vod_ctx_t *ctx);
 
 // globals
 ngx_module_t  ngx_http_vod_module = {
@@ -418,6 +420,29 @@ ngx_http_vod_set_request_params_var(ngx_http_request_t *r, ngx_http_variable_val
 
 	v->data = value.data;
 	v->len = value.len;
+	v->valid = 1;
+	v->no_cacheable = 1;
+	v->not_found = 0;
+
+	return NGX_OK;
+}
+
+ngx_int_t
+ngx_http_vod_set_notification_id_var(ngx_http_request_t *r, ngx_http_variable_value_t *v, uintptr_t data)
+{
+	ngx_http_vod_ctx_t *ctx;
+	ngx_str_t* value;
+
+	ctx = ngx_http_get_module_ctx(r, ngx_http_vod_module);
+	if (ctx == NULL || ctx->notification == NULL)
+	{
+		v->not_found = 1;
+		return NGX_OK;
+	}
+
+	value = &ctx->notification->id;
+	v->data = value->data;
+	v->len = value->len;
 	v->valid = 1;
 	v->no_cacheable = 1;
 	v->not_found = 0;
@@ -3718,7 +3743,7 @@ ngx_http_vod_map_source_clip_start(ngx_http_vod_ctx_t *ctx)
 
 	if (conf->source_clip_map_uri == NULL)
 	{
-		vod_log_error(VOD_LOG_ERR, ctx->submodule_context.request_context.log, 0,
+		ngx_log_error(NGX_LOG_ERR, ctx->submodule_context.request_context.log, 0,
 			"ngx_http_vod_map_source_clip_start: media set contains mapped source clips and \"vod_source_clip_map_uri\" was not configured");
 		return NGX_HTTP_INTERNAL_SERVER_ERROR;
 	}
@@ -3734,20 +3759,99 @@ ngx_http_vod_map_source_clip_start(ngx_http_vod_ctx_t *ctx)
 	return ngx_http_vod_map_source_clip_state_machine(ctx);
 }
 
-/// map dynamic clip
+/// send notifications
+
+static void
+ngx_http_vod_notification_finished(void* context, ngx_int_t rc, ngx_buf_t* buf, ssize_t bytes_read)
+{
+	ngx_http_vod_ctx_t *ctx = context;
+
+	// ignore errors
+
+	rc = ngx_http_vod_send_notification(ctx);
+	if (rc != NGX_AGAIN)
+	{
+		ngx_http_vod_finalize_request(ctx, rc);
+	}
+}
 
 static ngx_int_t
-ngx_http_vod_map_dynamic_clip_done(ngx_http_vod_ctx_t *ctx)
+ngx_http_vod_send_notification(ngx_http_vod_ctx_t *ctx)
 {
-	// redirect if it's a segment request and redirect segment urls is set
-	if (ctx->submodule_context.conf->redirect_segments_url != NULL &&
-		ctx->request->request_class != REQUEST_CLASS_MANIFEST)
+	ngx_child_request_params_t child_params;
+	ngx_http_vod_loc_conf_t *conf;
+	media_notification_t* notification;
+	ngx_int_t rc;
+
+	notification = ctx->submodule_context.media_set.notifications_head;
+	if (notification == NULL)
 	{
+		// sent all notifications, redirect the segment request
 		return ngx_http_send_response(
 			ctx->submodule_context.r,
 			NGX_HTTP_MOVED_TEMPORARILY,
 			NULL,
 			ctx->submodule_context.conf->redirect_segments_url);
+	}
+
+	// remove the notification from list
+	ctx->submodule_context.media_set.notifications_head = notification->next;
+
+	// get the notification uri
+	conf = ctx->submodule_context.conf;
+	if (conf->notification_uri == NULL)
+	{
+		ngx_log_error(NGX_LOG_ERR, ctx->submodule_context.request_context.log, 0,
+			"ngx_http_vod_send_notification: no notification uri was configured");
+		return NGX_HTTP_INTERNAL_SERVER_ERROR;
+	}
+
+	ngx_memzero(&child_params, sizeof(child_params));
+	ctx->notification = notification;
+
+	if (ngx_http_complex_value(
+		ctx->submodule_context.r,
+		conf->notification_uri,
+		&child_params.base_uri) != NGX_OK)
+	{
+		ngx_log_debug0(NGX_LOG_DEBUG_HTTP, ctx->submodule_context.request_context.log, 0,
+			"ngx_http_vod_send_notification: ngx_http_complex_value failed");
+		return NGX_ERROR;
+	}
+
+	ctx->notification = NULL;
+
+	// send the notification
+	rc = ngx_http_vod_alloc_read_buffer(ctx, conf->max_upstream_headers_size, READER_HTTP);
+	if (rc != NGX_OK)
+	{
+		return rc;
+	}
+
+	child_params.method = NGX_HTTP_GET;
+	child_params.extra_args = ctx->upstream_extra_args;
+	child_params.range_start = 0;
+	child_params.range_end = 1;
+
+	return ngx_child_request_start(
+		ctx->submodule_context.r,
+		ngx_http_vod_notification_finished,
+		ctx,
+		&conf->upstream_location,
+		&child_params,
+		&ctx->read_buffer);
+}
+
+/// map dynamic clip
+
+static ngx_int_t
+ngx_http_vod_map_dynamic_clip_done(ngx_http_vod_ctx_t *ctx)
+{
+	// if it's a segment request and redirect segment urls is set, send notifications
+	if (ctx->submodule_context.conf->redirect_segments_url != NULL &&
+		ctx->request->request_class != REQUEST_CLASS_MANIFEST)
+	{
+		return ngx_http_vod_send_notification(ctx);
 	}
 
 	// map source clips
@@ -3825,7 +3929,7 @@ ngx_http_vod_map_dynamic_clip_start(ngx_http_vod_ctx_t *ctx)
 	// map the dynamic clips by calling the upstream
 	if (conf->dynamic_clip_map_uri == NULL)
 	{
-		vod_log_error(VOD_LOG_ERR, ctx->submodule_context.request_context.log, 0,
+		ngx_log_error(NGX_LOG_ERR, ctx->submodule_context.request_context.log, 0,
 			"ngx_http_vod_map_dynamic_clip_start: media set contains dynamic clips and \"vod_dynamic_clip_map_uri\" was not configured");
 		return NGX_HTTP_INTERNAL_SERVER_ERROR;
 	}
@@ -3952,7 +4056,7 @@ ngx_http_vod_map_media_set_apply(ngx_http_vod_ctx_t *ctx, ngx_str_t* mapping, in
 		rc = vod_json_decode_string(&path, &src_path);
 		if (rc != VOD_JSON_OK)
 		{
-			vod_log_error(VOD_LOG_ERR, ctx->submodule_context.request_context.log, 0,
+			ngx_log_error(NGX_LOG_ERR, ctx->submodule_context.request_context.log, 0,
 				"ngx_http_vod_map_media_set_apply: vod_json_decode_string failed %i", rc);
 			return NGX_HTTP_SERVICE_UNAVAILABLE;
 		}
