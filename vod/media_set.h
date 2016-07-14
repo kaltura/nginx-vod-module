@@ -14,6 +14,7 @@
 #define INVALID_SEGMENT_TIME (ULLONG_MAX)
 #define INVALID_CLIP_INDEX (UINT_MAX)
 
+#define MAX_NOTIFICATIONS (1024)
 #define MAX_CLIPS (128)
 #define MAX_CLIPS_PER_REQUEST (16)
 #define MAX_SEQUENCES (32)
@@ -84,6 +85,11 @@ typedef struct {
 	uint32_t first_segment_alignment_offset;	// difference between unaligned first segment time and first_time
 } media_clip_timing_t;
 
+typedef struct media_notification_s {
+	struct media_notification_s* next;
+	vod_str_t id;
+} media_notification_t;
+
 typedef struct {
 	// initialized during parsing
 	struct segmenter_conf_s* segmenter_conf;
@@ -110,6 +116,8 @@ typedef struct {
 	uint32_t initial_segment_index;
 	uint32_t initial_clip_index;
 	vod_str_t uri;
+
+	media_notification_t* notifications_head;
 
 	// initialized while applying filters
 	uint32_t track_count[MEDIA_TYPE_COUNT];	// sum of track count in all sequences per clip

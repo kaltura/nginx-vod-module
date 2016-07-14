@@ -18,18 +18,20 @@ enum {
 	CONCAT_PARAM_DURATIONS,
 	CONCAT_PARAM_OFFSET,
 	CONCAT_PARAM_TRACKS,
+	CONCAT_PARAM_NOTIFICATIONS,
 
 	CONCAT_PARAM_COUNT
 };
 
 // constants
 static json_object_key_def_t concat_clip_params[] = {
-	{ vod_string("basePath"),	VOD_JSON_STRING,	CONCAT_PARAM_BASE_PATH },
-	{ vod_string("paths"),		VOD_JSON_ARRAY,		CONCAT_PARAM_PATHS },
-	{ vod_string("clipIds"),	VOD_JSON_ARRAY,		CONCAT_PARAM_CLIP_IDS },
-	{ vod_string("durations"),	VOD_JSON_ARRAY,		CONCAT_PARAM_DURATIONS },
-	{ vod_string("offset"),		VOD_JSON_INT,		CONCAT_PARAM_OFFSET },
-	{ vod_string("tracks"),		VOD_JSON_STRING,	CONCAT_PARAM_TRACKS },	
+	{ vod_string("basePath"),		VOD_JSON_STRING,	CONCAT_PARAM_BASE_PATH },
+	{ vod_string("paths"),			VOD_JSON_ARRAY,		CONCAT_PARAM_PATHS },
+	{ vod_string("clipIds"),		VOD_JSON_ARRAY,		CONCAT_PARAM_CLIP_IDS },
+	{ vod_string("durations"),		VOD_JSON_ARRAY,		CONCAT_PARAM_DURATIONS },
+	{ vod_string("offset"),			VOD_JSON_INT,		CONCAT_PARAM_OFFSET },
+	{ vod_string("tracks"),			VOD_JSON_STRING,	CONCAT_PARAM_TRACKS },
+	{ vod_string("notifications"),	VOD_JSON_ARRAY,		CONCAT_PARAM_NOTIFICATIONS },
 	{ vod_null_string, 0, 0 }
 };
 
@@ -323,6 +325,21 @@ concat_clip_parse(
 		if (range[clip_count - 1].end > end - offset)
 		{
 			range[clip_count - 1].end = end - offset;
+		}
+
+		// parse the notifications
+		if (params[CONCAT_PARAM_NOTIFICATIONS] != NULL)
+		{
+			rc = media_set_parse_notifications(
+				context->request_context,
+				&params[CONCAT_PARAM_NOTIFICATIONS]->v.arr,
+				start,
+				end,
+				&context->notifications_head);
+			if (rc != VOD_OK)
+			{
+				return rc;
+			}
 		}
 	}
 

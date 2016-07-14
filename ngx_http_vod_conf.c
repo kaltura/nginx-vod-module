@@ -12,75 +12,48 @@
 #include "vod/common.h"
 #include "vod/udrm.h"
 
+// macros
+#define DEFINE_VAR(name) \
+	{ ngx_string("vod_" #name), ngx_http_vod_set_##name##_var }
+
+// typedefs
+typedef struct {
+	ngx_str_t name;
+	ngx_http_get_variable_pt handler;
+} ngx_http_vod_variable_t;
+
+// globals
 static ngx_str_t ngx_http_vod_last_modified_default_types[] = {
 	ngx_null_string
 };
 
-static ngx_str_t ngx_http_vod_filepath = ngx_string("vod_filepath");
-static ngx_str_t ngx_http_vod_suburi = ngx_string("vod_suburi");
-static ngx_str_t ngx_http_vod_sequence_id = ngx_string("vod_sequence_id");
-static ngx_str_t ngx_http_vod_clip_id = ngx_string("vod_clip_id");
-static ngx_str_t ngx_http_vod_dynamic_mapping = ngx_string("vod_dynamic_mapping");
-static ngx_str_t ngx_http_vod_request_params = ngx_string("vod_request_params");
+static ngx_http_vod_variable_t ngx_http_vod_variables[] = {
+	DEFINE_VAR(filepath),
+	DEFINE_VAR(suburi),
+	DEFINE_VAR(sequence_id),
+	DEFINE_VAR(clip_id),
+	DEFINE_VAR(dynamic_mapping),
+	DEFINE_VAR(request_params),
+	DEFINE_VAR(notification_id),
+};
 
 static ngx_int_t
 ngx_http_vod_add_variables(ngx_conf_t *cf)
 {
+	ngx_http_vod_variable_t* vars_cur = ngx_http_vod_variables;
+	ngx_http_vod_variable_t* vars_end = vars_cur + vod_array_entries(ngx_http_vod_variables);
 	ngx_http_variable_t  *var;
 
-	// filepath
-	var = ngx_http_add_variable(cf, &ngx_http_vod_filepath, NGX_HTTP_VAR_NOCACHEABLE);
-	if (var == NULL) 
+	for (; vars_cur < vars_end; vars_cur++)
 	{
-		return NGX_ERROR;
+		var = ngx_http_add_variable(cf, &vars_cur->name, NGX_HTTP_VAR_NOCACHEABLE);
+		if (var == NULL)
+		{
+			return NGX_ERROR;
+		}
+
+		var->get_handler = vars_cur->handler;
 	}
-
-	var->get_handler = ngx_http_vod_set_filepath_var;
-
-	// suburi
-	var = ngx_http_add_variable(cf, &ngx_http_vod_suburi, NGX_HTTP_VAR_NOCACHEABLE);
-	if (var == NULL)
-	{
-		return NGX_ERROR;
-	}
-
-	var->get_handler = ngx_http_vod_set_suburi_var;
-
-	// sequence id
-	var = ngx_http_add_variable(cf, &ngx_http_vod_sequence_id, NGX_HTTP_VAR_NOCACHEABLE);
-	if (var == NULL)
-	{
-		return NGX_ERROR;
-	}
-
-	var->get_handler = ngx_http_vod_set_sequence_id_var;
-
-	// clip id
-	var = ngx_http_add_variable(cf, &ngx_http_vod_clip_id, NGX_HTTP_VAR_NOCACHEABLE);
-	if (var == NULL)
-	{
-		return NGX_ERROR;
-	}
-
-	var->get_handler = ngx_http_vod_set_clip_id_var;
-
-	// dynamic mapping
-	var = ngx_http_add_variable(cf, &ngx_http_vod_dynamic_mapping, NGX_HTTP_VAR_NOCACHEABLE);
-	if (var == NULL)
-	{
-		return NGX_ERROR;
-	}
-
-	var->get_handler = ngx_http_vod_set_dynamic_mapping_var;
-
-	// request params
-	var = ngx_http_add_variable(cf, &ngx_http_vod_request_params, NGX_HTTP_VAR_NOCACHEABLE);
-	if (var == NULL)
-	{
-		return NGX_ERROR;
-	}
-
-	var->get_handler = ngx_http_vod_set_request_params_var;
 
 	return NGX_OK;
 }
@@ -269,6 +242,10 @@ ngx_http_vod_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child)
 	ngx_conf_merge_str_value(conf->path_response_prefix, prev->path_response_prefix, "{\"sequences\":[{\"clips\":[{\"type\":\"source\",\"path\":\"");
 	ngx_conf_merge_str_value(conf->path_response_postfix, prev->path_response_postfix, "\"}]}]}");
 	ngx_conf_merge_size_value(conf->max_mapping_response_size, prev->max_mapping_response_size, 1024);
+	if (conf->notification_uri == NULL)
+	{
+		conf->notification_uri = prev->notification_uri;
+	}
 	if (conf->dynamic_clip_map_uri == NULL)
 	{
 		conf->dynamic_clip_map_uri = prev->dynamic_clip_map_uri;
@@ -1011,13 +988,6 @@ ngx_command_t ngx_http_vod_commands[] = {
 	offsetof(ngx_http_vod_loc_conf_t, ignore_edit_list),
 	NULL },
 
-	{ ngx_string("vod_output_buffer_pool"),
-	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE2,
-	ngx_http_vod_buffer_pool_command,
-	NGX_HTTP_LOC_CONF_OFFSET,
-	offsetof(ngx_http_vod_loc_conf_t, output_buffer_pool),
-	NULL },
-
 	// upstream parameters - only for mapped/remote modes
 	{ ngx_string("vod_max_upstream_headers_size"),
 	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1,
@@ -1081,6 +1051,13 @@ ngx_command_t ngx_http_vod_commands[] = {
 	ngx_conf_set_size_slot,
 	NGX_HTTP_LOC_CONF_OFFSET,
 	offsetof(ngx_http_vod_loc_conf_t, max_mapping_response_size),
+	NULL },
+
+	{ ngx_string("vod_notification_uri"),
+	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1,
+	ngx_http_set_complex_value_slot,
+	NGX_HTTP_LOC_CONF_OFFSET,
+	offsetof(ngx_http_vod_loc_conf_t, notification_uri),
 	NULL },
 
 	{ ngx_string("vod_dynamic_clip_map_uri"),
@@ -1256,6 +1233,13 @@ ngx_command_t ngx_http_vod_commands[] = {
 	ngx_http_vod_perf_counters_command,
 	NGX_HTTP_LOC_CONF_OFFSET,
 	offsetof(ngx_http_vod_loc_conf_t, perf_counters_zone),
+	NULL },
+
+	{ ngx_string("vod_output_buffer_pool"),
+	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE2,
+	ngx_http_vod_buffer_pool_command,
+	NGX_HTTP_LOC_CONF_OFFSET,
+	offsetof(ngx_http_vod_loc_conf_t, output_buffer_pool),
 	NULL },
 
 #if (NGX_THREADS)

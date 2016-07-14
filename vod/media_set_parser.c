@@ -23,8 +23,16 @@ enum {
 	MEDIA_SET_PARAM_REFERENCE_CLIP_INDEX,
 	MEDIA_SET_PARAM_PRESENTATION_END_TIME,
 	MEDIA_SET_PARAM_LIVE_WINDOW_DURATION,
+	MEDIA_SET_PARAM_NOTIFICATIONS,
 
 	MEDIA_SET_PARAM_COUNT
+};
+
+enum {
+	MEDIA_NOTIFICATION_PARAM_ID,
+	MEDIA_NOTIFICATION_PARAM_OFFSET,
+
+	MEDIA_NOTIFICATION_PARAM_COUNT
 };
 
 typedef struct {
@@ -50,6 +58,12 @@ static vod_status_t media_set_parse_array(void* ctx, vod_json_value_t* value, vo
 static vod_status_t media_set_parse_clips_array(void* ctx, vod_json_value_t* value, void* dest);
 
 // constants
+static json_object_key_def_t media_notification_params[] = {
+	{ vod_string("id"), VOD_JSON_STRING, MEDIA_NOTIFICATION_PARAM_ID },
+	{ vod_string("offset"), VOD_JSON_INT, MEDIA_NOTIFICATION_PARAM_OFFSET },
+	{ vod_null_string, 0, 0 }
+};
+
 static json_object_value_def_t media_clip_source_params[] = {
 	{ vod_string("path"), VOD_JSON_STRING, offsetof(media_clip_source_t, mapped_uri), media_set_parse_null_term_string },
 	{ vod_string("tracks"), VOD_JSON_STRING, offsetof(media_clip_source_t, tracks_mask), media_set_parse_tracks_spec },
@@ -92,6 +106,7 @@ static json_object_key_def_t media_set_params[] = {
 	{ vod_string("referenceClipIndex"),				VOD_JSON_INT,	MEDIA_SET_PARAM_REFERENCE_CLIP_INDEX },
 	{ vod_string("presentationEndTime"),			VOD_JSON_INT,	MEDIA_SET_PARAM_PRESENTATION_END_TIME },
 	{ vod_string("liveWindowDuration"),				VOD_JSON_INT,	MEDIA_SET_PARAM_LIVE_WINDOW_DURATION },
+	{ vod_string("notifications"),					VOD_JSON_ARRAY,	MEDIA_SET_PARAM_NOTIFICATIONS },
 	{ vod_null_string, 0, 0 }
 };
 
@@ -105,6 +120,7 @@ static vod_str_t playlist_type_live = vod_string("live");
 static vod_hash_t media_clip_source_hash;
 static vod_hash_t media_clip_union_hash;
 static vod_hash_t media_sequence_hash;
+static vod_hash_t media_notification_hash;
 static vod_hash_t media_set_hash;
 
 static vod_status_t
@@ -798,6 +814,7 @@ media_set_parse_sequences_clips(
 	context->base.sources_head = NULL;
 	context->base.mapped_sources_head = NULL;
 	context->base.dynamic_clips_head = NULL;
+	context->base.notifications_head = media_set->notifications_head;
 
 	for (sequence = media_set->sequences; sequence < media_set->sequences_end; sequence++)
 	{
@@ -816,6 +833,7 @@ media_set_parse_sequences_clips(
 	media_set->sources_head = context->base.sources_head;
 	media_set->mapped_sources_head = context->base.mapped_sources_head;
 	media_set->dynamic_clips_head = context->base.dynamic_clips_head;
+	media_set->notifications_head = context->base.notifications_head;
 
 	return VOD_OK;
 }
@@ -870,6 +888,18 @@ media_set_parser_init(
 		media_clip_union_types,
 		sizeof(media_clip_union_types[0]),
 		&media_clip_union_hash);
+	if (rc != VOD_OK)
+	{
+		return rc;
+	}
+
+	rc = vod_json_init_hash(
+		pool,
+		temp_pool,
+		"media_notification_hash",
+		media_notification_params,
+		sizeof(media_notification_params[0]),
+		&media_notification_hash);
 	if (rc != VOD_OK)
 	{
 		return rc;
@@ -1185,6 +1215,110 @@ media_set_is_clip_start(media_clip_timing_t* timing, uint64_t time)
 }
 
 vod_status_t
+media_set_parse_notifications(
+	request_context_t* request_context, 
+	vod_json_array_t* array, 
+	int64_t min_offset,
+	int64_t max_offset,
+	media_notification_t** result)
+{
+	media_notification_t** tail;
+	media_notification_t* head;
+	media_notification_t* notification;
+	vod_json_value_t* params[MEDIA_NOTIFICATION_PARAM_COUNT];
+	vod_array_part_t* part;
+	vod_json_object_t* cur_pos;
+	vod_str_t* id;
+
+	if (array->count > MAX_NOTIFICATIONS)
+	{
+		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+		"media_set_parse_notifications: invalid number of elements in the notifications array %uz", array->count);
+		return VOD_BAD_MAPPING;
+	}
+
+	if (array->type != VOD_JSON_OBJECT)
+	{
+		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+			"media_set_parse_notifications: invalid notification type %d expected object", array->type);
+		return VOD_BAD_MAPPING;
+	}
+
+	tail = &head;
+
+	part = &array->part;
+	for (cur_pos = part->first;; cur_pos++)
+	{
+		if ((void*)cur_pos >= part->last)
+		{
+			if (part->next == NULL)
+			{
+				break;
+			}
+
+			part = part->next;
+			cur_pos = part->first;
+		}
+
+		// parse the notification
+		vod_memzero(params, sizeof(params));
+
+		vod_json_get_object_values(cur_pos, &media_notification_hash, params);
+
+		// check whether the offset matches the current segment
+		if (params[MEDIA_NOTIFICATION_PARAM_OFFSET] == NULL)
+		{
+			vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+				"media_set_parse_notifications: missing offset in notification object");
+			return VOD_BAD_MAPPING;
+		}
+		
+		if (params[MEDIA_NOTIFICATION_PARAM_OFFSET]->v.num.nom < min_offset)
+		{
+			continue;
+		}
+
+		if (params[MEDIA_NOTIFICATION_PARAM_OFFSET]->v.num.nom >= max_offset)
+		{
+			break;
+		}
+
+		// create a notification
+		if (params[MEDIA_NOTIFICATION_PARAM_ID] == NULL)
+		{
+			vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+				"media_set_parse_notifications: missing id in notification object, offset=%L", 
+				params[MEDIA_NOTIFICATION_PARAM_OFFSET]->v.num.nom);
+			return VOD_BAD_MAPPING;
+		}
+
+		id = &params[MEDIA_NOTIFICATION_PARAM_ID]->v.str;
+
+		notification = vod_alloc(request_context->pool, sizeof(*notification) + id->len + 1);
+		if (notification == NULL)
+		{
+			vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
+				"media_set_parse_notifications: vod_alloc failed");
+			return VOD_ALLOC_FAILED;
+		}
+
+		notification->id.data = (void*)(notification + 1);
+		notification->id.len = id->len;
+		vod_memcpy(notification->id.data, id->data, id->len);
+		notification->id.data[id->len] = '\0';
+
+		// add the notification to the list
+		// Note: adding to the end of the list to retain the order between notifications
+		*tail = notification;
+		tail = &notification->next;
+	}
+
+	*tail = *result;
+	*result = head;
+	return VOD_OK;
+}
+
+vod_status_t
 media_set_parse_json(
 	request_context_t* request_context, 
 	u_char* string, 
@@ -1201,9 +1335,6 @@ media_set_parse_json(
 	vod_status_t rc;
 	uint32_t margin;
 	u_char error[128];
-
-	result->segmenter_conf = segmenter;
-	result->uri = *uri;
 
 	// parse the json and get the media set object values
 	rc = vod_json_parse(request_context->pool, string, &json, error, sizeof(error));
@@ -1235,12 +1366,10 @@ media_set_parse_json(
 		return VOD_BAD_MAPPING;
 	}
 
-	result->timing.times = NULL;
-	result->timing.first_time = 0;
+	vod_memzero(result, sizeof(*result));
+	result->segmenter_conf = segmenter;
+	result->uri = *uri;
 	result->timing.segment_base_time = SEGMENT_BASE_TIME_RELATIVE;
-	result->timing.first_segment_alignment_offset = 0;
-	result->initial_segment_index = 0;
-	result->initial_clip_index = 0;
 
 	if (params[MEDIA_SET_PARAM_DURATIONS] == NULL)
 	{
@@ -1254,10 +1383,7 @@ media_set_parse_json(
 		}
 
 		result->timing.total_count = 1;
-		result->timing.durations = NULL;
 		result->clip_count = 1;
-		result->use_discontinuity = FALSE;
-		result->type = MEDIA_SET_VOD;
 		result->presentation_end = TRUE;
 
 		// parse the sequences
@@ -1296,7 +1422,6 @@ media_set_parse_json(
 		(params[MEDIA_SET_PARAM_PLAYLIST_TYPE]->v.str.len == playlist_type_vod.len &&
 		vod_strncasecmp(params[MEDIA_SET_PARAM_PLAYLIST_TYPE]->v.str.data, playlist_type_vod.data, playlist_type_vod.len) == 0))
 	{
-		result->type = MEDIA_SET_VOD;
 		result->presentation_end = TRUE;
 	}
 	else if (params[MEDIA_SET_PARAM_PLAYLIST_TYPE]->v.str.len == playlist_type_live.len &&
@@ -1461,16 +1586,31 @@ media_set_parse_json(
 			return rc;
 		}
 
+		if (context.clip_ranges.clip_count <= 0)
+		{
+			return VOD_OK;
+		}
+
 		// set the segment_start_time & segment_duration
 		result->segment_start_time = context.clip_ranges.clip_time;
+		result->segment_start_time += context.clip_ranges.clip_ranges[0].start;
+		result->segment_duration = 
+			(result->timing.times[context.clip_ranges.max_clip_index] + 
+				context.clip_ranges.clip_ranges[context.clip_ranges.clip_count - 1].end) -
+			result->segment_start_time;
 
-		if (context.clip_ranges.clip_count > 0)
+		if (params[MEDIA_SET_PARAM_NOTIFICATIONS] != NULL)
 		{
-			result->segment_start_time += context.clip_ranges.clip_ranges[0].start;
-			result->segment_duration = 
-				(result->timing.times[context.clip_ranges.max_clip_index] + 
-					context.clip_ranges.clip_ranges[context.clip_ranges.clip_count - 1].end) -
-				result->segment_start_time;
+			rc = media_set_parse_notifications(
+				request_context,
+				&params[MEDIA_SET_PARAM_NOTIFICATIONS]->v.arr,
+				result->segment_start_time - result->timing.first_time, 
+				result->segment_start_time - result->timing.first_time + result->segment_duration,
+				&result->notifications_head);
+			if (rc != VOD_OK)
+			{
+				return rc;
+			}
 		}
 	}
 	else
