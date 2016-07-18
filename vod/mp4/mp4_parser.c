@@ -28,6 +28,7 @@
 // constants
 #define MAX_FRAMERATE_TEST_SAMPLES (20)
 #define MAX_TOTAL_SIZE_TEST_SAMPLES (100000)
+#define MAX_PTS_DELAY_TEST_SAMPLES (100)
 
 // typedefs
 typedef struct {
@@ -961,6 +962,56 @@ mp4_parser_parse_stts_atom(atom_info_t* atom_info, frames_parse_context_t* conte
 		context->clip_to = UINT_MAX;
 	}
 	
+	return VOD_OK;
+}
+
+static vod_status_t
+mp4_parser_parse_ctts_atom_initial_pts_delay(atom_info_t* atom_info, frames_parse_context_t* context)
+{
+	const ctts_entry_t* first_entry;
+	const ctts_entry_t* last_entry;
+	const ctts_entry_t* cur_entry;
+	vod_status_t rc;
+	uint32_t entries;
+	uint32_t dts_shift;
+	int32_t sample_duration;
+
+	if (atom_info->size == 0)		// optional atom
+	{
+		return VOD_OK;
+	}
+
+	if (context->media_info->media_type != MEDIA_TYPE_VIDEO)
+	{
+		return VOD_OK;
+	}
+
+	rc = mp4_parser_validate_ctts_atom(context->request_context, atom_info, &entries);
+	if (rc != VOD_OK)
+	{
+		return rc;
+	}
+
+	// estimate dts_shift
+	if (entries > MAX_PTS_DELAY_TEST_SAMPLES)
+	{
+		entries = MAX_PTS_DELAY_TEST_SAMPLES;
+	}
+
+	first_entry = (const ctts_entry_t*)(atom_info->ptr + sizeof(ctts_atom_t));
+	last_entry = first_entry + entries;
+
+	dts_shift = 0;
+	for (cur_entry = first_entry; cur_entry < last_entry; cur_entry++)
+	{
+		sample_duration = parse_be32(cur_entry->duration);
+		if (sample_duration < 0 && (uint32_t)-sample_duration > dts_shift)
+		{
+			dts_shift = (uint32_t)-sample_duration;
+		}
+	}
+
+	context->media_info->u.video.initial_pts_delay = dts_shift + parse_be32(first_entry->duration);
 	return VOD_OK;
 }
 
@@ -2455,6 +2506,7 @@ static const trak_atom_parser_t trak_atom_parsers[] = {
 	{ mp4_parser_parse_stts_atom,							offsetof(trak_atom_infos_t, stts), PARSE_FLAG_FRAMES_DURATION },
 	{ mp4_parser_parse_stts_atom_frame_duration_only,		offsetof(trak_atom_infos_t, stts), PARSE_FLAG_DURATION_LIMITS },
 	{ mp4_parser_parse_ctts_atom,							offsetof(trak_atom_infos_t, ctts), PARSE_FLAG_FRAMES_PTS_DELAY },
+	{ mp4_parser_parse_ctts_atom_initial_pts_delay,			offsetof(trak_atom_infos_t, ctts), PARSE_FLAG_INITIAL_PTS_DELAY },
 	{ mp4_parser_parse_stsc_atom,							offsetof(trak_atom_infos_t, stsc), PARSE_FLAG_FRAMES_OFFSET },
 	{ mp4_parser_parse_stsz_atom,							offsetof(trak_atom_infos_t, stsz), PARSE_FLAG_FRAMES_SIZE },
 	{ mp4_parser_parse_stsz_atom_total_size_estimate_only,	offsetof(trak_atom_infos_t, stsz), PARSE_FLAG_TOTAL_SIZE_ESTIMATE },

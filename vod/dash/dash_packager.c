@@ -165,7 +165,7 @@
 #define VOD_DASH_MANIFEST_FOOTER												\
     "</MPD>\n"
 
-#define MAX_TRACK_SPEC_LENGTH (sizeof("f-v") + 2 * VOD_INT32_LEN)
+#define MAX_TRACK_SPEC_LENGTH (sizeof("f-v-p") + 3 * VOD_INT32_LEN)
 #define MAX_CLIP_SPEC_LENGTH (sizeof("c-") + VOD_INT32_LEN)
 #define MAX_MIME_TYPE_SIZE (sizeof("video/webm") - 1)
 #define MAX_FILE_EXT_SIZE (sizeof("webm") - 1)
@@ -183,6 +183,7 @@ typedef struct {
 	uint32_t clip_index;
 	uint64_t clip_start_offset;
 	adaptation_sets_t adaptation_sets;
+	uint32_t max_pts_delay;
 } write_period_context_t;
 
 typedef struct {
@@ -441,7 +442,8 @@ dash_packager_get_track_spec(
 	media_set_t* media_set,
 	uint32_t sequence_index,
 	uint32_t track_index,
-	uint32_t media_type)
+	uint32_t media_type,
+	uint32_t pts_delay)
 {
 	u_char* p = result->data;
 
@@ -454,6 +456,10 @@ dash_packager_get_track_spec(
 	{
 	case MEDIA_TYPE_VIDEO:
 		p = vod_sprintf(p, "v%uD", track_index + 1);
+		if (pts_delay > 0)
+		{
+			p = vod_sprintf(p, "-p%uD", pts_delay);
+		}
 		break;
 
 	case MEDIA_TYPE_AUDIO:
@@ -600,16 +606,17 @@ dash_packager_write_segment_timeline(
 static u_char*
 dash_packager_write_segment_list(
 	u_char* p,
-	dash_manifest_config_t* conf,
+	write_period_context_t* context,
 	uint32_t start_number,
 	media_set_t* media_set,
-	vod_str_t* base_url,
-	u_char* base_url_temp_buffer,
 	u_char* clip_spec,
 	media_sequence_t* cur_sequence,
 	media_track_t* cur_track,
 	uint32_t segment_count)
 {
+	dash_manifest_config_t* conf = context->conf;
+	vod_str_t* base_url = context->base_url;
+	u_char* base_url_temp_buffer = context->base_url_temp_buffer;
 	vod_str_t track_spec;
 	vod_str_t cur_base_url;
 	u_char track_spec_buffer[MAX_TRACK_SPEC_LENGTH];
@@ -647,7 +654,8 @@ dash_packager_write_segment_list(
 		media_set,
 		sequence_index,
 		cur_track->index,
-		cur_track->media_info.media_type);
+		cur_track->media_info.media_type,
+		context->max_pts_delay - cur_track->media_info.u.video.initial_pts_delay);
 
 	// write the header
 	p = vod_sprintf(p,
@@ -858,7 +866,8 @@ dash_packager_write_mpd_period(
 				media_set,
 				cur_sequence->index,
 				cur_track->index,
-				cur_track->media_info.media_type);
+				cur_track->media_info.media_type,
+				context->max_pts_delay - cur_track->media_info.u.video.initial_pts_delay);
 
 			if (representation_id.len > 0 && representation_id.data[representation_id.len - 1] == '-')
 			{
@@ -939,7 +948,8 @@ dash_packager_write_mpd_period(
 				media_set, 
 				cur_sequence->index, 
 				cur_track->index, 
-				cur_track->media_info.media_type);
+				cur_track->media_info.media_type,
+				context->max_pts_delay - cur_track->media_info.u.video.initial_pts_delay);
 
 			switch (media_type)
 			{
@@ -976,11 +986,9 @@ dash_packager_write_mpd_period(
 			{
 				p = dash_packager_write_segment_list(
 					p,
-					context->conf,
+					context,
 					start_number,
 					media_set,
-					context->base_url,
-					context->base_url_temp_buffer,
 					clip_spec,
 					cur_sequence,
 					cur_track,
@@ -1156,6 +1164,7 @@ dash_packager_build_mpd(
 	write_period_context_t context;
 	adaptation_set_t* adaptation_set;
 	segmenter_conf_t* segmenter_conf = media_set->segmenter_conf;
+	media_track_t* cur_track;
 	vod_tm_t start_time_gmt;
 	size_t base_url_temp_buffer_size = 0;
 	size_t base_period_size;
@@ -1178,6 +1187,21 @@ dash_packager_build_mpd(
 	if (rc != VOD_OK)
 	{
 		return rc;
+	}
+
+	// get the max pts delay of video tracks
+	context.max_pts_delay = 0;
+	for (cur_track = media_set->filtered_tracks; cur_track < media_set->filtered_tracks_end; cur_track++)
+	{
+		if (cur_track->media_info.media_type != MEDIA_TYPE_VIDEO)
+		{
+			continue;
+		}
+
+		if (cur_track->media_info.u.video.initial_pts_delay > context.max_pts_delay)
+		{
+			context.max_pts_delay = cur_track->media_info.u.video.initial_pts_delay;
+		}
 	}
 
 	// get segment durations and count for each media type

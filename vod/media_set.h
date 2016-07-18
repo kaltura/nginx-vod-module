@@ -131,6 +131,7 @@ typedef struct {
 	uint64_t segment_time;		// used in mss
 	uint32_t segment_index;
 	uint32_t clip_index;
+	uint32_t pts_delay;
 	uint32_t sequences_mask;
 	vod_str_t sequence_id;
 	uint32_t tracks_mask[MEDIA_TYPE_COUNT];

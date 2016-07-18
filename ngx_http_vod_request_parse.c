@@ -229,6 +229,7 @@ ngx_http_vod_parse_uri_file_name(
 	uint32_t sequence_index;
 	uint32_t clip_index;
 	uint32_t media_type;
+	uint32_t pts_delay;
 	language_id_t lang_id;
 
 	default_tracks_mask = (flags & PARSE_FILE_NAME_MULTI_STREAMS_PER_TYPE) ? 0xffffffff : 1;
@@ -395,6 +396,24 @@ ngx_http_vod_parse_uri_file_name(
 		{
 			return NGX_OK;
 		}
+	}
+
+	// pts delay
+	if (*start_pos == 'p')
+	{
+		start_pos++;		// skip the p
+
+		start_pos = parse_utils_extract_uint32_token(start_pos, end_pos, &pts_delay);
+		if (pts_delay <= 0)
+		{
+			ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
+				"ngx_http_vod_parse_uri_file_name: failed to parse pts delay");
+			return NGX_HTTP_BAD_REQUEST;
+		}
+
+		result->pts_delay = pts_delay;
+
+		skip_dash(start_pos, end_pos);
 	}
 
 	// languages
