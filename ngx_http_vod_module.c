@@ -1872,7 +1872,8 @@ static ngx_int_t
 ngx_http_vod_update_track_timescale(
 	ngx_http_vod_ctx_t *ctx, 
 	media_track_t* track, 
-	uint32_t new_timescale)
+	uint32_t new_timescale, 
+	uint32_t pts_delay)
 {
 	frame_list_part_t* part;
 	input_frame_t* last_frame;
@@ -1935,7 +1936,7 @@ ngx_http_vod_update_track_timescale(
 		}
 
 		pts = dts + cur_frame->pts_delay;
-		cur_frame->pts_delay = rescale_time(pts, cur_timescale, new_timescale) - scaled_dts;
+		cur_frame->pts_delay = rescale_time(pts, cur_timescale, new_timescale) - scaled_dts + pts_delay;
 
 		dts += cur_frame->duration;
 		next_scaled_dts = rescale_time(dts, cur_timescale, new_timescale);
@@ -1956,15 +1957,22 @@ ngx_http_vod_update_track_timescale(
 		return ngx_http_vod_status_to_ngx_error(VOD_BAD_DATA);
 	}
 
-	if (track->media_info.media_type == MEDIA_TYPE_VIDEO && track->media_info.min_frame_duration != 0)
+	if (track->media_info.media_type == MEDIA_TYPE_VIDEO)
 	{
-		track->media_info.min_frame_duration = rescale_time(track->media_info.min_frame_duration, cur_timescale, new_timescale);
-		if (track->media_info.min_frame_duration == 0)
+		if (track->media_info.min_frame_duration != 0)
 		{
-			ngx_log_error(NGX_LOG_WARN, ctx->submodule_context.request_context.log, 0,
-				"ngx_http_vod_update_track_timescale: min frame duration is zero following rescale");
-			track->media_info.min_frame_duration = 1;
+			track->media_info.min_frame_duration =
+				rescale_time(track->media_info.min_frame_duration, cur_timescale, new_timescale);
+			if (track->media_info.min_frame_duration == 0)
+			{
+				ngx_log_error(NGX_LOG_WARN, ctx->submodule_context.request_context.log, 0,
+					"ngx_http_vod_update_track_timescale: min frame duration is zero following rescale");
+				track->media_info.min_frame_duration = 1;
+			}
 		}
+
+		track->media_info.u.video.initial_pts_delay =
+			rescale_time(track->media_info.u.video.initial_pts_delay, cur_timescale, new_timescale);
 	}
 
 	track->media_info.timescale = new_timescale;
@@ -1982,7 +1990,11 @@ ngx_http_vod_update_timescale(ngx_http_vod_ctx_t *ctx)
 
 	for (track = media_set->filtered_tracks; track < media_set->filtered_tracks_end; track++)
 	{
-		rc = ngx_http_vod_update_track_timescale(ctx, track, ctx->request->timescale);
+		rc = ngx_http_vod_update_track_timescale(
+			ctx, 
+			track, 
+			ctx->request->timescale, 
+			ctx->submodule_context.request_params.pts_delay);
 		if (rc != NGX_OK)
 		{
 			return rc;
@@ -3376,7 +3388,7 @@ ngx_http_vod_dump_http_part(ngx_http_vod_http_reader_state_t *state, off_t start
 		NULL);
 }
 
-ngx_int_t
+static ngx_int_t
 ngx_http_vod_dump_http_request(ngx_http_vod_ctx_t *ctx)
 {
 	ngx_http_request_t* r;
