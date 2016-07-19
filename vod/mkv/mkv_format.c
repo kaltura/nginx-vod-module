@@ -1605,6 +1605,8 @@ mkv_read_frames(
 	uint32_t range;
 	vod_status_t rc;
 
+	// TODO: handle initial pts delay
+
 	if (frame_data == NULL && 
 		(parse_params->parse_type & (PARSE_FLAG_FRAMES_ALL | PARSE_FLAG_TOTAL_SIZE_ESTIMATE)) != 0)
 	{

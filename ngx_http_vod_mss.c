@@ -202,7 +202,7 @@ ngx_http_vod_mss_handle_ttml_fragment(
 }
 
 static const ngx_http_vod_request_t mss_manifest_request = {
-	REQUEST_FLAG_TIME_DEPENDENT_ON_LIVE,
+	REQUEST_FLAG_TIME_DEPENDENT_ON_LIVE | REQUEST_FLAG_LOOK_AHEAD_SEGMENTS | REQUEST_FLAG_NO_DISCONTINUITY,
 	PARSE_FLAG_TOTAL_SIZE_ESTIMATE | PARSE_FLAG_PARSED_EXTRA_DATA,
 	REQUEST_CLASS_MANIFEST,
 	SUPPORTED_CODECS | VOD_CODEC_FLAG(WEBVTT),
@@ -212,7 +212,7 @@ static const ngx_http_vod_request_t mss_manifest_request = {
 };
 
 static const ngx_http_vod_request_t mss_fragment_request = {
-	REQUEST_FLAG_SINGLE_TRACK,
+	REQUEST_FLAG_SINGLE_TRACK | REQUEST_FLAG_LOOK_AHEAD_SEGMENTS | REQUEST_FLAG_NO_DISCONTINUITY,
 	PARSE_FLAG_FRAMES_ALL,
 	REQUEST_CLASS_SEGMENT,
 	SUPPORTED_CODECS,
@@ -222,7 +222,7 @@ static const ngx_http_vod_request_t mss_fragment_request = {
 };
 
 static const ngx_http_vod_request_t mss_playready_fragment_request = {
-	REQUEST_FLAG_SINGLE_TRACK,
+	REQUEST_FLAG_SINGLE_TRACK | REQUEST_FLAG_LOOK_AHEAD_SEGMENTS | REQUEST_FLAG_NO_DISCONTINUITY,
 	PARSE_FLAG_FRAMES_ALL | PARSE_FLAG_PARSED_EXTRA_DATA,
 	REQUEST_CLASS_SEGMENT,
 	SUPPORTED_CODECS,
@@ -232,7 +232,7 @@ static const ngx_http_vod_request_t mss_playready_fragment_request = {
 };
 
 static const ngx_http_vod_request_t mss_ttml_request = {
-	REQUEST_FLAG_SINGLE_TRACK,
+	REQUEST_FLAG_SINGLE_TRACK | REQUEST_FLAG_NO_DISCONTINUITY,
 	PARSE_FLAG_FRAMES_ALL | PARSE_FLAG_EXTRA_DATA | PARSE_FLAG_RELATIVE_TIMESTAMPS,
 	REQUEST_CLASS_SEGMENT,
 	VOD_CODEC_FLAG(WEBVTT),

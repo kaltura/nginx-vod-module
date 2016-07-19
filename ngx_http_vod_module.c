@@ -98,12 +98,17 @@ typedef struct {
 	ngx_http_vod_mapping_apply_t apply;
 } ngx_http_vod_mapping_context_t;
 
+typedef struct {
+	ngx_http_vod_open_file_t open;
+	ngx_http_vod_dump_part_t dump_part;
+	ngx_http_vod_dump_request_t dump_request;
+} ngx_http_vod_reader_t;
+
 struct ngx_http_vod_ctx_s {
 	// base params
 	ngx_http_vod_submodule_context_t submodule_context;
 	const struct ngx_http_vod_request_s* request;
 	ngx_http_vod_alloc_params_t alloc_params[READER_COUNT];
-	int alloc_params_index;
 	off_t alignment;
 	int state;
 	u_char request_key[BUFFER_CACHE_KEY_SIZE];
@@ -142,10 +147,9 @@ struct ngx_http_vod_ctx_s {
 	media_clipper_parse_result_t* clipper_parse_result;
 
 	// reading abstraction (over file / http)
-	ngx_http_vod_open_file_t open_file;
-	ngx_http_vod_async_read_func_t async_read;
-	ngx_http_vod_dump_part_t dump_part;
-	ngx_http_vod_dump_request_t dump_request;
+	ngx_http_vod_reader_t* reader;
+	ngx_http_vod_async_read_func_t read;
+	int alloc_params_index;
 
 	// read state - file
 #if (NGX_THREADS)
@@ -170,6 +174,14 @@ struct ngx_http_vod_ctx_s {
 static ngx_int_t ngx_http_vod_run_state_machine(ngx_http_vod_ctx_t *ctx);
 static ngx_int_t ngx_http_vod_process_init(ngx_cycle_t *cycle);
 static ngx_int_t ngx_http_vod_send_notification(ngx_http_vod_ctx_t *ctx);
+
+static ngx_int_t ngx_http_vod_init_file_reader_with_fallback(ngx_http_request_t *r, ngx_str_t* path, void** context);
+static ngx_int_t ngx_http_vod_init_file_reader(ngx_http_request_t *r, ngx_str_t* path, void** context);
+static ngx_int_t ngx_http_vod_dump_file(ngx_http_vod_ctx_t* ctx);
+
+static ngx_int_t ngx_http_vod_http_reader_open_file(ngx_http_request_t* r, ngx_str_t* path, void** context);
+static ngx_int_t ngx_http_vod_dump_http_part(ngx_http_vod_http_reader_state_t *state, off_t start, off_t end);
+static ngx_int_t ngx_http_vod_dump_http_request(ngx_http_vod_ctx_t *ctx);
 
 // globals
 ngx_module_t  ngx_http_vod_module = {
@@ -196,6 +208,25 @@ static media_format_t* media_formats[] = {
 	&webvtt_format,
 	NULL
 };
+
+static ngx_http_vod_reader_t reader_file_with_fallback = {
+	ngx_http_vod_init_file_reader_with_fallback,
+	(ngx_http_vod_dump_part_t)ngx_file_reader_dump_file_part,
+	ngx_http_vod_dump_file,
+};
+
+static ngx_http_vod_reader_t reader_file = {
+	ngx_http_vod_init_file_reader,
+	(ngx_http_vod_dump_part_t)ngx_file_reader_dump_file_part,
+	ngx_http_vod_dump_file,
+};
+
+static ngx_http_vod_reader_t reader_http = {
+	ngx_http_vod_http_reader_open_file,
+	(ngx_http_vod_dump_part_t)ngx_http_vod_dump_http_part,
+	ngx_http_vod_dump_http_request,
+};
+
 
 ////// Variables
 
@@ -1398,7 +1429,7 @@ ngx_http_vod_async_read(ngx_http_vod_ctx_t* ctx, media_format_read_request_t* re
 
 	ngx_perf_counter_start(ctx->perf_counter_context);
 
-	rc = ctx->async_read(
+	rc = ctx->read(
 		ctx->cur_source->reader_context,
 		&ctx->read_buffer,
 		read_size - prefix_size,
@@ -1647,7 +1678,7 @@ ngx_http_vod_state_machine_parse_metadata(ngx_http_vod_ctx_t *ctx)
 			}
 
 			// open the file
-			rc = ctx->open_file(r, &cur_source->mapped_uri, &cur_source->reader_context);
+			rc = ctx->reader->open(r, &cur_source->mapped_uri, &cur_source->reader_context);
 			if (rc != NGX_OK)
 			{
 				if (rc != NGX_AGAIN && rc != NGX_DONE)
@@ -1680,7 +1711,7 @@ ngx_http_vod_state_machine_parse_metadata(ngx_http_vod_ctx_t *ctx)
 
 			ngx_perf_counter_start(ctx->perf_counter_context);
 
-			rc = ctx->async_read(cur_source->reader_context, &ctx->read_buffer, conf->initial_read_size, 0);
+			rc = ctx->read(cur_source->reader_context, &ctx->read_buffer, conf->initial_read_size, 0);
 			if (rc != NGX_OK)
 			{
 				if (rc != NGX_AGAIN)
@@ -2099,7 +2130,7 @@ ngx_http_vod_state_machine_open_files(ngx_http_vod_ctx_t *ctx)
 
 		path = &cur_source->mapped_uri;
 
-		rc = ctx->open_file(ctx->submodule_context.r, path, &cur_source->reader_context);
+		rc = ctx->reader->open(ctx->submodule_context.r, path, &cur_source->reader_context);
 		if (rc != NGX_OK)
 		{
 			if (rc != NGX_AGAIN && rc != NGX_DONE)
@@ -2402,7 +2433,7 @@ ngx_http_vod_process_media_frames(ngx_http_vod_ctx_t *ctx)
 		// perform the read
 		ngx_perf_counter_start(ctx->perf_counter_context);
 
-		rc = ctx->async_read(
+		rc = ctx->read(
 			read_buf.source->reader_context, 
 			&ctx->read_buffer, 
 			read_buf.size, 
@@ -2715,7 +2746,7 @@ ngx_http_vod_run_state_machine(ngx_http_vod_ctx_t *ctx)
 
 				ctx->state = STATE_DUMP_FILE_PART;
 
-				rc = ctx->dump_part(
+				rc = ctx->reader->dump_part(
 					ctx->cur_source->reader_context,
 					ctx->clipper_parse_result->first_offset,
 					ctx->clipper_parse_result->last_offset);
@@ -2810,7 +2841,7 @@ ngx_http_vod_run_state_machine(ngx_http_vod_ctx_t *ctx)
 		return ngx_http_vod_finalize_segment_response(ctx);
 
 	case STATE_DUMP_OPEN_FILE:
-		return ctx->dump_request(ctx);
+		return ctx->reader->dump_request(ctx);
 
 	case STATE_DUMP_FILE_PART:
 		rc = ngx_http_send_special(ctx->submodule_context.r, NGX_HTTP_LAST);
@@ -2999,7 +3030,7 @@ ngx_http_vod_start_processing_media_file(ngx_http_vod_ctx_t *ctx)
 		cur_source = ctx->submodule_context.media_set.sources_head;
 		ctx->cur_source = cur_source;
 
-		rc = ctx->open_file(r, &cur_source->mapped_uri, &cur_source->reader_context);
+		rc = ctx->reader->open(r, &cur_source->mapped_uri, &cur_source->reader_context);
 		if (rc != NGX_OK)
 		{
 			if (rc != NGX_AGAIN && rc != NGX_DONE)
@@ -3010,7 +3041,7 @@ ngx_http_vod_start_processing_media_file(ngx_http_vod_ctx_t *ctx)
 			return rc;
 		}
 
-		return ctx->dump_request(ctx);
+		return ctx->reader->dump_request(ctx);
 	}
 
 	// initialize the file keys
@@ -3469,13 +3500,10 @@ ngx_http_vod_local_request_handler(ngx_http_request_t *r)
 	}
 
 	// initialize for reading files
+	ctx->reader = &reader_file_with_fallback;
+	ctx->read = (ngx_http_vod_async_read_func_t)ngx_async_file_read;
 	ctx->alloc_params_index = READER_FILE;
 	ctx->alignment = ctx->alloc_params[READER_FILE].alignment;
-
-	ctx->open_file = ngx_http_vod_init_file_reader_with_fallback;
-	ctx->async_read = (ngx_http_vod_async_read_func_t)ngx_async_file_read;
-	ctx->dump_part = (ngx_http_vod_dump_part_t)ngx_file_reader_dump_file_part;
-	ctx->dump_request = ngx_http_vod_dump_file;
 	ctx->perf_counter_async_read = PC_ASYNC_READ_FILE;
 
 	// start the state machine
@@ -3557,7 +3585,7 @@ ngx_http_vod_map_run_step(ngx_http_vod_ctx_t *ctx)
 
 		ctx->state = STATE_MAP_OPEN;
 
-		rc = ctx->open_file(ctx->submodule_context.r, &uri, &ctx->mapping.reader_context);
+		rc = ctx->reader->open(ctx->submodule_context.r, &uri, &ctx->mapping.reader_context);
 		if (rc != NGX_OK)
 		{
 			if (rc != NGX_AGAIN && rc != NGX_DONE)
@@ -3582,7 +3610,7 @@ ngx_http_vod_map_run_step(ngx_http_vod_ctx_t *ctx)
 		ctx->state = STATE_MAP_READ;
 		ngx_perf_counter_start(ctx->perf_counter_context);
 
-		rc = ctx->async_read(ctx->mapping.reader_context, &ctx->read_buffer, ctx->mapping.max_response_size, 0);
+		rc = ctx->read(ctx->mapping.reader_context, &ctx->read_buffer, ctx->mapping.max_response_size, 0);
 		if (rc != NGX_OK)
 		{
 			if (rc != NGX_AGAIN)
@@ -3668,13 +3696,10 @@ static ngx_int_t
 ngx_http_vod_map_source_clip_done(ngx_http_vod_ctx_t *ctx)
 {
 	// initialize for reading files
+	ctx->reader = &reader_file;
+	ctx->read = (ngx_http_vod_async_read_func_t)ngx_async_file_read;
 	ctx->alloc_params_index = READER_FILE;
 	ctx->alignment = ctx->alloc_params[READER_FILE].alignment;
-
-	ctx->open_file = ngx_http_vod_init_file_reader;
-	ctx->async_read = (ngx_http_vod_async_read_func_t)ngx_async_file_read;
-	ctx->dump_part = (ngx_http_vod_dump_part_t)ngx_file_reader_dump_file_part;
-	ctx->dump_request = ngx_http_vod_dump_file;
 	ctx->perf_counter_async_read = PC_ASYNC_READ_FILE;
 
 	// run the main state machine
@@ -4025,7 +4050,6 @@ ngx_http_vod_map_media_set_apply(ngx_http_vod_ctx_t *ctx, ngx_str_t* mapping, in
 	ngx_str_t src_path;
 	ngx_str_t path;
 	ngx_int_t rc;
-	bool_t parse_all_clips;
 
 	// optimization for the case of simple mapping response
 	if (mapping->len >= conf->path_response_prefix.len + conf->path_response_postfix.len &&
@@ -4086,9 +4110,6 @@ ngx_http_vod_map_media_set_apply(ngx_http_vod_ctx_t *ctx, ngx_str_t* mapping, in
 
 	// TODO: in case the new media set may replace the existing one, propagate clip from, clip to, rate
 
-	parse_all_clips = ctx->request != NULL ?
-		(ctx->request->parse_type & PARSE_FLAG_ALL_CLIPS) : 0;
-
 	ngx_perf_counter_start(perf_counter_context);
 
 	rc = media_set_parse_json(
@@ -4097,7 +4118,7 @@ ngx_http_vod_map_media_set_apply(ngx_http_vod_ctx_t *ctx, ngx_str_t* mapping, in
 		&ctx->submodule_context.request_params,
 		&ctx->submodule_context.conf->segmenter,
 		&cur_source->uri,
-		parse_all_clips,
+		ctx->request != NULL ? ctx->request->flags : 0,
 		&mapped_media_set);
 
 	if (rc == VOD_NOT_FOUND)
@@ -4243,20 +4264,18 @@ ngx_http_vod_mapped_request_handler(ngx_http_request_t *r)
 		}
 
 		// initialize for reading files
+		ctx->reader = &reader_file;
+		ctx->read = (ngx_http_vod_async_read_func_t)ngx_async_file_read;
 		ctx->alloc_params_index = READER_FILE;
 		ctx->alignment = ctx->alloc_params[READER_FILE].alignment;
-
-		ctx->open_file = ngx_http_vod_init_file_reader;
-		ctx->async_read = (ngx_http_vod_async_read_func_t)ngx_async_file_read;
 	}
 	else
 	{
 		// initialize for http read
+		ctx->reader = &reader_http;
+		ctx->read = (ngx_http_vod_async_read_func_t)ngx_http_vod_async_http_read;
 		ctx->alloc_params_index = READER_HTTP;
 		ctx->alignment = ctx->alloc_params[READER_HTTP].alignment;
-
-		ctx->open_file = ngx_http_vod_http_reader_open_file;
-		ctx->async_read = (ngx_http_vod_async_read_func_t)ngx_http_vod_async_http_read;
 	}
 
 	// initialize the mapping context
@@ -4290,13 +4309,10 @@ ngx_http_vod_remote_request_handler(ngx_http_request_t *r)
 
 	ctx = ngx_http_get_module_ctx(r, ngx_http_vod_module);
 
+	ctx->reader = &reader_http;
+	ctx->read = (ngx_http_vod_async_read_func_t)ngx_http_vod_async_http_read;
 	ctx->alloc_params_index = READER_HTTP;
 	ctx->alignment = ctx->alloc_params[READER_HTTP].alignment;
-
-	ctx->open_file = ngx_http_vod_http_reader_open_file;
-	ctx->async_read = (ngx_http_vod_async_read_func_t)ngx_http_vod_async_http_read;
-	ctx->dump_part = (ngx_http_vod_dump_part_t)ngx_http_vod_dump_http_part;
-	ctx->dump_request = ngx_http_vod_dump_http_request;
 	ctx->perf_counter_async_read = PC_ASYNC_READ_FILE;
 	ctx->file_key_prefix = (r->headers_in.host != NULL ? &r->headers_in.host->value : NULL);
 

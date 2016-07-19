@@ -28,7 +28,7 @@ vod_status_t media_set_parse_json(
 	request_params_t* request_params,
 	struct segmenter_conf_s* segmenter,
 	vod_str_t* uri,
-	bool_t parse_all_clips,
+	int request_flags,
 	media_set_t* result);
 
 vod_status_t media_set_map_source(

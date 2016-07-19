@@ -20,11 +20,6 @@
 #define ngx_http_vod_submodule_size_only(submodule_context)		\
 	((submodule_context)->r->header_only || (submodule_context)->r->method == NGX_HTTP_HEAD)
 
-// request flags
-#define REQUEST_FLAG_SINGLE_TRACK (0x1)
-#define REQUEST_FLAG_SINGLE_TRACK_PER_MEDIA_TYPE (0x2)
-#define REQUEST_FLAG_TIME_DEPENDENT_ON_LIVE (0x4)
-
 // request classes
 enum {
 	REQUEST_CLASS_MANIFEST,

@@ -14,6 +14,7 @@
 #define INVALID_SEGMENT_TIME (ULLONG_MAX)
 #define INVALID_CLIP_INDEX (UINT_MAX)
 
+#define MAX_LOOK_AHEAD_SEGMENTS (2)
 #define MAX_NOTIFICATIONS (1024)
 #define MAX_CLIPS (128)
 #define MAX_CLIPS_PER_REQUEST (16)
@@ -54,6 +55,7 @@ struct media_sequence_s {
 	language_id_t language;
 	int64_t first_key_frame_offset;
 	vod_array_part_t* key_frame_durations;
+	uint64_t last_key_frame_time;
 
 	// initialized after mapping
 	vod_str_t mapped_uri;
@@ -91,6 +93,11 @@ typedef struct media_notification_s {
 } media_notification_t;
 
 typedef struct {
+	uint64_t start_time;
+	uint32_t duration;
+} media_look_ahead_segment_t;
+
+typedef struct {
 	// initialized during parsing
 	struct segmenter_conf_s* segmenter_conf;
 
@@ -112,6 +119,8 @@ typedef struct {
 	uint64_t segment_start_time;
 	uint32_t segment_duration;
 	int64_t live_window_duration;
+	media_look_ahead_segment_t* look_ahead_segments;
+	uint32_t look_ahead_segment_count;
 
 	uint32_t initial_segment_index;
 	uint32_t initial_clip_index;
