@@ -8,6 +8,10 @@
 #include "filters/dynamic_clip.h"
 #include "parse_utils.h"
 
+// macros
+#define HASH_TABLE(name) \
+	{ #name "_hash", name ## _params, sizeof(name ## _params[0]), &name ## _hash }
+
 // typedefs
 enum {
 	MEDIA_SET_PARAM_DISCONTINUITY,
@@ -29,6 +33,13 @@ enum {
 };
 
 enum {
+	MEDIA_CLIP_PARAM_FIRST_KEY_FRAME_OFFSET,
+	MEDIA_CLIP_PARAM_KEY_FRAME_DURATIONS,
+
+	MEDIA_CLIP_PARAM_COUNT
+};
+
+enum {
 	MEDIA_NOTIFICATION_PARAM_ID,
 	MEDIA_NOTIFICATION_PARAM_OFFSET,
 
@@ -47,32 +58,30 @@ typedef struct {
 	uint32_t expected_clip_count;
 } media_set_parse_sequences_context_t;
 
+typedef struct {
+	vod_array_part_t part;
+	int64_t duration;
+} single_duration_part_t;
+
+typedef struct {
+	char* hash_name;
+	void* elements;
+	size_t element_size;
+	vod_hash_t* output;
+} hash_definition_t;
+
+typedef vod_status_t(*parser_init_t)(vod_pool_t* pool, vod_pool_t* temp_pool);
+
 // forward decls
 static vod_status_t media_set_parse_tracks_spec(void* ctx, vod_json_value_t* value, void* dest);
 static vod_status_t media_set_parse_int32(void* ctx, vod_json_value_t* value, void* dest);
-static vod_status_t media_set_parse_int64(void* ctx, vod_json_value_t* value, void* dest);
 static vod_status_t media_set_parse_encryption_key(void* ctx, vod_json_value_t* value, void* dest);
 static vod_status_t media_set_parse_source(void* ctx, vod_json_object_t* element, void** result);
 static vod_status_t media_set_parse_language(void* ctx, vod_json_value_t* value, void* dest);
-static vod_status_t media_set_parse_array(void* ctx, vod_json_value_t* value, void* dest);
 static vod_status_t media_set_parse_clips_array(void* ctx, vod_json_value_t* value, void* dest);
 
 // constants
-static json_object_key_def_t media_notification_params[] = {
-	{ vod_string("id"), VOD_JSON_STRING, MEDIA_NOTIFICATION_PARAM_ID },
-	{ vod_string("offset"), VOD_JSON_INT, MEDIA_NOTIFICATION_PARAM_OFFSET },
-	{ vod_null_string, 0, 0 }
-};
-
-static json_object_value_def_t media_clip_source_params[] = {
-	{ vod_string("path"), VOD_JSON_STRING, offsetof(media_clip_source_t, mapped_uri), media_set_parse_null_term_string },
-	{ vod_string("tracks"), VOD_JSON_STRING, offsetof(media_clip_source_t, tracks_mask), media_set_parse_tracks_spec },
-	{ vod_string("clipFrom"), VOD_JSON_INT, offsetof(media_clip_source_t, clip_from), media_set_parse_int32 },
-	{ vod_string("encryptionKey"), VOD_JSON_STRING, offsetof(media_clip_source_t, encryption_key), media_set_parse_encryption_key },
-	{ vod_null_string, 0, 0, NULL }
-};
-
-static json_parser_union_type_def_t media_clip_union_types[] = {
+static json_parser_union_type_def_t media_clip_union_params[] = {
 	{ vod_string("gainFilter"), gain_filter_parse },
 	{ vod_string("mixFilter"), mix_filter_parse },
 	{ vod_string("rateFilter"), rate_filter_parse },
@@ -82,14 +91,32 @@ static json_parser_union_type_def_t media_clip_union_types[] = {
 	{ vod_null_string, NULL }
 };
 
-static json_object_value_def_t media_sequence_params[] = {
-	{ vod_string("id"), VOD_JSON_STRING, offsetof(media_sequence_t, id), media_set_parse_null_term_string },
-	{ vod_string("clips"), VOD_JSON_ARRAY, offsetof(media_sequence_t, unparsed_clips), media_set_parse_clips_array },
-	{ vod_string("language"), VOD_JSON_STRING, offsetof(media_sequence_t, language), media_set_parse_language },
-	{ vod_string("label"), VOD_JSON_STRING, offsetof(media_sequence_t, label), media_set_parse_null_term_string },
-	{ vod_string("firstKeyFrameOffset"), VOD_JSON_INT, offsetof(media_sequence_t, first_key_frame_offset), media_set_parse_int64 },
-	{ vod_string("keyFrameDurations"), VOD_JSON_ARRAY, offsetof(media_sequence_t, key_frame_durations), media_set_parse_array },
+static json_object_value_def_t media_clip_source_params[] = {
+	{ vod_string("path"),			VOD_JSON_STRING,	offsetof(media_clip_source_t, mapped_uri), media_set_parse_null_term_string },
+	{ vod_string("tracks"),			VOD_JSON_STRING,	offsetof(media_clip_source_t, tracks_mask), media_set_parse_tracks_spec },
+	{ vod_string("clipFrom"),		VOD_JSON_INT,		offsetof(media_clip_source_t, clip_from), media_set_parse_int32 },
+	{ vod_string("encryptionKey"),	VOD_JSON_STRING,	offsetof(media_clip_source_t, encryption_key), media_set_parse_encryption_key },
 	{ vod_null_string, 0, 0, NULL }
+};
+
+static json_object_value_def_t media_sequence_params[] = {
+	{ vod_string("id"),				VOD_JSON_STRING,	offsetof(media_sequence_t, id), media_set_parse_null_term_string },
+	{ vod_string("clips"),			VOD_JSON_ARRAY,		offsetof(media_sequence_t, unparsed_clips), media_set_parse_clips_array },
+	{ vod_string("language"),		VOD_JSON_STRING,	offsetof(media_sequence_t, language), media_set_parse_language },
+	{ vod_string("label"),			VOD_JSON_STRING,	offsetof(media_sequence_t, label), media_set_parse_null_term_string },
+	{ vod_null_string, 0, 0, NULL }
+};
+
+static json_object_key_def_t media_notification_params[] = {
+	{ vod_string("id"),								VOD_JSON_STRING,MEDIA_NOTIFICATION_PARAM_ID },
+	{ vod_string("offset"),							VOD_JSON_INT,	MEDIA_NOTIFICATION_PARAM_OFFSET },
+	{ vod_null_string, 0, 0 }
+};
+
+static json_object_key_def_t media_clip_params[] = {
+	{ vod_string("firstKeyFrameOffset"),			VOD_JSON_INT,	MEDIA_CLIP_PARAM_FIRST_KEY_FRAME_OFFSET },
+	{ vod_string("keyFrameDurations"),				VOD_JSON_ARRAY, MEDIA_CLIP_PARAM_KEY_FRAME_DURATIONS },
+	{ vod_null_string, 0, 0 }
 };
 
 static json_object_key_def_t media_set_params[] = {
@@ -116,12 +143,32 @@ static vod_uint_t type_key_hash = vod_hash(vod_hash(vod_hash('t', 'y'), 'p'), 'e
 static vod_str_t playlist_type_vod = vod_string("vod");
 static vod_str_t playlist_type_live = vod_string("live");
 
+static parser_init_t parser_init_funcs[] = {
+	gain_filter_parser_init,
+	mix_filter_parser_init,
+	rate_filter_parser_init,
+	concat_clip_parser_init,
+	dynamic_clip_parser_init,
+	NULL
+};
+
 // globals
 static vod_hash_t media_clip_source_hash;
 static vod_hash_t media_clip_union_hash;
 static vod_hash_t media_sequence_hash;
 static vod_hash_t media_notification_hash;
 static vod_hash_t media_set_hash;
+static vod_hash_t media_clip_hash;
+
+static hash_definition_t hash_definitions[] = {
+	HASH_TABLE(media_set),
+	HASH_TABLE(media_sequence),
+	HASH_TABLE(media_clip_source),
+	HASH_TABLE(media_clip_union),
+	HASH_TABLE(media_notification),
+	HASH_TABLE(media_clip),
+	{ NULL, NULL, 0, NULL }
+};
 
 static vod_status_t
 media_set_parse_durations(
@@ -212,16 +259,6 @@ media_set_parse_int32(
 	void* dest)
 {
 	*(uint32_t*)dest = value->v.num.nom;
-	return VOD_OK;
-}
-
-static vod_status_t 
-media_set_parse_int64(
-	void* ctx,
-	vod_json_value_t* value,
-	void* dest)
-{
-	*(int64_t*)dest = value->v.num.nom;
 	return VOD_OK;
 }
 
@@ -334,16 +371,6 @@ media_set_parse_tracks_spec(
 		return VOD_BAD_MAPPING;
 	}
 
-	return VOD_OK;
-}
-
-static vod_status_t 
-media_set_parse_array(
-	void* ctx,
-	vod_json_value_t* value,
-	void* dest)
-{
-	*(vod_array_part_t**)dest = &value->v.arr.part;
 	return VOD_OK;
 }
 
@@ -843,96 +870,34 @@ media_set_parser_init(
 	vod_pool_t* pool,
 	vod_pool_t* temp_pool)
 {
+	hash_definition_t* hash_definition;
+	parser_init_t* init_func;
 	vod_status_t rc;
 
-	rc = vod_json_init_hash(
-		pool,
-		temp_pool,
-		"media_set_hash",
-		media_set_params,
-		sizeof(media_set_params[0]),
-		&media_set_hash);
-	if (rc != VOD_OK)
+	// initialize hash tables
+	for (hash_definition = hash_definitions; hash_definition->hash_name != NULL; hash_definition++)
 	{
-		return rc;
+		rc = vod_json_init_hash(
+			pool,
+			temp_pool,
+			hash_definition->hash_name,
+			hash_definition->elements,
+			hash_definition->element_size,
+			hash_definition->output);
+		if (rc != VOD_OK)
+		{
+			return rc;
+		}
 	}
 
-	rc = vod_json_init_hash(
-		pool,
-		temp_pool,
-		"media_sequence_hash",
-		media_sequence_params,
-		sizeof(media_sequence_params[0]),
-		&media_sequence_hash);
-	if (rc != VOD_OK)
+	// initialize child parsers
+	for (init_func = parser_init_funcs; *init_func != NULL; init_func++)
 	{
-		return rc;
-	}
-
-	rc = vod_json_init_hash(
-		pool,
-		temp_pool,
-		"media_clip_source_hash",
-		media_clip_source_params,
-		sizeof(media_clip_source_params[0]),
-		&media_clip_source_hash);
-	if (rc != VOD_OK)
-	{
-		return rc;
-	}
-
-	rc = vod_json_init_hash(
-		pool,
-		temp_pool,
-		"media_clip_union_hash",
-		media_clip_union_types,
-		sizeof(media_clip_union_types[0]),
-		&media_clip_union_hash);
-	if (rc != VOD_OK)
-	{
-		return rc;
-	}
-
-	rc = vod_json_init_hash(
-		pool,
-		temp_pool,
-		"media_notification_hash",
-		media_notification_params,
-		sizeof(media_notification_params[0]),
-		&media_notification_hash);
-	if (rc != VOD_OK)
-	{
-		return rc;
-	}
-
-	rc = gain_filter_parser_init(pool, temp_pool);
-	if (rc != VOD_OK)
-	{
-		return rc;
-	}
-
-	rc = mix_filter_parser_init(pool, temp_pool);
-	if (rc != VOD_OK)
-	{
-		return rc;
-	}
-
-	rc = rate_filter_parser_init(pool, temp_pool);
-	if (rc != VOD_OK)
-	{
-		return rc;
-	}
-
-	rc = concat_clip_parser_init(pool, temp_pool);
-	if (rc != VOD_OK)
-	{
-		return rc;
-	}
-
-	rc = dynamic_clip_parser_init(pool, temp_pool);
-	if (rc != VOD_OK)
-	{
-		return rc;
+		rc = (*init_func)(pool, temp_pool);
+		if (rc != VOD_OK)
+		{
+			return rc;
+		}
 	}
 
 	return VOD_OK;
@@ -1318,6 +1283,319 @@ media_set_parse_notifications(
 	return VOD_OK;
 }
 
+static vod_status_t
+media_set_init_look_ahead_segments(
+	request_context_t* request_context,
+	media_set_t* media_set,
+	get_clip_ranges_params_t* get_ranges_params)
+{
+	media_look_ahead_segment_t* cur_output;
+	get_clip_ranges_result_t clip_ranges;
+	vod_status_t rc;
+	uint32_t segment_index_limit;
+
+	cur_output = vod_alloc(request_context->pool,
+		sizeof(cur_output[0]) *  MAX_LOOK_AHEAD_SEGMENTS);
+	if (cur_output == NULL)
+	{
+		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
+			"media_set_init_look_ahead_segments: vod_alloc failed");
+		return VOD_ALLOC_FAILED;
+	}
+
+	media_set->look_ahead_segments = cur_output;
+
+	segment_index_limit = get_ranges_params->segment_index + MAX_LOOK_AHEAD_SEGMENTS;
+
+	while (get_ranges_params->segment_index < segment_index_limit)
+	{
+		get_ranges_params->segment_index++;
+		rc = segmenter_get_start_end_ranges_no_discontinuity(
+			get_ranges_params,
+			&clip_ranges);
+		if (rc != VOD_OK)
+		{
+			return rc;
+		}
+
+		if (clip_ranges.clip_count <= 0)
+		{
+			break;
+		}
+
+		cur_output->start_time = clip_ranges.clip_time + clip_ranges.clip_ranges[0].start;
+		cur_output->duration =
+			(media_set->timing.times[clip_ranges.max_clip_index] +
+			clip_ranges.clip_ranges[clip_ranges.clip_count - 1].end) -
+			cur_output->start_time;
+		cur_output++;
+	}
+
+	media_set->look_ahead_segment_count = cur_output - media_set->look_ahead_segments;
+	return VOD_OK;
+}
+
+static vod_status_t
+media_set_sum_key_frame_durations(
+	request_context_t* request_context,
+	vod_array_part_t* part, 
+	vod_array_part_t** last_part,
+	uint64_t* result)
+{
+	uint64_t sum = 0;
+	int64_t cur_duration;
+	int64_t* cur_pos;
+
+	for (cur_pos = part->first;; cur_pos++)
+	{
+		if ((void*)cur_pos >= part->last)
+		{
+			if (part->next == NULL)
+			{
+				break;
+			}
+
+			part = part->next;
+			cur_pos = part->first;
+		}
+
+		cur_duration = *cur_pos;
+		if (cur_duration <= 0 || cur_duration > MAX_CLIP_DURATION)
+		{
+			vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+				"media_set_sum_key_frame_durations: ignoring invalid key frame duration %L", cur_duration);
+			return VOD_BAD_MAPPING;
+		}
+
+		sum += cur_duration;
+	}
+
+	*last_part = part;
+	*result = sum;
+	return VOD_OK;
+}
+
+static vod_status_t
+media_set_parse_sequence_key_frame_offsets(
+	request_context_t* request_context,
+	media_sequence_t* sequence, 
+	media_clip_timing_t* timing)
+{
+	single_duration_part_t* duration_part = NULL;
+	vod_json_value_t* params[MEDIA_CLIP_PARAM_COUNT];
+	vod_array_part_t* durations;
+	vod_array_part_t* last_part = NULL;
+	vod_array_part_t* new_part;
+	vod_array_part_t* part;
+	vod_json_object_t* cur_pos;
+	vod_status_t rc;
+	uint64_t* cur_clip_time;
+	uint32_t* cur_duration;
+	uint64_t first_key_frame_time;
+	uint64_t last_key_frame_time = 0;
+	uint64_t clip_end_time;
+	uint64_t sum_durations;
+	int64_t first_key_frame_offset;
+
+	if (timing->total_count > 1)
+	{
+		duration_part = vod_alloc(request_context->pool, sizeof(*duration_part) * (timing->total_count - 1));
+		if (duration_part == NULL)
+		{
+			vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
+				"media_set_parse_sequence_key_frame_offsets: vod_alloc failed");
+			return VOD_ALLOC_FAILED;
+		}
+	}
+
+	part = sequence->unparsed_clips;
+	for (cur_pos = part->first, cur_duration = timing->durations, cur_clip_time = timing->times;
+		;
+		cur_pos++, cur_duration++, cur_clip_time++)
+	{
+		if ((void*)cur_pos >= part->last)
+		{
+			if (part->next == NULL)
+			{
+				break;
+			}
+
+			part = part->next;
+			cur_pos = part->first;
+		}
+
+		// get the key frame params
+		vod_memzero(params, sizeof(params));
+
+		vod_json_get_object_values(
+			cur_pos,
+			&media_clip_hash,
+			params);
+
+		if (params[MEDIA_CLIP_PARAM_KEY_FRAME_DURATIONS] == NULL)
+		{
+			continue;
+		}
+
+		// get the first key frame time
+		first_key_frame_time = *cur_clip_time;
+		if (params[MEDIA_CLIP_PARAM_FIRST_KEY_FRAME_OFFSET] != NULL)
+		{
+			first_key_frame_offset = params[MEDIA_CLIP_PARAM_FIRST_KEY_FRAME_OFFSET]->v.num.nom;
+			if (first_key_frame_offset < 0 || first_key_frame_offset > *cur_duration)
+			{
+				vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+					"media_set_parse_sequence_key_frame_offsets: invalid first key frame offset %L", 
+					first_key_frame_offset);
+				return VOD_BAD_MAPPING;
+			}
+
+			first_key_frame_time += first_key_frame_offset;
+		}
+
+		durations = &params[MEDIA_CLIP_PARAM_KEY_FRAME_DURATIONS]->v.arr.part;
+
+		// add the durations to the array
+		if (last_part == NULL)
+		{
+			sequence->first_key_frame_offset = first_key_frame_time - timing->first_time;
+			sequence->key_frame_durations = durations;
+
+			if (durations->first >= durations->last)
+			{
+				last_part = durations;
+				last_key_frame_time = first_key_frame_time;
+				continue;
+			}
+		}
+		else if (first_key_frame_time > last_key_frame_time)
+		{
+			duration_part->duration = first_key_frame_time - last_key_frame_time;
+			new_part = &duration_part->part;
+			new_part->first = &duration_part->duration;
+			new_part->last = &duration_part->duration + 1;
+			new_part->count = 1;
+			duration_part++;
+
+			last_part->next = new_part;
+
+			if (durations->first >= durations->last)
+			{
+				new_part->next = NULL;
+				last_part = new_part;
+				last_key_frame_time = first_key_frame_time;
+				continue;
+			}
+
+			new_part->next = durations;
+		}
+		else
+		{
+			if (durations->first >= durations->last)
+			{
+				continue;
+			}
+
+			last_part->next = durations;
+		}
+
+		// get the key frame durations
+		rc = media_set_sum_key_frame_durations(
+			request_context,
+			durations,
+			&last_part,
+			&sum_durations);
+		if (rc != VOD_OK)
+		{
+			return rc;
+		}
+
+		last_key_frame_time = first_key_frame_time + sum_durations;
+		clip_end_time = *cur_clip_time + *cur_duration;
+		if (last_key_frame_time > clip_end_time)
+		{
+			vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+				"media_set_parse_sequence_key_frame_offsets: last key frame time %uL exceeds clip end time %uL",
+				last_key_frame_time, clip_end_time);
+			return VOD_BAD_MAPPING;
+		}
+	}
+
+	sequence->last_key_frame_time = last_key_frame_time;
+
+#if (VOD_DEBUG)
+	if (sequence->key_frame_durations != NULL)
+	{
+		int64_t last_kf_duration = -1;
+		int64_t* cur_kf_duration;
+		uint32_t kf_count = 0;
+
+		vod_log_debug1(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
+			"media_set_parse_sequence_key_frame_offsets: first_key_frame_offset %L", sequence->first_key_frame_offset);
+		part = sequence->key_frame_durations;
+		for (cur_kf_duration = part->first;
+			;
+			cur_kf_duration++)
+		{
+			if ((void*)cur_kf_duration >= part->last)
+			{
+				if (part->next == NULL)
+				{
+					break;
+				}
+
+				part = part->next;
+				cur_kf_duration = part->first;
+			}
+
+			if (last_kf_duration != *cur_kf_duration && kf_count > 0)
+			{
+				vod_log_debug2(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
+					"media_set_parse_sequence_key_frame_offsets: duration %L x %uD", last_kf_duration, kf_count);
+				kf_count = 0;
+			}
+
+			last_kf_duration = *cur_kf_duration;
+			kf_count++;
+		}
+
+		if (kf_count > 0)
+		{
+			vod_log_debug2(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
+				"media_set_parse_sequence_key_frame_offsets: duration %L x %uD", last_kf_duration, kf_count);
+		}
+
+		vod_log_debug1(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
+			"media_set_parse_sequence_key_frame_offsets: last_key_frame_time %L", sequence->last_key_frame_time);
+	}
+#endif
+
+	return VOD_OK;
+}
+
+static vod_status_t
+media_set_parse_key_frame_offsets(
+	request_context_t* request_context,
+	media_set_t* media_set)
+{
+	media_sequence_t* sequence;
+	vod_status_t rc;
+
+	for (sequence = media_set->sequences; sequence < media_set->sequences_end; sequence++)
+	{
+		rc = media_set_parse_sequence_key_frame_offsets(
+			request_context,
+			sequence,
+			&media_set->timing);
+		if (rc != VOD_OK)
+		{
+			return rc;
+		}
+	}
+
+	return VOD_OK;
+}
+
 vod_status_t
 media_set_parse_json(
 	request_context_t* request_context, 
@@ -1325,7 +1603,7 @@ media_set_parse_json(
 	request_params_t* request_params,
 	segmenter_conf_t* segmenter,
 	vod_str_t* uri,
-	bool_t parse_all_clips,
+	int request_flags,
 	media_set_t* result)
 {
 	media_set_parse_context_t context;
@@ -1334,6 +1612,7 @@ media_set_parse_json(
 	vod_json_value_t json;
 	vod_status_t rc;
 	uint32_t margin;
+	bool_t parse_all_clips;
 	u_char error[128];
 
 	// parse the json and get the media set object values
@@ -1440,7 +1719,11 @@ media_set_parse_json(
 	}
 
 	// discontinuity
-	if (params[MEDIA_SET_PARAM_DISCONTINUITY] != NULL)
+	if ((request_flags & REQUEST_FLAG_NO_DISCONTINUITY) != 0)
+	{
+		result->use_discontinuity = FALSE;
+	}
+	else if (params[MEDIA_SET_PARAM_DISCONTINUITY] != NULL)
 	{
 		result->use_discontinuity = params[MEDIA_SET_PARAM_DISCONTINUITY]->v.boolean;
 
@@ -1504,6 +1787,13 @@ media_set_parse_json(
 		}
 	}
 
+	// get the key frame durations
+	rc = media_set_parse_key_frame_offsets(request_context, result);
+	if (rc != VOD_OK)
+	{
+		return rc;
+	}
+
 	if (request_params->segment_index != INVALID_SEGMENT_INDEX || request_params->segment_time != INVALID_SEGMENT_TIME)
 	{
 		// recalculate the segment index if it was determined according to timestamp
@@ -1561,6 +1851,10 @@ media_set_parse_json(
 				rc = segmenter_get_start_end_ranges_discontinuity(
 					&get_ranges_params,
 					&context.clip_ranges);
+				if (rc != VOD_OK)
+				{
+					return rc;
+				}
 			}
 			else
 			{
@@ -1569,6 +1863,25 @@ media_set_parse_json(
 				rc = segmenter_get_start_end_ranges_no_discontinuity(
 					&get_ranges_params,
 					&context.clip_ranges);
+				if (rc != VOD_OK)
+				{
+					return rc;
+				}
+
+				// initialize the look ahead segment times
+				if (result->type == MEDIA_SET_LIVE &&
+					(request_flags & REQUEST_FLAG_LOOK_AHEAD_SEGMENTS) != 0)
+				{
+					rc = media_set_init_look_ahead_segments(
+						request_context,
+						result,
+						&get_ranges_params);
+					if (rc != VOD_OK)
+					{
+						return rc;
+					}
+
+				}
 			}
 		}
 		else
@@ -1579,11 +1892,10 @@ media_set_parse_json(
 			rc = segmenter_get_start_end_ranges_gop(
 				&get_ranges_params,
 				&context.clip_ranges);
-		}
-
-		if (rc != VOD_OK)
-		{
-			return rc;
+			if (rc != VOD_OK)
+			{
+				return rc;
+			}
 		}
 
 		if (context.clip_ranges.clip_count <= 0)
@@ -1592,8 +1904,8 @@ media_set_parse_json(
 		}
 
 		// set the segment_start_time & segment_duration
-		result->segment_start_time = context.clip_ranges.clip_time;
-		result->segment_start_time += context.clip_ranges.clip_ranges[0].start;
+		result->segment_start_time = context.clip_ranges.clip_time + 
+			context.clip_ranges.clip_ranges[0].start;
 		result->segment_duration = 
 			(result->timing.times[context.clip_ranges.max_clip_index] + 
 				context.clip_ranges.clip_ranges[context.clip_ranges.clip_count - 1].end) -
@@ -1641,6 +1953,14 @@ media_set_parse_json(
 			{
 				parse_all_clips = TRUE;
 			}
+			else if ((request_flags & REQUEST_FLAG_PARSE_ALL_CLIPS) != 0)
+			{
+				parse_all_clips = TRUE;
+			}
+			else
+			{
+				parse_all_clips = FALSE;
+			}
 
 			if (result->type == MEDIA_SET_LIVE)
 			{
@@ -1652,6 +1972,19 @@ media_set_parse_json(
 					result->live_window_duration = media_set_apply_live_window_duration_param(
 						result->live_window_duration,
 						params[MEDIA_SET_PARAM_LIVE_WINDOW_DURATION]->v.num.nom);
+				}
+
+				if ((request_flags & REQUEST_FLAG_LOOK_AHEAD_SEGMENTS) != 0)
+				{
+					// increase the live window to compensate for the look ahead segments reduction
+					if (result->live_window_duration > 0)
+					{
+						result->live_window_duration += segmenter->segment_duration * MAX_LOOK_AHEAD_SEGMENTS;
+					}
+					else if (result->live_window_duration < 0)
+					{
+						result->live_window_duration -= segmenter->segment_duration * MAX_LOOK_AHEAD_SEGMENTS;
+					}
 				}
 
 				rc = segmenter_get_live_window(

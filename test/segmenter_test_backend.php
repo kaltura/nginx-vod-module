@@ -41,12 +41,40 @@ function getRequestParams()
         return $params;
 }
 
-function getSourceClip($filePath)
+function getSourceClips($filePaths, $durations, $generateKfs)
 {
-	return array(
-		"type" => "source",
-		"path" => $filePath
-	);
+	$result = array();
+	for ($i = 0; $i < count($filePaths); $i++)
+	{
+		$clip = array(
+			"type" => "source",
+			"path" => $filePaths[$i]
+		);
+		
+		if ($generateKfs)
+		{
+			$r = new Random();
+			$curPos = $r->num(0, 1000);
+			$clip["firstKeyFrameOffset"] = $curPos;
+			$limit = $durations[$i];
+			$kfDurations = array();
+			for (;;)
+			{
+				$curDuration = $r->num(500, 4000);
+				$curPos += $curDuration;
+				if ($curPos > $limit)
+				{
+					break;
+				}
+				$kfDurations[] = $curDuration;
+			}
+			$clip["keyFrameDurations"] = $kfDurations;
+		}
+		
+		$result[] = $clip;
+	}
+	
+	return $result;
 }
 
 // input params
@@ -91,24 +119,6 @@ if (!is_numeric($params['window']))
 	die("invalid value for 'window', must be numeric\n");
 }
 
-// build the sequence
-$sequence = array();
-if ($params['kf'] == 'yes')
-{
-	$r = new Random();
-	$curPos = -500;
-	$sequence["firstKeyFrameOffset"] = $curPos;
-	$limit = $sumDurations + $gapSize * count($durations);
-	$kfDurations = array();
-	while ($curPos < $limit)
-	{
-		$curDuration = $r->num(1000, 5000);
-		$kfDurations[] = $curDuration;
-		$curPos += $curDuration;
-	}
-	$sequence["keyFrameDurations"] = $kfDurations;
-}
-
 // parse the input
 $discontinuity = $params['disc'] != 'no';
 $playlistType = $params['type'];
@@ -119,7 +129,9 @@ $mediaSet = array();
 switch ($playlistType)
 {
 case 'vod':
-	$sequence["clips"] = array(getSourceClip($filePaths[0]));
+	$sequence = array(
+		"clips" => getSourceClips(array($filePaths[0]), array($durations[0]), $params['kf'] == 'yes')
+		);
 	$mediaSet = array_merge($mediaSet, array(
 		"sequences" => array($sequence)
 	));
@@ -168,7 +180,9 @@ case 'live':
 	break;
 }
 
-$sequence["clips"] = array_map('getSourceClip', $filePaths);
+$sequence = array(
+	"clips" => getSourceClips($filePaths, $durations, $params['kf'] == 'yes')
+);
 
 // generate the result object
 $mediaSet = array_merge($mediaSet, array(

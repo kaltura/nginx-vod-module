@@ -280,13 +280,6 @@ segmenter_align_to_key_frames(
 
 		cur_duration = *context->cur_pos++;
 
-		if (cur_duration <= 0 || cur_duration > MAX_CLIP_DURATION)
-		{
-			vod_log_error(VOD_LOG_WARN, context->request_context->log, 0,
-				"segmenter_align_to_key_frames: ignoring invalid key frame duration %L", cur_duration);
-			continue;
-		}
-
 		context->offset += cur_duration;
 		if (context->offset >= limit)
 		{
@@ -851,10 +844,7 @@ segmenter_get_live_window_start_end(
 {
 	align_to_key_frames_context_t align_context;
 	media_sequence_t* sequence = media_set->sequences;
-	vod_array_part_t* part;
-	int64_t* cur_pos;
 	int64_t live_window_duration = media_set->live_window_duration;
-	int64_t last_key_frame_time;
 	uint64_t segment_base_time;
 	uint64_t clip_end_time;
 	uint64_t clip_time;
@@ -902,29 +892,10 @@ segmenter_get_live_window_start_end(
 
 	if (!media_set->presentation_end && sequence->key_frame_durations != NULL)
 	{
-		// get the last key frame time
-		part = sequence->key_frame_durations;
-		last_key_frame_time = timing->first_time + sequence->first_key_frame_offset;
-		for (cur_pos = part->first;; cur_pos++)
-		{
-			if ((void*)cur_pos >= part->last)
-			{
-				if (part->next == NULL)
-				{
-					break;
-				}
-
-				part = part->next;
-				cur_pos = part->first;
-			}
-
-			last_key_frame_time += *cur_pos;
-		}
-
 		// make sure end time does not exceed the last key frame time
-		if ((uint64_t)last_key_frame_time < end_time)
+		if ((uint64_t)sequence->last_key_frame_time < end_time)
 		{
-			end_time = last_key_frame_time;
+			end_time = sequence->last_key_frame_time;
 			end_clip_index = UINT_MAX;
 		}
 	}

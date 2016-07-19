@@ -443,14 +443,6 @@ Optional fields:
 * `label` - a friendly string that identifies the sequence. if a language is specified,
 	a default label will be automatically derived by it - e.g. if language is `ita`, 
 	by default `italiano` will be used as the label.
-* `keyFrameDurations` - array of integers, containing the durations of the video key frames
-	in the sequence. Supplying the key frame durations enables the module to both:
-	1. align the segments to key frames 
-	2. report the correct segment durations in the manifest - providing an alternative to setting
-		`vod_manifest_segment_durations_mode` to `accurate`, which is not supported for multi clip
-		media sets (for performance reasons).
-* `firstKeyFrameOffset` - integer, offset of the first video key frame in the sequence, 
-	measured in milliseconds relative to `firstClipTime`. Defaults to 0 if not supplied.
 
 #### Clip (abstract)
 
@@ -462,7 +454,19 @@ Mandatory fields:
 	* gainFilter
 	* concat
 	* dynamic
-	
+
+Optional fields:
+* `keyFrameDurations` - array of integers, containing the durations of the video key frames
+	in the clip. This property can only be supplied on the top level clips of each sequence,
+	supplying this property on nested clips has no effect.
+	Supplying the key frame durations enables the module to both:
+	1. align the segments to key frames 
+	2. report the correct segment durations in the manifest - providing an alternative to setting
+		`vod_manifest_segment_durations_mode` to `accurate`, which is not supported for multi clip
+		media sets (for performance reasons).
+* `firstKeyFrameOffset` - integer, offset of the first video key frame in the clip, 
+	measured in milliseconds relative to `firstClipTime`. Defaults to 0 if not supplied.
+
 #### Source clip
 
 Mandatory fields:

@@ -3,8 +3,8 @@
 #include "../manifest_utils.h"
 
 // constants
-#define MSS_LOOK_AHEAD_COUNT (2)
-#define TFRF_ATOM_SIZE (ATOM_HEADER_SIZE + sizeof(uuid_tfrf_atom_t) + sizeof(uuid_tfrf_entry_t) * MSS_LOOK_AHEAD_COUNT)
+#define get_tfrf_atom_size(count) \
+	(ATOM_HEADER_SIZE + sizeof(uuid_tfrf_atom_t) + sizeof(uuid_tfrf_entry_t) * (count))
 
 #define MSS_AUDIO_TAG_AAC (255)
 #define MSS_AUDIO_TAG_MP3 (85)
@@ -288,6 +288,30 @@ mss_packager_remove_redundant_tracks(
 	}
 }
 
+static void
+mss_packager_remove_segment_durations(segment_durations_t* segment_durations, uint32_t count)
+{
+	segment_duration_item_t* cur_pos = &segment_durations->items[segment_durations->item_count - 1];
+	uint32_t cur_count;
+
+	segment_durations->segment_count -= count;
+
+	while (count > 0)
+	{
+		cur_count = vod_min(count, cur_pos->repeat_count);
+		cur_pos->repeat_count -= cur_count;
+		if (cur_pos->repeat_count <= 0)
+		{
+			segment_durations->item_count--;
+			cur_pos--;
+		}
+
+		count -= cur_count;
+	}
+
+	// Note: not updating segment_durations->end_time / segment_durations->duration since they are not needed here
+}
+
 vod_status_t 
 mss_packager_build_manifest(
 	request_context_t* request_context, 
@@ -375,6 +399,19 @@ mss_packager_build_manifest(
 			break;
 
 		case MEDIA_SET_LIVE:
+			if (!media_set->presentation_end)
+			{
+				if (segment_durations[media_type].segment_count <= MAX_LOOK_AHEAD_SEGMENTS)
+				{
+					vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+						"mss_packager_build_manifest: segment count %uD smaller than look ahead segment count", 
+						segment_durations[media_type].segment_count);
+					return VOD_BAD_REQUEST;
+				}
+
+				mss_packager_remove_segment_durations(&segment_durations[media_type], MAX_LOOK_AHEAD_SEGMENTS);
+			}
+
 			adaptation_set_size = segment_durations[media_type].segment_count * (sizeof(MSS_CHUNK_TAG_LIVE) + VOD_INT64_LEN) +
 				sizeof(MSS_CHUNK_TAG_LIVE_FIRST) + 2 * VOD_INT64_LEN;
 			break;
@@ -442,7 +479,7 @@ mss_packager_build_manifest(
 		media_type = media_set->track_count[MEDIA_TYPE_VIDEO] != 0 ? MEDIA_TYPE_VIDEO : MEDIA_TYPE_AUDIO;
 		p = vod_sprintf(p, MSS_MANIFEST_HEADER_LIVE_ATTRIBUTES, 
 			mss_rescale_millis(segment_durations[media_type].segment_count * segmenter_conf->segment_duration),
-			MSS_LOOK_AHEAD_COUNT);
+			MAX_LOOK_AHEAD_SEGMENTS);
 	}
 	p = vod_copy(p, MSS_MANIFEST_HEADER_SUFFIX, sizeof(MSS_MANIFEST_HEADER_SUFFIX) - 1);
 
@@ -629,24 +666,24 @@ mss_write_uuid_tfxd_atom(u_char* p, segment_timing_info_t* timing_info)
 }
 
 static u_char*
-mss_write_uuid_tfrf_atom(u_char* p, segment_timing_info_t* timing_info)
+mss_write_uuid_tfrf_atom(u_char* p, media_set_t* media_set)
 {
-	size_t atom_size = TFRF_ATOM_SIZE;
+	media_look_ahead_segment_t* cur = media_set->look_ahead_segments;
+	media_look_ahead_segment_t* last = cur + media_set->look_ahead_segment_count;
 	uint64_t timestamp;
 	uint64_t duration;
-	int i;
+	size_t atom_size;
 
-	timestamp = timing_info->timestamp;
-	duration = timing_info->duration;
-
+	atom_size = get_tfrf_atom_size(media_set->look_ahead_segment_count);
 	write_atom_header(p, atom_size, 'u', 'u', 'i', 'd');
 	p = vod_copy(p, tfrf_uuid, sizeof(tfrf_uuid));
 	write_be32(p, 0x01000000);		// version / flags
-	*p++ = MSS_LOOK_AHEAD_COUNT;
+	*p++ = media_set->look_ahead_segment_count;
 
-	for (i = 0; i < MSS_LOOK_AHEAD_COUNT; i++)
+	for (; cur < last; cur++)
 	{
-		timestamp += duration;
+		timestamp = mss_rescale_millis(cur->start_time);
+		duration = mss_rescale_millis(cur->duration);
 		write_be64(p, timestamp);
 		write_be64(p, duration);
 	}
@@ -688,9 +725,9 @@ mss_packager_build_fragment_header(
 		ATOM_HEADER_SIZE + sizeof(uuid_tfxd_atom_t) + 
 		extra_traf_atoms_size;
 
-	if (media_set->type == MEDIA_SET_LIVE)
+	if (media_set->look_ahead_segment_count > 0)
 	{
-		traf_atom_size += TFRF_ATOM_SIZE;
+		traf_atom_size += get_tfrf_atom_size(media_set->look_ahead_segment_count);
 	}
 
 	moof_atom_size =
@@ -747,23 +784,13 @@ mss_packager_build_fragment_header(
 		sequence,
 		moof_atom_size + ATOM_HEADER_SIZE);
 
-	if (media_set->type == MEDIA_SET_LIVE)
+	// moof.traf.tfxd
+	mss_get_segment_timing_info(sequence, &timing_info);
+	p = mss_write_uuid_tfxd_atom(p, &timing_info);
+
+	if (media_set->look_ahead_segment_count > 0)
 	{
-		// using only estimate timing info in live, since we don't have the accurate timing
-		//	for the lookahead segments. the timestamp has to be consistent between segments/manifest
-		//	otherwise some segments may be pulled more than once
-		timing_info.timestamp = mss_rescale_millis(media_set->segment_start_time);
-		timing_info.duration = mss_rescale_millis(media_set->segmenter_conf->segment_duration);
-
-		p = mss_write_uuid_tfxd_atom(p, &timing_info);
-
-		p = mss_write_uuid_tfrf_atom(p, &timing_info);
-	}
-	else
-	{
-		mss_get_segment_timing_info(sequence, &timing_info);
-
-		p = mss_write_uuid_tfxd_atom(p, &timing_info);
+		p = mss_write_uuid_tfrf_atom(p, media_set);
 	}
 
 	// moof.traf.xxx
