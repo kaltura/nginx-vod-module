@@ -27,6 +27,8 @@
 #include "vod/manifest_utils.h"
 #include "vod/thumb/thumb_grabber.h"
 
+#define OPEN_FILE_FALLBACK_ENABLED (0x80000000)
+
 enum {
 	// mapping state machine
 	STATE_MAP_INITIAL,
@@ -58,7 +60,7 @@ struct ngx_http_vod_ctx_s;
 typedef struct ngx_http_vod_ctx_s ngx_http_vod_ctx_t;
 
 typedef ngx_int_t(*ngx_http_vod_state_machine_t)(ngx_http_vod_ctx_t* ctx);
-typedef ngx_int_t(*ngx_http_vod_open_file_t)(ngx_http_request_t* r, ngx_str_t* path, void** context);
+typedef ngx_int_t(*ngx_http_vod_open_file_t)(ngx_http_request_t* r, ngx_str_t* path, uint32_t flags, void** context);
 typedef ngx_int_t(*ngx_http_vod_async_read_func_t)(void* context, ngx_buf_t *buf, size_t size, off_t offset);
 typedef ngx_int_t(*ngx_http_vod_dump_part_t)(void* context, off_t start, off_t end);
 typedef ngx_int_t(*ngx_http_vod_dump_request_t)(ngx_http_vod_ctx_t* context);
@@ -175,11 +177,11 @@ static ngx_int_t ngx_http_vod_run_state_machine(ngx_http_vod_ctx_t *ctx);
 static ngx_int_t ngx_http_vod_process_init(ngx_cycle_t *cycle);
 static ngx_int_t ngx_http_vod_send_notification(ngx_http_vod_ctx_t *ctx);
 
-static ngx_int_t ngx_http_vod_init_file_reader_with_fallback(ngx_http_request_t *r, ngx_str_t* path, void** context);
-static ngx_int_t ngx_http_vod_init_file_reader(ngx_http_request_t *r, ngx_str_t* path, void** context);
+static ngx_int_t ngx_http_vod_init_file_reader_with_fallback(ngx_http_request_t *r, ngx_str_t* path, uint32_t flags, void** context);
+static ngx_int_t ngx_http_vod_init_file_reader(ngx_http_request_t *r, ngx_str_t* path, uint32_t flags, void** context);
 static ngx_int_t ngx_http_vod_dump_file(ngx_http_vod_ctx_t* ctx);
 
-static ngx_int_t ngx_http_vod_http_reader_open_file(ngx_http_request_t* r, ngx_str_t* path, void** context);
+static ngx_int_t ngx_http_vod_http_reader_open_file(ngx_http_request_t* r, ngx_str_t* path, uint32_t flags, void** context);
 static ngx_int_t ngx_http_vod_dump_http_part(ngx_http_vod_http_reader_state_t *state, off_t start, off_t end);
 static ngx_int_t ngx_http_vod_dump_http_request(ngx_http_vod_ctx_t *ctx);
 
@@ -1678,7 +1680,7 @@ ngx_http_vod_state_machine_parse_metadata(ngx_http_vod_ctx_t *ctx)
 			}
 
 			// open the file
-			rc = ctx->reader->open(r, &cur_source->mapped_uri, &cur_source->reader_context);
+			rc = ctx->reader->open(r, &cur_source->mapped_uri, 0, &cur_source->reader_context);
 			if (rc != NGX_OK)
 			{
 				if (rc != NGX_AGAIN && rc != NGX_DONE)
@@ -2130,7 +2132,7 @@ ngx_http_vod_state_machine_open_files(ngx_http_vod_ctx_t *ctx)
 
 		path = &cur_source->mapped_uri;
 
-		rc = ctx->reader->open(ctx->submodule_context.r, path, &cur_source->reader_context);
+		rc = ctx->reader->open(ctx->submodule_context.r, path, 0, &cur_source->reader_context);
 		if (rc != NGX_OK)
 		{
 			if (rc != NGX_AGAIN && rc != NGX_DONE)
@@ -3030,7 +3032,7 @@ ngx_http_vod_start_processing_media_file(ngx_http_vod_ctx_t *ctx)
 		cur_source = ctx->submodule_context.media_set.sources_head;
 		ctx->cur_source = cur_source;
 
-		rc = ctx->reader->open(r, &cur_source->mapped_uri, &cur_source->reader_context);
+		rc = ctx->reader->open(r, &cur_source->mapped_uri, 0, &cur_source->reader_context);
 		if (rc != NGX_OK)
 		{
 			if (rc != NGX_AGAIN && rc != NGX_DONE)
@@ -3217,11 +3219,12 @@ ngx_http_vod_file_open_completed_with_fallback(void* context, ngx_int_t rc)
 #endif // NGX_THREADS
 
 static ngx_int_t
-ngx_http_vod_init_file_reader_internal(ngx_http_request_t *r, ngx_str_t* path, void** context, ngx_flag_t fallback)
+ngx_http_vod_init_file_reader_internal(ngx_http_request_t *r, ngx_str_t* path, void** context, uint32_t flags)
 {
 	ngx_file_reader_state_t* state;
 	ngx_http_core_loc_conf_t *clcf;
 	ngx_http_vod_ctx_t *ctx;
+	ngx_flag_t fallback = (flags & OPEN_FILE_FALLBACK_ENABLED) != 0;
 	ngx_int_t rc;
 
 	ctx = ngx_http_get_module_ctx(r, ngx_http_vod_module);
@@ -3252,7 +3255,8 @@ ngx_http_vod_init_file_reader_internal(ngx_http_request_t *r, ngx_str_t* path, v
 			ctx,
 			r,
 			clcf,
-			path);
+			path,
+			flags);
 	}
 	else
 	{
@@ -3263,7 +3267,8 @@ ngx_http_vod_init_file_reader_internal(ngx_http_request_t *r, ngx_str_t* path, v
 			ctx,
 			r,
 			clcf,
-			path);
+			path,
+			flags);
 #if (NGX_THREADS)
 	}
 #endif
@@ -3294,15 +3299,15 @@ ngx_http_vod_init_file_reader_internal(ngx_http_request_t *r, ngx_str_t* path, v
 }
 
 static ngx_int_t
-ngx_http_vod_init_file_reader(ngx_http_request_t *r, ngx_str_t* path, void** context)
+ngx_http_vod_init_file_reader(ngx_http_request_t *r, ngx_str_t* path, uint32_t flags, void** context)
 {
-	return ngx_http_vod_init_file_reader_internal(r, path, context, 0);
+	return ngx_http_vod_init_file_reader_internal(r, path, context, flags);
 }
 
 static ngx_int_t
-ngx_http_vod_init_file_reader_with_fallback(ngx_http_request_t *r, ngx_str_t* path, void** context)
+ngx_http_vod_init_file_reader_with_fallback(ngx_http_request_t *r, ngx_str_t* path, uint32_t flags, void** context)
 {
-	return ngx_http_vod_init_file_reader_internal(r, path, context, 1);
+	return ngx_http_vod_init_file_reader_internal(r, path, context, flags | OPEN_FILE_FALLBACK_ENABLED);
 }
 
 // Note: this function initializes r->exten in order to have nginx select the correct mime type for the request
@@ -3446,7 +3451,7 @@ ngx_http_vod_dump_http_request(ngx_http_vod_ctx_t *ctx)
 }
 
 static ngx_int_t
-ngx_http_vod_http_reader_open_file(ngx_http_request_t* r, ngx_str_t* path, void** context)
+ngx_http_vod_http_reader_open_file(ngx_http_request_t* r, ngx_str_t* path, uint32_t flags, void** context)
 {
 	ngx_http_vod_http_reader_state_t* state;
 	ngx_http_vod_ctx_t *ctx;
@@ -3585,7 +3590,7 @@ ngx_http_vod_map_run_step(ngx_http_vod_ctx_t *ctx)
 
 		ctx->state = STATE_MAP_OPEN;
 
-		rc = ctx->reader->open(ctx->submodule_context.r, &uri, &ctx->mapping.reader_context);
+		rc = ctx->reader->open(ctx->submodule_context.r, &uri, OPEN_FILE_NO_CACHE, &ctx->mapping.reader_context);
 		if (rc != NGX_OK)
 		{
 			if (rc != NGX_AGAIN && rc != NGX_DONE)

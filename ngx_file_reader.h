@@ -11,6 +11,9 @@
 #include "ngx_async_open_file_cache.h"
 #endif
 
+// constants
+#define OPEN_FILE_NO_CACHE (0x1)
+
 // typedefs
 typedef void (*ngx_async_read_callback_t)(void* context, ngx_int_t rc, ngx_buf_t* buf, ssize_t bytes_read);
 
@@ -36,7 +39,8 @@ ngx_int_t ngx_file_reader_init(
 	void* callback_context,
 	ngx_http_request_t *r,
 	ngx_http_core_loc_conf_t  *clcf,
-	ngx_str_t* path);
+	ngx_str_t* path,
+	uint32_t flags);
 
 #if (NGX_THREADS)
 ngx_int_t ngx_file_reader_init_async(
@@ -48,7 +52,8 @@ ngx_int_t ngx_file_reader_init_async(
 	void* callback_context,
 	ngx_http_request_t *r,
 	ngx_http_core_loc_conf_t  *clcf,
-	ngx_str_t* path);
+	ngx_str_t* path,
+	uint32_t flags);
 #endif
 
 ngx_int_t ngx_file_reader_dump_file_part(ngx_file_reader_state_t* state, off_t start, off_t end);
