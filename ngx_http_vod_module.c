@@ -73,6 +73,11 @@ typedef struct {
 } multipart_cache_header_t;
 
 typedef struct {
+	size_t content_type_len;
+	uint32_t media_set_type;
+} response_cache_header_t;
+
+typedef struct {
 	ngx_http_request_t* r;
 	ngx_chain_t* chain_head;
 	ngx_chain_t* chain_end;
@@ -742,7 +747,8 @@ ngx_http_vod_send_header(
 	ngx_http_request_t* r, 
 	off_t content_length_n, 
 	ngx_str_t* content_type, 
-	int cache_type)
+	uint32_t media_set_type,
+	const ngx_http_vod_request_t* request)
 {
 	ngx_http_vod_loc_conf_t* conf;
 	ngx_int_t rc;
@@ -760,23 +766,33 @@ ngx_http_vod_send_header(
 	r->headers_out.content_length_n = content_length_n;
 
 	// last modified
-	switch (cache_type)
+	if (request == NULL || 
+		(request->request_class & (REQUEST_CLASS_SEGMENT | REQUEST_CLASS_THUMB)) != 0 ||
+		media_set_type == MEDIA_SET_VOD)
 	{
-	case CACHE_TYPE_VOD:
 		if (conf->last_modified_time != -1 &&
 			ngx_http_test_content_type(r, &conf->last_modified_types) != NULL)
 		{
 			r->headers_out.last_modified_time = conf->last_modified_time;
 		}
-		break;
 
-	case CACHE_TYPE_LIVE:
+		expires = conf->expires[EXPIRES_TYPE_VOD];
+	}
+	else
+	{
 		r->headers_out.last_modified_time = ngx_time();
-		break;
+
+		if ((request->flags & REQUEST_FLAG_TIME_DEPENDENT_ON_LIVE) != 0)
+		{
+			expires = conf->expires[EXPIRES_TYPE_LIVE_TIME_DEPENDENT];
+		}
+		else
+		{
+			expires = conf->expires[EXPIRES_TYPE_LIVE];
+		}
 	}
 
 	// expires
-	expires = conf->expires[cache_type];
 	if (expires >= 0)
 	{
 		rc = ngx_http_vod_set_expires(r, expires);
@@ -1155,8 +1171,7 @@ ngx_http_vod_parse_metadata(
 		return VOD_OK;
 	}
 
-	if (request->request_class == REQUEST_CLASS_MANIFEST ||
-		request->request_class == REQUEST_CLASS_OTHER)
+	if ((request->request_class & (REQUEST_CLASS_MANIFEST | REQUEST_CLASS_OTHER)) != 0)
 	{
 		request_context->simulation_only = TRUE;
 
@@ -2043,6 +2058,7 @@ static ngx_int_t
 ngx_http_vod_handle_metadata_request(ngx_http_vod_ctx_t *ctx)
 {
 	ngx_http_vod_loc_conf_t* conf;
+	response_cache_header_t cache_header;
 	ngx_buffer_cache_t* cache;
 	ngx_str_t cache_buffers[3];
 	ngx_str_t content_type;
@@ -2085,8 +2101,10 @@ ngx_http_vod_handle_metadata_request(ngx_http_vod_ctx_t *ctx)
 	cache = conf->response_cache[cache_type];
 	if (cache != NULL && response.data != NULL)
 	{
-		cache_buffers[0].data = (u_char*)&content_type.len;
-		cache_buffers[0].len = sizeof(content_type.len);
+		cache_header.content_type_len = content_type.len;
+		cache_header.media_set_type = ctx->submodule_context.media_set.type;
+		cache_buffers[0].data = (u_char*)&cache_header;
+		cache_buffers[0].len = sizeof(cache_header);
 		cache_buffers[1] = content_type;
 		cache_buffers[2] = response;
 
@@ -2102,7 +2120,12 @@ ngx_http_vod_handle_metadata_request(ngx_http_vod_ctx_t *ctx)
 		}
 	}
 
-	rc = ngx_http_vod_send_header(ctx->submodule_context.r, response.len, &content_type, cache_type);
+	rc = ngx_http_vod_send_header(
+		ctx->submodule_context.r, 
+		response.len, 
+		&content_type, 
+		ctx->submodule_context.media_set.type, 
+		ctx->request);
 	if (rc != NGX_OK)
 	{
 		return rc;
@@ -2334,7 +2357,7 @@ ngx_http_vod_init_frame_processing(ngx_http_vod_ctx_t *ctx)
 	if (ctx->content_length != 0)
 	{
 		// send the response header
-		rc = ngx_http_vod_send_header(r, ctx->content_length, NULL, CACHE_TYPE_VOD);
+		rc = ngx_http_vod_send_header(r, ctx->content_length, NULL, MEDIA_SET_VOD, NULL);
 		if (rc != NGX_OK)
 		{
 			return rc;
@@ -2495,7 +2518,7 @@ ngx_http_vod_finalize_segment_response(ngx_http_vod_ctx_t *ctx)
 	ctx->write_segment_buffer_context.chain_end->buf->last_buf = 1;
 
 	// send the response header
-	rc = ngx_http_vod_send_header(r, ctx->write_segment_buffer_context.total_size, NULL, CACHE_TYPE_VOD);
+	rc = ngx_http_vod_send_header(r, ctx->write_segment_buffer_context.total_size, NULL, MEDIA_SET_VOD, NULL);
 	if (rc != NGX_OK)
 	{
 		return rc;
@@ -2572,7 +2595,7 @@ ngx_http_vod_send_clip_header(ngx_http_vod_ctx_t *ctx)
 	}
 
 	// send the response header
-	rc = ngx_http_vod_send_header(r, response_size, &content_type, CACHE_TYPE_VOD);
+	rc = ngx_http_vod_send_header(r, response_size, &content_type, MEDIA_SET_VOD, NULL);
 	if (rc != NGX_OK)
 	{
 		return rc;
@@ -3354,7 +3377,7 @@ ngx_http_vod_dump_file(ngx_http_vod_ctx_t* ctx)
 	}
 
 	// send the response header
-	rc = ngx_http_vod_send_header(r, state->file_size, NULL, CACHE_TYPE_VOD);
+	rc = ngx_http_vod_send_header(r, state->file_size, NULL, MEDIA_SET_VOD, NULL);
 	if (rc != NGX_OK)
 	{
 		return rc;
@@ -4405,6 +4428,7 @@ ngx_int_t
 ngx_http_vod_handler(ngx_http_request_t *r)
 {
 	ngx_perf_counter_context(pcctx);
+	response_cache_header_t cache_header;
 	ngx_perf_counters_t* perf_counters;
 	ngx_http_vod_ctx_t *ctx;
 	request_params_t request_params;
@@ -4436,7 +4460,7 @@ ngx_http_vod_handler(ngx_http_request_t *r)
 		response.data = NULL;
 		response.len = 0;
 
-		rc = ngx_http_vod_send_header(r, response.len, &options_content_type, CACHE_TYPE_VOD);
+		rc = ngx_http_vod_send_header(r, response.len, &options_content_type, MEDIA_SET_VOD, NULL);
 		if (rc != NGX_OK)
 		{
 			return rc;
@@ -4546,16 +4570,18 @@ ngx_http_vod_handler(ngx_http_request_t *r)
 			&cache_buffer,
 			&cache_buffer_size);
 		if (cache_type >= 0 &&
-			cache_buffer_size > sizeof(size_t))
+			cache_buffer_size > sizeof(cache_header))
 		{
 			ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
 				"ngx_http_vod_handler: response cache hit, size is %uz", cache_buffer_size);
 
 			// extract the content type
-			content_type.len = *(size_t*)cache_buffer;
-			cache_buffer += sizeof(size_t);
-			cache_buffer_size -= sizeof(size_t);
+			ngx_memcpy(&cache_header, cache_buffer, sizeof(cache_header));
+			cache_buffer += sizeof(cache_header);
+			cache_buffer_size -= sizeof(cache_header);
+
 			content_type.data = cache_buffer;
+			content_type.len = cache_header.content_type_len;
 
 			if (cache_buffer_size >= content_type.len)
 			{
@@ -4568,7 +4594,7 @@ ngx_http_vod_handler(ngx_http_request_t *r)
 				r->allow_ranges = 1;
 
 				// return the response
-				rc = ngx_http_vod_send_header(r, response.len, &content_type, cache_type);
+				rc = ngx_http_vod_send_header(r, response.len, &content_type, cache_header.media_set_type, request);
 				if (rc != NGX_OK)
 				{
 					return rc;

@@ -13,6 +13,14 @@
 
 // enum
 enum {
+	EXPIRES_TYPE_VOD,
+	EXPIRES_TYPE_LIVE,
+	EXPIRES_TYPE_LIVE_TIME_DEPENDENT,
+
+	EXPIRES_TYPE_COUNT
+};
+
+enum {
 	CACHE_TYPE_VOD,
 	CACHE_TYPE_LIVE,
 
@@ -56,7 +64,7 @@ struct ngx_http_vod_loc_conf_s {
 	ngx_str_t fallback_upstream_location;
 	ngx_table_elt_t proxy_header;
 
-	time_t expires[CACHE_TYPE_COUNT];
+	time_t expires[EXPIRES_TYPE_COUNT];
 	time_t last_modified_time;
 	ngx_hash_t  last_modified_types;
 	ngx_array_t *last_modified_types_keys;

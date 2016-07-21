@@ -1040,14 +1040,21 @@ This directive is similar to nginx's built-in `expires` directive, except that i
 (epoch, max, off, day time are not supported)
 Main motivation for using this directive instead of the built-in `expires` is to have different expiration for VOD and dynamic live content.
 If this directive is not specified, nginx-vod-module will not set the "Expires" / "Cache-Control" headers.
+This setting affects - all types of requests in VOD playlists, segment requests in live playlists.
 
 #### vod_expires_live
 * **syntax**: `vod_expires_live time`
 * **default**: `none`
 * **context**: `http`, `server`, `location`
 
-Same as `vod_expires` (above) for dynamic live content.
-In DASH, for example, the expiration of the video fragments is determined by `vod_expires`, while `vod_expires_live` determines the expiration of the MPD.
+Same as `vod_expires` (above) for live requests that are not time dependent and not segments (e.g. HLS - master.m3u8, HDS - manifest.f4m).
+
+#### vod_expires_live_time_dependent
+* **syntax**: `vod_expires_live_time_dependent time`
+* **default**: `none`
+* **context**: `http`, `server`, `location`
+
+Same as `vod_expires` (above) for live requests that are time dependent (HLS - index.m3u8, HDS - bootstrap.abst, MSS - manifest, DASH - manifest.mpd).
 
 #### vod_last_modified
 * **syntax**: `vod_last_modified time`
@@ -1058,7 +1065,7 @@ Sets the value of the Last-Modified header returned on the response, by default 
 The reason for having this parameter here is in order to support If-Modified-Since / If-Unmodified-Since.
 Since nginx's builtin ngx_http_not_modified_filter_module runs before any other header filter module, it will not see any headers set by add_headers / more_set_headers.
 This makes nginx always reply as if the content changed (412 for If-Unmodified-Since / 200 for If-Modified-Since)
-For changing live content (e.g. live DASH MPD), Last-Modified is set to the current server time.
+For live requests that are not segments (e.g. live DASH MPD), Last-Modified is set to the current server time.
 
 #### vod_last_modified_types
 * **syntax**: `vod_last_modified_types mime-type1 mime-type2 ...`
