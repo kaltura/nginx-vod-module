@@ -102,7 +102,8 @@ ngx_file_reader_init(
 	void* callback_context,
 	ngx_http_request_t *r,
 	ngx_http_core_loc_conf_t *clcf,
-	ngx_str_t* path)
+	ngx_str_t* path,
+	uint32_t flags)
 {
 	ngx_open_file_info_t of;
 	ngx_int_t rc;
@@ -125,7 +126,11 @@ ngx_file_reader_init(
 		return rc;
 	}
 
-	rc = ngx_open_cached_file(clcf->open_file_cache, path, &of, r->pool);
+	rc = ngx_open_cached_file(
+		(flags & OPEN_FILE_NO_CACHE) != 0 ? NULL : clcf->open_file_cache, 
+		path, 
+		&of, 
+		r->pool);
 
 	return ngx_file_reader_update_state_file_info(state, &of, rc);
 }
@@ -168,7 +173,8 @@ ngx_file_reader_init_async(
 	void* callback_context,
 	ngx_http_request_t *r,
 	ngx_http_core_loc_conf_t *clcf,
-	ngx_str_t* path)
+	ngx_str_t* path,
+	uint32_t flags)
 {
 	ngx_file_reader_async_open_context_t* open_context;
 	ngx_int_t rc;
@@ -213,7 +219,7 @@ ngx_file_reader_init_async(
 	}
 
 	rc = ngx_async_open_cached_file(
-		clcf->open_file_cache,
+		(flags & OPEN_FILE_NO_CACHE) != 0 ? NULL : clcf->open_file_cache, 
 		path,
 		&open_context->of,
 		r->pool,
