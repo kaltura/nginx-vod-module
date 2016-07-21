@@ -3,8 +3,9 @@
 #include "../media_set.h"
 
 // constants
+#define UTF8_BOM ("\xEF\xBB\xBF")
 #define WEBVTT_HEADER ("WEBVTT")
-#define WEBVTT_BOM_HEADER ("\xEF\xBB\xBFWEBVTT")
+#define WEBVTT_HEADER_NEWLINES ("WEBVTT\r\n\r\n")
 #define WEBVTT_DURATION_ESTIMATE_CUES (10)
 #define WEBVTT_CUE_MARKER ("-->")
 
@@ -20,6 +21,126 @@ typedef struct {
 	vod_str_t source;
 } webvtt_base_metadata_t;
 
+static int64_t 
+webvtt_read_timestamp(u_char* cur_pos, u_char** end_pos)
+{
+	int64_t hours;
+	int64_t minutes;
+	int64_t seconds;
+	int64_t millis;
+
+	// hour digits
+	if (!isdigit(*cur_pos))
+	{
+		return -1;
+	}
+
+	hours = 0;
+	for (; isdigit(*cur_pos); cur_pos++)
+	{
+		hours = hours * 10 + (*cur_pos - '0');
+	}
+
+	// colon
+	if (*cur_pos != ':')
+	{
+		return -1;
+	}
+	cur_pos++;
+
+	// 2 minute digits
+	if (!isdigit(cur_pos[0]) || !isdigit(cur_pos[1]))
+	{
+		return -1;
+	}
+	minutes = (cur_pos[0] - '0') * 10 + (cur_pos[1] - '0');
+	cur_pos += 2;
+
+	// colon
+	if (*cur_pos == ':')
+	{
+		cur_pos++;
+
+		// 2 second digits
+		if (!isdigit(cur_pos[0]) || !isdigit(cur_pos[1]))
+		{
+			return -1;
+		}
+		seconds = (cur_pos[0] - '0') * 10 + (cur_pos[1] - '0');
+		cur_pos += 2;
+	}
+	else
+	{
+		// no hours
+		seconds = minutes;
+		minutes = hours;
+		hours = 0;
+	}
+
+	// dot
+	if (*cur_pos != '.' && *cur_pos != ',')
+	{
+		return -1;
+	}
+	cur_pos++;
+
+	// 3 digit millis
+	if (!isdigit(cur_pos[0]) || !isdigit(cur_pos[1]) || !isdigit(cur_pos[2]))
+	{
+		return -1;
+	}
+	millis = (cur_pos[0] - '0') * 100 + (cur_pos[1] - '0') * 10 + (cur_pos[2] - '0');
+
+	if (end_pos != NULL)
+	{
+		*end_pos = cur_pos + 3;
+	}
+
+	return millis + 1000 * (seconds + 60 * (minutes + 60 * hours));
+}
+
+static bool_t
+webvtt_identify_srt(u_char* p)
+{
+	// n digits
+	if (!isdigit(*p))
+	{
+		return FALSE;
+	}
+
+	for (; isdigit(*p); p++);
+
+	// new line
+	switch (*p)
+	{
+	case '\r':
+		p++;
+		if (*p == '\n')
+		{
+			p++;
+		}
+		break;
+
+	case '\n':
+		p++;
+		break;
+
+	default:
+		return FALSE;
+	}
+
+	// timestamp
+	if (webvtt_read_timestamp(p, &p) < 0)
+	{
+		return FALSE;
+	}
+
+	for (; *p == ' ' || *p == '\t'; p++);
+
+	// cue marker
+	return vod_strncmp(p, WEBVTT_CUE_MARKER, sizeof(WEBVTT_CUE_MARKER) - 1) == 0;
+}
+
 static vod_status_t
 webvtt_reader_init(
 	request_context_t* request_context,
@@ -28,9 +149,15 @@ webvtt_reader_init(
 	void** ctx)
 {
 	webvtt_reader_state_t* state;
+	u_char* p = buffer->data;
 
-	if (vod_strncmp(buffer->data, WEBVTT_HEADER, sizeof(WEBVTT_HEADER) - 1) != 0 && 
-		vod_strncmp(buffer->data, WEBVTT_BOM_HEADER, sizeof(WEBVTT_BOM_HEADER) - 1) != 0)
+	if (vod_strncmp(p, UTF8_BOM, sizeof(UTF8_BOM) - 1) == 0)
+	{
+		p += sizeof(UTF8_BOM) - 1;
+	}
+
+	if (vod_strncmp(p, WEBVTT_HEADER, sizeof(WEBVTT_HEADER) - 1) != 0 && 
+		!webvtt_identify_srt(p))
 	{
 		return VOD_NOT_FOUND;
 	}
@@ -172,84 +299,6 @@ webvtt_skip_newline_reverse_no_limit(u_char* cur_pos)
 	}
 
 	return cur_pos - 1;
-}
-
-static int64_t 
-webvtt_read_timestamp(u_char* cur_pos, u_char** end_pos)
-{
-	int64_t hours;
-	int64_t minutes;
-	int64_t seconds;
-	int64_t millis;
-
-	// hour digits
-	if (!isdigit(*cur_pos))
-	{
-		return -1;
-	}
-
-	hours = 0;
-	for (; isdigit(*cur_pos); cur_pos++)
-	{
-		hours = hours * 10 + (*cur_pos - '0');
-	}
-
-	// colon
-	if (*cur_pos != ':')
-	{
-		return -1;
-	}
-	cur_pos++;
-
-	// 2 minute digits
-	if (!isdigit(cur_pos[0]) || !isdigit(cur_pos[1]))
-	{
-		return -1;
-	}
-	minutes = (cur_pos[0] - '0') * 10 + (cur_pos[1] - '0');
-	cur_pos += 2;
-
-	// colon
-	if (*cur_pos == ':')
-	{
-		cur_pos++;
-
-		// 2 second digits
-		if (!isdigit(cur_pos[0]) || !isdigit(cur_pos[1]))
-		{
-			return -1;
-		}
-		seconds = (cur_pos[0] - '0') * 10 + (cur_pos[1] - '0');
-		cur_pos += 2;
-	}
-	else
-	{
-		// no hours
-		seconds = minutes;
-		minutes = hours;
-		hours = 0;
-	}
-
-	// dot
-	if (*cur_pos != '.')
-	{
-		return -1;
-	}
-	cur_pos++;
-
-	// 3 digit millis
-	if (!isdigit(cur_pos[0]) || !isdigit(cur_pos[1]) || !isdigit(cur_pos[2]))
-	{
-		return -1;
-	}
-	millis = (cur_pos[0] - '0') * 100 + (cur_pos[1] - '0') * 10 + (cur_pos[2] - '0');
-
-	if (end_pos != NULL)
-	{
-		*end_pos = cur_pos + 3;
-	}
-
-	return millis + 1000 * (seconds + 60 * (minutes + 60 * hours));
 }
 
 static u_char*
@@ -463,84 +512,84 @@ webvtt_parse_frames(
 	header->data = source->data;
 
 	// skip the file magic line
+	if (vod_strncmp(cur_pos, UTF8_BOM, sizeof(UTF8_BOM) - 1) == 0)
+	{
+		cur_pos += sizeof(UTF8_BOM) - 1;
+	}
+
 	if (vod_strncmp(cur_pos, WEBVTT_HEADER, sizeof(WEBVTT_HEADER) - 1) == 0)
 	{
 		cur_pos += sizeof(WEBVTT_HEADER) - 1;
-	}
-	else if (vod_strncmp(cur_pos, WEBVTT_BOM_HEADER, sizeof(WEBVTT_BOM_HEADER) - 1) == 0)
-	{
-		cur_pos += sizeof(WEBVTT_BOM_HEADER) - 1;
-	}
-	else
-	{
-		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-			"webvtt_parse_frames: invalid webvtt magic");
-		return VOD_UNEXPECTED;
-	}
 
-	for (;;)
-	{
-		if (*cur_pos == '\r')
+		for (;;)
 		{
-			cur_pos++;
-			if (*cur_pos == '\n')
+			if (*cur_pos == '\r')
 			{
 				cur_pos++;
+				if (*cur_pos == '\n')
+				{
+					cur_pos++;
+				}
+				break;
 			}
-			break;
-		}
-		else if (*cur_pos == '\n')
-		{
+			else if (*cur_pos == '\n')
+			{
+				cur_pos++;
+				break;
+			}
+			else if (*cur_pos == '\0')
+			{
+				vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+					"webvtt_parse_frames: eof while reading file magic line");
+				return VOD_BAD_DATA;
+			}
+
 			cur_pos++;
-			break;
 		}
-		else if (*cur_pos == '\0')
+
+		// find the start of the first cue
+		cur_pos = webvtt_find_next_cue(cur_pos);
+		if (cur_pos == NULL)
 		{
-			vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-				"webvtt_parse_frames: eof while reading file magic line");
-			return VOD_BAD_DATA;
+			header->len = source->len;
+			header->data = vod_pstrdup(request_context->pool, header);
+			if (header->data == NULL)
+			{
+				vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
+					"webvtt_parse_frames: vod_pstrdup failed (1)");
+				return VOD_ALLOC_FAILED;
+			}
+			return VOD_OK;
 		}
 
-		cur_pos++;
-	}
+		cur_pos = webvtt_find_prev_newline_no_limit(cur_pos);
 
-	// find the start of the first cue
-	cur_pos = webvtt_find_next_cue(cur_pos);
-	if (cur_pos == NULL)
-	{
-		header->len = source->len;
+		prev_line = webvtt_skip_newline_reverse_no_limit(cur_pos);
+		if (*prev_line != '\r' && *prev_line != '\n')
+		{
+			cur_pos = webvtt_find_prev_newline(prev_line, source->data);
+			if (cur_pos == NULL)
+			{
+				vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+					"webvtt_parse_frames: failed to extract cue identifier");
+				return VOD_BAD_DATA;
+			}
+		}
+
+		cur_pos++;		// \r or \n
+		header->len = cur_pos - header->data;
 		header->data = vod_pstrdup(request_context->pool, header);
 		if (header->data == NULL)
 		{
 			vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
-				"webvtt_parse_frames: vod_pstrdup failed (1)");
+				"webvtt_parse_frames: vod_pstrdup failed (2)");
 			return VOD_ALLOC_FAILED;
 		}
-		return VOD_OK;
 	}
-
-	cur_pos = webvtt_find_prev_newline_no_limit(cur_pos);
-
-	prev_line = webvtt_skip_newline_reverse_no_limit(cur_pos);
-	if (*prev_line != '\r' && *prev_line != '\n')
+	else
 	{
-		cur_pos = webvtt_find_prev_newline(prev_line, source->data);
-		if (cur_pos == NULL)
-		{
-			vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-				"webvtt_parse_frames: failed to extract cue identifier");
-			return VOD_BAD_DATA;
-		}
-	}
-
-	cur_pos++;		// \r or \n
-	header->len = cur_pos - header->data;
-	header->data = vod_pstrdup(request_context->pool, header);
-	if (header->data == NULL)
-	{
-		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
-			"webvtt_parse_frames: vod_pstrdup failed (2)");
-		return VOD_ALLOC_FAILED;
+		header->len = sizeof(WEBVTT_HEADER_NEWLINES) - 1;
+		header->data = (u_char*)WEBVTT_HEADER_NEWLINES;
 	}
 
 	if ((parse_params->parse_type & PARSE_FLAG_FRAMES_ALL) == 0)
@@ -650,7 +699,15 @@ webvtt_parse_frames(
 		prev_line = webvtt_skip_newline_reverse_no_limit(cue_start);
 		if (*prev_line != '\r' && *prev_line != '\n')
 		{
-			cue_id.data = webvtt_find_prev_newline_no_limit(prev_line) + 1;
+			cue_id.data = webvtt_find_prev_newline(prev_line, source->data);
+			if (cue_id.data == NULL)
+			{
+				cue_id.data = source->data;
+			}
+			else
+			{
+				cue_id.data++;
+			}
 			cue_id.len = cue_start + 1 - cue_id.data;
 		}
 		else

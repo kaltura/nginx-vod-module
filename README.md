@@ -22,8 +22,8 @@
 
 * Audio codecs: AAC, MP3
 
-* WebVTT captions support:
-  1. DASH - served as is
+* WebVTT/SRT captions support:
+  1. DASH - served as a single WebVTT
   2. HLS - segmented WebVTT (m3u8)
   3. MSS - converted to TTML and packaged in fragmented MP4 (no support for styling)
 
