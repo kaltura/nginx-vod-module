@@ -21,12 +21,10 @@
 	((submodule_context)->r->header_only || (submodule_context)->r->method == NGX_HTTP_HEAD)
 
 // request classes
-enum {
-	REQUEST_CLASS_MANIFEST,
-	REQUEST_CLASS_SEGMENT,
-	REQUEST_CLASS_THUMB,
-	REQUEST_CLASS_OTHER,		// dash init segment, hls iframes manifest, hls master manifest, hls encryption key
-};
+#define REQUEST_CLASS_MANIFEST	(0x01)
+#define REQUEST_CLASS_SEGMENT	(0x02)
+#define REQUEST_CLASS_THUMB		(0x04)
+#define REQUEST_CLASS_OTHER		(0x08)		// dash init segment, hls iframes manifest, hls master manifest, hls encryption key
 
 struct ngx_http_vod_loc_conf_s;
 
