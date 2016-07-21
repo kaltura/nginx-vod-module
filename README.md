@@ -1040,7 +1040,7 @@ This directive is similar to nginx's built-in `expires` directive, except that i
 (epoch, max, off, day time are not supported)
 Main motivation for using this directive instead of the built-in `expires` is to have different expiration for VOD and dynamic live content.
 If this directive is not specified, nginx-vod-module will not set the "Expires" / "Cache-Control" headers.
-This setting affects - all types of requests in VOD playlists, segment requests in live playlists.
+This setting affects all types of requests in VOD playlists and segment requests in live playlists.
 
 #### vod_expires_live
 * **syntax**: `vod_expires_live time`
