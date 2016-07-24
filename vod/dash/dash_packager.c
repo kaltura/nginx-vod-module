@@ -603,20 +603,51 @@ dash_packager_write_segment_timeline(
 	return p;
 }
 
+static void
+dash_packager_get_segment_list_base_url(
+	write_period_context_t* context,
+	media_track_t* cur_track,
+	vod_str_t* result,
+	uint32_t* sequence_index)
+{
+	vod_str_t* base_url = context->base_url;
+	u_char* base_url_temp_buffer = context->base_url_temp_buffer;
+
+	if (base_url->len != 0)
+	{
+		result->data = base_url_temp_buffer;
+		base_url_temp_buffer = vod_copy(base_url_temp_buffer, base_url->data, base_url->len);
+		if (cur_track->file_info.uri.len != 0)
+		{
+			base_url_temp_buffer = vod_copy(base_url_temp_buffer, cur_track->file_info.uri.data, cur_track->file_info.uri.len);
+			*sequence_index = INVALID_SEQUENCE_INDEX;		// no need to pass the sequence index since we have a direct uri
+		}
+		else
+		{
+			base_url_temp_buffer = vod_copy(base_url_temp_buffer, context->media_set->uri.data, context->media_set->uri.len);
+		}
+		*base_url_temp_buffer++ = '/';
+		result->len = base_url_temp_buffer - result->data;
+	}
+	else
+	{
+		result->data = NULL;
+		result->len = 0;
+	}
+}
+
 static u_char*
 dash_packager_write_segment_list(
 	u_char* p,
 	write_period_context_t* context,
 	uint32_t start_number,
-	media_set_t* media_set,
 	u_char* clip_spec,
 	media_sequence_t* cur_sequence,
 	media_track_t* cur_track,
 	uint32_t segment_count)
 {
 	dash_manifest_config_t* conf = context->conf;
-	vod_str_t* base_url = context->base_url;
-	u_char* base_url_temp_buffer = context->base_url_temp_buffer;
+	media_set_t* media_set = context->media_set;
 	vod_str_t track_spec;
 	vod_str_t cur_base_url;
 	u_char track_spec_buffer[MAX_TRACK_SPEC_LENGTH];
@@ -626,27 +657,7 @@ dash_packager_write_segment_list(
 	track_spec.data = track_spec_buffer;
 
 	// build the base url
-	if (base_url->len != 0)
-	{
-		cur_base_url.data = base_url_temp_buffer;
-		base_url_temp_buffer = vod_copy(base_url_temp_buffer, base_url->data, base_url->len);
-		if (cur_track->file_info.uri.len != 0)
-		{
-			base_url_temp_buffer = vod_copy(base_url_temp_buffer, cur_track->file_info.uri.data, cur_track->file_info.uri.len);
-			sequence_index = INVALID_SEQUENCE_INDEX;		// no need to pass the sequence index since we have a direct uri
-		}
-		else
-		{
-			base_url_temp_buffer = vod_copy(base_url_temp_buffer, media_set->uri.data, media_set->uri.len);
-		}
-		*base_url_temp_buffer++ = '/';
-		cur_base_url.len = base_url_temp_buffer - cur_base_url.data;
-	}
-	else
-	{
-		cur_base_url.data = NULL;
-		cur_base_url.len = 0;
-	}
+	dash_packager_get_segment_list_base_url(context, cur_track, &cur_base_url, &sequence_index);
 
 	// get the track specification
 	dash_packager_get_track_spec(
@@ -738,6 +749,7 @@ dash_packager_write_mpd_period(
 	media_set_t* media_set = context->media_set;
 	const char* lang_code;
 	vod_str_t representation_id;
+	vod_str_t cur_base_url;
 	vod_str_t frame_rate;
 	u_char representation_id_buffer[MAX_TRACK_SPEC_LENGTH];
 	u_char frame_rate_buffer[VOD_DASH_MAX_FRAME_RATE_LEN];
@@ -751,6 +763,7 @@ dash_packager_write_mpd_period(
 	uint32_t media_type;
 	uint32_t audio_adapt_id = 2;
 	uint32_t subtitle_adapt_id = 0;
+	uint32_t sequence_index;
 
 	frame_rate.data = frame_rate_buffer;
 	representation_id.data = representation_id_buffer;
@@ -861,10 +874,20 @@ dash_packager_write_mpd_period(
 			cur_track = (*adaptation_set->first) + filtered_clip_offset;
 			cur_sequence = cur_track->file_info.source->sequence;
 
+			sequence_index = cur_sequence->index;
+			if (context->conf->manifest_format == FORMAT_SEGMENT_LIST)
+			{
+				dash_packager_get_segment_list_base_url(context, cur_track, &cur_base_url, &sequence_index);
+			}
+			else
+			{
+				cur_base_url = *context->base_url;
+			}
+
 			dash_packager_get_track_spec(
 				&representation_id,
 				media_set,
-				cur_sequence->index,
+				sequence_index,
 				cur_track->index,
 				cur_track->media_info.media_type,
 				context->max_pts_delay - cur_track->media_info.u.video.initial_pts_delay);
@@ -879,7 +902,7 @@ dash_packager_write_mpd_period(
 				lang_code,
 				lang_code,
 				subtitle_adapt_id++, 
-				context->base_url,
+				&cur_base_url,
 				&context->conf->subtitle_file_name_prefix,
 				clip_spec,
 				&representation_id);
@@ -988,7 +1011,6 @@ dash_packager_write_mpd_period(
 					p,
 					context,
 					start_number,
-					media_set,
 					clip_spec,
 					cur_sequence,
 					cur_track,
