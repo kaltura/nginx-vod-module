@@ -63,6 +63,7 @@ typedef ngx_int_t(*ngx_http_vod_state_machine_t)(ngx_http_vod_ctx_t* ctx);
 typedef ngx_int_t(*ngx_http_vod_open_file_t)(ngx_http_request_t* r, ngx_str_t* path, uint32_t flags, void** context);
 typedef ngx_int_t(*ngx_http_vod_async_read_func_t)(void* context, ngx_buf_t *buf, size_t size, off_t offset);
 typedef ngx_int_t(*ngx_http_vod_dump_part_t)(void* context, off_t start, off_t end);
+typedef size_t(*ngx_http_vod_get_size_t)(void* context);
 typedef ngx_int_t(*ngx_http_vod_dump_request_t)(ngx_http_vod_ctx_t* context);
 typedef ngx_int_t(*ngx_http_vod_mapping_apply_t)(ngx_http_vod_ctx_t *ctx, ngx_str_t* mapping, int* cache_index);
 typedef ngx_int_t(*ngx_http_vod_mapping_get_uri_t)(ngx_http_vod_ctx_t *ctx, ngx_str_t* uri);
@@ -109,6 +110,7 @@ typedef struct {
 	ngx_http_vod_open_file_t open;
 	ngx_http_vod_dump_part_t dump_part;
 	ngx_http_vod_dump_request_t dump_request;
+	ngx_http_vod_get_size_t get_size;
 } ngx_http_vod_reader_t;
 
 struct ngx_http_vod_ctx_s {
@@ -187,7 +189,7 @@ static ngx_int_t ngx_http_vod_init_file_reader(ngx_http_request_t *r, ngx_str_t*
 static ngx_int_t ngx_http_vod_dump_file(ngx_http_vod_ctx_t* ctx);
 
 static ngx_int_t ngx_http_vod_http_reader_open_file(ngx_http_request_t* r, ngx_str_t* path, uint32_t flags, void** context);
-static ngx_int_t ngx_http_vod_dump_http_part(ngx_http_vod_http_reader_state_t *state, off_t start, off_t end);
+static ngx_int_t ngx_http_vod_dump_http_part(void* context, off_t start, off_t end);
 static ngx_int_t ngx_http_vod_dump_http_request(ngx_http_vod_ctx_t *ctx);
 
 // globals
@@ -218,20 +220,23 @@ static media_format_t* media_formats[] = {
 
 static ngx_http_vod_reader_t reader_file_with_fallback = {
 	ngx_http_vod_init_file_reader_with_fallback,
-	(ngx_http_vod_dump_part_t)ngx_file_reader_dump_file_part,
+	ngx_file_reader_dump_file_part,
 	ngx_http_vod_dump_file,
+	ngx_file_reader_get_size,
 };
 
 static ngx_http_vod_reader_t reader_file = {
 	ngx_http_vod_init_file_reader,
-	(ngx_http_vod_dump_part_t)ngx_file_reader_dump_file_part,
+	ngx_file_reader_dump_file_part,
 	ngx_http_vod_dump_file,
+	ngx_file_reader_get_size,
 };
 
 static ngx_http_vod_reader_t reader_http = {
 	ngx_http_vod_http_reader_open_file,
-	(ngx_http_vod_dump_part_t)ngx_http_vod_dump_http_part,
+	ngx_http_vod_dump_http_part,
 	ngx_http_vod_dump_http_request,
+	NULL,
 };
 
 
@@ -3422,8 +3427,9 @@ ngx_http_vod_async_http_read(ngx_http_vod_http_reader_state_t *state, ngx_buf_t 
 }
 
 static ngx_int_t
-ngx_http_vod_dump_http_part(ngx_http_vod_http_reader_state_t *state, off_t start, off_t end)
+ngx_http_vod_dump_http_part(void* context, off_t start, off_t end)
 {
+	ngx_http_vod_http_reader_state_t *state = context;
 	ngx_http_vod_loc_conf_t *conf;
 	ngx_http_vod_ctx_t *ctx;
 	ngx_child_request_params_t child_params;
@@ -3557,6 +3563,7 @@ ngx_http_vod_map_run_step(ngx_http_vod_ctx_t *ctx)
 	ngx_str_t uri;
 	ngx_md5_t md5;
 	ngx_int_t rc;
+	size_t read_size;
 	int cache_index;
 
 	switch (ctx->state)
@@ -3628,7 +3635,23 @@ ngx_http_vod_map_run_step(ngx_http_vod_ctx_t *ctx)
 
 	case STATE_MAP_OPEN:
 
-		rc = ngx_http_vod_alloc_read_buffer(ctx, ctx->mapping.max_response_size, ctx->alloc_params_index);
+		if (ctx->reader->get_size != NULL)
+		{
+			read_size = ctx->reader->get_size(ctx->mapping.reader_context);
+			if (read_size > ctx->mapping.max_response_size)
+			{
+				ngx_log_error(NGX_LOG_ERR, ctx->submodule_context.request_context.log, 0,
+					"ngx_http_vod_map_run_step: mapping size %uz greater than limit %uz", 
+					read_size, ctx->mapping.max_response_size);
+				return NGX_HTTP_SERVICE_UNAVAILABLE;
+			}
+		}
+		else
+		{
+			read_size = ctx->mapping.max_response_size;
+		}
+
+		rc = ngx_http_vod_alloc_read_buffer(ctx, read_size, ctx->alloc_params_index);
 		if (rc != NGX_OK)
 		{
 			return rc;
@@ -3638,7 +3661,7 @@ ngx_http_vod_map_run_step(ngx_http_vod_ctx_t *ctx)
 		ctx->state = STATE_MAP_READ;
 		ngx_perf_counter_start(ctx->perf_counter_context);
 
-		rc = ctx->read(ctx->mapping.reader_context, &ctx->read_buffer, ctx->mapping.max_response_size, 0);
+		rc = ctx->read(ctx->mapping.reader_context, &ctx->read_buffer, read_size, 0);
 		if (rc != NGX_OK)
 		{
 			if (rc != NGX_AGAIN)

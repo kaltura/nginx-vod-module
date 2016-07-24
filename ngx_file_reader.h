@@ -56,7 +56,9 @@ ngx_int_t ngx_file_reader_init_async(
 	uint32_t flags);
 #endif
 
-ngx_int_t ngx_file_reader_dump_file_part(ngx_file_reader_state_t* state, off_t start, off_t end);
+ngx_int_t ngx_file_reader_dump_file_part(void* context, off_t start, off_t end);
+
+size_t ngx_file_reader_get_size(void* context);
 
 ngx_int_t ngx_async_file_read(ngx_file_reader_state_t* state, ngx_buf_t *buf, size_t size, off_t offset);
 
