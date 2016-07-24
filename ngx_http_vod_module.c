@@ -3638,7 +3638,13 @@ ngx_http_vod_map_run_step(ngx_http_vod_ctx_t *ctx)
 		if (ctx->reader->get_size != NULL)
 		{
 			read_size = ctx->reader->get_size(ctx->mapping.reader_context);
-			if (read_size > ctx->mapping.max_response_size)
+			if (read_size <= 0)
+			{
+				ngx_log_error(NGX_LOG_ERR, ctx->submodule_context.request_context.log, 0,
+					"ngx_http_vod_map_run_step: empty mapping response");
+				return NGX_HTTP_NOT_FOUND;
+			}
+			else if (read_size > ctx->mapping.max_response_size)
 			{
 				ngx_log_error(NGX_LOG_ERR, ctx->submodule_context.request_context.log, 0,
 					"ngx_http_vod_map_run_step: mapping size %uz greater than limit %uz", 
