@@ -8,7 +8,7 @@ class Random
 	public function __construct($s = 0) 
 	{
 		$this->RSeed = abs(intval($s)) % 9999999 + 1;
-		$this->num();
+		$this->num(0, 1);
 	}
 
 	public function num($min, $max)
@@ -156,10 +156,8 @@ case 'live':
 		}
 		$mediaSet["clipTimes"] = $clipTimes;
 	}
-	else
-	{
-		$mediaSet["firstClipTime"] = $firstClipTime;
-	}
+
+	$mediaSet["firstClipTime"] = $firstClipTime;
 	
 	if ($discontinuity)
 	{	
