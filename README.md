@@ -1587,13 +1587,6 @@ Note: Configuration directives that can accept variables are explicitly marked a
 			# gzip manifests
 			gzip on;
 			gzip_types application/vnd.apple.mpegurl;
-
-			# file handle caching / aio
-			open_file_cache          max=1000 inactive=5m;
-			open_file_cache_valid    2m;
-			open_file_cache_min_uses 1;
-			open_file_cache_errors   on;
-			aio on;
 			
 			location ^~ /kalapi/ {
 				internal;
