@@ -492,6 +492,7 @@ webvtt_parse_frames(
 	int64_t end_time = 0;
 	u_char* timings_end;
 	u_char* cur_pos = source->data;
+	u_char* start_pos;
 	u_char* cue_start;
 	u_char* prev_line;
 	u_char* p;
@@ -509,13 +510,14 @@ webvtt_parse_frames(
 		return VOD_OK;
 	}
 
-	header->data = source->data;
-
 	// skip the file magic line
 	if (vod_strncmp(cur_pos, UTF8_BOM, sizeof(UTF8_BOM) - 1) == 0)
 	{
 		cur_pos += sizeof(UTF8_BOM) - 1;
 	}
+
+	start_pos = cur_pos;
+	header->data = cur_pos;
 
 	if (vod_strncmp(cur_pos, WEBVTT_HEADER, sizeof(WEBVTT_HEADER) - 1) == 0)
 	{
@@ -567,7 +569,7 @@ webvtt_parse_frames(
 		prev_line = webvtt_skip_newline_reverse_no_limit(cur_pos);
 		if (*prev_line != '\r' && *prev_line != '\n')
 		{
-			cur_pos = webvtt_find_prev_newline(prev_line, source->data);
+			cur_pos = webvtt_find_prev_newline(prev_line, start_pos);
 			if (cur_pos == NULL)
 			{
 				vod_log_error(VOD_LOG_ERR, request_context->log, 0,
@@ -699,10 +701,10 @@ webvtt_parse_frames(
 		prev_line = webvtt_skip_newline_reverse_no_limit(cue_start);
 		if (*prev_line != '\r' && *prev_line != '\n')
 		{
-			cue_id.data = webvtt_find_prev_newline(prev_line, source->data);
+			cue_id.data = webvtt_find_prev_newline(prev_line, start_pos);
 			if (cue_id.data == NULL)
 			{
-				cue_id.data = source->data;
+				cue_id.data = start_pos;
 			}
 			else
 			{
