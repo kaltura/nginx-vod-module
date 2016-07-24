@@ -177,7 +177,7 @@ def getTestUrls():
 			
 			for liveJsonComb in liveCombs:
 				liveCombDict = dict(liveJsonComb)
-				if combDict['disc'] == 'no' and combDict['type'] == 'live' and liveCombDict['sbt'] == 'no':
+				if (combDict['disc'] == 'no' or combDict.has_key('mss')) and combDict['type'] == 'live' and liveCombDict['sbt'] == 'no':
 					continue	# segment base time mandatory in continuous live
 				if combDict['type'] in set(['live', 'playlist']) and liveCombDict['sbt'] == 'yes' and combDict['disc'] == 'yes':
 					continue	# passing segment base time with multi clip in discontinuous mode will result in error of gap too small

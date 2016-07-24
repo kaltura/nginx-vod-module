@@ -193,9 +193,12 @@ def getMssManifestUrls(baseUrl, urlContent, headers):
 		timestamps = []
 		curTimestamp = 0
 		for childNode in node.getElementsByTagName('c'):
-			duration = getAttributesDict(childNode)['d']
+			curAtts = getAttributesDict(childNode)
+			if curAtts.has_key('t'):
+				curTimestamp = int(curAtts['t'])
+			duration = int(curAtts['d'])
 			timestamps.append('%s' % curTimestamp)
-			curTimestamp += int(duration)
+			curTimestamp += duration
 			
 		# build the final urls
 		atts = getAttributesDict(node)

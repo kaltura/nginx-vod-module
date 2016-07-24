@@ -241,8 +241,9 @@ ngx_file_reader_init_async(
 #endif // NGX_THREADS
 
 ngx_int_t
-ngx_file_reader_dump_file_part(ngx_file_reader_state_t* state, off_t start, off_t end)
+ngx_file_reader_dump_file_part(void* context, off_t start, off_t end)
 {
+	ngx_file_reader_state_t* state = context;
 	ngx_http_request_t* r = state->r;
 	ngx_buf_t                 *b;
 	ngx_int_t                  rc;
@@ -319,6 +320,14 @@ ngx_file_reader_enable_directio(ngx_file_reader_state_t* state)
 	}
 
 	return NGX_OK;
+}
+
+size_t 
+ngx_file_reader_get_size(void* context)
+{
+	ngx_file_reader_state_t* state = context;
+
+	return state->file_size;
 }
 
 #if (NGX_HAVE_FILE_AIO)
