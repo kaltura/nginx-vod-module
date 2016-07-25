@@ -565,6 +565,13 @@ segmenter_get_start_end_ranges_no_discontinuity(
 		return VOD_BAD_REQUEST;
 	}
 
+	if (end > end_time && !params->allow_last_segment)
+	{
+		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+			"segmenter_get_start_end_ranges_no_discontinuity: request for the last segment in a live presentation (1)");
+		return VOD_BAD_REQUEST;
+	}
+
 	if (params->key_frame_durations != NULL)
 	{
 		align_context.request_context = request_context;
@@ -572,7 +579,18 @@ segmenter_get_start_end_ranges_no_discontinuity(
 		align_context.offset = start_time + params->first_key_frame_offset;
 		align_context.cur_pos = align_context.part->first;
 		start = segmenter_align_to_key_frames(&align_context, start, last_segment_end);
-		end = segmenter_align_to_key_frames(&align_context, end, last_segment_end);
+		end = segmenter_align_to_key_frames(&align_context, end, last_segment_end != ULLONG_MAX ? last_segment_end + 1 : last_segment_end);
+		if (end > last_segment_end)
+		{
+			if (!params->allow_last_segment)
+			{
+				vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+					"segmenter_get_start_end_ranges_no_discontinuity: request for the last segment in a live presentation (2)");
+				return VOD_BAD_REQUEST;
+			}
+
+			end = last_segment_end;
+		}
 	}
 
 	if (params->segment_index + 1 >= segment_count)
@@ -609,9 +627,10 @@ segmenter_get_start_end_ranges_no_discontinuity(
 
 	if (result->min_clip_index == INVALID_CLIP_INDEX)
 	{
-		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-			"segmenter_get_start_end_ranges_no_discontinuity: invalid segment index %uD", params->segment_index);
-		return VOD_BAD_REQUEST;
+		result->clip_count = 0;
+		result->min_clip_index = 1;
+		result->max_clip_index = 0;
+		return VOD_OK;
 	}
 
 	// allocate the clip ranges
@@ -786,6 +805,12 @@ segmenter_get_start_end_ranges_discontinuity(
 
 	if (segment_index + 1 >= cur_segment_limit)
 	{
+		if (end > clip_duration && clip_index + 1 >= params->timing.total_count && !params->allow_last_segment)
+		{
+			vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+				"segmenter_get_start_end_ranges_discontinuity: request for the last segment in a live presentation (1)");
+			return VOD_BAD_REQUEST;
+		}
 		end = clip_duration;
 	}
 	else
@@ -809,7 +834,18 @@ segmenter_get_start_end_ranges_discontinuity(
 		{
 			start = segmenter_align_to_key_frames(&align_context, start, clip_duration);
 		}
-		end = segmenter_align_to_key_frames(&align_context, end, clip_duration);
+		end = segmenter_align_to_key_frames(&align_context, end, clip_duration + 1);
+		if (end > clip_duration)
+		{
+			if (clip_index + 1 >= params->timing.total_count && !params->allow_last_segment)
+			{
+				vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+					"segmenter_get_start_end_ranges_discontinuity: request for the last segment in a live presentation (2)");
+				return VOD_BAD_REQUEST;
+			}
+
+			end = clip_duration;
+		}
 	}
 
 	// initialize the clip range

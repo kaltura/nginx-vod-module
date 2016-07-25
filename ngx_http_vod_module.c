@@ -1234,6 +1234,7 @@ ngx_http_vod_parse_metadata(
 			get_ranges_params.conf = segmenter;
 			get_ranges_params.last_segment_end = last_segment_end;
 			get_ranges_params.key_frame_durations = NULL;
+			get_ranges_params.allow_last_segment = TRUE;
 
 			ngx_memzero(&get_ranges_params.timing, sizeof(get_ranges_params.timing));
 			get_ranges_params.timing.durations = &duration_millis;

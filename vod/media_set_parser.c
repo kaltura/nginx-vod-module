@@ -1320,6 +1320,13 @@ media_set_init_look_ahead_segments(
 
 		if (clip_ranges.clip_count <= 0)
 		{
+			if (!media_set->presentation_end)
+			{
+				vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+					"media_set_init_look_ahead_segments: failed to get look ahead segment");
+				return VOD_BAD_REQUEST;
+			}
+
 			break;
 		}
 
@@ -1840,6 +1847,7 @@ media_set_parse_json(
 		get_ranges_params.timing = result->timing;
 		get_ranges_params.first_key_frame_offset = result->sequences[0].first_key_frame_offset;
 		get_ranges_params.key_frame_durations = result->sequences[0].key_frame_durations;
+		get_ranges_params.allow_last_segment = result->presentation_end;
 
 		if (request_params->segment_index != INVALID_SEGMENT_INDEX)
 		{
