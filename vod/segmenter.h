@@ -39,6 +39,7 @@ typedef struct {
 	uint32_t segment_index;
 	int64_t first_key_frame_offset;
 	vod_array_part_t* key_frame_durations;
+	bool_t allow_last_segment;
 
 	// no discontinuity
 	uint64_t last_segment_end;

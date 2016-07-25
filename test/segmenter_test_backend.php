@@ -174,7 +174,7 @@ case 'live':
 	}
 	
 	$mediaSet["liveWindowDuration"] = intval($params['window']) * 1000;
-	$mediaSet["presentationEndTime"] = $time * 1000 + ($params['pet'] == 'past' ? -100000 : 100000);
+	$mediaSet["presentationEndTime"] = $time * 1000 + ($params['pet'] == 'past' ? -1000000 : 1000000);
 	break;
 }
 
