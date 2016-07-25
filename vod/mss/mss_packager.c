@@ -159,6 +159,11 @@ mss_write_manifest_chunks_live(u_char* p, segment_durations_t* segment_durations
 	{
 		repeat_count = cur_item->repeat_count;
 
+		if (cur_item->duration == 0)
+		{
+			continue;
+		}
+
 		// output the timestamp in the first chunk
 		if (first_time)
 		{
