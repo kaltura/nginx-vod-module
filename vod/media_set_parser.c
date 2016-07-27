@@ -1346,9 +1346,12 @@ static vod_status_t
 media_set_sum_key_frame_durations(
 	request_context_t* request_context,
 	vod_array_part_t* part, 
+	uint64_t limit,
 	vod_array_part_t** last_part,
 	uint64_t* result)
 {
+	vod_array_part_t* prev_part = NULL;
+	uint64_t next_sum;
 	uint64_t sum = 0;
 	int64_t cur_duration;
 	int64_t* cur_pos;
@@ -1362,6 +1365,7 @@ media_set_sum_key_frame_durations(
 				break;
 			}
 
+			prev_part = part;
 			part = part->next;
 			cur_pos = part->first;
 		}
@@ -1374,7 +1378,26 @@ media_set_sum_key_frame_durations(
 			return VOD_BAD_MAPPING;
 		}
 
-		sum += cur_duration;
+		next_sum = sum + cur_duration;
+		if (next_sum > limit)
+		{
+			if ((void*)cur_pos <= part->first)
+			{
+				// Note: prev_part can't be null, because the first duration was already tested outside 
+				//		this function to be less than the limit
+				part = prev_part;
+				part->next = NULL;
+			}
+			else
+			{
+				part->last = cur_pos;
+				part->count = cur_pos - (int64_t*)part->first;
+				part->next = NULL;
+			}
+			break;
+		}
+
+		sum = next_sum;
 	}
 
 	*last_part = part;
@@ -1400,8 +1423,8 @@ media_set_parse_sequence_key_frame_offsets(
 	uint32_t* cur_duration;
 	uint64_t first_key_frame_time;
 	uint64_t last_key_frame_time = 0;
-	uint64_t clip_end_time;
 	uint64_t sum_durations;
+	int64_t limit;
 	int64_t first_key_frame_offset;
 
 	if (timing->total_count > 1)
@@ -1463,13 +1486,19 @@ media_set_parse_sequence_key_frame_offsets(
 		durations = &params[MEDIA_CLIP_PARAM_KEY_FRAME_DURATIONS]->v.arr.part;
 
 		// add the durations to the array
+		limit = *cur_clip_time + *cur_duration - first_key_frame_time;
+
 		if (last_part == NULL)
 		{
 			sequence->first_key_frame_offset = first_key_frame_time - timing->first_time;
 			sequence->key_frame_durations = durations;
 
-			if (durations->first >= durations->last)
+			if (durations->first >= durations->last || 
+				*(int64_t*)durations->first > limit)
 			{
+				durations->last = durations->first;
+				durations->count = 0;
+				durations->next = NULL;
 				last_part = durations;
 				last_key_frame_time = first_key_frame_time;
 				continue;
@@ -1486,7 +1515,8 @@ media_set_parse_sequence_key_frame_offsets(
 
 			last_part->next = new_part;
 
-			if (durations->first >= durations->last)
+			if (durations->first >= durations->last ||
+				*(int64_t*)durations->first > limit)
 			{
 				new_part->next = NULL;
 				last_part = new_part;
@@ -1498,7 +1528,8 @@ media_set_parse_sequence_key_frame_offsets(
 		}
 		else
 		{
-			if (durations->first >= durations->last)
+			if (durations->first >= durations->last ||
+				*(int64_t*)durations->first > limit)
 			{
 				continue;
 			}
@@ -1510,6 +1541,7 @@ media_set_parse_sequence_key_frame_offsets(
 		rc = media_set_sum_key_frame_durations(
 			request_context,
 			durations,
+			limit,
 			&last_part,
 			&sum_durations);
 		if (rc != VOD_OK)
@@ -1518,14 +1550,6 @@ media_set_parse_sequence_key_frame_offsets(
 		}
 
 		last_key_frame_time = first_key_frame_time + sum_durations;
-		clip_end_time = *cur_clip_time + *cur_duration;
-		if (last_key_frame_time > clip_end_time)
-		{
-			vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-				"media_set_parse_sequence_key_frame_offsets: last key frame time %uL exceeds clip end time %uL",
-				last_key_frame_time, clip_end_time);
-			return VOD_BAD_MAPPING;
-		}
 	}
 
 	sequence->last_key_frame_time = last_key_frame_time;
