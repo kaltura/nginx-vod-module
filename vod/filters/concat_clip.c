@@ -157,7 +157,7 @@ concat_clip_parse(
 
 	if (context->range == NULL)
 	{
-		// no range, just use the first clip
+		// no range, just use the last clip
 		if (paths->count <= 0)
 		{
 			vod_log_error(VOD_LOG_ERR, context->request_context->log, 0,
@@ -165,7 +165,7 @@ concat_clip_parse(
 			return VOD_BAD_MAPPING;
 		}
 
-		min_index = 0;
+		min_index = paths->count - 1;
 		clip_count = 1;
 		range = NULL;
 

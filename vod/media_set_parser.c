@@ -2061,15 +2061,14 @@ media_set_parse_json(
 							context.clip_ranges.min_clip_index, result->timing.total_count);
 						return VOD_BAD_MAPPING;
 					}
-
-					context.clip_ranges.max_clip_index = context.clip_ranges.min_clip_index;
 				}
 				else
 				{
-					context.clip_ranges.min_clip_index = 0;
-					context.clip_ranges.max_clip_index = 0;
+					context.clip_ranges.min_clip_index = result->timing.total_count - 1;
 				}
 
+				context.clip_ranges.max_clip_index = context.clip_ranges.min_clip_index;
+				
 				// parse only the first clip in each sequence, assume subsequent clips have the same media info
 				context.clip_ranges.clip_count = 1;
 				context.clip_ranges.clip_time = result->timing.first_time;
