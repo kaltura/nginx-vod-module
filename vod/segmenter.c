@@ -805,7 +805,9 @@ segmenter_get_start_end_ranges_discontinuity(
 
 	if (segment_index + 1 >= cur_segment_limit)
 	{
-		if (end > clip_duration && clip_index + 1 >= params->timing.total_count && !params->allow_last_segment)
+		if (end > clip_start_offset + clip_duration && 
+			clip_index + 1 >= params->timing.total_count && 
+			!params->allow_last_segment)
 		{
 			vod_log_error(VOD_LOG_ERR, request_context->log, 0,
 				"segmenter_get_start_end_ranges_discontinuity: request for the last segment in a live presentation (1)");
@@ -986,18 +988,6 @@ segmenter_get_live_window_start_end(
 		end_time = segment_base_time +
 			((end_time - segment_base_time) / conf->segment_duration) * conf->segment_duration;
 
-		// align to key frames
-		if (sequence->key_frame_durations != NULL)
-		{
-			align_context.request_context = request_context;
-			align_context.part = sequence->key_frame_durations;
-			align_context.offset = timing->first_time + sequence->first_key_frame_offset;
-			align_context.cur_pos = align_context.part->first;
-
-			clip_end_time = timing->times[end_clip_index] + timing->durations[end_clip_index];
-			end_time = segmenter_align_to_key_frames(&align_context, end_time, clip_end_time);
-		}
-
 		if (end_time <= timing->times[end_clip_index])
 		{
 			// end slipped to the previous segment
@@ -1013,6 +1003,18 @@ segmenter_get_live_window_start_end(
 		}
 		else
 		{
+			// align to key frames
+			if (sequence->key_frame_durations != NULL)
+			{
+				align_context.request_context = request_context;
+				align_context.part = sequence->key_frame_durations;
+				align_context.offset = timing->first_time + sequence->first_key_frame_offset;
+				align_context.cur_pos = align_context.part->first;
+
+				clip_end_time = timing->times[end_clip_index] + timing->durations[end_clip_index];
+				end_time = segmenter_align_to_key_frames(&align_context, end_time, clip_end_time);
+			}
+
 			end_clip_offset = end_time - timing->times[end_clip_index];
 		}
 	}
