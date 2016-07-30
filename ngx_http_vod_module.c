@@ -2764,7 +2764,7 @@ ngx_http_vod_run_state_machine(ngx_http_vod_ctx_t *ctx)
 
 		// enable directio if enabled in the configuration (ignore errors)
 		// Note that directio is set on transfer only to allow the kernel to cache the "moov" atom
-		if (ctx->submodule_context.conf->request_handler != ngx_http_vod_remote_request_handler)
+		if (ctx->submodule_context.conf->request_handler == ngx_http_vod_local_request_handler)
 		{
 			ngx_http_vod_enable_directio(ctx);
 		}
@@ -3407,6 +3407,7 @@ ngx_http_vod_async_http_read(ngx_http_vod_http_reader_state_t *state, ngx_buf_t 
 	ngx_http_vod_loc_conf_t *conf;
 	ngx_http_vod_ctx_t *ctx;
 	ngx_child_request_params_t child_params;
+	ngx_str_t *upstream_location;
 
 	ctx = ngx_http_get_module_ctx(state->r, ngx_http_vod_module);
 	conf = ctx->submodule_context.conf;
@@ -3418,11 +3419,19 @@ ngx_http_vod_async_http_read(ngx_http_vod_http_reader_state_t *state, ngx_buf_t 
 	child_params.range_start = offset;
 	child_params.range_end = offset + size;
 
+	upstream_location = &conf->upstream_location;
+
+	if (conf->request_handler == ngx_http_vod_mapped_request_handler &&
+		conf->remote_upstream_location.len != 0)
+	{
+		upstream_location = &conf->remote_upstream_location;
+	}
+
 	return ngx_child_request_start(
 		state->r,
 		ngx_http_vod_handle_read_completed,
 		ctx,
-		&conf->upstream_location,
+		upstream_location,
 		&child_params,
 		buf);
 }
@@ -3754,7 +3763,6 @@ static ngx_int_t
 ngx_http_vod_map_source_clip_done(ngx_http_vod_ctx_t *ctx)
 {
 	ngx_http_vod_loc_conf_t* conf;
-
 	conf = ctx->submodule_context.conf;
 
 	if (conf->remote_upstream_location.len == 0)
