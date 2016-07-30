@@ -172,6 +172,7 @@ ngx_http_vod_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child)
 			ngx_memzero(&conf->submodule, sizeof(conf->submodule));
 		}
 	}
+	ngx_conf_merge_str_value(conf->remote_upstream_location, prev->remote_upstream_location, "");
 	ngx_conf_merge_ptr_value(conf->request_handler, prev->request_handler, ngx_http_vod_local_request_handler);
 	ngx_conf_merge_str_value(conf->multi_uri_suffix, prev->multi_uri_suffix, ".urlset");
 
@@ -1007,6 +1008,13 @@ ngx_command_t ngx_http_vod_commands[] = {
 	ngx_conf_set_str_slot,
 	NGX_HTTP_LOC_CONF_OFFSET,
 	offsetof(ngx_http_vod_loc_conf_t, upstream_location),
+	NULL },
+
+	{ ngx_string("vod_remote_upstream_location"),
+	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1,
+	ngx_conf_set_str_slot,
+	NGX_HTTP_LOC_CONF_OFFSET,
+	offsetof(ngx_http_vod_loc_conf_t, remote_upstream_location),
 	NULL },
 
 	{ ngx_string("vod_upstream_extra_args"),

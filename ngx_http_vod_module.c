@@ -3753,12 +3753,25 @@ ngx_http_vod_map_run_step(ngx_http_vod_ctx_t *ctx)
 static ngx_int_t
 ngx_http_vod_map_source_clip_done(ngx_http_vod_ctx_t *ctx)
 {
-	// initialize for reading files
-	ctx->reader = &reader_file;
-	ctx->read = (ngx_http_vod_async_read_func_t)ngx_async_file_read;
-	ctx->alloc_params_index = READER_FILE;
-	ctx->alignment = ctx->alloc_params[READER_FILE].alignment;
-	ctx->perf_counter_async_read = PC_ASYNC_READ_FILE;
+	ngx_http_vod_loc_conf_t* conf;
+
+	conf = ctx->submodule_context.conf;
+
+	if (conf->remote_upstream_location.len == 0)
+	{
+		// initialize for reading files
+		ctx->reader = &reader_file;
+		ctx->read = (ngx_http_vod_async_read_func_t)ngx_async_file_read;
+		ctx->alloc_params_index = READER_FILE;
+		ctx->alignment = ctx->alloc_params[READER_FILE].alignment;
+		ctx->perf_counter_async_read = PC_ASYNC_READ_FILE;
+	} else {
+		// initialize for http read
+		ctx->reader = &reader_http;
+		ctx->read = (ngx_http_vod_async_read_func_t)ngx_http_vod_async_http_read;
+		ctx->alloc_params_index = READER_HTTP;
+		ctx->alignment = ctx->alloc_params[READER_HTTP].alignment;
+	}
 
 	// run the main state machine
 	return ngx_http_vod_start_processing_media_file(ctx);
