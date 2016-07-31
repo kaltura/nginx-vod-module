@@ -2764,7 +2764,10 @@ ngx_http_vod_run_state_machine(ngx_http_vod_ctx_t *ctx)
 
 		// enable directio if enabled in the configuration (ignore errors)
 		// Note that directio is set on transfer only to allow the kernel to cache the "moov" atom
-		if (ctx->submodule_context.conf->request_handler == ngx_http_vod_local_request_handler)
+		if (ctx->submodule_context.conf->request_handler == ngx_http_vod_local_request_handler ||
+			(ctx->submodule_context.conf->request_handler == ngx_http_vod_mapped_request_handler &&
+			 ctx->submodule_context.conf->remote_upstream_location.len == 0)
+			)
 		{
 			ngx_http_vod_enable_directio(ctx);
 		}
