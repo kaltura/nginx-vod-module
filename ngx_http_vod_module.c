@@ -90,6 +90,7 @@ typedef struct {
 typedef struct {
 	ngx_http_request_t* r;
 	ngx_str_t cur_remote_suburi;
+	ngx_str_t upstream_location;
 } ngx_http_vod_http_reader_state_t;
 
 typedef struct {
@@ -3409,13 +3410,10 @@ ngx_http_vod_dump_file(ngx_http_vod_ctx_t* ctx)
 static ngx_int_t
 ngx_http_vod_async_http_read(ngx_http_vod_http_reader_state_t *state, ngx_buf_t *buf, size_t size, off_t offset)
 {
-	ngx_http_vod_loc_conf_t *conf;
 	ngx_http_vod_ctx_t *ctx;
 	ngx_child_request_params_t child_params;
-	ngx_str_t *upstream_location;
 
 	ctx = ngx_http_get_module_ctx(state->r, ngx_http_vod_module);
-	conf = ctx->submodule_context.conf;
 
 	ngx_memzero(&child_params, sizeof(child_params));
 	child_params.method = NGX_HTTP_GET;
@@ -3424,19 +3422,11 @@ ngx_http_vod_async_http_read(ngx_http_vod_http_reader_state_t *state, ngx_buf_t 
 	child_params.range_start = offset;
 	child_params.range_end = offset + size;
 
-	upstream_location = &conf->upstream_location;
-
-	if (conf->request_handler == ngx_http_vod_mapped_request_handler &&
-		conf->remote_upstream_location.len != 0)
-	{
-		upstream_location = &conf->remote_upstream_location;
-	}
-
 	return ngx_child_request_start(
 		state->r,
 		ngx_http_vod_handle_read_completed,
 		ctx,
-		upstream_location,
+		&state->upstream_location,
 		&child_params,
 		buf);
 }
@@ -3526,6 +3516,11 @@ ngx_http_vod_http_reader_open_file(ngx_http_request_t* r, ngx_str_t* path, uint3
 	// Note: for http, no need to open any files, just save the remote uri
 	state->r = r;
 	state->cur_remote_suburi = *path;
+	state->upstream_location = ctx->submodule_context.conf->upstream_location;
+	if (ctx->state == STATE_MAP_OPEN)
+	{
+		state->upstream_location = ctx->submodule_context.conf->remote_upstream_location;
+	}
 	*context = state;
 
 	return NGX_OK;
