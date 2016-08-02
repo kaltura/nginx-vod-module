@@ -8,7 +8,7 @@
 typedef struct {
 	simple_read_stream_t stream;
 	u_char cur_byte;
-	char cur_bit;
+	signed char cur_bit;
 } bit_reader_state_t;
 
 // functions
