@@ -2771,7 +2771,8 @@ ngx_http_vod_run_state_machine(ngx_http_vod_ctx_t *ctx)
 
 		// enable directio if enabled in the configuration (ignore errors)
 		// Note that directio is set on transfer only to allow the kernel to cache the "moov" atom
-		if (ctx->reader->enable_directio != NULL) {
+		if (ctx->reader->enable_directio != NULL)
+		{
 			ngx_http_vod_enable_directio(ctx);
 		}
 
@@ -3775,7 +3776,6 @@ ngx_http_vod_map_source_clip_done(ngx_http_vod_ctx_t *ctx)
 		ctx->read = (ngx_http_vod_async_read_func_t)ngx_async_file_read;
 		ctx->alloc_params_index = READER_FILE;
 		ctx->alignment = ctx->alloc_params[READER_FILE].alignment;
-		ctx->perf_counter_async_read = PC_ASYNC_READ_FILE;
 	}
 	else
 	{
@@ -3785,7 +3785,7 @@ ngx_http_vod_map_source_clip_done(ngx_http_vod_ctx_t *ctx)
 		ctx->alloc_params_index = READER_HTTP;
 		ctx->alignment = ctx->alloc_params[READER_HTTP].alignment;
 	}
-
+	ctx->perf_counter_async_read = PC_ASYNC_READ_FILE;
 	// run the main state machine
 	return ngx_http_vod_start_processing_media_file(ctx);
 }
