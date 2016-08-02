@@ -64,7 +64,7 @@ typedef ngx_int_t(*ngx_http_vod_open_file_t)(ngx_http_request_t* r, ngx_str_t* p
 typedef ngx_int_t(*ngx_http_vod_async_read_func_t)(void* context, ngx_buf_t *buf, size_t size, off_t offset);
 typedef ngx_int_t(*ngx_http_vod_dump_part_t)(void* context, off_t start, off_t end);
 typedef size_t(*ngx_http_vod_get_size_t)(void* context);
-typedef ngx_int_t (*ngx_http_vod_enable_directio_t)(ngx_file_reader_state_t* state);
+typedef ngx_int_t(*ngx_http_vod_enable_directio_t)(void* context);
 
 typedef ngx_int_t(*ngx_http_vod_dump_request_t)(ngx_http_vod_ctx_t* context);
 typedef ngx_int_t(*ngx_http_vod_mapping_apply_t)(ngx_http_vod_ctx_t *ctx, ngx_str_t* mapping, int* cache_index);
@@ -227,7 +227,7 @@ static ngx_http_vod_reader_t reader_file_with_fallback = {
 	ngx_file_reader_dump_file_part,
 	ngx_http_vod_dump_file,
 	ngx_file_reader_get_size,
-	ngx_file_reader_enable_directio,
+	(ngx_http_vod_enable_directio_t)ngx_file_reader_enable_directio,
 };
 
 static ngx_http_vod_reader_t reader_file = {
@@ -235,7 +235,7 @@ static ngx_http_vod_reader_t reader_file = {
 	ngx_file_reader_dump_file_part,
 	ngx_http_vod_dump_file,
 	ngx_file_reader_get_size,
-	ngx_file_reader_enable_directio,
+	(ngx_http_vod_enable_directio_t)ngx_file_reader_enable_directio,
 };
 
 static ngx_http_vod_reader_t reader_http = {
@@ -3516,8 +3516,11 @@ ngx_http_vod_http_reader_open_file(ngx_http_request_t* r, ngx_str_t* path, uint3
 	// Note: for http, no need to open any files, just save the remote uri
 	state->r = r;
 	state->cur_remote_suburi = *path;
-	state->upstream_location = ctx->submodule_context.conf->upstream_location;
-	if (ctx->state == STATE_MAP_OPEN)
+	if (ctx->state == STATE_MAP_OPEN || ctx->submodule_context.conf->remote_upstream_location.len == 0)
+	{
+		state->upstream_location = ctx->submodule_context.conf->upstream_location;
+	}
+	else
 	{
 		state->upstream_location = ctx->submodule_context.conf->remote_upstream_location;
 	}
@@ -3773,7 +3776,9 @@ ngx_http_vod_map_source_clip_done(ngx_http_vod_ctx_t *ctx)
 		ctx->alloc_params_index = READER_FILE;
 		ctx->alignment = ctx->alloc_params[READER_FILE].alignment;
 		ctx->perf_counter_async_read = PC_ASYNC_READ_FILE;
-	} else {
+	}
+	else
+	{
 		// initialize for http read
 		ctx->reader = &reader_http;
 		ctx->read = (ngx_http_vod_async_read_func_t)ngx_http_vod_async_http_read;
