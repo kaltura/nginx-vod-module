@@ -64,6 +64,8 @@ typedef ngx_int_t(*ngx_http_vod_open_file_t)(ngx_http_request_t* r, ngx_str_t* p
 typedef ngx_int_t(*ngx_http_vod_async_read_func_t)(void* context, ngx_buf_t *buf, size_t size, off_t offset);
 typedef ngx_int_t(*ngx_http_vod_dump_part_t)(void* context, off_t start, off_t end);
 typedef size_t(*ngx_http_vod_get_size_t)(void* context);
+typedef ngx_int_t(*ngx_http_vod_enable_directio_t)(void* context);
+
 typedef ngx_int_t(*ngx_http_vod_dump_request_t)(ngx_http_vod_ctx_t* context);
 typedef ngx_int_t(*ngx_http_vod_mapping_apply_t)(ngx_http_vod_ctx_t *ctx, ngx_str_t* mapping, int* cache_index);
 typedef ngx_int_t(*ngx_http_vod_mapping_get_uri_t)(ngx_http_vod_ctx_t *ctx, ngx_str_t* uri);
@@ -88,6 +90,7 @@ typedef struct {
 typedef struct {
 	ngx_http_request_t* r;
 	ngx_str_t cur_remote_suburi;
+	ngx_str_t upstream_location;
 } ngx_http_vod_http_reader_state_t;
 
 typedef struct {
@@ -111,6 +114,7 @@ typedef struct {
 	ngx_http_vod_dump_part_t dump_part;
 	ngx_http_vod_dump_request_t dump_request;
 	ngx_http_vod_get_size_t get_size;
+	ngx_http_vod_enable_directio_t enable_directio;
 } ngx_http_vod_reader_t;
 
 struct ngx_http_vod_ctx_s {
@@ -223,6 +227,7 @@ static ngx_http_vod_reader_t reader_file_with_fallback = {
 	ngx_file_reader_dump_file_part,
 	ngx_http_vod_dump_file,
 	ngx_file_reader_get_size,
+	(ngx_http_vod_enable_directio_t)ngx_file_reader_enable_directio,
 };
 
 static ngx_http_vod_reader_t reader_file = {
@@ -230,12 +235,14 @@ static ngx_http_vod_reader_t reader_file = {
 	ngx_file_reader_dump_file_part,
 	ngx_http_vod_dump_file,
 	ngx_file_reader_get_size,
+	(ngx_http_vod_enable_directio_t)ngx_file_reader_enable_directio,
 };
 
 static ngx_http_vod_reader_t reader_http = {
 	ngx_http_vod_http_reader_open_file,
 	ngx_http_vod_dump_http_part,
 	ngx_http_vod_dump_http_request,
+	NULL,
 	NULL,
 };
 
@@ -2764,7 +2771,7 @@ ngx_http_vod_run_state_machine(ngx_http_vod_ctx_t *ctx)
 
 		// enable directio if enabled in the configuration (ignore errors)
 		// Note that directio is set on transfer only to allow the kernel to cache the "moov" atom
-		if (ctx->submodule_context.conf->request_handler != ngx_http_vod_remote_request_handler)
+		if (ctx->reader->enable_directio != NULL)
 		{
 			ngx_http_vod_enable_directio(ctx);
 		}
@@ -3404,12 +3411,10 @@ ngx_http_vod_dump_file(ngx_http_vod_ctx_t* ctx)
 static ngx_int_t
 ngx_http_vod_async_http_read(ngx_http_vod_http_reader_state_t *state, ngx_buf_t *buf, size_t size, off_t offset)
 {
-	ngx_http_vod_loc_conf_t *conf;
 	ngx_http_vod_ctx_t *ctx;
 	ngx_child_request_params_t child_params;
 
 	ctx = ngx_http_get_module_ctx(state->r, ngx_http_vod_module);
-	conf = ctx->submodule_context.conf;
 
 	ngx_memzero(&child_params, sizeof(child_params));
 	child_params.method = NGX_HTTP_GET;
@@ -3422,7 +3427,7 @@ ngx_http_vod_async_http_read(ngx_http_vod_http_reader_state_t *state, ngx_buf_t 
 		state->r,
 		ngx_http_vod_handle_read_completed,
 		ctx,
-		&conf->upstream_location,
+		&state->upstream_location,
 		&child_params,
 		buf);
 }
@@ -3512,6 +3517,14 @@ ngx_http_vod_http_reader_open_file(ngx_http_request_t* r, ngx_str_t* path, uint3
 	// Note: for http, no need to open any files, just save the remote uri
 	state->r = r;
 	state->cur_remote_suburi = *path;
+	if (ctx->state == STATE_MAP_OPEN || ctx->submodule_context.conf->remote_upstream_location.len == 0)
+	{
+		state->upstream_location = ctx->submodule_context.conf->upstream_location;
+	}
+	else
+	{
+		state->upstream_location = ctx->submodule_context.conf->remote_upstream_location;
+	}
 	*context = state;
 
 	return NGX_OK;
@@ -3753,13 +3766,26 @@ ngx_http_vod_map_run_step(ngx_http_vod_ctx_t *ctx)
 static ngx_int_t
 ngx_http_vod_map_source_clip_done(ngx_http_vod_ctx_t *ctx)
 {
-	// initialize for reading files
-	ctx->reader = &reader_file;
-	ctx->read = (ngx_http_vod_async_read_func_t)ngx_async_file_read;
-	ctx->alloc_params_index = READER_FILE;
-	ctx->alignment = ctx->alloc_params[READER_FILE].alignment;
-	ctx->perf_counter_async_read = PC_ASYNC_READ_FILE;
+	ngx_http_vod_loc_conf_t* conf;
+	conf = ctx->submodule_context.conf;
 
+	if (conf->remote_upstream_location.len == 0)
+	{
+		// initialize for reading files
+		ctx->reader = &reader_file;
+		ctx->read = (ngx_http_vod_async_read_func_t)ngx_async_file_read;
+		ctx->alloc_params_index = READER_FILE;
+		ctx->alignment = ctx->alloc_params[READER_FILE].alignment;
+	}
+	else
+	{
+		// initialize for http read
+		ctx->reader = &reader_http;
+		ctx->read = (ngx_http_vod_async_read_func_t)ngx_http_vod_async_http_read;
+		ctx->alloc_params_index = READER_HTTP;
+		ctx->alignment = ctx->alloc_params[READER_HTTP].alignment;
+	}
+	ctx->perf_counter_async_read = PC_ASYNC_READ_FILE;
 	// run the main state machine
 	return ngx_http_vod_start_processing_media_file(ctx);
 }

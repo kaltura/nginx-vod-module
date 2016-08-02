@@ -34,6 +34,7 @@ struct ngx_http_vod_loc_conf_s {
 	// config fields
 	ngx_http_vod_submodule_t submodule;
 	ngx_str_t upstream_location;
+	ngx_str_t remote_upstream_location;
 	ngx_int_t(*request_handler)(ngx_http_request_t *r);
 	ngx_str_t multi_uri_suffix;
 	segmenter_conf_t segmenter;

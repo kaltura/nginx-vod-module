@@ -808,6 +808,14 @@ takes into account the key frame alignment, in case vod_align_segments_to_key_fr
 
 Sets an nginx location that is used to read the MP4 file (remote mode) or mapping the request URI (mapped mode).
 
+#### vod_remote_upstream_location
+* **syntax**: `vod_remote_upstream_location location`
+* **default**: `none`
+* **context**: `http`, `server`, `location`
+
+Sets an nginx location that is used to read the MP4 file on remote or mapped mode. If this directive is set on mapped mode, the module reads 
+the MP4 files over HTTP, treating the paths in the mapping JSON as URIs (the default behavior is to read from local files)
+
 #### vod_max_upstream_headers_size
 * **syntax**: `vod_max_upstream_headers_size size`
 * **default**: `4k`
