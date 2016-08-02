@@ -813,7 +813,9 @@ Sets an nginx location that is used to read the MP4 file (remote mode) or mappin
 * **default**: `none`
 * **context**: `http`, `server`, `location`
 
-Sets an nginx location that is used to read the MP4 file on mapped mode, file will be read on local file system in the absence of this directive.
+Sets an nginx location that is used to read the MP4 file on remote or mapped mode, file will be read on local file system in the absence of this directive.
+In case nginx location have both vod_upstream_location and vod_remote_upstream_location directives, vod_upstream_location is used for mapping request, 
+vod_remote_upstream_location is used for MP4 files.
 
 #### vod_max_upstream_headers_size
 * **syntax**: `vod_max_upstream_headers_size size`
