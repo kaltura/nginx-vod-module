@@ -230,6 +230,7 @@ ngx_http_vod_parse_uri_file_name(
 	uint32_t clip_index;
 	uint32_t media_type;
 	uint32_t pts_delay;
+	uint32_t version;
 	language_id_t lang_id;
 
 	default_tracks_mask = (flags & PARSE_FILE_NAME_MULTI_STREAMS_PER_TYPE) ? 0xffffffff : 1;
@@ -458,6 +459,24 @@ ngx_http_vod_parse_uri_file_name(
 				break;
 			}
 		}
+	}
+
+	// version
+	if (*start_pos == 'x')
+	{
+		start_pos++;		// skip the x
+
+		start_pos = parse_utils_extract_uint32_token(start_pos, end_pos, &version);
+		if (version <= 0)
+		{
+			ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
+				"ngx_http_vod_parse_uri_file_name: failed to parse version");
+			return NGX_HTTP_BAD_REQUEST;
+		}
+
+		result->version = version - 1;
+
+		skip_dash(start_pos, end_pos);
 	}
 
 	ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,

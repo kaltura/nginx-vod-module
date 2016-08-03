@@ -411,7 +411,7 @@ static const ngx_http_vod_request_t dash_mp4_init_request = {
 
 static const ngx_http_vod_request_t dash_mp4_fragment_request = {
 	REQUEST_FLAG_SINGLE_TRACK,
-	PARSE_FLAG_FRAMES_ALL,
+	PARSE_FLAG_FRAMES_ALL | PARSE_FLAG_INITIAL_PTS_DELAY,
 	REQUEST_CLASS_SEGMENT,
 	SUPPORTED_CODECS_MP4,
 	DASH_TIMESCALE,
@@ -421,7 +421,7 @@ static const ngx_http_vod_request_t dash_mp4_fragment_request = {
 
 static const ngx_http_vod_request_t edash_mp4_fragment_request = {
 	REQUEST_FLAG_SINGLE_TRACK,
-	PARSE_FLAG_FRAMES_ALL | PARSE_FLAG_PARSED_EXTRA_DATA,
+	PARSE_FLAG_FRAMES_ALL | PARSE_FLAG_INITIAL_PTS_DELAY | PARSE_FLAG_PARSED_EXTRA_DATA,
 	REQUEST_CLASS_SEGMENT,
 	SUPPORTED_CODECS_MP4,
 	DASH_TIMESCALE,
@@ -441,7 +441,7 @@ static const ngx_http_vod_request_t dash_webm_init_request = {
 
 static const ngx_http_vod_request_t dash_webm_fragment_request = {
 	REQUEST_FLAG_SINGLE_TRACK,
-	PARSE_FLAG_FRAMES_ALL,
+	PARSE_FLAG_FRAMES_ALL | PARSE_FLAG_INITIAL_PTS_DELAY,
 	REQUEST_CLASS_SEGMENT,
 	SUPPORTED_CODECS_WEBM,
 	DASH_TIMESCALE,

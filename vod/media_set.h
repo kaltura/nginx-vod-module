@@ -100,6 +100,7 @@ typedef struct {
 typedef struct {
 	// initialized during parsing
 	struct segmenter_conf_s* segmenter_conf;
+	uint32_t version;
 
 	uint32_t type;
 	media_clip_timing_t timing;
@@ -146,6 +147,7 @@ typedef struct {
 	uint32_t tracks_mask[MEDIA_TYPE_COUNT];
 	uint32_t* sequence_tracks_mask;	// [MAX_SEQUENCES][MEDIA_TYPE_COUNT]
 	uint8_t* langs_mask;			// [LANG_MASK_SIZE]
+	uint32_t version;
 } request_params_t;
 
 #endif //__MEDIA_SET_H__
