@@ -1680,6 +1680,7 @@ media_set_parse_json(
 	result->segmenter_conf = segmenter;
 	result->uri = *uri;
 	result->timing.segment_base_time = SEGMENT_BASE_TIME_RELATIVE;
+	result->version = request_params->version;
 
 	if (params[MEDIA_SET_PARAM_DURATIONS] == NULL)
 	{

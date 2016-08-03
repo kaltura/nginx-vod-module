@@ -456,10 +456,7 @@ dash_packager_get_track_spec(
 	{
 	case MEDIA_TYPE_VIDEO:
 		p = vod_sprintf(p, "v%uD", track_index + 1);
-		if (pts_delay > 0)
-		{
-			p = vod_sprintf(p, "-p%uD", pts_delay);
-		}
+		p = vod_copy(p, "-x2", sizeof("-x2") - 1);		// TODO: remove this after deployment
 		break;
 
 	case MEDIA_TYPE_AUDIO:
@@ -2054,6 +2051,13 @@ dash_packager_get_earliest_pres_time(media_set_t* media_set, media_track_t* trac
 	{
 		result += track->frames.first_frame[0].pts_delay;
 	}
+
+	if (track->media_info.media_type == MEDIA_TYPE_VIDEO && 
+		media_set->version == 1)							// TODO: remove this after deployment
+	{
+		result -= track->media_info.u.video.initial_pts_delay;
+	}
+
 	return result;
 }
 
