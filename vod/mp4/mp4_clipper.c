@@ -314,7 +314,7 @@ mp4_clipper_clip_duration(
 
 	if (parse_params->clip_to != UINT_MAX)
 	{
-		length = (parse_params->clip_to - parse_params->clip_from) * timescale / 1000;
+		length = (uint64_t)(parse_params->clip_to - parse_params->clip_from) * timescale / 1000;
 		if (*duration > length) 
 		{
 			*duration = length;
