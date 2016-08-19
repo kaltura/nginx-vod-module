@@ -364,7 +364,7 @@ class DashTestSuite(ProtocolTestSuite):
         self.logTracker.assertContains('unidentified request')
 
     def testBadStreamTypeManifest(self):
-        assertRequestFails(self.getUrl('/manifest-a1-x1.mpd'), 400)
+        assertRequestFails(self.getUrl('/manifest-a1-z1.mpd'), 400)
         self.logTracker.assertContains('did not consume the whole name')
         
     def testBadStreamIndexManifest(self):
@@ -372,7 +372,7 @@ class DashTestSuite(ProtocolTestSuite):
         self.logTracker.assertContains('did not consume the whole name')
     
     def testBadStreamTypeInit(self):
-        assertRequestFails(self.getUrl('/init-a1-x1.mp4'), 400)
+        assertRequestFails(self.getUrl('/init-a1-z1.mp4'), 400)
         self.logTracker.assertContains('did not consume the whole name')
         
     def testBadStreamIndexInit(self):
@@ -380,11 +380,11 @@ class DashTestSuite(ProtocolTestSuite):
         self.logTracker.assertContains('did not consume the whole name')
 
     def testBadFragmentIndex(self):
-        assertRequestFails(self.getUrl('/fragment-x-a1-x1.m4s'), 400)
+        assertRequestFails(self.getUrl('/fragment-x-a1-z1.m4s'), 400)
         self.logTracker.assertContains('failed to parse segment index')
 
     def testBadStreamTypeFragment(self):
-        assertRequestFails(self.getUrl('/fragment-1-a1-x1.m4s'), 400)
+        assertRequestFails(self.getUrl('/fragment-1-a1-z1.m4s'), 400)
         self.logTracker.assertContains('did not consume the whole name')
         
     def testBadStreamIndexFragment(self):
@@ -401,7 +401,7 @@ class HdsTestSuite(ProtocolTestSuite):
         self.logTracker.assertContains('unidentified request')
 
     def testBadStreamTypeManifest(self):
-        assertRequestFails(self.getUrl('/manifest-a1-x1.f4m'), 400)
+        assertRequestFails(self.getUrl('/manifest-a1-z1.f4m'), 400)
         self.logTracker.assertContains('did not consume the whole name')
         
     def testBadStreamIndexManifest(self):
@@ -421,7 +421,7 @@ class HdsTestSuite(ProtocolTestSuite):
         self.logTracker.assertContains('invalid segment / fragment requested')
         
     def testBadStreamTypeFragment(self):
-        assertRequestFails(self.getUrl('/frag-a1-x1-Seg1-Frag1'), 400)
+        assertRequestFails(self.getUrl('/frag-a1-z1-Seg1-Frag1'), 400)
         self.logTracker.assertContains('did not consume the whole name')
         
     def testBadStreamIndexFragment(self):
@@ -442,7 +442,7 @@ class HlsTestSuite(ProtocolTestSuite):
         self.logTracker.assertContains('did not consume the whole name')
     
     def testBadStreamType(self):
-        assertRequestFails(self.getUrl('/seg-1-a1-x1.ts'), 400)
+        assertRequestFails(self.getUrl('/seg-1-a1-z1.ts'), 400)
         self.logTracker.assertContains('did not consume the whole name')
 
     def testUnrecognizedTSRequest(self):
@@ -463,7 +463,7 @@ class MssTestSuite(ProtocolTestSuite):
         self.logTracker.assertContains('unidentified request')
 
     def testBadStreamType(self):
-        assertRequestFails(self.getUrl('/manifest-a1-x1'), 400)
+        assertRequestFails(self.getUrl('/manifest-a1-z1'), 400)
         self.logTracker.assertContains('did not consume the whole name')
         
     def testBadStreamIndex(self):
