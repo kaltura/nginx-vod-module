@@ -151,13 +151,6 @@ mp4_parser_validate_stts_data(
 	}
 
 	*entries = parse_be32(atom->entries);
-	if (*entries <= 0)
-	{
-		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-			"mp4_parser_validate_stts_data: zero entries");
-		return VOD_BAD_DATA;
-	}
-
 	if (*entries >= (INT_MAX - sizeof(*atom)) / sizeof(stts_entry_t))			// integer overflow protection
 	{
 		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
