@@ -550,6 +550,13 @@ mp4_clipper_stts_clip_data(
 		return rc;
 	}
 
+	if (entries <= 0)
+	{
+		vod_log_error(VOD_LOG_ERR, context->request_context->log, 0,
+			"mp4_clipper_stts_clip_data: zero entries");
+		return VOD_BAD_DATA;
+	}
+
 	// parse the first sample
 	mp4_parser_stts_iterator_init(
 		&iterator,
