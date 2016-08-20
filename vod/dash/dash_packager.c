@@ -456,7 +456,11 @@ dash_packager_get_track_spec(
 	{
 	case MEDIA_TYPE_VIDEO:
 		p = vod_sprintf(p, "v%uD", track_index + 1);
-		p = vod_copy(p, "-x2", sizeof("-x2") - 1);		// TODO: remove this after deployment
+		if (pts_delay > 0)
+		{
+			p = vod_sprintf(p, "-p%uD", pts_delay);
+		}
+		// XXXXX p = vod_copy(p, "-x2", sizeof("-x2") - 1);		// TODO: remove this after deployment
 		break;
 
 	case MEDIA_TYPE_AUDIO:
