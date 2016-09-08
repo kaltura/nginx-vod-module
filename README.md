@@ -97,6 +97,12 @@ To disable compiler optimizations (for debugging with gdb) add `--with-cc-opt="-
 
     ./configure --add-module=/path/to/nginx-vod-module --with-cc-opt="-O0"
 
+If you wish to make use of the following features:
+- Thumbnail capture
+- Playback rate change - 0.5x up to 2x
+
+Please also make sure you have the ffmpeg libs and headers in your the build ENV.
+
 #### RHEL/CentOS RPM
 If you are using RHEL or CentOS 6, you can install by setting up the repo:
 ```
@@ -120,6 +126,12 @@ baseurl = http://installrepo.kaltura.org/releases/latest/RPMS/$basearch/
 # apt-get install kaltura-nginx
 ```
 *Ubuntu NOTE: You must also make sure the multiverse repo is enabled in /etc/apt/sources.list*
+
+If you wish to make use of the following features:
+- Thumbnail capture
+- Playback rate change - 0.5x up to 2x
+
+You will also need to install the kaltura-ffmpeg package.
 
 ### URL structure
 
