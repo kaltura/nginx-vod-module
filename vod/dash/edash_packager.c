@@ -12,11 +12,31 @@
 #define VOD_EDASH_MANIFEST_CONTENT_PROTECTION_CENC									\
 	"        <ContentProtection schemeIdUri=\"urn:mpeg:dash:mp4protection:2011\" value=\"cenc\"/>\n"
 
-#define VOD_EDASH_MANIFEST_CONTENT_PROTECTION_PREFIX								\
-	"        <ContentProtection schemeIdUri=\"urn:uuid:"
+#define VOD_EDASH_MANIFEST_CONTENT_PROTECTION_CENC_PART1							\
+	"        <ContentProtection xmlns:cenc=\"urn:mpeg:cenc:2013\" schemeIdUri=\"urn:uuid:"
 
-#define VOD_EDASH_MANIFEST_CONTENT_PROTECTION_SUFFIX								\
-	"\"/>\n"
+#define VOD_EDASH_MANIFEST_CONTENT_PROTECTION_CENC_PART2							\
+	"\" cenc:default_KID=\""
+
+#define VOD_EDASH_MANIFEST_CONTENT_PROTECTION_CENC_PART3							\
+	"\">\n"																			\
+	"          <cenc:pssh>"
+
+#define VOD_EDASH_MANIFEST_CONTENT_PROTECTION_CENC_PART4							\
+	"</cenc:pssh>\n"																\
+	"        </ContentProtection>\n"
+
+#define VOD_EDASH_MANIFEST_CONTENT_PROTECTION_PLAYREADY_PART1						\
+	"        <ContentProtection xmlns:mspr=\"urn:microsoft:playready\" schemeIdUri=\"urn:uuid:"
+
+#define VOD_EDASH_MANIFEST_CONTENT_PROTECTION_PLAYREADY_PART2						\
+	"\">\n"																			\
+	"          <mspr:pro>"
+
+#define VOD_EDASH_MANIFEST_CONTENT_PROTECTION_PLAYREADY_PART3						\
+	"</mspr:pro>\n"																	\
+	"        </ContentProtection>\n"
+
 
 // init segment types
 typedef struct {
@@ -63,18 +83,66 @@ typedef struct {
 
 ////// mpd functions
 
+static u_char edash_playready_system_id[] = {
+	0x9a, 0x04, 0xf0, 0x79, 0x98, 0x40, 0x42, 0x86,
+	0xab, 0x92, 0xe6, 0x5b, 0xe0, 0x88, 0x5f, 0x95
+};
+
+static u_char*
+edash_packager_write_pssh(u_char* p, drm_system_info_t* cur_info)
+{
+	size_t pssh_atom_size;
+
+	pssh_atom_size = ATOM_HEADER_SIZE + sizeof(pssh_atom_t) + cur_info->data.len;
+
+	write_atom_header(p, pssh_atom_size, 'p', 's', 's', 'h');
+	write_be32(p, 0);						// version + flags
+	p = vod_copy(p, cur_info->system_id, DRM_SYSTEM_ID_SIZE);	// system id
+	write_be32(p, cur_info->data.len);		// data size
+	p = vod_copy(p, cur_info->data.data, cur_info->data.len);
+	return p;
+}
+
 static u_char* 
 edash_packager_write_content_protection(void* context, u_char* p, media_track_t* track)
 {
 	drm_info_t* drm_info = (drm_info_t*)track->file_info.drm_info;
 	drm_system_info_t* cur_info;
+	vod_str_t base64;
+	vod_str_t pssh;
 
 	p = vod_copy(p, VOD_EDASH_MANIFEST_CONTENT_PROTECTION_CENC, sizeof(VOD_EDASH_MANIFEST_CONTENT_PROTECTION_CENC) - 1);
 	for (cur_info = drm_info->pssh_array.first; cur_info < drm_info->pssh_array.last; cur_info++)
 	{
-		p = vod_copy(p, VOD_EDASH_MANIFEST_CONTENT_PROTECTION_PREFIX, sizeof(VOD_EDASH_MANIFEST_CONTENT_PROTECTION_PREFIX) - 1);
-		p = mp4_encrypt_write_guid(p, cur_info->system_id);
-		p = vod_copy(p, VOD_EDASH_MANIFEST_CONTENT_PROTECTION_SUFFIX, sizeof(VOD_EDASH_MANIFEST_CONTENT_PROTECTION_SUFFIX) - 1);
+		if (vod_memcmp(cur_info->system_id, edash_playready_system_id, sizeof(edash_playready_system_id)) == 0)
+		{
+			p = vod_copy(p, VOD_EDASH_MANIFEST_CONTENT_PROTECTION_PLAYREADY_PART1, sizeof(VOD_EDASH_MANIFEST_CONTENT_PROTECTION_PLAYREADY_PART1) - 1);
+			p = mp4_encrypt_write_guid(p, cur_info->system_id);
+			p = vod_copy(p, VOD_EDASH_MANIFEST_CONTENT_PROTECTION_PLAYREADY_PART2, sizeof(VOD_EDASH_MANIFEST_CONTENT_PROTECTION_PLAYREADY_PART2) - 1);
+
+			base64.data = p;
+			vod_encode_base64(&base64, &cur_info->data);
+			p += base64.len;
+
+			p = vod_copy(p, VOD_EDASH_MANIFEST_CONTENT_PROTECTION_PLAYREADY_PART3, sizeof(VOD_EDASH_MANIFEST_CONTENT_PROTECTION_PLAYREADY_PART3) - 1);
+		}
+		else
+		{
+			p = vod_copy(p, VOD_EDASH_MANIFEST_CONTENT_PROTECTION_CENC_PART1, sizeof(VOD_EDASH_MANIFEST_CONTENT_PROTECTION_CENC_PART1) - 1);
+			p = mp4_encrypt_write_guid(p, cur_info->system_id);
+			p = vod_copy(p, VOD_EDASH_MANIFEST_CONTENT_PROTECTION_CENC_PART2, sizeof(VOD_EDASH_MANIFEST_CONTENT_PROTECTION_CENC_PART2) - 1);
+			p = mp4_encrypt_write_guid(p, drm_info->key_id);
+			p = vod_copy(p, VOD_EDASH_MANIFEST_CONTENT_PROTECTION_CENC_PART3, sizeof(VOD_EDASH_MANIFEST_CONTENT_PROTECTION_CENC_PART3) - 1);
+
+			pssh.data = (u_char*)context;
+			pssh.len = edash_packager_write_pssh(pssh.data, cur_info) - pssh.data;
+
+			base64.data = p;
+			vod_encode_base64(&base64, &pssh);
+			p += base64.len;
+
+			p = vod_copy(p, VOD_EDASH_MANIFEST_CONTENT_PROTECTION_CENC_PART4, sizeof(VOD_EDASH_MANIFEST_CONTENT_PROTECTION_CENC_PART4) - 1);
+		}
 	}
 	return p;
 }
@@ -88,9 +156,13 @@ edash_packager_build_mpd(
 	vod_str_t* result)
 {
 	media_sequence_t* cur_sequence;
+	drm_system_info_t* cur_info;
 	drm_info_t* drm_info;
+	u_char* pssh_temp_buffer = NULL;
 	size_t representation_tags_size;
 	size_t cur_drm_tags_size;
+	size_t cur_pssh_size;
+	size_t max_pssh_size = 0;
 	vod_status_t rc;
 
 	representation_tags_size = 0;
@@ -99,12 +171,52 @@ edash_packager_build_mpd(
 	{
 		drm_info = (drm_info_t*)cur_sequence->drm_info;
 
-		cur_drm_tags_size = 
-			sizeof(VOD_EDASH_MANIFEST_CONTENT_PROTECTION_CENC) - 1 + 
-			(sizeof(VOD_EDASH_MANIFEST_CONTENT_PROTECTION_PREFIX) - 1 +
-				VOD_GUID_LENGTH +
-			sizeof(VOD_EDASH_MANIFEST_CONTENT_PROTECTION_SUFFIX) - 1) * drm_info->pssh_array.count;
+		cur_drm_tags_size = sizeof(VOD_EDASH_MANIFEST_CONTENT_PROTECTION_CENC) - 1;
+
+		for (cur_info = drm_info->pssh_array.first; cur_info < drm_info->pssh_array.last; cur_info++)
+		{
+			if (vod_memcmp(cur_info->system_id, edash_playready_system_id, sizeof(edash_playready_system_id)) == 0)
+			{
+				cur_drm_tags_size +=
+					sizeof(VOD_EDASH_MANIFEST_CONTENT_PROTECTION_PLAYREADY_PART1) - 1 +
+					VOD_GUID_LENGTH +
+					sizeof(VOD_EDASH_MANIFEST_CONTENT_PROTECTION_PLAYREADY_PART2) - 1 +
+					vod_base64_encoded_length(cur_info->data.len) +
+					sizeof(VOD_EDASH_MANIFEST_CONTENT_PROTECTION_PLAYREADY_PART3) - 1;
+			}
+			else
+			{
+				cur_pssh_size = ATOM_HEADER_SIZE + sizeof(pssh_atom_t) + cur_info->data.len;
+				if (cur_pssh_size > max_pssh_size)
+				{
+					max_pssh_size = cur_pssh_size;
+				}
+
+				cur_drm_tags_size +=
+					sizeof(VOD_EDASH_MANIFEST_CONTENT_PROTECTION_CENC_PART1) - 1 +
+					VOD_GUID_LENGTH +
+					sizeof(VOD_EDASH_MANIFEST_CONTENT_PROTECTION_CENC_PART2) - 1 +
+					VOD_GUID_LENGTH +
+					sizeof(VOD_EDASH_MANIFEST_CONTENT_PROTECTION_CENC_PART3) - 1 +
+					vod_base64_encoded_length(cur_pssh_size) +
+					sizeof(VOD_EDASH_MANIFEST_CONTENT_PROTECTION_CENC_PART4) - 1;
+
+				continue;
+			}
+		}
+
 		representation_tags_size += cur_drm_tags_size * cur_sequence->total_track_count;
+	}
+
+	if (max_pssh_size > 0)
+	{
+		pssh_temp_buffer = vod_alloc(request_context->pool, max_pssh_size);
+		if (pssh_temp_buffer == NULL)
+		{
+			vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
+				"edash_packager_build_mpd: vod_alloc failed");
+			return VOD_ALLOC_FAILED;
+		}
 	}
 
 	rc = dash_packager_build_mpd(
@@ -114,7 +226,7 @@ edash_packager_build_mpd(
 		media_set,
 		representation_tags_size,
 		edash_packager_write_content_protection,
-		NULL,
+		pssh_temp_buffer,
 		result);
 	if (rc != VOD_OK)
 	{
@@ -225,21 +337,14 @@ edash_packager_write_stsd(void* ctx, u_char* p)
 }
 
 static u_char*
-edash_packager_write_pssh(void* context, u_char* p)
+edash_packager_write_psshs(void* context, u_char* p)
 {
 	drm_system_info_array_t* pssh_array = (drm_system_info_array_t*)context;
 	drm_system_info_t* cur_info;
-	size_t pssh_atom_size;
 
 	for (cur_info = pssh_array->first; cur_info < pssh_array->last; cur_info++)
 	{
-		pssh_atom_size = ATOM_HEADER_SIZE + sizeof(pssh_atom_t) + cur_info->data.len;
-
-		write_atom_header(p, pssh_atom_size, 'p', 's', 's', 'h');
-		write_be32(p, 0);						// version + flags
-		p = vod_copy(p, cur_info->system_id, DRM_SYSTEM_ID_SIZE);	// system id
-		write_be32(p, cur_info->data.len);		// data size
-		p = vod_copy(p, cur_info->data.data, cur_info->data.len);
+		p = edash_packager_write_pssh(p, cur_info);
 	}
 
 	return p;
@@ -281,7 +386,7 @@ edash_packager_build_init_mp4(
 	{
 		pssh_atom_writer.atom_size += ATOM_HEADER_SIZE + sizeof(pssh_atom_t) + cur_info->data.len;
 	}
-	pssh_atom_writer.write = edash_packager_write_pssh;
+	pssh_atom_writer.write = edash_packager_write_psshs;
 	pssh_atom_writer.context = &drm_info->pssh_array;
 
 	// build the stsd writer
