@@ -432,11 +432,18 @@ Live fields:
 * `initialSegmentIndex` - integer, mandatory for live streams that do not set `segmentBaseTime`, 
 	contains the index of the first segment in the playlist. Whenever a clip is pushed out of the head of
 	the playlist, this value must be incremented by the number of segments in the clip.
-* `presentationEndTime` - integer, optional, when supplied the module will compare the 
-	current time to the supplied value, and signal the end of the live presentation
-	if `presentationEndTime` has passed. In HLS, for example, this parameter controls 
-	whether an `#EXT-X-ENDLIST` tag should be included in the media playlist.
+* `presentationEndTime` - integer, optional, measured in milliseconds since the epoch.
+	when supplied, the module will compare the current time to the supplied value, 
+	and signal the end of the live presentation if `presentationEndTime` has passed. 
+	In HLS, for example, this parameter controls whether an `#EXT-X-ENDLIST` tag should be 
+	included in the media playlist.
 	When the parameter is not supplied, the module will not signal live presentation end.
+* `expirationTime` - integer, optional, measured in milliseconds since the epoch.
+	when supplied, the module will compare the current time to the supplied value, 
+	and if `expirationTime` has passed, the module will return a 404 error for manifest requests 
+	(segment requests will continue to be served).
+	when both presentationEndTime and expirationTime have passed, presentationEndTime takes
+	priority, i.e. manifest requests will be served and signal presentation end.
 * `liveWindowDuration` - integer, optional, provides a way to override `vod_live_window_duration`
 	specified in the configuration. If the value exceeds the absolute value specified in 
 	`vod_live_window_duration`, it is ignored.
@@ -468,7 +475,7 @@ Mandatory fields:
 	* dynamic
 
 Optional fields:
-* `keyFrameDurations` - array of integers, containing the durations of the video key frames
+* `keyFrameDurations` - array of integers, containing the durations in milliseconds of the video key frames
 	in the clip. This property can only be supplied on the top level clips of each sequence,
 	supplying this property on nested clips has no effect.
 	Supplying the key frame durations enables the module to both:
