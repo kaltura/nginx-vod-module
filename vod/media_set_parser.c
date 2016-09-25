@@ -26,6 +26,7 @@ enum {
 	MEDIA_SET_PARAM_PLAYLIST_TYPE,
 	MEDIA_SET_PARAM_REFERENCE_CLIP_INDEX,
 	MEDIA_SET_PARAM_PRESENTATION_END_TIME,
+	MEDIA_SET_PARAM_EXPIRATION_TIME,
 	MEDIA_SET_PARAM_LIVE_WINDOW_DURATION,
 	MEDIA_SET_PARAM_NOTIFICATIONS,
 
@@ -132,6 +133,7 @@ static json_object_key_def_t media_set_params[] = {
 	{ vod_string("playlistType"),					VOD_JSON_STRING,MEDIA_SET_PARAM_PLAYLIST_TYPE },
 	{ vod_string("referenceClipIndex"),				VOD_JSON_INT,	MEDIA_SET_PARAM_REFERENCE_CLIP_INDEX },
 	{ vod_string("presentationEndTime"),			VOD_JSON_INT,	MEDIA_SET_PARAM_PRESENTATION_END_TIME },
+	{ vod_string("expirationTime"),					VOD_JSON_INT,	MEDIA_SET_PARAM_EXPIRATION_TIME },
 	{ vod_string("liveWindowDuration"),				VOD_JSON_INT,	MEDIA_SET_PARAM_LIVE_WINDOW_DURATION },
 	{ vod_string("notifications"),					VOD_JSON_ARRAY,	MEDIA_SET_PARAM_NOTIFICATIONS },
 	{ vod_null_string, 0, 0 }
@@ -1642,6 +1644,7 @@ media_set_parse_json(
 	vod_json_value_t* params[MEDIA_SET_PARAM_COUNT];
 	vod_json_value_t json;
 	vod_status_t rc;
+	int64_t current_time;
 	uint32_t margin;
 	bool_t parse_all_clips;
 	u_char error[128];
@@ -1739,8 +1742,36 @@ media_set_parse_json(
 		vod_strncasecmp(params[MEDIA_SET_PARAM_PLAYLIST_TYPE]->v.str.data, playlist_type_live.data, playlist_type_live.len) == 0)
 	{
 		result->type = MEDIA_SET_LIVE;
-		result->presentation_end = params[MEDIA_SET_PARAM_PRESENTATION_END_TIME] != NULL &&
-			params[MEDIA_SET_PARAM_PRESENTATION_END_TIME]->v.num.nom <= (int64_t)vod_time(request_context) * 1000;
+
+		// live manifest timeline:
+		//
+		//                   expirationTime              presentationEnd
+		//                         |                           |
+		//  <return open manifest> | <return 404 for manifest> | <return closed manifest>
+
+		current_time = (int64_t)vod_time(request_context) * 1000;
+
+		if (params[MEDIA_SET_PARAM_PRESENTATION_END_TIME] != NULL &&
+			params[MEDIA_SET_PARAM_PRESENTATION_END_TIME]->v.num.nom <= current_time)
+		{
+			result->presentation_end = TRUE;
+		}
+		else
+		{
+			if (params[MEDIA_SET_PARAM_EXPIRATION_TIME] != NULL &&
+				params[MEDIA_SET_PARAM_EXPIRATION_TIME]->v.num.nom <= current_time &&
+				request_params->segment_index == INVALID_SEGMENT_INDEX &&
+				request_params->segment_time == INVALID_SEGMENT_TIME)
+			{
+				vod_log_debug2(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
+					"media_set_parse_durations: media set expired, expiration=%L time=%L",
+					params[MEDIA_SET_PARAM_EXPIRATION_TIME]->v.num.nom,
+					current_time);
+				return VOD_EXPIRED;
+			}
+
+			result->presentation_end = FALSE;
+		}
 	}
 	else
 	{
