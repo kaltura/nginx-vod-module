@@ -57,6 +57,7 @@ read_cache_get_from_cache(
 	cache_buffer_t* target_buffer;
 	cache_buffer_t* cur_buffer;
 	uint32_t read_size;
+	uint64_t aligned_last_offset;
 	uint64_t offset = request->cur_offset;
 	size_t alignment;
 
@@ -105,7 +106,11 @@ read_cache_get_from_cache(
 	// don't read past the max required offset
 	if (offset + read_size > source->last_offset)
 	{
-		read_size = ((source->last_offset + alignment) & ~alignment) - offset;
+		aligned_last_offset = (source->last_offset + alignment) & ~alignment;
+		if (aligned_last_offset > offset)
+		{
+			read_size = aligned_last_offset - offset;
+		}
 	}
 
 	target_buffer->source = source;
