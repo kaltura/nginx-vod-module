@@ -915,13 +915,6 @@ media_set_init_continuous_clip_times(
 	uint64_t* dest_end;
 	uint64_t last_end_time;
 
-	// optimization for the common case
-	if (timing->total_count == 1)
-	{
-		timing->times = &timing->first_time;
-		return VOD_OK;
-	}
-
 	// allocate the array
 	dest = vod_alloc(request_context->pool, sizeof(timing->times[0]) * timing->total_count);
 	if (dest == NULL)
@@ -936,11 +929,14 @@ media_set_init_continuous_clip_times(
 
 	// generate continuous times
 	last_end_time = timing->first_time;
-	for (cur_duration = timing->durations; 
-		dest < dest_end; 
-		dest++, cur_duration++)
+	for (cur_duration = timing->durations; ; cur_duration++)
 	{
-		*dest = last_end_time;
+		*dest++ = last_end_time;
+		if (dest >= dest_end)
+		{
+			break;
+		}
+
 		last_end_time += *cur_duration;
 	}
 
