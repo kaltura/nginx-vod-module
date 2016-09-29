@@ -1162,7 +1162,8 @@ segmenter_get_live_window(
 				media_set->initial_segment_index += vod_div_ceil(*durations_cur, conf->segment_duration);
 			}
 
-			media_set->initial_segment_index += window.start_clip_offset / conf->segment_duration;
+			media_set->initial_segment_clip_relative_index = window.start_clip_offset / conf->segment_duration;
+			media_set->initial_segment_index += media_set->initial_segment_clip_relative_index;
 		}
 	}
 	else
@@ -1203,6 +1204,10 @@ segmenter_get_live_window(
 			window.end_clip_offset -= *durations_cur;
 			window.end_clip_index++;
 		}
+
+		media_set->initial_segment_clip_relative_index = segmenter_get_segment_index_no_discontinuity(
+			conf, 
+			window.start_time - timing->segment_base_time);
 	}
 
 	// update the initial clip index
@@ -1236,6 +1241,7 @@ segmenter_get_live_window(
 
 	// trim the clip times array
 	timing->times += window.start_clip_index;
+	timing->original_first_time = timing->times[0];
 	timing->times[0] = window.start_time;
 	timing->first_time = window.start_time;
 

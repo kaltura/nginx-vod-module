@@ -225,6 +225,7 @@ ngx_http_vod_parse_uri_file_name(
 	uint32_t* tracks_mask;
 	uint32_t* end_mask;
 	uint32_t* cur_mask;
+	uint32_t segment_index_shift;
 	uint32_t masks_per_sequence;
 	uint32_t sequence_index;
 	uint32_t clip_index;
@@ -257,9 +258,31 @@ ngx_http_vod_parse_uri_file_name(
 			return NGX_HTTP_BAD_REQUEST;
 		}
 		result->segment_index--;		// convert to 0-based
-	}
 
-	skip_dash(start_pos, end_pos);
+		skip_dash(start_pos, end_pos);
+
+		// index shift
+		if (*start_pos == 'i')
+		{
+			start_pos++;		// skip the i
+
+			start_pos = parse_utils_extract_uint32_token(start_pos, end_pos, &segment_index_shift);
+			if (segment_index_shift <= 0)
+			{
+				ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
+					"ngx_http_vod_parse_uri_file_name: failed to parse segment index shift");
+				return NGX_HTTP_BAD_REQUEST;
+			}
+
+			result->segment_index += segment_index_shift;
+
+			skip_dash(start_pos, end_pos);
+		}
+	}
+	else
+	{
+		skip_dash(start_pos, end_pos);
+	}
 
 	// clip index
 	if (*start_pos == 'c' && (flags & PARSE_FILE_NAME_ALLOW_CLIP_INDEX) != 0)

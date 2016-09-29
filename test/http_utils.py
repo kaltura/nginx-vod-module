@@ -1,4 +1,5 @@
 from httplib import BadStatusLine
+from httplib import IncompleteRead
 from StringIO import StringIO
 from g2o_params import *
 import urlparse
@@ -36,6 +37,8 @@ def getUrl(url, extraHeaders={}):
 		return 0, {}, 'Error: request failed %s %s' % (url, e)
 	except socket.error, e:
 		return 0, {}, 'Error: got socket error %s %s' % (url, e)
+	except IncompleteRead, e:
+		return 0, {}, 'Error: got incomplete read error %s %s' % (url, e)
 		
 	# validate content length
 	contentLength = f.info().getheader('content-length')
