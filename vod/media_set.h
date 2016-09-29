@@ -84,6 +84,7 @@ typedef struct {
 	uint64_t segment_base_time;			// the time of segment 0
 	uint64_t total_duration;			// = sum(durations)
 	uint64_t first_time;				// = times[0]
+	uint64_t original_first_time;		// start time of the first clip before it was trimmed to the live window
 	uint32_t first_segment_alignment_offset;	// difference between unaligned first segment time and first_time
 } media_clip_timing_t;
 
@@ -124,6 +125,7 @@ typedef struct {
 	uint32_t look_ahead_segment_count;
 
 	uint32_t initial_segment_index;
+	uint32_t initial_segment_clip_relative_index;
 	uint32_t initial_clip_index;
 	vod_str_t uri;
 

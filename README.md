@@ -410,6 +410,7 @@ Optional fields:
 	to read the media info of all clips included in the mapping in order to generate the MPD)
 * `notifications` - array of notification objects (see below), when a segment is requested,
 	all the notifications that fall between the start/end times of the segment are fired.
+	the notifications must be ordered in an increasing offset order.
 	
 Live fields:
 * `firstClipTime` - integer, mandatory for all live playlists unless `clipTimes` is specified.
@@ -542,6 +543,7 @@ Optional fields:
 * `basePath` - a string that should be added as a prefix to all the paths
 * `notifications` - array of notification objects (see below), when a segment is requested,
 	all the notifications that fall between the start/end times of the segment are fired.
+	the notifications must be ordered in an increasing offset order.
 
 #### Dynamic clip
 
