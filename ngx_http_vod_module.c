@@ -28,6 +28,7 @@
 #include "vod/thumb/thumb_grabber.h"
 
 #define OPEN_FILE_FALLBACK_ENABLED (0x80000000)
+#define MAX_STALE_RETRIES (2)
 
 enum {
 	// mapping state machine
@@ -103,6 +104,7 @@ typedef struct {
 	ngx_str_t* cache_key_prefix;
 	ngx_buffer_cache_t** caches;
 	uint32_t cache_count;
+	uint32_t stale_retries;
 	void* reader_context;
 	size_t max_response_size;
 	ngx_http_vod_mapping_get_uri_t get_uri;
@@ -2906,6 +2908,22 @@ ngx_http_vod_handle_read_completed(void* context, ngx_int_t rc, ngx_buf_t* buf, 
 
 	if (rc != NGX_OK)
 	{
+		if (ctx->state == STATE_MAP_READ && 
+			ctx->mapping.stale_retries > 0 && 
+			errno == ESTALE)
+		{
+			ctx->mapping.stale_retries--;
+			ctx->state = STATE_MAP_INITIAL;
+
+			rc = ctx->state_machine(ctx);
+			if (rc == NGX_AGAIN)
+			{
+				return;
+			}
+
+			goto finalize_request;
+		}
+
 		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, ctx->submodule_context.request_context.log, 0,
 			"ngx_http_vod_handle_read_completed: read failed %i", rc);
 		goto finalize_request;
@@ -4352,6 +4370,7 @@ ngx_http_vod_mapped_request_handler(ngx_http_request_t *r)
 		ctx->read = (ngx_http_vod_async_read_func_t)ngx_async_file_read;
 		ctx->alloc_params_index = READER_FILE;
 		ctx->alignment = ctx->alloc_params[READER_FILE].alignment;
+		ctx->mapping.stale_retries = MAX_STALE_RETRIES;
 	}
 	else
 	{
