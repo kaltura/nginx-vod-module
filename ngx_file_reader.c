@@ -355,7 +355,7 @@ ngx_async_read_completed_callback(ngx_event_t *ev)
 
 	if (rc < 0)
 	{
-		ngx_log_error(NGX_LOG_ERR, state->log, 0,
+		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, state->log, 0,
 			"ngx_async_read_completed_callback: ngx_file_aio_read failed rc=%z", rc);
 		bytes_read = 0;
 	}
