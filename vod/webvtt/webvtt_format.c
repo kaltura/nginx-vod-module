@@ -376,7 +376,6 @@ webvtt_parse(
 	media_parse_params_t* parse_params,
 	vod_str_t* source,
 	size_t metadata_part_count,
-	file_info_t* file_info,
 	media_base_metadata_t** result)
 {
 	webvtt_base_metadata_t* metadata;
@@ -413,7 +412,7 @@ webvtt_parse(
 	}
 
 	// inherit the sequence language and label
-	sequence = file_info->source->sequence;
+	sequence = parse_params->source->sequence;
 	if (sequence->label.len != 0)
 	{
 		label = sequence->label;
@@ -455,8 +454,6 @@ webvtt_parse(
 	track->media_info.label = label;
 	track->media_info.language = lang_id;
 	track->media_info.bitrate = (source->len * 1000 * 8) / full_duration;
-	track->clip_start_time = parse_params->clip_start_time;
-	track->file_info = *file_info;
 
 	metadata->source = *source;
 	metadata->base.duration = duration;

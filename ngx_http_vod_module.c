@@ -1072,6 +1072,37 @@ ngx_http_vod_state_machine_get_drm_info(ngx_http_vod_ctx_t *ctx)
 
 ////// Common media processing
 
+static void
+ngx_http_vod_update_source_tracks(
+	request_context_t* request_context,
+	media_clip_source_t* cur_source)
+{
+	media_track_t* cur_track;
+	file_info_t file_info;
+	int64_t original_clip_time;
+
+	file_info.source = cur_source;
+	file_info.uri = cur_source->uri;
+	file_info.drm_info = cur_source->sequence->drm_info;
+
+	original_clip_time = cur_source->range != NULL ?
+		cur_source->range->original_clip_time : cur_source->clip_time;
+
+	for (cur_track = cur_source->track_array.first_track;
+		cur_track < cur_source->track_array.last_track;
+		cur_track++)
+	{
+		cur_track->clip_start_time = cur_source->clip_time;
+		cur_track->original_clip_time = original_clip_time;
+		cur_track->file_info = file_info;
+
+		vod_log_debug1(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
+			"mp4_parser_parse_frames: first frame dts is %uL",
+			rescale_time(cur_track->first_frame_time_offset, cur_track->media_info.timescale, 1000) +
+			cur_track->clip_start_time);
+	}
+}
+
 static ngx_int_t 
 ngx_http_vod_parse_metadata(
 	ngx_http_vod_ctx_t *ctx, 
@@ -1087,22 +1118,44 @@ ngx_http_vod_parse_metadata(
 	uint64_t last_segment_end;
 	media_range_t range;
 	vod_status_t rc;
-	file_info_t file_info;
 	uint32_t* request_tracks_mask;
 	uint32_t tracks_mask[MEDIA_TYPE_COUNT];
 	uint32_t duration_millis;
 	uint32_t media_type;
 	vod_fraction_t rate;
 
+	// initialize clipping params
+	if (cur_source->clip_to == ULLONG_MAX)
+	{
+		if (cur_source->clip_from >= UINT_MAX)
+		{
+			ngx_log_error(NGX_LOG_ERR, request_context->log, 0,
+				"ngx_http_vod_parse_metadata: clip from value %uL too large", cur_source->clip_from);
+			return NGX_HTTP_BAD_REQUEST;
+		}
+
+		parse_params.clip_to = UINT_MAX;
+	}
+	else
+	{
+		if (cur_source->clip_to >= UINT_MAX)
+		{
+			ngx_log_error(NGX_LOG_ERR, request_context->log, 0,
+				"ngx_http_vod_parse_metadata: clip to value %uL too large", cur_source->clip_to);
+			return NGX_HTTP_BAD_REQUEST;
+		}
+
+		parse_params.clip_to = cur_source->clip_to;
+	}
+	parse_params.clip_from = cur_source->clip_from;
+
 	if (request == NULL)
 	{
 		// Note: the other fields in parse_params are not required here
-		parse_params.clip_from = cur_source->clip_from;
-		parse_params.clip_to = cur_source->clip_to;
 
 		if (ctx->format->clipper_parse == NULL)
 		{
-			ngx_log_error(NGX_LOG_ERR, ctx->submodule_context.request_context.log, 0,
+			ngx_log_error(NGX_LOG_ERR, request_context->log, 0,
 				"ngx_http_vod_parse_metadata: clipping not supported for %V", &ctx->format->name);
 			return NGX_HTTP_BAD_REQUEST;
 		}
@@ -1156,21 +1209,14 @@ ngx_http_vod_parse_metadata(
 	}
 	parse_params.required_tracks_mask = tracks_mask;
 	parse_params.langs_mask = ctx->submodule_context.request_params.langs_mask;
-	parse_params.clip_from = cur_source->clip_from;
-	parse_params.clip_to = cur_source->clip_to;
-	parse_params.clip_start_time = cur_source->clip_time;
+	parse_params.source = cur_source;
 	
-	file_info.source = cur_source;
-	file_info.uri = cur_source->uri;
-	file_info.drm_info = cur_source->sequence->drm_info;
-
 	// parse the basic metadata
 	rc = ctx->format->parse_metadata(
-		&ctx->submodule_context.request_context,
+		request_context,
 		&parse_params,
 		ctx->metadata_parts,
 		ctx->metadata_part_count,
-		&file_info,
 		&ctx->base_metadata);
 	if (rc != VOD_OK)
 	{
@@ -1191,8 +1237,9 @@ ngx_http_vod_parse_metadata(
 
 		parse_params.max_frame_count = 1024 * 1024;
 		range.timescale = 1000;
+		range.original_clip_time = 0;
 		range.start = 0;
-		if (cur_source->clip_to == UINT_MAX)
+		if (cur_source->clip_to == ULLONG_MAX)
 		{
 			range.end = ULLONG_MAX;
 		}
@@ -1227,7 +1274,7 @@ ngx_http_vod_parse_metadata(
 			}
 
 			// get the last segment end
-			if (cur_source->clip_to == UINT_MAX)
+			if (cur_source->clip_to == ULLONG_MAX)
 			{
 				last_segment_end = ULLONG_MAX;
 			}
@@ -1239,7 +1286,7 @@ ngx_http_vod_parse_metadata(
 			// get the start/end offsets
 			duration_millis = rescale_time(ctx->base_metadata->duration * rate.denom, ctx->base_metadata->timescale * rate.nom, 1000);
 
-			get_ranges_params.request_context = &ctx->submodule_context.request_context;
+			get_ranges_params.request_context = request_context;
 			get_ranges_params.conf = segmenter;
 			get_ranges_params.last_segment_end = last_segment_end;
 			get_ranges_params.key_frame_durations = NULL;
@@ -1307,7 +1354,7 @@ ngx_http_vod_parse_metadata(
 
 	// parse the frames
 	rc = ctx->format->read_frames(
-		&ctx->submodule_context.request_context,
+		request_context,
 		ctx->base_metadata,
 		&parse_params,
 		segmenter,
@@ -1315,12 +1362,21 @@ ngx_http_vod_parse_metadata(
 		NULL,
 		&ctx->frames_read_req,
 		&cur_source->track_array);
-	if (rc != VOD_OK && rc != VOD_AGAIN)
+	switch (rc)
 	{
+	case VOD_OK:
+		break;	// handled outside the switch
+
+	case VOD_AGAIN:
+		return NGX_AGAIN;
+
+	default:
 		ngx_log_debug2(NGX_LOG_DEBUG_HTTP, request_context->log, 0,
 			"ngx_http_vod_parse_metadata: read_frames(%V) failed %i", &ctx->format->name, rc);
 		return ngx_http_vod_status_to_ngx_error(rc);
 	}
+
+	ngx_http_vod_update_source_tracks(request_context, cur_source);
 
 	ngx_perf_counter_end(ctx->perf_counters, ctx->perf_counter_context, PC_MEDIA_PARSE);
 
@@ -1593,6 +1649,7 @@ static ngx_int_t
 ngx_http_vod_read_frames(ngx_http_vod_ctx_t *ctx)
 {
 	media_format_read_request_t read_req;
+	request_context_t* request_context = &ctx->submodule_context.request_context;
 	vod_str_t read_buffer;
 	ngx_int_t rc;
 
@@ -1606,7 +1663,7 @@ ngx_http_vod_read_frames(ngx_http_vod_ctx_t *ctx)
 
 		// run the read state machine
 		rc = ctx->format->read_frames(
-			&ctx->submodule_context.request_context,
+			request_context,
 			ctx->base_metadata,
 			NULL,
 			&ctx->submodule_context.conf->segmenter,
@@ -1621,7 +1678,7 @@ ngx_http_vod_read_frames(ngx_http_vod_ctx_t *ctx)
 
 		if (rc != VOD_AGAIN)
 		{
-			ngx_log_debug2(NGX_LOG_DEBUG_HTTP, ctx->submodule_context.request_context.log, 0,
+			ngx_log_debug2(NGX_LOG_DEBUG_HTTP, request_context->log, 0,
 				"ngx_http_vod_read_frames: read_frames(%V) failed %i", &ctx->format->name, rc);
 			return ngx_http_vod_status_to_ngx_error(rc);
 		}
@@ -1633,6 +1690,8 @@ ngx_http_vod_read_frames(ngx_http_vod_ctx_t *ctx)
 			return rc;
 		}
 	}
+
+	ngx_http_vod_update_source_tracks(request_context, ctx->cur_source);
 
 	return NGX_OK;
 }
@@ -3079,7 +3138,7 @@ ngx_http_vod_start_processing_media_file(ngx_http_vod_ctx_t *ctx)
 	// handle serve requests
 	if (ctx->request == NULL &&
 		ctx->submodule_context.media_set.sources_head->clip_from == 0 &&
-		ctx->submodule_context.media_set.sources_head->clip_to == UINT_MAX)
+		ctx->submodule_context.media_set.sources_head->clip_to == ULLONG_MAX)
 	{
 		ctx->state = STATE_DUMP_OPEN_FILE;
 
@@ -4152,6 +4211,7 @@ ngx_http_vod_map_media_set_apply(ngx_http_vod_ctx_t *ctx, ngx_str_t* mapping, in
 	ngx_str_t src_path;
 	ngx_str_t path;
 	ngx_int_t rc;
+	uint32_t request_flags;
 
 	// optimization for the case of simple mapping response
 	if (mapping->len >= conf->path_response_prefix.len + conf->path_response_postfix.len &&
@@ -4214,13 +4274,20 @@ ngx_http_vod_map_media_set_apply(ngx_http_vod_ctx_t *ctx, ngx_str_t* mapping, in
 
 	ngx_perf_counter_start(perf_counter_context);
 
+	request_flags = ctx->request != NULL ? ctx->request->flags : 0;
+
+	if (conf->force_continuous_timestamps)
+	{
+		request_flags |= REQUEST_FLAG_NO_DISCONTINUITY;
+	}
+
 	rc = media_set_parse_json(
 		&ctx->submodule_context.request_context,
 		mapping->data,
 		&ctx->submodule_context.request_params,
 		&ctx->submodule_context.conf->segmenter,
 		&cur_source->uri,
-		ctx->request != NULL ? ctx->request->flags : 0,
+		request_flags,
 		&mapped_media_set);
 
 	if (rc == VOD_NOT_FOUND)
@@ -4251,7 +4318,7 @@ ngx_http_vod_map_media_set_apply(ngx_http_vod_ctx_t *ctx, ngx_str_t* mapping, in
 		mapped_source = (media_clip_source_t*)*mapped_media_set.sequences[0].clips;
 
 		if (mapped_source->clip_from == 0 &&
-			mapped_source->clip_to == UINT_MAX &&
+			mapped_source->clip_to == ULLONG_MAX &&
 			mapped_source->tracks_mask[MEDIA_TYPE_AUDIO] == 0xffffffff &&
 			mapped_source->tracks_mask[MEDIA_TYPE_VIDEO] == 0xffffffff)
 		{

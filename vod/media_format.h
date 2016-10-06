@@ -103,12 +103,12 @@ typedef struct {
 	uint64_t start;			// relative to clip_from
 	uint64_t end;			// relative to clip_from
 	uint32_t timescale;
+	int64_t original_clip_time;
 } media_range_t;
 
 typedef struct {
 	uint32_t* required_tracks_mask;
 	uint8_t* langs_mask;
-	int64_t clip_start_time;
 	uint32_t clip_from;
 	uint32_t clip_to;
 	media_range_t* range;
@@ -116,6 +116,7 @@ typedef struct {
 	size_t max_frames_size;
 	int parse_type;
 	int codecs_mask;
+	struct media_clip_source_s* source;
 } media_parse_params_t;
 
 // typedefs
@@ -213,6 +214,7 @@ typedef struct {
 	uint32_t first_frame_index;
 	uint64_t first_frame_time_offset;
 	int64_t clip_start_time;
+	int64_t original_clip_time;
 	int32_t clip_from_frame_offset;
 	raw_atom_t raw_atoms[RTA_COUNT];		// mp4 only
 	void* source_clip;
@@ -294,7 +296,6 @@ typedef struct {
 		media_parse_params_t* parse_params,
 		vod_str_t* metadata_parts,
 		size_t metadata_part_count,
-		file_info_t* file_info,
 		media_base_metadata_t** result);
 
 	vod_status_t(*read_frames)(

@@ -58,7 +58,6 @@ typedef struct {
 	request_context_t* request_context;
 	media_parse_params_t parse_params;
 	uint32_t track_indexes[MEDIA_TYPE_COUNT];
-	file_info_t* file_info;
 	vod_str_t ftyp_atom;
 	mp4_base_metadata_t* result;
 } process_moov_context_t;
@@ -107,7 +106,6 @@ typedef struct {
 	trak_atom_infos_t trak_atom_infos;
 	media_info_t media_info;
 	atom_info_t sinf_atom;
-	file_info_t file_info;
 	uint32_t track_index;
 } mp4_track_base_metadata_t;
 
@@ -2351,7 +2349,7 @@ mp4_parser_process_moov_atom_callback(void* ctx, atom_info_t* atom_info)
 	}
 
 	// inherit the sequence language and label
-	sequence = context->file_info->source->sequence;
+	sequence = context->parse_params.source->sequence;
 	if (sequence->label.len != 0)
 	{
 		metadata_parse_context.media_info.label = sequence->label;
@@ -2447,7 +2445,6 @@ mp4_parser_process_moov_atom_callback(void* ctx, atom_info_t* atom_info)
 	result_track->trak_atom_infos = trak_atom_infos;
 	result_track->media_info = metadata_parse_context.media_info;
 	result_track->sinf_atom = metadata_parse_context.sinf_atom;
-	result_track->file_info = *context->file_info;
 	result_track->track_index = track_index;
 
 	// update max duration / track index
@@ -2523,7 +2520,6 @@ mp4_parser_parse_basic_metadata(
 	media_parse_params_t* parse_params,
 	vod_str_t* metadata_parts,
 	size_t metadata_part_count,
-	file_info_t* file_info,
 	media_base_metadata_t** result)
 {
 	process_moov_context_t context;
@@ -2549,7 +2545,6 @@ mp4_parser_parse_basic_metadata(
 	context.request_context = request_context;
 	context.parse_params = *parse_params;
 	vod_memzero(context.track_indexes, sizeof(context.track_indexes));
-	context.file_info = file_info;
 	context.ftyp_atom = metadata_parts[MP4_METADATA_PART_FTYP];
 	context.result = metadata;
 
@@ -2780,7 +2775,7 @@ mp4_parser_parse_frames(
 		rc = frames_source_cache_init(
 			request_context,
 			read_cache_state,
-			cur_track->file_info.source,
+			parse_params->source,
 			media_type,
 			&frames_source_context);
 		if (rc != VOD_OK)
@@ -2790,7 +2785,7 @@ mp4_parser_parse_frames(
 
 		if (context.encryption_info.auxiliary_info < context.encryption_info.auxiliary_info_end)
 		{
-			if (cur_track->file_info.source->encryption_key == NULL)
+			if (parse_params->source->encryption_key == NULL)
 			{
 				vod_log_error(VOD_LOG_ERR, request_context->log, 0,
 					"mp4_parser_parse_frames: media is encrypted and no decryption key was supplied");
@@ -2801,7 +2796,7 @@ mp4_parser_parse_frames(
 				request_context,
 				frames_source,
 				frames_source_context,
-				cur_track->file_info.source->encryption_key,
+				parse_params->source->encryption_key,
 				&context.encryption_info,
 				&frames_source_context);
 			if (rc != VOD_OK)
@@ -2822,7 +2817,6 @@ mp4_parser_parse_frames(
 		// copy the result
 		result_track->media_info = cur_track->media_info;
 		result_track->encryption_info = context.encryption_info;
-		result_track->file_info = cur_track->file_info;
 		result_track->index = cur_track->track_index;
 		result_track->frame_count = context.frame_count;
 		result_track->key_frame_count = context.key_frame_count;
@@ -2830,7 +2824,6 @@ mp4_parser_parse_frames(
 		result_track->total_frames_duration = context.total_frames_duration;
 		result_track->first_frame_index = context.first_frame;
 		result_track->first_frame_time_offset = context.first_frame_time_offset;
-		result_track->clip_start_time = parse_params->clip_start_time;
 		result_track->clip_from_frame_offset = context.clip_from_frame_offset;
 		result_track->source_clip = NULL;
 
@@ -2839,16 +2832,11 @@ mp4_parser_parse_frames(
 		{
 			last_frame = result_track->frames.last_frame - 1;
 			last_offset = last_frame->offset + last_frame->size;
-			if (last_offset > cur_track->file_info.source->last_offset)
+			if (last_offset > parse_params->source->last_offset)
 			{
-				cur_track->file_info.source->last_offset = last_offset;
+				parse_params->source->last_offset = last_offset;
 			}
 		}
-
-		vod_log_debug1(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
-			"mp4_parser_parse_frames: first frame dts is %uL",
-			rescale_time(result_track->first_frame_time_offset, result_track->media_info.timescale, 1000) + 
-			result_track->clip_start_time);
 
 		// copy raw atoms
 		if ((parse_params->parse_type & PARSE_FLAG_SAVE_RAW_ATOMS) != 0)

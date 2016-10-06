@@ -37,8 +37,8 @@ struct media_clip_source_s {
 	// input params
 	media_clip_t base;
 	vod_str_t uri;				// original uri
-	uint32_t clip_to;
-	uint32_t clip_from;
+	uint64_t clip_to;
+	uint64_t clip_from;
 	uint32_t tracks_mask[MEDIA_TYPE_COUNT];
 	int64_t clip_time;
 	u_char* encryption_key;

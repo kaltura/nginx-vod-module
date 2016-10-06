@@ -623,7 +623,6 @@ mkv_metadata_parse(
 	media_parse_params_t* parse_params,
 	vod_str_t* metadata_parts,
 	size_t metadata_part_count,
-	file_info_t* file_info,
 	media_base_metadata_t** result)
 {
 	mkv_base_metadata_t* metadata;
@@ -773,7 +772,7 @@ mkv_metadata_parse(
 		}
 
 		// inherit the sequence language and label
-		sequence = file_info->source->sequence;
+		sequence = parse_params->source->sequence;
 		if (sequence->label.len != 0)
 		{
 			track.name = sequence->label;
@@ -890,8 +889,6 @@ mkv_metadata_parse(
 		cur_track->media_info.extra_data = track.codec_private;
 
 		cur_track->index = track_index;
-		cur_track->clip_start_time = parse_params->clip_start_time;
-		cur_track->file_info = *file_info;
 
 		rc = media_format_finalize_track(
 			request_context,

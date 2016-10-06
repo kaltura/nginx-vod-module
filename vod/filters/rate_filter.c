@@ -191,6 +191,7 @@ rate_filter_parse(
 		new_range->start = (old_range->start * filter->rate.nom) / filter->rate.denom;
 		new_range->end = (old_range->end * filter->rate.nom) / filter->rate.denom;
 		new_range->timescale = old_range->timescale;
+		new_range->original_clip_time = old_range->original_clip_time;
 
 		context->range = new_range;
 	}
