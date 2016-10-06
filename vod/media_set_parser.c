@@ -413,7 +413,8 @@ media_set_map_source(
 {
 	media_filter_parse_context_t context;
 	vod_json_value_t json;
-	uint64_t duration = source->clip_to - source->clip_from;
+	uint64_t initial_clip_to = source->clip_to;
+	uint64_t initial_clip_from = source->clip_from;
 	u_char error[128];
 	vod_status_t rc;
 
@@ -455,7 +456,14 @@ media_set_map_source(
 		return VOD_NOT_FOUND;
 	}
 
-	source->clip_to = source->clip_from + duration;
+	if (initial_clip_to == ULLONG_MAX)
+	{
+		source->clip_to = ULLONG_MAX;
+	}
+	else
+	{
+		source->clip_to = source->clip_from + (initial_clip_to - initial_clip_from);
+	}
 	source->stripped_uri = source->mapped_uri;
 
 	return VOD_OK;
@@ -508,7 +516,14 @@ media_set_parse_source(
 		return VOD_NOT_FOUND;
 	}
 
-	source->clip_to = source->clip_from + context->base.duration;
+	if (context->base.duration == UINT_MAX)
+	{
+		source->clip_to = ULLONG_MAX;
+	}
+	else
+	{
+		source->clip_to = source->clip_from + context->base.duration;
+	}
 	source->stripped_uri = source->mapped_uri;
 
 	source->next = context->base.sources_head;

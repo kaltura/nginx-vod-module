@@ -1297,6 +1297,7 @@ ngx_http_vod_parse_metadata(
 			get_ranges_params.timing.total_count = 1;
 			get_ranges_params.timing.total_duration = duration_millis;
 			get_ranges_params.timing.times = &get_ranges_params.timing.first_time;
+			get_ranges_params.timing.original_times = &get_ranges_params.timing.first_time;
 
 			if (ctx->submodule_context.request_params.segment_index != INVALID_SEGMENT_INDEX)
 			{
