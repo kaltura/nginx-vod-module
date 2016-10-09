@@ -1097,7 +1097,7 @@ ngx_http_vod_update_source_tracks(
 		cur_track->file_info = file_info;
 
 		vod_log_debug1(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
-			"mp4_parser_parse_frames: first frame dts is %uL",
+			"ngx_http_vod_update_source_tracks: first frame dts is %uL",
 			rescale_time(cur_track->first_frame_time_offset, cur_track->media_info.timescale, 1000) +
 			cur_track->clip_start_time);
 	}

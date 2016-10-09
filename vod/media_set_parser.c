@@ -982,7 +982,7 @@ media_set_parse_clip_times(
 	if (dest == NULL)
 	{
 		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
-			"media_set_live_init_clip_times: vod_alloc failed");
+			"media_set_parse_clip_times: vod_alloc failed");
 		return VOD_ALLOC_FAILED;
 	}
 
@@ -995,14 +995,14 @@ media_set_parse_clip_times(
 	if (array->type != VOD_JSON_INT)
 	{
 		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-			"media_set_live_init_clip_times: clipTimes must be an array of integers");
+			"media_set_parse_clip_times: clipTimes must be an array of integers");
 		return VOD_BAD_MAPPING;
 	}
 
 	if (array->count != media_set->timing.total_count)
 	{
 		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-			"media_set_live_init_clip_times: clipTimes element count %uz does not match clip count %uD",
+			"media_set_parse_clip_times: clipTimes element count %uz does not match clip count %uD",
 			array->count, media_set->timing.total_count);
 		return VOD_BAD_MAPPING;
 	}
@@ -1028,7 +1028,7 @@ media_set_parse_clip_times(
 		if (cur_clip_time < last_end_time)
 		{
 			vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-				"media_set_live_init_clip_times: bad clip time %L last clip ended at %L",
+				"media_set_parse_clip_times: bad clip time %L last clip ended at %L",
 				cur_clip_time, last_end_time);
 			return VOD_BAD_MAPPING;
 		}
@@ -1802,7 +1802,7 @@ media_set_parse_json(
 				request_params->segment_time == INVALID_SEGMENT_TIME)
 			{
 				vod_log_debug2(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
-					"media_set_parse_durations: media set expired, expiration=%L time=%L",
+					"media_set_parse_json: media set expired, expiration=%L time=%L",
 					params[MEDIA_SET_PARAM_EXPIRATION_TIME]->v.num.nom,
 					current_time);
 				return VOD_EXPIRED;
