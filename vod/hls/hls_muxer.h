@@ -14,6 +14,9 @@
 #define HLS_TIMESCALE (90000)
 
 // typedefs
+struct id3_context_s;
+typedef struct id3_context_s id3_context_t;
+
 typedef void(*hls_get_iframe_positions_callback_t)(
 	void* context, 
 	uint32_t segment_index, 
@@ -69,6 +72,7 @@ typedef struct {
 	// child states
 	write_buffer_queue_t queue;
 	aes_cbc_encrypt_context_t* encrypted_write_context;
+	struct id3_context_s* id3_context;
 	
 	// cur clip state
 	media_set_t* media_set;

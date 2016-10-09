@@ -413,6 +413,7 @@ segmenter_get_start_end_ranges_gop(
 	uint64_t segment_base_time;
 	uint64_t time = params->time;
 	uint32_t clip_duration;
+	uint32_t clip_index;
 
 	segment_base_time = params->timing.segment_base_time;
 	if (segment_base_time != SEGMENT_BASE_TIME_RELATIVE)
@@ -445,6 +446,8 @@ segmenter_get_start_end_ranges_gop(
 			break;
 		}
 	}
+
+	clip_index = cur_duration - clip_durations;
 
 	start = time - clip_time;
 	if (start > conf->gop_look_behind)
@@ -487,10 +490,11 @@ segmenter_get_start_end_ranges_gop(
 	cur_clip_range->timescale = 1000;
 	cur_clip_range->start = start;
 	cur_clip_range->end = end;
+	cur_clip_range->original_clip_time = params->timing.original_times[clip_index];
 
 	// initialize the result
 	result->clip_time = clip_time;
-	result->min_clip_index = result->max_clip_index = cur_duration - clip_durations;
+	result->min_clip_index = result->max_clip_index = clip_index;
 	result->clip_count = 1;
 	result->clip_ranges = cur_clip_range;
 
@@ -651,6 +655,7 @@ segmenter_get_start_end_ranges_no_discontinuity(
 	for (index = result->min_clip_index;; index++, cur_clip_range++)
 	{
 		cur_clip_range->timescale = 1000;
+		cur_clip_range->original_clip_time = params->timing.original_times[index];
 		cur_clip_range->start = start;
 		if (index >= result->max_clip_index)
 		{
@@ -862,6 +867,7 @@ segmenter_get_start_end_ranges_discontinuity(
 	cur_clip_range->timescale = 1000;
 	cur_clip_range->start = start;
 	cur_clip_range->end = end;
+	cur_clip_range->original_clip_time = params->timing.original_times[clip_index];
 
 	// initialize the result
 	result->clip_time = clip_time;

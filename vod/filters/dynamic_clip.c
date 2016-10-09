@@ -237,7 +237,7 @@ dynamic_clip_get_mapping_string(
 		for (i = 0; i < cur_clip->base.source_count; i++)
 		{
 			cur_source = (media_clip_source_t*)cur_clip->base.sources[i];
-			p = vod_sprintf(p, "-%V-%uD", 
+			p = vod_sprintf(p, "-%V-%uL", 
 				&cur_source->mapped_uri, 
 				cur_source->clip_to);
 		}
@@ -295,6 +295,7 @@ dynamic_clip_apply_mapping_string_clip(
 	vod_str_t clip_id;
 	uint32_t offset;
 	u_char* p = *cur;
+	uint64_t original_clip_time;
 	uint64_t range_start;
 	uint64_t range_end;
 	uint32_t source_count;
@@ -339,6 +340,7 @@ dynamic_clip_apply_mapping_string_clip(
 
 	range_start = clip->range->start;
 	range_end = clip->range->end;
+	original_clip_time = clip->range->original_clip_time;
 
 	range = vod_alloc(request_context->pool, (sizeof(range[0]) + sizeof(cur_source[0]) + sizeof(cur_source_ptr[0])) * source_count);
 	if (range == NULL)
@@ -424,6 +426,8 @@ dynamic_clip_apply_mapping_string_clip(
 		{
 			range->end = duration;
 		}
+
+		range->original_clip_time = original_clip_time + offset;
 
 		// initialize the source
 		cur_source->next = sources_list_head;

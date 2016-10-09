@@ -781,6 +781,14 @@ If the value is positive, nginx vod returns a range of maximum `vod_live_window_
 If the value is negative, nginx vod returns a range of maximum `-vod_live_window_duration` milliseconds from the end of the mapping json.
 If the value is set to zero, the live manifest will contain all the segments that are fully contained in the mapping json time frame.
 
+#### vod_force_continuous_timestamps
+* **syntax**: `vod_force_continuous_timestamps on/off`
+* **default**: `off
+* **context**: `http`, `server`, `location`
+
+Generate continuous timestamps even when the media set has gaps (gaps can created by the use of `clipTimes`)
+If ID3 timestamps are enabled (`vod_hls_output_id3_timestamps`), they contain the original timestamps that were set in `clipTimes`.
+
 #### vod_bootstrap_segment_durations
 * **syntax**: `vod_bootstrap_segment_durations duration`
 * **default**: `none`

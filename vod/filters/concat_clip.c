@@ -65,6 +65,7 @@ concat_clip_parse(
 	int64_t* cur_duration;
 	int64_t cur_duration_value;
 	int64_t clip_time;
+	uint64_t original_clip_time;
 	uint64_t start;
 	uint64_t end;
 	uint32_t tracks_mask[MEDIA_TYPE_COUNT];
@@ -299,6 +300,7 @@ concat_clip_parse(
 		range = (void*)sources_end;
 
 		// initialize the ranges
+		original_clip_time = context->range->original_clip_time + start_offset;
 		part = first_part;
 		for (cur_source = sources, range_cur = range, cur_duration = first_duration;
 			cur_source < sources_end;
@@ -313,6 +315,8 @@ concat_clip_parse(
 			range_cur->start = 0;
 			range_cur->end = *cur_duration;
 			range_cur->timescale = 1000;
+			range_cur->original_clip_time = original_clip_time;
+			original_clip_time += *cur_duration;
 
 			cur_source->clip_to = *cur_duration;
 		}

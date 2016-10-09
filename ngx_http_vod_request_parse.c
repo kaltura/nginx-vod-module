@@ -597,7 +597,7 @@ ngx_http_vod_parse_multi_uri(
 }
 
 static ngx_int_t
-ngx_http_vod_parse_uint32_param(ngx_str_t* value, void* output, int offset)
+ngx_http_vod_parse_uint64_param(ngx_str_t* value, void* output, int offset)
 {
 	ngx_int_t result;
 
@@ -607,7 +607,7 @@ ngx_http_vod_parse_uint32_param(ngx_str_t* value, void* output, int offset)
 		return NGX_HTTP_BAD_REQUEST;
 	}
 
-	*(uint32_t*)((u_char*)output + offset) = result;
+	*(uint64_t*)((u_char*)output + offset) = result;
 	return NGX_OK;
 }
 
@@ -628,16 +628,16 @@ ngx_http_vod_parse_tracks_param(ngx_str_t* value, void* output, int offset)
 }
 
 static ngx_http_vod_uri_param_def_t uri_param_defs[] = {
-	{ offsetof(ngx_http_vod_loc_conf_t, clip_to_param_name), "clip to", ngx_http_vod_parse_uint32_param, offsetof(media_clip_source_t, clip_to) },
-	{ offsetof(ngx_http_vod_loc_conf_t, clip_from_param_name), "clip from", ngx_http_vod_parse_uint32_param, offsetof(media_clip_source_t, clip_from) },
+	{ offsetof(ngx_http_vod_loc_conf_t, clip_to_param_name), "clip to", ngx_http_vod_parse_uint64_param, offsetof(media_clip_source_t, clip_to) },
+	{ offsetof(ngx_http_vod_loc_conf_t, clip_from_param_name), "clip from", ngx_http_vod_parse_uint64_param, offsetof(media_clip_source_t, clip_from) },
 	{ offsetof(ngx_http_vod_loc_conf_t, tracks_param_name), "tracks", ngx_http_vod_parse_tracks_param, offsetof(media_clip_source_t, tracks_mask) },
 	{ offsetof(ngx_http_vod_loc_conf_t, speed_param_name), "speed", NULL, 0 },
 	{ -1, NULL, NULL, 0}
 };
 
 static ngx_http_vod_uri_param_def_t pd_uri_param_defs[] = {
-	{ offsetof(ngx_http_vod_loc_conf_t, clip_to_param_name), "clip to", ngx_http_vod_parse_uint32_param, offsetof(media_clip_source_t, clip_to) },
-	{ offsetof(ngx_http_vod_loc_conf_t, clip_from_param_name), "clip from", ngx_http_vod_parse_uint32_param, offsetof(media_clip_source_t, clip_from) },
+	{ offsetof(ngx_http_vod_loc_conf_t, clip_to_param_name), "clip to", ngx_http_vod_parse_uint64_param, offsetof(media_clip_source_t, clip_to) },
+	{ offsetof(ngx_http_vod_loc_conf_t, clip_from_param_name), "clip from", ngx_http_vod_parse_uint64_param, offsetof(media_clip_source_t, clip_from) },
 	{ -1, NULL, NULL, 0 }
 };
 
@@ -760,7 +760,7 @@ ngx_http_vod_extract_uri_params(
 	source_clip->base.type = MEDIA_CLIP_SOURCE;
 	source_clip->base.id = (*clip_id)++;
 
-	source_clip->clip_to = UINT_MAX;
+	source_clip->clip_to = ULLONG_MAX;
 	ngx_memset(source_clip->tracks_mask, 0xff, sizeof(source_clip->tracks_mask));
 	source_clip->uri = *uri;
 	source_clip->sequence = sequence;
@@ -860,7 +860,7 @@ ngx_http_vod_extract_uri_params(
 	if (source_clip->clip_from >= source_clip->clip_to)
 	{
 		ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
-			"ngx_http_vod_extract_uri_params: clip from %uD is larger than clip to %uD", source_clip->clip_from, source_clip->clip_to);
+			"ngx_http_vod_extract_uri_params: clip from %uL is larger than clip to %uL", source_clip->clip_from, source_clip->clip_to);
 		return NGX_HTTP_BAD_REQUEST;
 	}
 

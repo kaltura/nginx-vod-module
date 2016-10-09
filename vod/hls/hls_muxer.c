@@ -15,10 +15,16 @@
 
 // typedefs
 typedef struct {
-	id3_encoder_state_t encoder;
+	media_track_t track;
 	input_frame_t frame;
 	u_char data[sizeof(ID3_TEXT_JSON_FORMAT) + VOD_INT64_LEN];
-} id3_context_t;
+} id3_track_t;
+
+struct id3_context_s {
+	id3_encoder_state_t encoder;
+	id3_track_t* first_track;
+	id3_track_t* cur_track;
+};
 
 // forward decls
 static vod_status_t hls_muxer_start_frame(hls_muxer_state_t* state);
@@ -105,12 +111,18 @@ static vod_status_t
 hls_muxer_init_id3_stream(
 	hls_muxer_state_t* state,
 	hls_muxer_conf_t* conf,
+	media_set_t* media_set,
 	mpegts_encoder_init_streams_state_t* init_streams_state)
 {
 	hls_muxer_stream_state_t* cur_stream;
-	hls_muxer_stream_state_t* reference_stream;
+	media_track_t* dest_track;
+	media_track_t* ref_track;
 	id3_context_t* context;
+	id3_track_t* last_track;
+	id3_track_t* cur_track;
 	vod_status_t rc;
+	int64_t timestamp;
+	void* frames_source_context;
 
 	cur_stream = state->last_stream;
 
@@ -129,22 +141,13 @@ hls_muxer_init_id3_stream(
 
 	if (!conf->output_id3_timestamps)
 	{
+		state->id3_context = NULL;
 		return VOD_OK;
 	}
 
-	// get the stream that has the first frame
-	rc = hls_muxer_choose_stream(state, &reference_stream);
-	if (rc != VOD_OK)
-	{
-		if (rc == VOD_NOT_FOUND)
-		{
-			return VOD_OK;
-		}
-		return rc;
-	}
-
 	// allocate the context
-	context = vod_alloc(state->request_context->pool, sizeof(*context));
+	context = vod_alloc(state->request_context->pool, 
+		sizeof(*context) + sizeof(context->first_track[0]) * media_set->clip_count);
 	if (context == NULL)
 	{
 		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, state->request_context->log, 0,
@@ -152,17 +155,61 @@ hls_muxer_init_id3_stream(
 		return VOD_ALLOC_FAILED;
 	}
 
+	context->first_track = (void*)(context + 1);
+
 	// init the memory frames source
-	rc = frames_source_memory_init(state->request_context, &cur_stream->cur_frame_part.frames_source_context);
+	rc = frames_source_memory_init(state->request_context, &frames_source_context);
 	if (rc != VOD_OK)
 	{
 		return rc;
 	}
 
-	cur_stream->cur_frame_part.frames_source = &frames_source_memory;
+	// init the tracks
+	cur_track = context->first_track;
+	last_track = cur_track + media_set->clip_count;
+	ref_track = media_set->filtered_tracks;
+
+	for (; cur_track < last_track; cur_track++, ref_track += media_set->total_track_count)
+	{
+		// init the track
+		dest_track = &cur_track->track;
+		dest_track->media_info.media_type = MEDIA_TYPE_NONE;
+		dest_track->clip_start_time = ref_track->clip_start_time;
+		dest_track->first_frame_time_offset = ref_track->first_frame_time_offset;
+		dest_track->clip_from_frame_offset = ref_track->clip_from_frame_offset;
+
+		// init the frame part
+		dest_track->frames.next = NULL;
+		dest_track->frames.first_frame = &cur_track->frame;
+		dest_track->frames.last_frame = &cur_track->frame;
+		if (ref_track->frame_count > 0)
+		{
+			dest_track->frames.last_frame++;
+		}
+		dest_track->frames.frames_source = &frames_source_memory;
+		dest_track->frames.frames_source_context = frames_source_context;
+
+		// init the frame
+		timestamp = ref_track->original_clip_time + 
+			hls_rescale_to_millis(ref_track->first_frame_time_offset);
+		cur_track->frame.size = vod_sprintf(cur_track->data, 
+			ID3_TEXT_JSON_FORMAT, timestamp) - cur_track->data;
+		cur_track->frame.duration = 0;
+		cur_track->frame.key_frame = 1;
+		cur_track->frame.pts_delay = 0;
+		cur_track->frame.offset = (uintptr_t)&cur_track->data;
+	}
+
+	// init the first track
+	rc = hls_muxer_init_track(cur_stream, &context->first_track[0].track);
+	if (rc != VOD_OK)
+	{
+		return rc;
+	}
+
+	context->cur_track = context->first_track + 1;
 
 	// base initialization
-	cur_stream->media_type = MEDIA_TYPE_NONE;
 	cur_stream->segment_limit = ULLONG_MAX;
 	cur_stream->buffer_state = NULL;
 
@@ -172,28 +219,9 @@ hls_muxer_init_id3_stream(
 	cur_stream->top_filter = &id3_encoder;
 	cur_stream->top_filter_context = &context->encoder;
 
-	// copy the time stamps
-	cur_stream->first_frame_time_offset = reference_stream->first_frame_time_offset;
-	cur_stream->next_frame_time_offset = reference_stream->next_frame_time_offset;
-	cur_stream->clip_from_frame_offset = reference_stream->clip_from_frame_offset;
-
-	// init the frame part
-	cur_stream->cur_frame = &context->frame;
-	cur_stream->first_frame_part = &cur_stream->cur_frame_part;
-	cur_stream->cur_frame_part.next = NULL;
-	cur_stream->cur_frame_part.first_frame = &context->frame;
-	cur_stream->cur_frame_part.last_frame = &context->frame + 1;
-	cur_stream->source = NULL;
-
-	// init the frame
-	context->frame.size = vod_sprintf(context->data, ID3_TEXT_JSON_FORMAT,
-		hls_rescale_to_millis(cur_stream->first_frame_time_offset)) - context->data;
-	context->frame.duration = 0;
-	context->frame.key_frame = 1;
-	context->frame.pts_delay = 0;
-	context->frame.offset = (uintptr_t)&context->data;
-
+	// update the state
 	state->last_stream++;
+	state->id3_context = context;
 
 	return VOD_OK;
 }
@@ -422,7 +450,7 @@ hls_muxer_init_base(
 	state->first_clip_track = track;
 
 	// init the id3 stream
-	rc = hls_muxer_init_id3_stream(state, conf, &init_streams_state);
+	rc = hls_muxer_init_id3_stream(state, conf, media_set, &init_streams_state);
 	if (rc != VOD_OK)
 	{
 		return rc;
@@ -529,12 +557,16 @@ hls_muxer_reinit_tracks(hls_muxer_state_t* state)
 
 	state->first_time = TRUE;
 
-	track = state->first_clip_track;
 	for (cur_stream = state->first_stream; cur_stream < state->last_stream; cur_stream++)
 	{
-		if (cur_stream->media_type == MEDIA_TYPE_NONE)		// id3 track
+		if (cur_stream->media_type != MEDIA_TYPE_NONE)		// id3 track
 		{
-			continue;
+			track = state->first_clip_track++;
+		}
+		else
+		{
+			track = &state->id3_context->cur_track->track;
+			state->id3_context->cur_track++;
 		}
 
 		rc = hls_muxer_init_track(cur_stream, track);
@@ -542,10 +574,7 @@ hls_muxer_reinit_tracks(hls_muxer_state_t* state)
 		{
 			return rc;
 		}
-
-		track++;
 	}
-	state->first_clip_track = track;
 
 	return VOD_OK;
 }
@@ -1204,20 +1233,15 @@ hls_muxer_simulation_reset(hls_muxer_state_t* state)
 	if (state->media_set->clip_count > 1)
 	{
 		state->first_clip_track = state->media_set->filtered_tracks;
+		if (state->id3_context != NULL)
+		{
+			state->id3_context->cur_track = state->id3_context->first_track;
+		}
 		rc = hls_muxer_reinit_tracks(state);
 		if (rc != VOD_OK)
 		{
 			vod_log_error(VOD_LOG_ERR, state->request_context->log, 0,
 				"hls_muxer_simulation_reset: unexpected - hls_muxer_reinit_tracks failed %i", rc);
-		}
-
-		// need to explicitly reset the id3 stream since reinit tracks skips it
-		cur_stream = state->last_stream - 1;
-		if (cur_stream->media_type == MEDIA_TYPE_NONE)
-		{
-			cur_stream->cur_frame_part = *cur_stream->first_frame_part;
-			cur_stream->cur_frame = cur_stream->cur_frame_part.first_frame;
-			cur_stream->next_frame_time_offset = cur_stream->first_frame_time_offset;
 		}
 	}
 	else

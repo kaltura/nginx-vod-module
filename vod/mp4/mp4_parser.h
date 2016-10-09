@@ -33,7 +33,6 @@ vod_status_t mp4_parser_parse_basic_metadata(
 	media_parse_params_t* parse_params,
 	vod_str_t* metadata_parts,
 	size_t metadata_part_count,
-	file_info_t* file_info,
 	media_base_metadata_t** result);
 
 vod_status_t mp4_parser_parse_frames(
