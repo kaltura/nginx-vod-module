@@ -11,7 +11,10 @@ language: c
 compiler:
     - clang
     - gcc
-script: ./travis_build.sh
+env:
+  - NGX_VOD_MODULE=--add-module=./nginx-vod-module
+  - NGX_VOD_MODULE=--add-dynamic-module=./nginx-vod-module
+script: ./travis_build.sh $NGX_VOD_MODULE
 notifications:
   email:
     recipients:

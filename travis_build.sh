@@ -1,7 +1,7 @@
 #!/bin/sh
 set -o nounset                              # Treat unset variables as an error
 
-NGINX_VERSION=1.8.0
+NGINX_VERSION=1.10.2
 NGINX_URI="http://nginx.org/download/nginx-$NGINX_VERSION.tar.gz"
 
 
@@ -54,6 +54,5 @@ export LD_LIBRARY_PATH LIBRARY_PATH C_INCLUDE_PATH
         --with-debug \
         --with-threads \
         --with-cc-opt="-O3" \
-        --add-module=./nginx-vod-module \
         $*
 make
