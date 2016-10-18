@@ -427,6 +427,10 @@ Live fields:
 		In this case, the upstream server generating the mapping json has to maintain state,
 		and update initialSegmentIndex every time a clip is removed from the playlist.
 	* if set, the timing gaps between clips must not be lower than `vod_segment_duration`.
+* `firstClipStartOffset` - integer, optional, measured in milliseconds. This field contains the
+	difference between the minimum allowed live window start time, and the first clip time.
+	When using concat clips, set this field to the maximum value of `offset` in the concat clips 
+	of the first sequence clip.
 * `initialClipIndex` - integer, mandatory for non-continuous live streams that mix videos having
 	different encoding parameters (SPS/PPS), contains the index of the first clip in the playlist. 
 	Whenever a clip is pushed out of the head of the playlist, this value must be incremented by one.

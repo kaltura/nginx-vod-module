@@ -23,6 +23,7 @@ enum {
 	MEDIA_SET_PARAM_FIRST_CLIP_TIME,
 	MEDIA_SET_PARAM_CLIP_TIMES,
 	MEDIA_SET_PARAM_SEGMENT_BASE_TIME,
+	MEDIA_SET_PARAM_FIRST_CLIP_START_OFFSET,
 	MEDIA_SET_PARAM_PLAYLIST_TYPE,
 	MEDIA_SET_PARAM_REFERENCE_CLIP_INDEX,
 	MEDIA_SET_PARAM_PRESENTATION_END_TIME,
@@ -130,6 +131,7 @@ static json_object_key_def_t media_set_params[] = {
 	{ vod_string("firstClipTime"),					VOD_JSON_INT,	MEDIA_SET_PARAM_FIRST_CLIP_TIME },
 	{ vod_string("clipTimes"),						VOD_JSON_ARRAY,	MEDIA_SET_PARAM_CLIP_TIMES },
 	{ vod_string("segmentBaseTime"),				VOD_JSON_INT,	MEDIA_SET_PARAM_SEGMENT_BASE_TIME },
+	{ vod_string("firstClipStartOffset"),			VOD_JSON_INT,	MEDIA_SET_PARAM_FIRST_CLIP_START_OFFSET },
 	{ vod_string("playlistType"),					VOD_JSON_STRING,MEDIA_SET_PARAM_PLAYLIST_TYPE },
 	{ vod_string("referenceClipIndex"),				VOD_JSON_INT,	MEDIA_SET_PARAM_REFERENCE_CLIP_INDEX },
 	{ vod_string("presentationEndTime"),			VOD_JSON_INT,	MEDIA_SET_PARAM_PRESENTATION_END_TIME },
@@ -1048,6 +1050,28 @@ media_set_live_init_clip_times(
 	vod_json_value_t** params)
 {
 	vod_status_t rc;
+	int64_t first_clip_start_offset;
+
+	if (params[MEDIA_SET_PARAM_FIRST_CLIP_START_OFFSET] != NULL)
+	{
+		first_clip_start_offset = params[MEDIA_SET_PARAM_FIRST_CLIP_START_OFFSET]->v.num.nom;
+		if (first_clip_start_offset < 0)
+		{
+			vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+				"media_set_live_init_clip_times: firstClipStartOffset cannot be negative");
+			return VOD_BAD_MAPPING;
+		}
+
+		if (first_clip_start_offset >= media_set->timing.durations[0])
+		{
+			vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+				"media_set_live_init_clip_times: firstClipStartOffset %L larger than first clip duration %uD",
+				first_clip_start_offset, media_set->timing.durations[0]);
+			return VOD_BAD_MAPPING;
+		}
+
+		media_set->timing.first_clip_start_offset = first_clip_start_offset;
+	}
 
 	// parse clip times into original_times
 	if (params[MEDIA_SET_PARAM_CLIP_TIMES] != NULL)

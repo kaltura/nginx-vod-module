@@ -87,6 +87,7 @@ typedef struct {
 	uint64_t first_time;				// = times[0]
 	uint64_t original_first_time;		// start time of the first clip before it was trimmed to the live window
 	uint32_t first_segment_alignment_offset;	// difference between unaligned first segment time and first_time
+	uint32_t first_clip_start_offset;	// min live window start offset relative to first clip time
 } media_clip_timing_t;
 
 typedef struct media_notification_s {
