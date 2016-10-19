@@ -312,7 +312,7 @@ vod_json_parse_fraction(vod_json_parser_state_t* state, vod_json_fraction_t* res
 		value = -value;
 	}
 
-	result->nom = value;
+	result->num = value;
 	result->denom = denom;
 
 	return VOD_OK;

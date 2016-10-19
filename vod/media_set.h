@@ -34,7 +34,7 @@ struct media_sequence_s;
 typedef struct media_sequence_s media_sequence_t;
 
 typedef struct {
-	uint32_t nom;
+	uint32_t num;
 	uint32_t denom;
 } vod_fraction_t;
 

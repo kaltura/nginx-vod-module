@@ -1269,7 +1269,7 @@ ngx_http_vod_parse_metadata(
 			}
 			else
 			{
-				rate.nom = 1;
+				rate.num = 1;
 				rate.denom = 1;
 			}
 
@@ -1280,11 +1280,11 @@ ngx_http_vod_parse_metadata(
 			}
 			else
 			{
-				last_segment_end = ((cur_source->clip_to - cur_source->clip_from) * rate.denom) / rate.nom;
+				last_segment_end = ((cur_source->clip_to - cur_source->clip_from) * rate.denom) / rate.num;
 			}
 
 			// get the start/end offsets
-			duration_millis = rescale_time(ctx->base_metadata->duration * rate.denom, ctx->base_metadata->timescale * rate.nom, 1000);
+			duration_millis = rescale_time(ctx->base_metadata->duration * rate.denom, ctx->base_metadata->timescale * rate.num, 1000);
 
 			get_ranges_params.request_context = request_context;
 			get_ranges_params.conf = segmenter;
@@ -1343,10 +1343,10 @@ ngx_http_vod_parse_metadata(
 			}
 
 			parse_params.range = clip_ranges.clip_ranges;
-			parse_params.range->start = (parse_params.range->start * rate.nom) / rate.denom;
+			parse_params.range->start = (parse_params.range->start * rate.num) / rate.denom;
 			if (parse_params.range->end != ULLONG_MAX)
 			{
-				parse_params.range->end = (parse_params.range->end * rate.nom) / rate.denom;
+				parse_params.range->end = (parse_params.range->end * rate.num) / rate.denom;
 			}
 		}
 	}
@@ -1797,7 +1797,7 @@ ngx_http_vod_state_machine_parse_metadata(ngx_http_vod_ctx_t *ctx)
 
 			ctx->read_offset = 0;
 			ctx->requested_offset = 0;
-			ctx->read_flags = 0;
+			ctx->read_flags = MEDIA_READ_FLAG_ALLOW_EMPTY_READ;
 
 			cur_source = ctx->cur_source;
 
