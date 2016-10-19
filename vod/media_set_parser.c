@@ -1054,7 +1054,7 @@ media_set_live_init_clip_times(
 
 	if (params[MEDIA_SET_PARAM_FIRST_CLIP_START_OFFSET] != NULL)
 	{
-		first_clip_start_offset = params[MEDIA_SET_PARAM_FIRST_CLIP_START_OFFSET]->v.num.nom;
+		first_clip_start_offset = params[MEDIA_SET_PARAM_FIRST_CLIP_START_OFFSET]->v.num.num;
 		if (first_clip_start_offset < 0)
 		{
 			vod_log_error(VOD_LOG_ERR, request_context->log, 0,
