@@ -831,7 +831,7 @@ ngx_http_vod_extract_uri_params(
 						return ngx_http_vod_status_to_ngx_error(rc);
 					}
 
-					if (rate_filter->rate.nom != rate_filter->rate.denom)
+					if (rate_filter->rate.num != rate_filter->rate.denom)
 					{
 						rate_filter->base.id = (*clip_id)++;
 						*result = &rate_filter->base;

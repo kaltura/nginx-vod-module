@@ -40,14 +40,14 @@ gain_filter_append_desc(u_char* p, media_clip_t* clip)
 {
 	media_clip_gain_filter_t* filter = vod_container_of(clip, media_clip_gain_filter_t, base);
 	uint32_t denom;
-	uint32_t nom;
+	uint32_t num;
 
 	// normalize the fraction to 100 denom
-	nom = filter->gain.nom;
+	num = filter->gain.num;
 	denom = filter->gain.denom;
 	while (denom < 100)
 	{
-		nom *= 10;
+		num *= 10;
 		denom *= 10;
 	}
 
@@ -55,8 +55,8 @@ gain_filter_append_desc(u_char* p, media_clip_t* clip)
 		p,
 		GAIN_FILTER_DESC_PATTERN,
 		clip->sources[0]->id,
-		nom / 100,
-		nom % 100,
+		num / 100,
+		num % 100,
 		clip->id);
 }
 
@@ -98,11 +98,11 @@ gain_filter_parse(
 		return VOD_BAD_MAPPING;
 	}
 
-	if (gain->v.num.nom <= 0 || gain->v.num.denom > 100)
+	if (gain->v.num.num <= 0 || gain->v.num.denom > 100)
 	{
 		vod_log_error(VOD_LOG_ERR, context->request_context->log, 0,
 			"gain_filter_parse: invalid gain %L/%uL, expecting a positive number with up to 2 decimal points", 
-			gain->v.num.nom, gain->v.num.denom);
+			gain->v.num.num, gain->v.num.denom);
 		return VOD_BAD_MAPPING;
 	}
 
@@ -118,7 +118,7 @@ gain_filter_parse(
 
 	filter->base.type = MEDIA_CLIP_GAIN_FILTER;
 	filter->base.audio_filter = &gain_filter;
-	filter->gain.nom = gain->v.num.nom;
+	filter->gain.num = gain->v.num.num;
 	filter->gain.denom = gain->v.num.denom;
 
 	rc = media_set_parse_clip(
@@ -134,7 +134,7 @@ gain_filter_parse(
 	*result = &filter->base;
 
 	vod_log_debug2(VOD_LOG_DEBUG_LEVEL, context->request_context->log, 0,
-		"gain_filter_parse: done, gain=%uD/%uD", filter->gain.nom, filter->gain.denom);
+		"gain_filter_parse: done, gain=%uD/%uD", filter->gain.num, filter->gain.denom);
 
 	return VOD_OK;
 }

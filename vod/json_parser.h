@@ -27,7 +27,7 @@ enum {
 typedef vod_status_t vod_json_status_t;
 
 typedef struct {
-	int64_t nom;
+	int64_t num;
 	uint64_t denom;
 } vod_json_fraction_t;
 

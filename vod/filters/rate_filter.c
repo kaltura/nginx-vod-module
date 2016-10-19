@@ -26,7 +26,7 @@ static vod_hash_t rate_filter_hash;
 void
 rate_filter_scale_track_timestamps(
 	media_track_t* track,
-	uint32_t speed_nom,
+	uint32_t speed_num,
 	uint32_t speed_denom)
 {
 	input_frame_t* last_frame;
@@ -34,13 +34,13 @@ rate_filter_scale_track_timestamps(
 	frame_list_part_t* part;
 
 	// TODO: remove this (added temporarily in order to avoid changing existing responses)
-	if (speed_nom % 10 == 0 && speed_denom % 10 == 0)
+	if (speed_num % 10 == 0 && speed_denom % 10 == 0)
 	{
-		speed_nom /= 10;
+		speed_num /= 10;
 		speed_denom /= 10;
 	}
 
-	track->media_info.timescale *= speed_nom;
+	track->media_info.timescale *= speed_num;
 	track->media_info.duration *= speed_denom;
 	track->media_info.full_duration *= speed_denom;
 	track->media_info.duration_millis = rescale_time(track->media_info.duration, track->media_info.timescale, 1000);
@@ -86,14 +86,14 @@ rate_filter_append_desc(u_char* p, media_clip_t* clip)
 {
 	media_clip_rate_filter_t* filter = vod_container_of(clip, media_clip_rate_filter_t, base);
 	uint32_t denom;
-	uint32_t nom;
+	uint32_t num;
 
 	// normalize the fraction to 100 denom
-	nom = filter->rate.nom;
+	num = filter->rate.num;
 	denom = filter->rate.denom;
 	while (denom < 100)
 	{
-		nom *= 10;
+		num *= 10;
 		denom *= 10;
 	}
 
@@ -101,8 +101,8 @@ rate_filter_append_desc(u_char* p, media_clip_t* clip)
 		p,
 		RATE_FILTER_DESC_PATTERN,
 		clip->sources[0]->id,
-		nom / 100,
-		nom % 100,
+		num / 100,
+		num % 100,
 		clip->id);
 }
 
@@ -154,11 +154,11 @@ rate_filter_parse(
 		return VOD_BAD_MAPPING;
 	}
 	
-	if (rate->v.num.nom < 0 ||
-		rate->v.num.denom > (uint64_t)rate->v.num.nom * 2 || (uint64_t)rate->v.num.nom > rate->v.num.denom * 2)
+	if (rate->v.num.num < 0 ||
+		rate->v.num.denom > (uint64_t)rate->v.num.num * 2 || (uint64_t)rate->v.num.num > rate->v.num.denom * 2)
 	{
 		vod_log_error(VOD_LOG_ERR, context->request_context->log, 0,
-			"rate_filter_parse: invalid rate %L/%uL, must be between 0.5 and 2", rate->v.num.nom, rate->v.num.denom);
+			"rate_filter_parse: invalid rate %L/%uL, must be between 0.5 and 2", rate->v.num.num, rate->v.num.denom);
 		return VOD_BAD_MAPPING;
 	}
 
@@ -174,7 +174,7 @@ rate_filter_parse(
 
 	filter->base.type = MEDIA_CLIP_RATE_FILTER;
 	filter->base.audio_filter = &rate_filter;
-	filter->rate.nom = rate->v.num.nom;
+	filter->rate.num = rate->v.num.num;
 	filter->rate.denom = rate->v.num.denom;
 
 	old_range = context->range;
@@ -188,8 +188,8 @@ rate_filter_parse(
 			return VOD_ALLOC_FAILED;
 		}
 
-		new_range->start = (old_range->start * filter->rate.nom) / filter->rate.denom;
-		new_range->end = (old_range->end * filter->rate.nom) / filter->rate.denom;
+		new_range->start = (old_range->start * filter->rate.num) / filter->rate.denom;
+		new_range->end = (old_range->end * filter->rate.num) / filter->rate.denom;
 		new_range->timescale = old_range->timescale;
 		new_range->original_clip_time = old_range->original_clip_time;
 
@@ -197,7 +197,7 @@ rate_filter_parse(
 	}
 
 	old_duration = context->duration;
-	context->duration = ((uint64_t)old_duration * filter->rate.nom) / filter->rate.denom;
+	context->duration = ((uint64_t)old_duration * filter->rate.num) / filter->rate.denom;
 
 	rc = media_set_parse_clip(
 		context, 
@@ -215,7 +215,7 @@ rate_filter_parse(
 	*result = &filter->base;
 
 	vod_log_debug2(VOD_LOG_DEBUG_LEVEL, context->request_context->log, 0,
-		"rate_filter_parse: done, rate=%uD/%uD", filter->rate.nom, filter->rate.denom);
+		"rate_filter_parse: done, rate=%uD/%uD", filter->rate.num, filter->rate.denom);
 
 	return VOD_OK;
 }
@@ -228,20 +228,20 @@ rate_filter_create_from_string(
 	media_clip_rate_filter_t** result)
 {
 	media_clip_rate_filter_t* filter;
-	vod_int_t nom;
+	vod_int_t num;
 
-	nom = vod_atofp(str->data, str->len, 2);
-	if (nom < 0)
+	num = vod_atofp(str->data, str->len, 2);
+	if (num < 0)
 	{
 		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
 			"rate_filter_create_from_string: failed to parse playback rate \"%V\", expecting a float with up to 2 digits precision", str);
 		return VOD_BAD_REQUEST;
 	}
 
-	if (nom < 50 || nom > 200)
+	if (num < 50 || num > 200)
 	{
 		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-			"rate_filter_create_from_string: invalid playback rate value %i/100, must be between 0.5 and 2", nom);
+			"rate_filter_create_from_string: invalid playback rate value %i/100, must be between 0.5 and 2", num);
 		return VOD_BAD_REQUEST;
 	}
 
@@ -260,7 +260,7 @@ rate_filter_create_from_string(
 
 	filter->base.type = MEDIA_CLIP_RATE_FILTER;
 	filter->base.audio_filter = &rate_filter;
-	filter->rate.nom = nom;
+	filter->rate.num = num;
 	filter->rate.denom = 100;
 
 	source->parent = &filter->base;

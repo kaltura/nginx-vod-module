@@ -199,14 +199,14 @@ concat_clip_parse(
 		// parse the offset
 		if (params[CONCAT_PARAM_OFFSET] != NULL)
 		{
-			if (params[CONCAT_PARAM_OFFSET]->v.num.nom < INT_MIN)
+			if (params[CONCAT_PARAM_OFFSET]->v.num.num < INT_MIN)
 			{
 				vod_log_error(VOD_LOG_ERR, context->request_context->log, 0,
-					"concat_clip_parse: offset %L too small", params[CONCAT_PARAM_OFFSET]->v.num.nom);
+					"concat_clip_parse: offset %L too small", params[CONCAT_PARAM_OFFSET]->v.num.num);
 				return VOD_BAD_MAPPING;
 			}
 
-			offset = params[CONCAT_PARAM_OFFSET]->v.num.nom;
+			offset = params[CONCAT_PARAM_OFFSET]->v.num.num;
 			if ((int64_t)end <= offset)
 			{
 				vod_log_error(VOD_LOG_ERR, context->request_context->log, 0,
