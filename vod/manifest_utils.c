@@ -303,7 +303,14 @@ manifest_utils_append_tracks_spec(
 			if (cur_sequence->index != last_sequence_index)
 			{
 				last_sequence_index = cur_sequence->index;
-				p = vod_sprintf(p, "-f%uD", last_sequence_index + 1);
+				if (cur_sequence->id.len != 0 && cur_sequence->id.len < VOD_INT32_LEN)
+				{
+					p = vod_sprintf(p, "-s%V", &cur_sequence->id);
+				}
+				else
+				{
+					p = vod_sprintf(p, "-f%uD", last_sequence_index + 1);
+				}
 			}
 		}
 
