@@ -1797,7 +1797,7 @@ ngx_http_vod_state_machine_parse_metadata(ngx_http_vod_ctx_t *ctx)
 
 			ctx->read_offset = 0;
 			ctx->requested_offset = 0;
-			ctx->read_flags = 0;
+			ctx->read_flags = MEDIA_READ_FLAG_ALLOW_EMPTY_READ;
 
 			cur_source = ctx->cur_source;
 
