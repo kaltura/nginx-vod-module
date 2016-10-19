@@ -156,7 +156,8 @@ webvtt_reader_init(
 		p += sizeof(UTF8_BOM) - 1;
 	}
 
-	if (vod_strncmp(p, WEBVTT_HEADER, sizeof(WEBVTT_HEADER) - 1) != 0 && 
+	if (buffer->len > 0 &&
+		vod_strncmp(p, WEBVTT_HEADER, sizeof(WEBVTT_HEADER) - 1) != 0 && 
 		!webvtt_identify_srt(p))
 	{
 		return VOD_NOT_FOUND;
@@ -386,14 +387,6 @@ webvtt_parse(
 	uint64_t full_duration;
 	uint64_t duration;
 
-	full_duration = webvtt_estimate_duration(source);
-	if (full_duration == 0)
-	{
-		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-			"webvtt_parse: duration is zero");
-		return VOD_BAD_DATA;
-	}
-
 	metadata = vod_alloc(request_context->pool, sizeof(*metadata));
 	if (metadata == NULL)
 	{
@@ -403,6 +396,8 @@ webvtt_parse(
 	}
 
 	*result = &metadata->base;
+
+	full_duration = webvtt_estimate_duration(source);
 
 	if (!vod_codec_in_mask(VOD_CODEC_ID_WEBVTT, parse_params->codecs_mask) || 
 		full_duration <= parse_params->clip_from)
