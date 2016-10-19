@@ -11,7 +11,7 @@ typedef struct {
 	media_clip_filtered_t* output_clip;
 	media_track_t* output_track;
 	media_track_t* audio_reference_track;
-	uint32_t audio_reference_track_speed_nom;
+	uint32_t audio_reference_track_speed_num;
 	uint32_t audio_reference_track_speed_denom;
 	bool_t has_audio_frames;
 	uint32_t source_count;
@@ -115,7 +115,7 @@ filter_init_filtered_clip_from_source(
 }
 
 static vod_status_t
-filter_scale_video_tracks(filters_init_state_t* state, media_clip_t* clip, uint32_t speed_nom, uint32_t speed_denom)
+filter_scale_video_tracks(filters_init_state_t* state, media_clip_t* clip, uint32_t speed_num, uint32_t speed_denom)
 {
 	media_clip_rate_filter_t* rate_filter;
 	media_clip_source_t* source;
@@ -142,7 +142,7 @@ filter_scale_video_tracks(filters_init_state_t* state, media_clip_t* clip, uint3
 				if (state->audio_reference_track == NULL)
 				{
 					state->audio_reference_track = cur_track;
-					state->audio_reference_track_speed_nom = speed_nom;
+					state->audio_reference_track_speed_num = speed_num;
 					state->audio_reference_track_speed_denom = speed_denom;
 				}
 				if (cur_track->frame_count > 0)
@@ -153,9 +153,9 @@ filter_scale_video_tracks(filters_init_state_t* state, media_clip_t* clip, uint3
 
 			default:
 				new_track = filter_copy_track_to_clip(state, cur_track);
-				if (speed_nom != speed_denom)
+				if (speed_num != speed_denom)
 				{
-					rate_filter_scale_track_timestamps(new_track, speed_nom, speed_denom);
+					rate_filter_scale_track_timestamps(new_track, speed_num, speed_denom);
 				}
 				break;
 			}
@@ -170,7 +170,7 @@ filter_scale_video_tracks(filters_init_state_t* state, media_clip_t* clip, uint3
 	{
 	case MEDIA_CLIP_RATE_FILTER:
 		rate_filter = vod_container_of(clip, media_clip_rate_filter_t, base);
-		speed_nom = ((uint64_t)speed_nom * rate_filter->rate.nom) / rate_filter->rate.denom;
+		speed_num = ((uint64_t)speed_num * rate_filter->rate.num) / rate_filter->rate.denom;
 		break;
 
 	default:;
@@ -188,7 +188,7 @@ filter_scale_video_tracks(filters_init_state_t* state, media_clip_t* clip, uint3
 	sources_end = clip->sources + clip->source_count;
 	for (cur_source = clip->sources; cur_source < sources_end; cur_source++)
 	{
-		rc = filter_scale_video_tracks(state, *cur_source, speed_nom, speed_denom);
+		rc = filter_scale_video_tracks(state, *cur_source, speed_num, speed_denom);
 		if (rc != VOD_OK)
 		{
 			return rc;
@@ -394,11 +394,11 @@ filter_init_filtered_clips(
 			{
 				// add the audio filter output track
 				new_track = filter_copy_track_to_clip(&init_state, init_state.audio_reference_track);
-				if (init_state.audio_reference_track_speed_nom != init_state.audio_reference_track_speed_denom)
+				if (init_state.audio_reference_track_speed_num != init_state.audio_reference_track_speed_denom)
 				{
 					rate_filter_scale_track_timestamps(
 						new_track,
-						init_state.audio_reference_track_speed_nom,
+						init_state.audio_reference_track_speed_num,
 						init_state.audio_reference_track_speed_denom);
 				}
 

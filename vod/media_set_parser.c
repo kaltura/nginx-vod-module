@@ -260,7 +260,7 @@ media_set_parse_int64(
 	vod_json_value_t* value,
 	void* dest)
 {
-	*(uint64_t*)dest = value->v.num.nom;
+	*(uint64_t*)dest = value->v.num.num;
 	return VOD_OK;
 }
 
@@ -1070,7 +1070,7 @@ media_set_live_init_clip_times(
 			return VOD_BAD_MAPPING;
 		}
 
-		media_set->timing.first_time = params[MEDIA_SET_PARAM_FIRST_CLIP_TIME]->v.num.nom;
+		media_set->timing.first_time = params[MEDIA_SET_PARAM_FIRST_CLIP_TIME]->v.num.num;
 
 		return media_set_init_continuous_clip_times(request_context, &media_set->timing);
 	}
@@ -1103,13 +1103,13 @@ media_set_parse_live_params(
 	{
 		if (params[MEDIA_SET_PARAM_INITIAL_SEGMENT_INDEX] != NULL)
 		{
-			media_set->initial_segment_index = params[MEDIA_SET_PARAM_INITIAL_SEGMENT_INDEX]->v.num.nom - 1;
+			media_set->initial_segment_index = params[MEDIA_SET_PARAM_INITIAL_SEGMENT_INDEX]->v.num.num - 1;
 		}
 
 		// Note: initial_clip_index must be supplied when the clips have different encoding parameters
 		if (params[MEDIA_SET_PARAM_INITIAL_CLIP_INDEX] != NULL)
 		{
-			media_set->initial_clip_index = params[MEDIA_SET_PARAM_INITIAL_CLIP_INDEX]->v.num.nom - 1;
+			media_set->initial_clip_index = params[MEDIA_SET_PARAM_INITIAL_CLIP_INDEX]->v.num.num - 1;
 
 			if (request_params->clip_index != INVALID_CLIP_INDEX)
 			{
@@ -1139,7 +1139,7 @@ media_set_parse_live_params(
 		// segment base time
 		if (params[MEDIA_SET_PARAM_SEGMENT_BASE_TIME] != NULL)
 		{
-			media_set->timing.segment_base_time = params[MEDIA_SET_PARAM_SEGMENT_BASE_TIME]->v.num.nom;
+			media_set->timing.segment_base_time = params[MEDIA_SET_PARAM_SEGMENT_BASE_TIME]->v.num.num;
 		}
 	}
 	else
@@ -1152,7 +1152,7 @@ media_set_parse_live_params(
 			return VOD_BAD_MAPPING;
 		}
 
-		media_set->timing.segment_base_time = params[MEDIA_SET_PARAM_SEGMENT_BASE_TIME]->v.num.nom;
+		media_set->timing.segment_base_time = params[MEDIA_SET_PARAM_SEGMENT_BASE_TIME]->v.num.num;
 	}
 
 	if (media_set->timing.segment_base_time != SEGMENT_BASE_TIME_RELATIVE &&
@@ -1278,12 +1278,12 @@ media_set_parse_notifications(
 			return VOD_BAD_MAPPING;
 		}
 		
-		if (params[MEDIA_NOTIFICATION_PARAM_OFFSET]->v.num.nom < min_offset)
+		if (params[MEDIA_NOTIFICATION_PARAM_OFFSET]->v.num.num < min_offset)
 		{
 			continue;
 		}
 
-		if (params[MEDIA_NOTIFICATION_PARAM_OFFSET]->v.num.nom >= max_offset)
+		if (params[MEDIA_NOTIFICATION_PARAM_OFFSET]->v.num.num >= max_offset)
 		{
 			break;
 		}
@@ -1293,7 +1293,7 @@ media_set_parse_notifications(
 		{
 			vod_log_error(VOD_LOG_ERR, request_context->log, 0,
 				"media_set_parse_notifications: missing id in notification object, offset=%L", 
-				params[MEDIA_NOTIFICATION_PARAM_OFFSET]->v.num.nom);
+				params[MEDIA_NOTIFICATION_PARAM_OFFSET]->v.num.num);
 			return VOD_BAD_MAPPING;
 		}
 
@@ -1511,7 +1511,7 @@ media_set_parse_sequence_key_frame_offsets(
 		first_key_frame_time = *cur_clip_time;
 		if (params[MEDIA_CLIP_PARAM_FIRST_KEY_FRAME_OFFSET] != NULL)
 		{
-			first_key_frame_offset = params[MEDIA_CLIP_PARAM_FIRST_KEY_FRAME_OFFSET]->v.num.nom;
+			first_key_frame_offset = params[MEDIA_CLIP_PARAM_FIRST_KEY_FRAME_OFFSET]->v.num.num;
 			if (first_key_frame_offset < 0 || first_key_frame_offset > *cur_duration)
 			{
 				vod_log_error(VOD_LOG_ERR, request_context->log, 0,
@@ -1790,20 +1790,20 @@ media_set_parse_json(
 		current_time = (int64_t)vod_time(request_context) * 1000;
 
 		if (params[MEDIA_SET_PARAM_PRESENTATION_END_TIME] != NULL &&
-			params[MEDIA_SET_PARAM_PRESENTATION_END_TIME]->v.num.nom <= current_time)
+			params[MEDIA_SET_PARAM_PRESENTATION_END_TIME]->v.num.num <= current_time)
 		{
 			result->presentation_end = TRUE;
 		}
 		else
 		{
 			if (params[MEDIA_SET_PARAM_EXPIRATION_TIME] != NULL &&
-				params[MEDIA_SET_PARAM_EXPIRATION_TIME]->v.num.nom <= current_time &&
+				params[MEDIA_SET_PARAM_EXPIRATION_TIME]->v.num.num <= current_time &&
 				request_params->segment_index == INVALID_SEGMENT_INDEX &&
 				request_params->segment_time == INVALID_SEGMENT_TIME)
 			{
 				vod_log_debug2(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
 					"media_set_parse_json: media set expired, expiration=%L time=%L",
-					params[MEDIA_SET_PARAM_EXPIRATION_TIME]->v.num.nom,
+					params[MEDIA_SET_PARAM_EXPIRATION_TIME]->v.num.num,
 					current_time);
 				return VOD_EXPIRED;
 			}
@@ -2073,7 +2073,7 @@ media_set_parse_json(
 				{
 					result->live_window_duration = media_set_apply_live_window_duration_param(
 						result->live_window_duration,
-						params[MEDIA_SET_PARAM_LIVE_WINDOW_DURATION]->v.num.nom);
+						params[MEDIA_SET_PARAM_LIVE_WINDOW_DURATION]->v.num.num);
 				}
 
 				if ((request_flags & REQUEST_FLAG_LOOK_AHEAD_SEGMENTS) != 0)
@@ -2119,7 +2119,7 @@ media_set_parse_json(
 			{
 				if (params[MEDIA_SET_PARAM_REFERENCE_CLIP_INDEX] != NULL)
 				{
-					context.clip_ranges.min_clip_index = params[MEDIA_SET_PARAM_REFERENCE_CLIP_INDEX]->v.num.nom - 1;
+					context.clip_ranges.min_clip_index = params[MEDIA_SET_PARAM_REFERENCE_CLIP_INDEX]->v.num.num - 1;
 					if (result->initial_clip_index != INVALID_CLIP_INDEX)
 					{
 						context.clip_ranges.min_clip_index -= result->initial_clip_index;

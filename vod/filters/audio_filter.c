@@ -76,7 +76,7 @@ static vod_status_t
 audio_filter_walk_filters_prepare_init(
 	audio_filter_init_context_t* state, 
 	media_clip_t** clip_ptr, 
-	uint32_t speed_nom, 
+	uint32_t speed_num, 
 	uint32_t speed_denom)
 {
 	media_clip_rate_filter_t* rate_filter;
@@ -122,7 +122,7 @@ audio_filter_walk_filters_prepare_init(
 
 		state->source_count++;
 
-		cur_frame_count = ((uint64_t)audio_track->frame_count * speed_denom) / speed_nom;
+		cur_frame_count = ((uint64_t)audio_track->frame_count * speed_denom) / speed_num;
 		if (state->output_frame_count < cur_frame_count)
 		{
 			state->output_frame_count = cur_frame_count;
@@ -131,7 +131,7 @@ audio_filter_walk_filters_prepare_init(
 
 	case MEDIA_CLIP_RATE_FILTER:
 		rate_filter = vod_container_of(clip, media_clip_rate_filter_t, base);
-		speed_nom = ((uint64_t)speed_nom * rate_filter->rate.nom) / rate_filter->rate.denom;
+		speed_num = ((uint64_t)speed_num * rate_filter->rate.num) / rate_filter->rate.denom;
 		break;
 
 	default:;
@@ -143,7 +143,7 @@ audio_filter_walk_filters_prepare_init(
 	sources_end = clip->sources + clip->source_count;
 	for (sources_cur = clip->sources; sources_cur < sources_end; sources_cur++)
 	{
-		rc = audio_filter_walk_filters_prepare_init(state, sources_cur, speed_nom, speed_denom);
+		rc = audio_filter_walk_filters_prepare_init(state, sources_cur, speed_num, speed_denom);
 		if (rc != VOD_OK)
 		{
 			return rc;

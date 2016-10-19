@@ -14,7 +14,7 @@ typedef struct {
 // functions
 void rate_filter_scale_track_timestamps(
 	media_track_t* track,
-	uint32_t speed_nom,
+	uint32_t speed_num,
 	uint32_t speed_denom);
 
 vod_status_t rate_filter_parse(
