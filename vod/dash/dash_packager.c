@@ -47,6 +47,9 @@
 #define VOD_DASH_MANIFEST_PERIOD_HEADER_START_ZERO								\
 	"  <Period id=\"0\" start=\"PT0S\">\n"
 
+#define VOD_DASH_MANIFEST_PERIOD_HEADER_START_DURATION							\
+	"  <Period id=\"%uD\" start=\"PT%uD.%03uDS\" duration=\"PT%uD.%03uDS\">\n"
+
 #define VOD_DASH_MANIFEST_ADAPTATION_HEADER_VIDEO								\
     "    <AdaptationSet\n"														\
     "        id=\"1\"\n"														\
@@ -780,6 +783,7 @@ dash_packager_write_mpd_period(
 	u_char frame_rate_buffer[VOD_DASH_MAX_FRAME_RATE_LEN];
 	u_char clip_spec[MAX_CLIP_SPEC_LENGTH];
 	uint64_t clip_start_offset;
+	uint32_t clip_duration;
 	uint32_t filtered_clip_offset;
 	uint32_t max_width = 0;
 	uint32_t max_height = 0;
@@ -796,23 +800,42 @@ dash_packager_write_mpd_period(
 
 	if (media_set->use_discontinuity)
 	{
+		clip_duration = media_set->timing.durations[context->clip_index];
 		switch (media_set->type)
 		{
 		case MEDIA_SET_VOD:
 			p = vod_sprintf(p,
 				VOD_DASH_MANIFEST_PERIOD_HEADER_DURATION,
 				media_set->initial_clip_index + context->clip_index,
-				media_set->timing.durations[context->clip_index] / 1000,
-				media_set->timing.durations[context->clip_index] % 1000);
+				clip_duration / 1000,
+				clip_duration % 1000);
 			break;
 
 		case MEDIA_SET_LIVE:
 			clip_start_offset = context->clip_start_time - context->segment_base_time;
-			p = vod_sprintf(p,
-				VOD_DASH_MANIFEST_PERIOD_HEADER_START,
-				media_set->initial_clip_index + context->clip_index,
-				clip_start_offset / 1000,
-				clip_start_offset % 1000);
+
+			if (context->clip_index + 1 < media_set->timing.total_count &&
+				media_set->timing.times[context->clip_index] + clip_duration !=
+				media_set->timing.times[context->clip_index + 1])
+			{
+				// there is a gap after this clip, output start time and duration
+				p = vod_sprintf(p,
+					VOD_DASH_MANIFEST_PERIOD_HEADER_START_DURATION,
+					media_set->initial_clip_index + context->clip_index,
+					clip_start_offset / 1000,
+					clip_start_offset % 1000,
+					clip_duration / 1000,
+					clip_duration % 1000);
+			}
+			else
+			{
+				// last clip / no gap, output only the start time
+				p = vod_sprintf(p,
+					VOD_DASH_MANIFEST_PERIOD_HEADER_START,
+					media_set->initial_clip_index + context->clip_index,
+					clip_start_offset / 1000,
+					clip_start_offset % 1000);
+			}
 			break;
 		}
 	}
@@ -1283,7 +1306,7 @@ dash_packager_build_mpd(
 		conf->fragment_file_name_prefix.len;
 
 	base_period_size =
-		sizeof(VOD_DASH_MANIFEST_PERIOD_HEADER_DURATION) - 1 + 3 * VOD_INT32_LEN +
+		sizeof(VOD_DASH_MANIFEST_PERIOD_HEADER_START_DURATION) - 1 + 5 * VOD_INT32_LEN +
 			// video adaptations
 			(sizeof(VOD_DASH_MANIFEST_ADAPTATION_HEADER_VIDEO) - 1 + 2 * VOD_INT32_LEN + VOD_DASH_MAX_FRAME_RATE_LEN +
 			sizeof(VOD_DASH_MANIFEST_ADAPTATION_FOOTER) - 1) * context.adaptation_sets.count[ADAPTATION_TYPE_VIDEO] +

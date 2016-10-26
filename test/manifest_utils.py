@@ -1,8 +1,10 @@
 from xml.dom.minidom import parseString
 import http_utils
+import calendar
 import struct
 import base64
 import math
+import time
 
 def getAttributesDict(node):
 	result = {}
@@ -60,6 +62,12 @@ def getHlsMasterPlaylistUrls(baseUrl, urlContent, headers):
 		result += getHlsMediaPlaylistUrls(curBaseUrl, mediaContent)
 	return result
 
+def parseDashInterval(interval):
+	return int(float(interval[2:-1]) * 1000)		# strip the PT / S
+
+def parseDashDate(date):
+	return int(calendar.timegm(time.strptime(date,'%Y-%m-%dT%H:%M:%SZ')) * 1000)
+
 def getDashManifestUrls(baseUrl, urlContent, headers):
 	parsed = parseString(urlContent)
 
@@ -77,21 +85,47 @@ def getDashManifestUrls(baseUrl, urlContent, headers):
 	
 	# try SegmentTemplate - get media duration
 	mediaDuration = None
+	timeShiftBufferDepth = None
+	availabilityStartTime = None
+	publishTime = None
 	for node in parsed.getElementsByTagName('MPD'):
 		atts = getAttributesDict(node)
-		mediaDuration = float(atts['mediaPresentationDuration'][2:-1])
+		if atts.has_key('mediaPresentationDuration'):
+			mediaDuration = parseDashInterval(atts['mediaPresentationDuration'])
+		if atts.has_key('timeShiftBufferDepth'):
+			timeShiftBufferDepth = parseDashInterval(atts['timeShiftBufferDepth'])
+		if atts.has_key('availabilityStartTime'):
+			availabilityStartTime = parseDashDate(atts['availabilityStartTime'])
+		if atts.has_key('publishTime'):
+			publishTime = parseDashDate(atts['publishTime'])
+
+	# get the period times
+	periodTimes = []
+	for period in parsed.getElementsByTagName('Period'):
+		atts = getAttributesDict(period)
+		if not atts.has_key('id') or not atts.has_key('start'):
+			continue
+		start = parseDashInterval(atts['start'])
+		id = atts['id']
+		periodTimes.append((id, start))
 	
 	# get the url templates and segment duration
 	result = []
 	for base in parsed.getElementsByTagName('AdaptationSet'):
 	
+		initUrls = set([])
+		mediaUrls = set([])
+
 		segmentDuration = None
+		startNumber = 0
 		for node in base.getElementsByTagName('SegmentTemplate'):
 			atts = getAttributesDict(node)
-			urls.add(atts['media'])
-			urls.add(atts['initialization'])
+			initUrls.add(atts['initialization'])
+			mediaUrls.add(atts['media'])
 			if atts.has_key('duration'):
 				segmentDuration = int(atts['duration'])
+			if atts.has_key('startNumber'):
+				startNumber = int(atts['startNumber']) - 1
 
 		# get the representation ids
 		repIds = set([])
@@ -115,10 +149,44 @@ def getDashManifestUrls(baseUrl, urlContent, headers):
 				for curBaseUrl in base.getElementsByTagName('BaseURL'):
 					result.append(getAbsoluteUrl(curBaseUrl.firstChild.nodeValue))
 				continue
-			segmentCount = int(math.ceil(mediaDuration * 1000 / segmentDuration))
+			period = base.parentNode
+			periodAtts = getAttributesDict(period)
+
+			# period start time
+			periodStartTime = 0
+			if periodAtts.has_key('start'):
+				periodStartTime = parseDashInterval(periodAtts['start'])
+
+			# period end time
+			if periodAtts.has_key('duration'):
+				periodEndTime = periodStartTime + parseDashInterval(periodAtts['duration'])
+			elif mediaDuration != None:
+				periodEndTime = periodStartTime + mediaDuration
+			else:
+				# derive the duration from the diff in start time
+				periodId = getAttributesDict(period)['id']
+				for index in xrange(len(periodTimes)):
+					if periodTimes[index][0] == periodId:
+						break
+				if index + 1 < len(periodTimes):
+					periodEndTime = periodTimes[index + 1][1]
+				else:
+					periodEndTime = publishTime - availabilityStartTime
+
+			# window start time
+			startTime = periodStartTime
+			if startTime == 0 and timeShiftBufferDepth != None:		# continuous live
+				startTime = periodEndTime - timeShiftBufferDepth
+
+			# find the segment number / count
+			startNumber += (startTime - periodStartTime + segmentDuration - 1) / segmentDuration
+			segmentCount = (periodEndTime - periodStartTime) / segmentDuration - startNumber
 		
-		for url in urls:
-			for curSeg in xrange(segmentCount):
+		for url in initUrls:
+			for repId in repIds:
+				result.append(getAbsoluteUrl(url.replace('$RepresentationID$', repId)))
+		for url in mediaUrls:
+			for curSeg in xrange(startNumber, startNumber + segmentCount):
 				for repId in repIds:
 					result.append(getAbsoluteUrl(url.replace('$Number$', '%s' % (curSeg + 1)).replace('$RepresentationID$', repId)))
 	return result

@@ -1,3 +1,4 @@
+from urlparse import urlparse
 import manifest_utils
 import compare_utils
 import stress_base
@@ -61,6 +62,7 @@ class TestThread(stress_base.TestThreadBase):
 		
 		mimeType = headers['content-type'][0]
 		urls = manifest_utils.getManifestUrls(url1.rsplit('/', 1)[0], body, mimeType, {})
+		urls = map(lambda x: urlBase1 + urlparse(x).path, urls)		# the urls may contain the host header
 
 		result = True
 		for url in urls:

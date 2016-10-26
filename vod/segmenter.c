@@ -996,7 +996,7 @@ segmenter_get_live_window_start_end(
 
 		if (end_time <= timing->times[end_clip_index])
 		{
-			// end slipped to the previous segment
+			// end slipped to the previous clip
 			if (end_clip_index <= 0)
 			{
 				vod_log_error(VOD_LOG_ERR, request_context->log, 0,
@@ -1094,7 +1094,7 @@ segmenter_get_live_window_start_end(
 
 	if (start_time >= clip_end_time)
 	{
-		// start slipped to the next segment
+		// start slipped to the next clip
 		start_clip_index++;
 		if (start_clip_index > end_clip_index)
 		{
@@ -1489,6 +1489,7 @@ segmenter_get_segment_durations_estimate_internal(
 		// there may be zero duration segments at the end due to key frame alignment, if so, strip them off
 		if (context.cur_item->duration == 0)
 		{
+			context.result->segment_count -= context.cur_item->repeat_count;
 			context.cur_item--;
 		}
 
