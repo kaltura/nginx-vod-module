@@ -819,6 +819,8 @@ dash_packager_write_mpd_period(
 				media_set->timing.times[context->clip_index + 1])
 			{
 				// there is a gap after this clip, output start time and duration
+				clip_duration += media_set->timing.times[context->clip_index] - context->clip_start_time;
+
 				p = vod_sprintf(p,
 					VOD_DASH_MANIFEST_PERIOD_HEADER_START_DURATION,
 					media_set->initial_clip_index + context->clip_index,
