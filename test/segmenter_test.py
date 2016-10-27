@@ -71,8 +71,8 @@ liveJsonMatrix = [
 		('window', '30'),
 	],
 	[
-		('sbt', 'yes'),		# segmentBaseTime
-		('sbt', 'no'),
+		('sbt', 'no'),		# segmentBaseTime
+		('sbt', 'yes'),
 	],
 	[
 		('pet', 'past'),	# presentationEndTime
@@ -129,6 +129,11 @@ http {
 		vod_max_metadata_size 256m;
 		vod_ignore_edit_list on;
 		vod_max_mapping_response_size 64k;
+		vod_hls_output_id3_timestamps on;
+		add_header 'Access-Control-Allow-Headers' 'Origin,Range,Accept-Encoding,Referer,Cache-Control';
+		add_header 'Access-Control-Expose-Headers' 'Server,Content-Length,Content-Range,Date';
+		add_header 'Access-Control-Allow-Methods' 'GET, HEAD, OPTIONS';
+		add_header 'Access-Control-Allow-Origin' '*';
 		
 		# internal location for vod subrequests
 		location ^~ /kalapi_proxy/ {
