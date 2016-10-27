@@ -1143,6 +1143,8 @@ segmenter_get_live_window(
 	uint32_t* durations_end;
 	uint32_t* durations_cur;
 	uint32_t total_duration;
+	uint32_t clip_initial_segment_index;
+	uint32_t initial_segment_index;
 
 	if (media_set->use_discontinuity)
 	{
@@ -1170,6 +1172,16 @@ segmenter_get_live_window(
 
 			media_set->initial_segment_clip_relative_index = window.start_clip_offset / conf->segment_duration;
 			media_set->initial_segment_index += media_set->initial_segment_clip_relative_index;
+		}
+		else
+		{
+			clip_initial_segment_index = segmenter_get_segment_index_no_discontinuity(
+				conf,
+				timing->times[window.start_clip_index] - timing->segment_base_time);
+			initial_segment_index = segmenter_get_segment_index_no_discontinuity(
+				conf,
+				window.start_time - timing->segment_base_time);
+			media_set->initial_segment_clip_relative_index = initial_segment_index - clip_initial_segment_index;
 		}
 	}
 	else
