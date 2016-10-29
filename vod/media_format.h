@@ -202,7 +202,7 @@ typedef struct {		// mp4 only
 	bool_t use_subsamples;
 } media_encryption_t;
 
-typedef struct {
+typedef struct media_track_s {
 	media_info_t media_info;
 	file_info_t file_info;
 	uint32_t index;
@@ -219,6 +219,7 @@ typedef struct {
 	raw_atom_t raw_atoms[RTA_COUNT];		// mp4 only
 	void* source_clip;
 	media_encryption_t encryption_info;
+	struct media_track_s* next;
 } media_track_t;
 
 typedef struct {
