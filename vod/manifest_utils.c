@@ -1,16 +1,36 @@
 #include "manifest_utils.h"
 
+// macros
+#define no_flag_set(mask, f) (((mask) & (f)) == 0)
+#define all_flags_set(mask, f) (((mask) & (f)) == (f))
+
+// internal flags
+#define ADAPTATION_SETS_FLAG_MULTI_AUDIO		(0x1000)
+#define ADAPTATION_SETS_FLAG_IGNORE_SUBTITLES	(0x2000)
+
 // typedefs
 typedef struct {
+	uint32_t codec_id;
 	vod_str_t label;
-	uint32_t track_count;
-} label_track_count_t;
+} track_group_key_t;
 
 typedef struct {
-	label_track_count_t* first;
-	label_track_count_t* last;
-	size_t count;
-} label_track_count_array_t;
+	track_group_key_t key;
+	media_track_t* head;
+	media_track_t* tail;
+	uint32_t count;
+	ngx_queue_t list_node;
+	ngx_rbtree_node_t rbtree_node;
+} track_group_t;
+
+typedef struct {
+	ngx_rbtree_t rbtree;
+	ngx_rbtree_node_t sentinel;
+	ngx_queue_t list;
+	uint32_t count;
+} track_groups_t;
+
+////// request params formatting functions
 
 static u_char*
 manifest_utils_write_bitmask(u_char* p, uint32_t bitmask, u_char letter)
@@ -325,68 +345,391 @@ manifest_utils_append_tracks_spec(
 	return p;
 }
 
-static vod_status_t
-manifest_utils_get_unique_labels(
-	request_context_t* request_context,
-	media_set_t* media_set, 
-	uint32_t media_type,
-	label_track_count_array_t* output)
-{
-	vod_str_t* cur_track_label;
-	label_track_count_t* first_label;
-	label_track_count_t* last_label;
-	label_track_count_t* cur_label;
-	media_track_t* last_track;
-	media_track_t* cur_track;
-	bool_t label_found;
+////// track group functions
 
-	first_label = vod_alloc(request_context->pool, 
-		media_set->total_track_count * sizeof(first_label[0]));
-	if (first_label == NULL)
+static bool_t
+track_group_key_init(
+	media_track_t* track,
+	uint32_t flags,
+	track_group_key_t* key)
+{
+	uint32_t media_type = track->media_info.media_type;
+
+	// label
+	switch (media_type)
+	{
+	case MEDIA_TYPE_VIDEO:
+		key->label.len = 0;
+		break;
+
+	case MEDIA_TYPE_AUDIO:
+		if ((flags & ADAPTATION_SETS_FLAG_MULTI_AUDIO) == 0)
+		{
+			key->label.len = 0;
+			break;
+		}
+
+		if (track->media_info.label.len == 0)
+		{
+			return FALSE;
+		}
+		key->label = track->media_info.label;
+		break;
+
+	case MEDIA_TYPE_SUBTITLE:
+		if (track->media_info.label.len == 0 ||
+			(flags & ADAPTATION_SETS_FLAG_IGNORE_SUBTITLES) != 0)
+		{
+			return FALSE;
+		}
+		key->label = track->media_info.label;
+		break;
+
+	default:		// MEDIA_TYPE_NONE
+		return FALSE;
+	}
+
+	// codec id
+	if ((flags & ADAPTATION_SETS_FLAG_MULTI_CODEC) != 0 &&
+		media_type != MEDIA_TYPE_SUBTITLE)
+	{
+		key->codec_id = track->media_info.codec_id;
+	}
+	else
+	{
+		key->codec_id = 0;
+	}
+
+	return TRUE;
+}
+
+static uint32_t
+track_group_key_get_hash(track_group_key_t* key)
+{
+	return key->codec_id + ngx_crc32_short(key->label.data, key->label.len);
+}
+
+static int
+track_group_key_compare(track_group_key_t* key1, track_group_key_t* key2)
+{
+	if (key1->codec_id != key2->codec_id)
+	{
+		return key1->codec_id < key2->codec_id ? -1 : 1;
+	}
+
+	if (key1->label.len != key2->label.len)
+	{
+		return key1->label.len < key2->label.len ? -1 : 1;
+	}
+
+	if (key1->label.data != key2->label.data)
+	{
+		return vod_memcmp(key1->label.data, key2->label.data, key1->label.len);
+	}
+
+	return 0;
+}
+
+static void
+track_group_rbtree_insert_value(
+	ngx_rbtree_node_t *temp,
+	ngx_rbtree_node_t *node,
+	ngx_rbtree_node_t *sentinel)
+{
+	ngx_rbtree_node_t **p;
+	track_group_t *n, *t;
+
+	for (;;)
+	{
+		n = vod_container_of(node, track_group_t, rbtree_node);
+		t = vod_container_of(temp, track_group_t, rbtree_node);
+
+		if (node->key != temp->key)
+		{
+			p = (node->key < temp->key) ? &temp->left : &temp->right;
+		}
+		else
+		{
+			p = (track_group_key_compare(&n->key, &t->key) < 0)
+				? &temp->left : &temp->right;
+		}
+
+		if (*p == sentinel)
+		{
+			break;
+		}
+
+		temp = *p;
+	}
+
+	*p = node;
+	node->parent = temp;
+	node->left = sentinel;
+	node->right = sentinel;
+	ngx_rbt_red(node);
+}
+
+static track_group_t *
+track_group_rbtree_lookup(ngx_rbtree_t *rbtree, track_group_key_t* key, uint32_t hash)
+{
+	ngx_rbtree_node_t *node, *sentinel;
+	track_group_t *n;
+	ngx_int_t rc;
+
+	node = rbtree->root;
+	sentinel = rbtree->sentinel;
+
+	while (node != sentinel)
+	{
+		n = vod_container_of(node, track_group_t, rbtree_node);
+
+		if (hash != node->key)
+		{
+			node = (hash < node->key) ? node->left : node->right;
+			continue;
+		}
+
+		rc = track_group_key_compare(key, &n->key);
+		if (rc < 0)
+		{
+			node = node->left;
+			continue;
+		}
+
+		if (rc > 0)
+		{
+			node = node->right;
+			continue;
+		}
+
+		return n;
+	}
+
+	return NULL;
+}
+
+static vod_status_t
+track_group_create(
+	request_context_t* request_context,
+	track_group_key_t* key,
+	uint32_t hash,
+	media_track_t* track,
+	track_groups_t* groups)
+{
+	track_group_t* group;
+
+	group = vod_alloc(request_context->pool, sizeof(*group));
+	if (group == NULL)
 	{
 		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
-			"manifest_utils_get_unique_labels: vod_alloc failed");
+			"track_group_create: vod_alloc failed");
 		return VOD_ALLOC_FAILED;
 	}
-	last_label = first_label;
+
+	// initialize the group
+	group->key = *key;
+	group->rbtree_node.key = hash;
+	group->count = 1;
+	group->head = track;
+	group->tail = track;
+	track->next = NULL;
+
+	// add to the groups
+	ngx_queue_insert_tail(&groups->list, &group->list_node);
+	ngx_rbtree_insert(&groups->rbtree, &group->rbtree_node);
+	groups->count++;
+
+	return VOD_OK;
+}
+
+static void
+track_group_add_track(
+	track_group_t* group,
+	media_track_t* track,
+	uint32_t flags)
+{
+	// check whether multiple tracks are allowed
+	switch (track->media_info.media_type)
+	{
+	case MEDIA_TYPE_SUBTITLE:
+		return;
+
+	case MEDIA_TYPE_AUDIO:
+		if (all_flags_set(flags, ADAPTATION_SETS_FLAG_MULTI_AUDIO | ADAPTATION_SETS_FLAG_SINGLE_LANG_TRACK))
+		{
+			return;
+		}
+		break;
+	}
+
+	// add to existing group
+	group->tail->next = track;
+	group->tail = track;
+	group->count++;
+	track->next = NULL;
+}
+
+static media_track_t**
+track_group_to_adaptation_set(
+	track_group_t* group,
+	media_track_t** cur_track_ptr,
+	adaptation_set_t* result)
+{
+	media_track_t* cur_track;
+
+	result->first = cur_track_ptr;
+	result->count = group->count;
+	result->type = group->head->media_info.media_type;
+
+	for (cur_track = group->head; cur_track != NULL; cur_track = cur_track->next)
+	{
+		*cur_track_ptr++ = cur_track;
+	}
+	result->last = cur_track_ptr;
+
+	return cur_track_ptr;
+}
+
+static void
+track_groups_init(
+	track_groups_t* result)
+{
+	track_groups_t* groups;
+	uint32_t media_type;
+
+	for (media_type = 0; media_type < MEDIA_TYPE_COUNT; media_type++)
+	{
+		groups = &result[media_type];
+		ngx_rbtree_init(&groups->rbtree, &groups->sentinel, track_group_rbtree_insert_value);
+		ngx_queue_init(&groups->list);
+		groups->count = 0;
+	}
+}
+
+static vod_status_t
+track_groups_from_media_set(
+	request_context_t* request_context,
+	media_set_t* media_set,
+	uint32_t flags,
+	uint32_t media_type,
+	track_groups_t* result)
+{
+	media_track_t* last_track;
+	media_track_t* cur_track;
+	track_groups_t* groups;
+	track_group_key_t key;
+	track_group_t* group;
+	vod_status_t rc;
+	uint32_t cur_media_type;
+	uint32_t hash;
+
+	// initialize the groups objects
+	track_groups_init(result);
 
 	last_track = media_set->filtered_tracks + media_set->total_track_count;
 	for (cur_track = media_set->filtered_tracks; cur_track < last_track; cur_track++)
 	{
-		if (cur_track->media_info.media_type != media_type ||
+		// ignore the track if it doesn't match the requested media type (if there is one)
+		cur_media_type = cur_track->media_info.media_type;
+		if (media_type != MEDIA_TYPE_NONE && cur_media_type != media_type)
+		{
+			continue;
+		}
+
+		// get the group key
+		if (!track_group_key_init(cur_track, flags, &key))
+		{
+			continue;
+		}
+
+		hash = track_group_key_get_hash(&key);
+
+		// look up the group
+		groups = &result[cur_media_type];
+
+		group = track_group_rbtree_lookup(&groups->rbtree, &key, hash);
+		if (group != NULL)
+		{
+			track_group_add_track(
+				group,
+				cur_track,
+				flags);
+			continue;
+		}
+
+		// create a new group
+		rc = track_group_create(
+			request_context,
+			&key,
+			hash,
+			cur_track,
+			groups);
+		if (rc != VOD_OK)
+		{
+			return rc;
+		}
+	}
+
+	return VOD_OK;
+}
+
+static adaptation_set_t*
+track_groups_to_adaptation_sets(
+	track_groups_t* groups,
+	media_track_t*** cur_track_ptr_arg,
+	adaptation_set_t* cur_adaptation_set)
+{
+	media_track_t** cur_track_ptr = *cur_track_ptr_arg;
+	track_group_t* group;
+	ngx_queue_t* list = &groups->list;
+	ngx_queue_t* node;
+
+	for (node = ngx_queue_head(list); node != list; node = node->next)
+	{
+		group = vod_container_of(node, track_group_t, list_node);
+
+		cur_track_ptr = track_group_to_adaptation_set(
+			group,
+			cur_track_ptr,
+			cur_adaptation_set);
+
+		cur_adaptation_set++;
+	}
+
+	*cur_track_ptr_arg = cur_track_ptr;
+
+	return cur_adaptation_set;
+}
+
+////// adaptation sets functions
+
+static bool_t
+manifest_utils_is_multi_audio(media_set_t* media_set)
+{
+	media_track_t* last_track;
+	media_track_t* cur_track;
+	vod_str_t* label = NULL;
+
+	last_track = media_set->filtered_tracks + media_set->total_track_count;
+	for (cur_track = media_set->filtered_tracks; cur_track < last_track; cur_track++)
+	{
+		if (cur_track->media_info.media_type != MEDIA_TYPE_AUDIO ||
 			cur_track->media_info.label.len == 0)
 		{
 			continue;
 		}
 
-		cur_track_label = &cur_track->media_info.label;
-
-		label_found = FALSE;
-		for (cur_label = first_label; cur_label < last_label; cur_label++)
+		if (label == NULL)
 		{
-			if (vod_str_equals(*cur_track_label, cur_label->label))
-			{
-				label_found = TRUE;
-				break;
-			}
+			label = &cur_track->media_info.label;
 		}
-
-		if (label_found)
+		else if (!vod_str_equals(cur_track->media_info.label, *label))
 		{
-			cur_label->track_count++;
-			continue;
+			return TRUE;
 		}
-
-		last_label->label = *cur_track_label;
-		last_label->track_count = 1;
-		last_label++;
 	}
 
-	output->first = first_label;
-	output->last = last_label;
-	output->count = last_label - first_label;
-
-	return VOD_OK;
+	return FALSE;
 }
 
 static vod_status_t
@@ -494,239 +837,40 @@ manifest_utils_get_muxed_adaptation_set(
 	return VOD_OK;
 }
 
-static label_track_count_t*
-manifest_utils_find_label(
-	vod_str_t* label,
-	label_track_count_array_t* labels, 
-	size_t* index)
-{
-	label_track_count_t* cur_label;
-
-	for (cur_label = labels->first, *index = 0; cur_label < labels->last; cur_label++, (*index)++)
-	{
-		if (vod_str_equals(cur_label->label, *label))
-		{
-			return cur_label;
-		}
-	}
-
-	return NULL;
-}
-
-static vod_status_t
-manifest_utils_get_multilingual_adaptation_sets(
-	request_context_t* request_context,
-	media_set_t* media_set,
-	uint32_t flags,
-	label_track_count_array_t* labels,
-	adaptation_sets_t* output)
-{
-	adaptation_set_t* cur_adaptation_set;
-	adaptation_set_t* adaptation_sets;
-	media_track_t** cur_track_ptr;
-	media_track_t* last_track;
-	media_track_t* cur_track;
-	label_track_count_t* cur_label;
-	vod_status_t rc;
-	uint32_t media_type;
-	size_t adaptation_sets_count;
-	size_t index;
-
-	// get the number of adaptation sets
-	adaptation_sets_count = labels[MEDIA_TYPE_AUDIO].count + labels[MEDIA_TYPE_SUBTITLE].count;
-	output->count[ADAPTATION_TYPE_SUBTITLE] = labels[MEDIA_TYPE_SUBTITLE].count;
-	if (media_set->track_count[MEDIA_TYPE_VIDEO] > 0)
-	{
-		if ((flags & ADAPTATION_SETS_FLAG_FORCE_MUXED) != 0)
-		{
-			output->count[ADAPTATION_TYPE_MUXED] = 1;
-			output->count[ADAPTATION_TYPE_VIDEO] = 0;
-			output->count[ADAPTATION_TYPE_AUDIO] = labels[MEDIA_TYPE_AUDIO].count - 1;
-		}
-		else
-		{
-			adaptation_sets_count++;
-			output->count[ADAPTATION_TYPE_MUXED] = 0;
-			output->count[ADAPTATION_TYPE_VIDEO] = 1;
-			output->count[ADAPTATION_TYPE_AUDIO] = labels[MEDIA_TYPE_AUDIO].count;
-		}
-	}
-	else
-	{
-		output->count[ADAPTATION_TYPE_MUXED] = 0;
-		output->count[ADAPTATION_TYPE_VIDEO] = 0;
-		output->count[ADAPTATION_TYPE_AUDIO] = labels[MEDIA_TYPE_AUDIO].count;
-	}
-
-	// allocate the adaptation sets and tracks
-	adaptation_sets = vod_alloc(request_context->pool, 
-		sizeof(adaptation_sets[0]) * adaptation_sets_count + 
-		sizeof(adaptation_sets[0].first[0]) * media_set->total_track_count);
-	if (adaptation_sets == NULL)
-	{
-		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
-			"manifest_utils_get_multilingual_adaptation_sets: vod_alloc failed");
-		return VOD_ALLOC_FAILED;
-	}
-
-	cur_track_ptr = (void*)(adaptation_sets + adaptation_sets_count);
-	cur_adaptation_set = adaptation_sets;
-
-	// initialize the video adaptation set
-	if (media_set->track_count[MEDIA_TYPE_VIDEO] > 0)
-	{
-		if (output->count[ADAPTATION_TYPE_MUXED] > 0)
-		{
-			output->first_by_type[ADAPTATION_TYPE_MUXED] = cur_adaptation_set;
-			rc = manifest_utils_get_muxed_adaptation_set(
-				request_context,
-				media_set,
-				flags,
-				&labels[MEDIA_TYPE_AUDIO].first->label,
-				cur_adaptation_set);
-			if (rc != VOD_OK)
-			{
-				return rc;
-			}
-			cur_adaptation_set++;
-			labels[MEDIA_TYPE_AUDIO].first++;		// do not output this label separately
-		}
-		else
-		{
-			output->first_by_type[ADAPTATION_TYPE_VIDEO] = cur_adaptation_set;
-			cur_adaptation_set->first = cur_track_ptr;
-			cur_adaptation_set->count = 0;
-			cur_adaptation_set->type = ADAPTATION_TYPE_VIDEO;
-			cur_track_ptr += media_set->track_count[MEDIA_TYPE_VIDEO];
-			cur_adaptation_set->last = cur_track_ptr;
-			cur_adaptation_set++;
-		}
-	}
-
-	// initialize the audio/subtitle adaptation sets
-	for (media_type = MEDIA_TYPE_AUDIO; media_type <= MEDIA_TYPE_SUBTITLE; media_type++)
-	{
-		output->first_by_type[media_type] = cur_adaptation_set;
-
-		for (cur_label = labels[media_type].first; cur_label < labels[media_type].last; cur_label++)
-		{
-			cur_adaptation_set->first = cur_track_ptr;
-			cur_adaptation_set->count = 0;
-			cur_adaptation_set->type = media_type;
-			if (media_type != MEDIA_TYPE_AUDIO || (flags & ADAPTATION_SETS_FLAG_SINGLE_LANG_TRACK) != 0)
-			{
-				cur_track_ptr++;
-			}
-			else
-			{
-				cur_track_ptr += cur_label->track_count;
-			}
-			cur_adaptation_set->last = cur_track_ptr;
-			cur_adaptation_set++;
-		}
-	}
-
-	last_track = media_set->filtered_tracks + media_set->total_track_count;
-	for (cur_track = media_set->filtered_tracks; cur_track < last_track; cur_track++)
-	{
-		media_type = cur_track->media_info.media_type;
-		switch (media_type)
-		{
-		case MEDIA_TYPE_AUDIO:
-		case MEDIA_TYPE_SUBTITLE:
-			if (cur_track->media_info.label.len == 0)
-			{
-				continue;
-			}
-
-			// find the label index
-			cur_label = manifest_utils_find_label(
-				&cur_track->media_info.label,
-				&labels[media_type],
-				&index);
-			if (cur_label == NULL)
-			{
-				continue;
-			}
-
-			// find the adaptation set
-			cur_adaptation_set = output->first_by_type[media_type] + index;
-
-			if ((media_type != MEDIA_TYPE_AUDIO || (flags & ADAPTATION_SETS_FLAG_SINGLE_LANG_TRACK) != 0) &&
-				cur_adaptation_set->count != 0)
-			{
-				continue;
-			}
-			break;
-
-		case MEDIA_TYPE_VIDEO:
-			// in forced muxed mode, all video tracks were already added
-			if (output->count[ADAPTATION_TYPE_MUXED] > 0)
-			{
-				continue;
-			}
-
-			cur_adaptation_set = adaptation_sets;
-			break;
-
-		default:
-			continue;
-		}
-
-		// add the track to the adaptation set
-		cur_adaptation_set->first[cur_adaptation_set->count++] = cur_track;
-	}
-
-	output->first = adaptation_sets;
-	output->last = adaptation_sets + adaptation_sets_count;
-	output->total_count = adaptation_sets_count;
-
-	return VOD_OK;
-}
-
 static vod_status_t
 manifest_utils_get_unmuxed_adaptation_sets(
 	request_context_t* request_context,
 	media_set_t* media_set,
-	label_track_count_array_t* subtitle_labels,
+	uint32_t flags,
+	track_groups_t* groups,
 	adaptation_sets_t* output)
 {
-	label_track_count_t* cur_label;
 	adaptation_set_t* cur_adaptation_set;
 	adaptation_set_t* adaptation_sets;
+	track_group_t* first_audio_group;
 	media_track_t** cur_track_ptr;
-	media_track_t* last_track;
-	media_track_t* cur_track;
+	vod_status_t rc;
 	uint32_t media_type;
 	size_t adaptation_sets_count;
-	size_t index;
 
 	// get the number of adaptation sets
-	adaptation_sets_count = subtitle_labels->count;
-	output->count[ADAPTATION_TYPE_MUXED] = 0;
-	output->count[ADAPTATION_TYPE_SUBTITLE] = subtitle_labels->count;
-
-	if (media_set->track_count[MEDIA_TYPE_VIDEO] > 0)
+	adaptation_sets_count = groups[MEDIA_TYPE_AUDIO].count + groups[MEDIA_TYPE_SUBTITLE].count;
+	output->count[ADAPTATION_TYPE_SUBTITLE] = groups[MEDIA_TYPE_SUBTITLE].count;
+	if (groups[MEDIA_TYPE_VIDEO].count > 0 && (flags & ADAPTATION_SETS_FLAG_FORCE_MUXED) != 0)
 	{
-		adaptation_sets_count++;
-		output->count[ADAPTATION_TYPE_VIDEO] = 1;
-	}
-	else
-	{
+		output->count[ADAPTATION_TYPE_MUXED] = 1;
 		output->count[ADAPTATION_TYPE_VIDEO] = 0;
-	}
-
-	if (media_set->track_count[MEDIA_TYPE_AUDIO] > 0)
-	{
-		adaptation_sets_count++;
-		output->count[ADAPTATION_TYPE_AUDIO] = 1;
+		output->count[ADAPTATION_TYPE_AUDIO] = groups[MEDIA_TYPE_AUDIO].count - 1;
 	}
 	else
 	{
-		output->count[ADAPTATION_TYPE_AUDIO] = 0;
+		adaptation_sets_count += groups[MEDIA_TYPE_VIDEO].count;
+		output->count[ADAPTATION_TYPE_MUXED] = 0;
+		output->count[ADAPTATION_TYPE_VIDEO] = groups[MEDIA_TYPE_VIDEO].count;
+		output->count[ADAPTATION_TYPE_AUDIO] = groups[MEDIA_TYPE_AUDIO].count;
 	}
 
-	// allocate the adaptation sets
+	// allocate the adaptation sets and tracks
 	adaptation_sets = vod_alloc(request_context->pool, 
 		sizeof(adaptation_sets[0]) * adaptation_sets_count + 
 		sizeof(adaptation_sets[0].first[0]) * media_set->total_track_count);
@@ -738,78 +882,46 @@ manifest_utils_get_unmuxed_adaptation_sets(
 	}
 
 	cur_track_ptr = (void*)(adaptation_sets + adaptation_sets_count);
-
-	// initialize the audio/video adaptation sets
 	cur_adaptation_set = adaptation_sets;
-	for (media_type = 0; media_type < MEDIA_TYPE_SUBTITLE; media_type++)
-	{
-		if (media_set->track_count[media_type] == 0)
-		{
-			continue;
-		}
 
+	if (output->count[ADAPTATION_TYPE_MUXED] > 0)
+	{
+		// initialize the muxed adaptation set
+		first_audio_group = vod_container_of(
+			ngx_queue_head(&groups[MEDIA_TYPE_AUDIO].list), track_group_t, list_node);
+
+		output->first_by_type[ADAPTATION_TYPE_MUXED] = cur_adaptation_set;
+		rc = manifest_utils_get_muxed_adaptation_set(
+			request_context,
+			media_set,
+			flags,
+			&first_audio_group->key.label,
+			cur_adaptation_set);
+		if (rc != VOD_OK)
+		{
+			return rc;
+		}
+		cur_adaptation_set++;
+		ngx_queue_remove(&first_audio_group->list_node);	// do not output this label separately
+
+		// start from audio (video already added)
+		media_type = MEDIA_TYPE_AUDIO;
+	}
+	else
+	{
+		// start from video
+		media_type = MEDIA_TYPE_VIDEO;
+	}
+
+	// initialize all other adaptation sets
+	for (; media_type < MEDIA_TYPE_COUNT; media_type++)
+	{
 		output->first_by_type[media_type] = cur_adaptation_set;
-		cur_adaptation_set->first = cur_track_ptr;
-		cur_adaptation_set->count = 0;
-		cur_adaptation_set->type = media_type;
-		cur_track_ptr += media_set->track_count[media_type];
-		cur_adaptation_set->last = cur_track_ptr;
-		cur_adaptation_set++;
-	}
 
-	// initialize the subtitle adaptation sets
-	output->first_by_type[MEDIA_TYPE_SUBTITLE] = cur_adaptation_set;
-	for (cur_label = subtitle_labels->first; cur_label < subtitle_labels->last; cur_label++)
-	{
-		cur_adaptation_set->first = cur_track_ptr;
-		cur_adaptation_set->count = 0;
-		cur_adaptation_set->type = MEDIA_TYPE_SUBTITLE;
-		cur_track_ptr++;
-		cur_adaptation_set->last = cur_track_ptr;
-		cur_adaptation_set++;
-	}
-
-	// add the tracks to the adaptation sets
-	last_track = media_set->filtered_tracks + media_set->total_track_count;
-	for (cur_track = media_set->filtered_tracks; cur_track < last_track; cur_track++)
-	{
-		media_type = cur_track->media_info.media_type;
-		switch (media_type)
-		{
-		case MEDIA_TYPE_AUDIO:
-		case MEDIA_TYPE_VIDEO:
-			cur_adaptation_set = output->first_by_type[media_type];
-			break;
-
-		case MEDIA_TYPE_SUBTITLE:
-			if (cur_track->media_info.label.len == 0)
-			{
-				continue;
-			}
-
-			// find the label index
-			cur_label = manifest_utils_find_label(
-				&cur_track->media_info.label,
-				subtitle_labels,
-				&index);
-			if (cur_label == NULL)
-			{
-				continue;
-			}
-
-			// find the adaptation set
-			cur_adaptation_set = output->first_by_type[MEDIA_TYPE_SUBTITLE] + index;
-			if (cur_adaptation_set->count != 0)
-			{
-				continue;
-			}
-			break;
-
-		default:		// MEDIA_TYPE_NONE
-			continue;
-		}
-
-		cur_adaptation_set->first[cur_adaptation_set->count++] = cur_track;
+		cur_adaptation_set = track_groups_to_adaptation_sets(
+			&groups[media_type],
+			&cur_track_ptr,
+			cur_adaptation_set);
 	}
 
 	output->first = adaptation_sets;
@@ -819,61 +931,6 @@ manifest_utils_get_unmuxed_adaptation_sets(
 	return VOD_OK;
 }
 
-static void
-manifest_utils_add_subtitle_adaptation_sets(
-	media_set_t* media_set,
-	label_track_count_array_t* subtitle_labels,
-	adaptation_set_t* first_adapt,
-	media_track_t** cur_track_ptr)
-{
-	label_track_count_t* cur_label;
-	adaptation_set_t* last_adapt = first_adapt + subtitle_labels->count;
-	adaptation_set_t* cur_adaptation_set;
-	media_track_t* last_track;
-	media_track_t* cur_track;
-	size_t index;
-
-	// initialize the adaptation sets
-	for (cur_adaptation_set = first_adapt; cur_adaptation_set < last_adapt; cur_adaptation_set++)
-	{
-		cur_adaptation_set->first = cur_track_ptr;
-		cur_adaptation_set->count = 0;
-		cur_adaptation_set->type = MEDIA_TYPE_SUBTITLE;
-		cur_track_ptr++;
-		cur_adaptation_set->last = cur_track_ptr;
-	}
-
-	last_track = media_set->filtered_tracks + media_set->total_track_count;
-	for (cur_track = media_set->filtered_tracks; cur_track < last_track; cur_track++)
-	{
-		if (cur_track->media_info.media_type != MEDIA_TYPE_SUBTITLE ||
-			cur_track->media_info.label.len == 0)
-		{
-			continue;
-		}
-
-		// find the label index
-		cur_label = manifest_utils_find_label(
-			&cur_track->media_info.label,
-			subtitle_labels,
-			&index);
-		if (cur_label == NULL)
-		{
-			continue;
-		}
-
-		// find the adaptation set
-		cur_adaptation_set = first_adapt + index;
-		if (cur_adaptation_set->count != 0)
-		{
-			continue;
-		}
-
-		// add the track to the adaptation set
-		cur_adaptation_set->first[cur_adaptation_set->count++] = cur_track;
-	}
-}
-
 vod_status_t
 manifest_utils_get_adaptation_sets(
 	request_context_t* request_context,
@@ -881,72 +938,85 @@ manifest_utils_get_adaptation_sets(
 	uint32_t flags,
 	adaptation_sets_t* output)
 {
-	label_track_count_t* last_label;
-	label_track_count_t temp_label;
-	label_track_count_array_t labels[MEDIA_TYPE_COUNT];
+	track_groups_t groups[MEDIA_TYPE_COUNT];
+	media_track_t** cur_track_ptr;
 	vod_status_t rc;
 
-	rc = manifest_utils_get_unique_labels(
-		request_context,
-		media_set,
-		MEDIA_TYPE_AUDIO,
-		&labels[MEDIA_TYPE_AUDIO]);
-	if (rc != VOD_OK)
+	// update flags
+	if (manifest_utils_is_multi_audio(media_set))
 	{
-		return rc;
+		flags |= ADAPTATION_SETS_FLAG_MULTI_AUDIO;
 	}
 
-	if (media_set->track_count[MEDIA_TYPE_SUBTITLE] > 0 && 
-		media_set->track_count[MEDIA_TYPE_VIDEO] > 0)		// ignore subtitles if there is no video
+	if (media_set->track_count[MEDIA_TYPE_VIDEO] <= 0)
 	{
-		rc = manifest_utils_get_unique_labels(
+		flags |= ADAPTATION_SETS_FLAG_IGNORE_SUBTITLES;
+	}
+
+	if ((flags & ADAPTATION_SETS_FLAG_MULTI_AUDIO) != 0 ||
+		no_flag_set(flags, ADAPTATION_SETS_FLAG_MUXED | ADAPTATION_SETS_FLAG_FORCE_MUXED))
+	{
+		// if multi audio or not muxed, output unmuxed
+		rc = track_groups_from_media_set(
 			request_context,
 			media_set,
-			MEDIA_TYPE_SUBTITLE,
-			&labels[MEDIA_TYPE_SUBTITLE]);
+			flags,
+			MEDIA_TYPE_NONE,
+			groups);
 		if (rc != VOD_OK)
 		{
 			return rc;
 		}
-	}
-	else
-	{
-		labels[MEDIA_TYPE_SUBTITLE].first = NULL;
-		labels[MEDIA_TYPE_SUBTITLE].last = NULL;
-		labels[MEDIA_TYPE_SUBTITLE].count = 0;
-	}
 
-	if (labels[MEDIA_TYPE_AUDIO].count > 1)
-	{
-		if ((flags & ADAPTATION_SETS_FLAG_DEFAULT_LANG_LAST) != 0)
+		if (all_flags_set(flags, ADAPTATION_SETS_FLAG_MULTI_AUDIO | ADAPTATION_SETS_FLAG_DEFAULT_LANG_LAST))
 		{
-			last_label = labels[MEDIA_TYPE_AUDIO].last - 1;
-			temp_label = *labels[MEDIA_TYPE_AUDIO].first;
-			*labels[MEDIA_TYPE_AUDIO].first = *last_label;
-			*last_label = temp_label;
+			ngx_queue_t* first = ngx_queue_head(&groups[MEDIA_TYPE_AUDIO].list);
+			ngx_queue_remove(first);
+			ngx_queue_insert_tail(&groups[MEDIA_TYPE_AUDIO].list, first);
 		}
 
-		rc = manifest_utils_get_multilingual_adaptation_sets(
+		rc = manifest_utils_get_unmuxed_adaptation_sets(
 			request_context,
 			media_set,
 			flags,
-			labels,
+			groups,
 			output);
 	}
-	else if ((flags & (ADAPTATION_SETS_FLAG_MUXED | ADAPTATION_SETS_FLAG_FORCE_MUXED)) != 0)
+	else
 	{
-		// cannot generate muxed media set if there are only subtitles
-		if (media_set->track_count[MEDIA_TYPE_VIDEO] + media_set->track_count[MEDIA_TYPE_AUDIO] <= 0)
+		// get subtitle track groups
+		if (media_set->track_count[MEDIA_TYPE_SUBTITLE] > 0 &&
+			media_set->track_count[MEDIA_TYPE_VIDEO] > 0)		// ignore subtitles if there is no video
 		{
-			vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-				"manifest_utils_get_adaptation_sets: no audio/video tracks");
-			return VOD_BAD_REQUEST;
+			rc = track_groups_from_media_set(
+				request_context,
+				media_set,
+				flags,
+				MEDIA_TYPE_SUBTITLE,
+				groups);
+			if (rc != VOD_OK)
+			{
+				return rc;
+			}
+		}
+		else
+		{
+			// cannot generate muxed media set if there are only subtitles
+			if (media_set->track_count[MEDIA_TYPE_VIDEO] + media_set->track_count[MEDIA_TYPE_AUDIO] <= 0)
+			{
+				vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+					"manifest_utils_get_adaptation_sets: no audio/video tracks");
+				return VOD_BAD_REQUEST;
+			}
+
+			groups[MEDIA_TYPE_SUBTITLE].count = 0;
 		}
 
+		// initialize the output
 		output->count[ADAPTATION_TYPE_MUXED] = 1;
 		output->count[ADAPTATION_TYPE_AUDIO] = 0;
 		output->count[ADAPTATION_TYPE_VIDEO] = 0;
-		output->count[ADAPTATION_TYPE_SUBTITLE] = labels[MEDIA_TYPE_SUBTITLE].count;
+		output->count[ADAPTATION_TYPE_SUBTITLE] = groups[MEDIA_TYPE_SUBTITLE].count;
 		output->total_count = 1 + output->count[ADAPTATION_TYPE_SUBTITLE];
 
 		output->first = vod_alloc(request_context->pool, output->total_count * sizeof(output->first[0]));
@@ -960,6 +1030,7 @@ manifest_utils_get_adaptation_sets(
 		output->last = output->first + output->total_count;
 		output->first_by_type[ADAPTATION_TYPE_MUXED] = output->first;
 
+		// get the muxed set
 		rc = manifest_utils_get_muxed_adaptation_set(
 			request_context,
 			media_set,
@@ -971,26 +1042,17 @@ manifest_utils_get_adaptation_sets(
 			return rc;
 		}
 
-		if (labels[MEDIA_TYPE_SUBTITLE].count > 0)
+		// get the subtitle sets
+		if (groups[MEDIA_TYPE_SUBTITLE].count > 0)
 		{
 			output->first_by_type[ADAPTATION_TYPE_SUBTITLE] = output->first + 1;
-			manifest_utils_add_subtitle_adaptation_sets(
-				media_set,
-				&labels[MEDIA_TYPE_SUBTITLE],
-				output->first_by_type[ADAPTATION_TYPE_SUBTITLE],
-				output->first->last);
-		}
-	}
-	else
-	{
-		rc = manifest_utils_get_unmuxed_adaptation_sets(
-			request_context,
-			media_set,
-			&labels[MEDIA_TYPE_SUBTITLE],
-			output);
-		if (rc != VOD_OK)
-		{
-			return rc;
+
+			cur_track_ptr = output->first->last;
+
+			track_groups_to_adaptation_sets(
+				&groups[ADAPTATION_TYPE_SUBTITLE],
+				&cur_track_ptr,
+				output->first_by_type[ADAPTATION_TYPE_SUBTITLE]);
 		}
 	}
 

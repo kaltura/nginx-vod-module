@@ -52,7 +52,7 @@
 
 #define VOD_DASH_MANIFEST_ADAPTATION_HEADER_VIDEO								\
     "    <AdaptationSet\n"														\
-    "        id=\"1\"\n"														\
+    "        id=\"%uD\"\n"														\
     "        segmentAlignment=\"true\"\n"										\
     "        maxWidth=\"%uD\"\n"												\
     "        maxHeight=\"%uD\"\n"												\
@@ -73,7 +73,7 @@
 // TODO: value should be the number of channels ?
 #define VOD_DASH_MANIFEST_ADAPTATION_HEADER_AUDIO								\
     "    <AdaptationSet\n"														\
-    "        id=\"2\"\n"														\
+    "        id=\"%uD\"\n"														\
     "        segmentAlignment=\"true\">\n"										\
     "      <AudioChannelConfiguration\n"										\
     "          schemeIdUri=\"urn:mpeg:dash:"									\
@@ -791,7 +791,7 @@ dash_packager_write_mpd_period(
 	uint32_t segment_count = 0;
 	uint32_t start_number;
 	uint32_t media_type;
-	uint32_t audio_adapt_id = 2;
+	uint32_t adapt_id = 1;
 	uint32_t subtitle_adapt_id = 0;
 	uint32_t sequence_index;
 
@@ -904,6 +904,7 @@ dash_packager_write_mpd_period(
 
 			p = vod_sprintf(p,
 				VOD_DASH_MANIFEST_ADAPTATION_HEADER_VIDEO,
+				adapt_id++,
 				max_width,
 				max_height,
 				&frame_rate);
@@ -914,11 +915,12 @@ dash_packager_write_mpd_period(
 			if (context->adaptation_sets.count[ADAPTATION_TYPE_AUDIO] > 1)
 			{
 				p = vod_sprintf(p, VOD_DASH_MANIFEST_ADAPTATION_HEADER_AUDIO_LANG, 
-					audio_adapt_id++, lang_get_iso639_1_name(reference_track->media_info.language));
+					adapt_id++, lang_get_iso639_1_name(reference_track->media_info.language));
 			}
 			else
 			{
-				p = vod_copy(p, VOD_DASH_MANIFEST_ADAPTATION_HEADER_AUDIO, sizeof(VOD_DASH_MANIFEST_ADAPTATION_HEADER_AUDIO) - 1);
+				p = vod_sprintf(p, VOD_DASH_MANIFEST_ADAPTATION_HEADER_AUDIO, 
+					adapt_id++);
 			}
 			break;
 
@@ -1260,7 +1262,11 @@ dash_packager_build_mpd(
 		media_set);
 
 	// get the adaptation sets
-	rc = manifest_utils_get_adaptation_sets(request_context, media_set, 0, &context.adaptation_sets);
+	rc = manifest_utils_get_adaptation_sets(
+		request_context, 
+		media_set, 
+		ADAPTATION_SETS_FLAG_MULTI_CODEC, 
+		&context.adaptation_sets);
 	if (rc != VOD_OK)
 	{
 		return rc;
@@ -1310,7 +1316,7 @@ dash_packager_build_mpd(
 	base_period_size =
 		sizeof(VOD_DASH_MANIFEST_PERIOD_HEADER_START_DURATION) - 1 + 5 * VOD_INT32_LEN +
 			// video adaptations
-			(sizeof(VOD_DASH_MANIFEST_ADAPTATION_HEADER_VIDEO) - 1 + 2 * VOD_INT32_LEN + VOD_DASH_MAX_FRAME_RATE_LEN +
+			(sizeof(VOD_DASH_MANIFEST_ADAPTATION_HEADER_VIDEO) - 1 + 3 * VOD_INT32_LEN + VOD_DASH_MAX_FRAME_RATE_LEN +
 			sizeof(VOD_DASH_MANIFEST_ADAPTATION_FOOTER) - 1) * context.adaptation_sets.count[ADAPTATION_TYPE_VIDEO] +
 			// video representations
 			(sizeof(VOD_DASH_MANIFEST_REPRESENTATION_HEADER_VIDEO) - 1 + MAX_TRACK_SPEC_LENGTH + MAX_MIME_TYPE_SIZE + MAX_CODEC_NAME_SIZE + 3 * VOD_INT32_LEN + VOD_DASH_MAX_FRAME_RATE_LEN +
