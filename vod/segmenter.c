@@ -1065,14 +1065,6 @@ segmenter_get_live_window_start_end(
 		}
 	}
 
-	// if the start clip is the first clip, make sure the start offset is not less than first_clip_start_offset
-	if (start_clip_index <= 0 &&
-		start_clip_offset < timing->first_clip_start_offset)
-	{
-		start_clip_offset = timing->first_clip_start_offset;
-		start_time = timing->times[0] + start_clip_offset;
-	}
-
 	// snap start to segment boundary
 	if (timing->segment_base_time == SEGMENT_BASE_TIME_RELATIVE)
 	{

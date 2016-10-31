@@ -1050,28 +1050,6 @@ media_set_live_init_clip_times(
 	vod_json_value_t** params)
 {
 	vod_status_t rc;
-	int64_t first_clip_start_offset;
-
-	if (params[MEDIA_SET_PARAM_FIRST_CLIP_START_OFFSET] != NULL)
-	{
-		first_clip_start_offset = params[MEDIA_SET_PARAM_FIRST_CLIP_START_OFFSET]->v.num.num;
-		if (first_clip_start_offset < 0)
-		{
-			vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-				"media_set_live_init_clip_times: firstClipStartOffset cannot be negative");
-			return VOD_BAD_MAPPING;
-		}
-
-		if (first_clip_start_offset >= media_set->timing.durations[0])
-		{
-			vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-				"media_set_live_init_clip_times: firstClipStartOffset %L larger than first clip duration %uD",
-				first_clip_start_offset, media_set->timing.durations[0]);
-			return VOD_BAD_MAPPING;
-		}
-
-		media_set->timing.first_clip_start_offset = first_clip_start_offset;
-	}
 
 	// parse clip times into original_times
 	if (params[MEDIA_SET_PARAM_CLIP_TIMES] != NULL)
@@ -1691,6 +1669,44 @@ media_set_parse_key_frame_offsets(
 	return VOD_OK;
 }
 
+static vod_status_t
+media_set_update_original_clip_time(
+	request_context_t* request_context,
+	media_clip_timing_t* timing,
+	int64_t first_clip_start_offset)
+{
+	uint64_t segment_base_time;
+
+	if (first_clip_start_offset < 0)
+	{
+		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+			"media_set_update_original_clip_time: firstClipStartOffset cannot be negative");
+		return VOD_BAD_MAPPING;
+	}
+
+	if (timing->segment_base_time != SEGMENT_BASE_TIME_RELATIVE)
+	{
+		segment_base_time = timing->segment_base_time;
+	}
+	else
+	{
+		segment_base_time = 0;
+	}
+
+	if (timing->original_first_time - segment_base_time < (uint64_t)first_clip_start_offset)
+	{
+		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+			"media_set_update_original_clip_time: firstClipStartOffset %L greater than firstClipTime %L minus segmentBaseTime %L",
+			first_clip_start_offset,
+			timing->original_first_time,
+			segment_base_time);
+		return VOD_BAD_MAPPING;
+	}
+
+	timing->original_first_time -= first_clip_start_offset;
+	return VOD_OK;
+}
+
 vod_status_t
 media_set_parse_json(
 	request_context_t* request_context, 
@@ -2122,6 +2138,19 @@ media_set_parse_json(
 				if (rc != VOD_OK)
 				{
 					return rc;
+				}
+
+				if (context.clip_ranges.min_clip_index == 0 &&
+					params[MEDIA_SET_PARAM_FIRST_CLIP_START_OFFSET] != NULL)
+				{
+					rc = media_set_update_original_clip_time(
+						request_context,
+						&result->timing,
+						params[MEDIA_SET_PARAM_FIRST_CLIP_START_OFFSET]->v.num.num);
+					if (rc != VOD_OK)
+					{
+						return rc;
+					}
 				}
 			}
 			else if (parse_all_clips)
