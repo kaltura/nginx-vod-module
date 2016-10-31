@@ -12,6 +12,9 @@
 	"  xmlns=\"http://ns.adobe.com/f4m/1.0\">\n"		\
 	"  <id>%V</id>\n"
 
+#define HDS_MANIFEST_HEADER_BASE_URL					\
+	"  <baseURL>%V</baseURL>\n"
+
 #define HDS_MANIFEST_HEADER_VOD							\
 	"  <duration>%uD.%03uD</duration>\n"				\
 	"  <streamType>recorded</streamType>\n"
@@ -354,6 +357,7 @@ vod_status_t
 hds_packager_build_manifest(
 	request_context_t* request_context,
 	hds_manifest_config_t* conf,
+	vod_str_t* base_url,
 	vod_str_t* manifest_id,
 	media_set_t* media_set,
 	bool_t drm_enabled,
@@ -407,6 +411,7 @@ hds_packager_build_manifest(
 	// calculate the result size
 	result_size = 
 		sizeof(HDS_MANIFEST_HEADER) - 1 + manifest_id->len + 
+		sizeof(HDS_MANIFEST_HEADER_BASE_URL) - 1 + base_url->len +
 		sizeof(HDS_MANIFEST_HEADER_LANG) - 1 + LANG_ISO639_2_LEN +
 		sizeof(HDS_MANIFEST_FOOTER);
 
@@ -533,6 +538,11 @@ hds_packager_build_manifest(
 
 	// print the manifest header
 	p = vod_sprintf(result->data, HDS_MANIFEST_HEADER, manifest_id);
+
+	if (base_url->len != 0)
+	{
+		p = vod_sprintf(p, HDS_MANIFEST_HEADER_BASE_URL, base_url);
+	}
 
 	switch (media_set->type)
 	{
