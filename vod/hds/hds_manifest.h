@@ -22,6 +22,7 @@ vod_status_t hds_packager_build_bootstrap(
 vod_status_t hds_packager_build_manifest(
 	request_context_t* request_context,
 	hds_manifest_config_t* conf,
+	vod_str_t* base_url,
 	vod_str_t* manifest_id,
 	media_set_t* media_set,
 	bool_t drm_enabled,
