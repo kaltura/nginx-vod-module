@@ -207,12 +207,6 @@ concat_clip_parse(
 			}
 
 			offset = params[CONCAT_PARAM_OFFSET]->v.num.num;
-			if ((int64_t)end <= offset)
-			{
-				vod_log_error(VOD_LOG_ERR, context->request_context->log, 0,
-					"concat_clip_parse: concat offset %D larger than end offset %uL", offset, end);
-				return VOD_BAD_REQUEST;
-			}
 		}
 		else
 		{
@@ -326,7 +320,14 @@ concat_clip_parse(
 			range[0].start = start - start_offset;
 		}
 
-		if (range[clip_count - 1].end > end - offset)
+		if ((int64_t)end <= offset)
+		{
+			// if the start offset is greater than the range end, produce an empty clip
+			// Note: there will always be a single clip in this case because if offset >= end,
+			//		then next_offset >= end, and the for loop above will stop after the first iteration
+			range[0].end = range[0].start;
+		}
+		else if (range[clip_count - 1].end > end - offset)
 		{
 			range[clip_count - 1].end = end - offset;
 		}

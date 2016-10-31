@@ -996,7 +996,7 @@ segmenter_get_live_window_start_end(
 
 		if (end_time <= timing->times[end_clip_index])
 		{
-			// end slipped to the previous segment
+			// end slipped to the previous clip
 			if (end_clip_index <= 0)
 			{
 				vod_log_error(VOD_LOG_ERR, request_context->log, 0,
@@ -1102,7 +1102,7 @@ segmenter_get_live_window_start_end(
 
 	if (start_time >= clip_end_time)
 	{
-		// start slipped to the next segment
+		// start slipped to the next clip
 		start_clip_index++;
 		if (start_clip_index > end_clip_index)
 		{
@@ -1151,6 +1151,8 @@ segmenter_get_live_window(
 	uint32_t* durations_end;
 	uint32_t* durations_cur;
 	uint32_t total_duration;
+	uint32_t clip_initial_segment_index;
+	uint32_t initial_segment_index;
 
 	if (media_set->use_discontinuity)
 	{
@@ -1178,6 +1180,16 @@ segmenter_get_live_window(
 
 			media_set->initial_segment_clip_relative_index = window.start_clip_offset / conf->segment_duration;
 			media_set->initial_segment_index += media_set->initial_segment_clip_relative_index;
+		}
+		else
+		{
+			clip_initial_segment_index = segmenter_get_segment_index_no_discontinuity(
+				conf,
+				timing->times[window.start_clip_index] - timing->segment_base_time);
+			initial_segment_index = segmenter_get_segment_index_no_discontinuity(
+				conf,
+				window.start_time - timing->segment_base_time);
+			media_set->initial_segment_clip_relative_index = initial_segment_index - clip_initial_segment_index;
 		}
 	}
 	else
@@ -1497,6 +1509,7 @@ segmenter_get_segment_durations_estimate_internal(
 		// there may be zero duration segments at the end due to key frame alignment, if so, strip them off
 		if (context.cur_item->duration == 0)
 		{
+			context.result->segment_count -= context.cur_item->repeat_count;
 			context.cur_item--;
 		}
 
