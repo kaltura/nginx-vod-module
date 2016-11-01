@@ -604,8 +604,7 @@ mp4_parser_parse_stts_atom(atom_info_t* atom_info, frames_parse_context_t* conte
 
 		for (;;)
 		{
-			if (sample_duration > 0 &&
-				clip_from + sample_duration - 1 < next_accum_duration)
+			if (clip_from + sample_duration <= next_accum_duration)
 			{
 				break;
 			}
@@ -642,8 +641,7 @@ mp4_parser_parse_stts_atom(atom_info_t* atom_info, frames_parse_context_t* conte
 
 	for (;;)
 	{
-		if (sample_duration > 0 && 
-			start_time + sample_duration - 1 < next_accum_duration)
+		if (start_time + sample_duration <= next_accum_duration)
 		{
 			break;
 		}
