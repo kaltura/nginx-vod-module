@@ -6,8 +6,16 @@ import http_utils
 import random
 import time
 import re
+import binascii
 
 from stream_compare_params import *
+
+def convert_body(body):
+	try:
+		return body.decode('ascii')
+	except UnicodeDecodeError:
+		return binascii.hexlify(bytearray(body))
+
 
 class TestThread(stress_base.TestThreadBase):
 
@@ -19,29 +27,38 @@ class TestThread(stress_base.TestThreadBase):
 		if code == 0:
 			self.writeOutput(body)
 		return code, headers, body
-		
+
+
 	def compareUrls(self, hostHeader, url1, url2):
-		code1, headers1, body1 = self.getURL(hostHeader, url1)
-		code2, headers2, body2 = self.getURL(hostHeader, url2)
-		if code1 != code2:
-			self.writeOutput('Error: got different status codes %s vs %s, url1=%s, url2=%s' % (code1, code2, url1, url2))
-			return False
-		
-		headerCompare = compare_utils.compareHeaders(headers1, headers2)
-		if headerCompare != None:
-			self.writeOutput(headerCompare)
-			return False
-		
-		if str(code1) != '200':
-			self.writeOutput('Notice: got status code %s, url1=%s, url2=%s' % (code1, url1, url2))
-					
-		if body1 != body2:
-			self.writeOutput('Error: comparison failed, url1=%s, url2=%s' % (url1, url2))
-			self.writeOutput(body1)
-			self.writeOutput(body2)
-			return False
-			
-		return code1, headers1, body1
+
+		for retry in range(1,3,1):
+			if retry != 1:
+				time.sleep(2)
+
+			if LOG_LEVEL['UrlCompareLog']:
+				self.writeOutput('Compare %s with %s  (retry %d)' % (url1, url2, retry))
+
+			code1, headers1, body1 = self.getURL(hostHeader, url1)
+			code2, headers2, body2 = self.getURL(hostHeader, url2)
+			if code1 != code2:
+				self.writeOutput('Error: got different status codes %s vs %s, url1=%s, url2=%s' % (code1, code2, url1, url2))
+				continue
+
+			headerCompare = compare_utils.compareHeaders(headers1, headers2)
+			if headerCompare != None:
+				self.writeOutput(headerCompare)
+				continue
+
+			if str(code1) != '200':
+				self.writeOutput('Notice: got status code %s, url1=%s, url2=%s' % (code1, url1, url2))
+
+			if body1 != body2:
+				self.writeOutput('Error: comparison failed, url1=%s, url2=%s\n%s\n%s' % (url1, url2, convert_body(body1), convert_body(body2)))
+				continue
+
+			return code1, headers1, body1
+
+		return False
 		
 	def runTest(self, uri):
 		hostHeader, uri = uri.split(' ')
@@ -61,7 +78,7 @@ class TestThread(stress_base.TestThreadBase):
 			return True
 		
 		mimeType = headers['content-type'][0]
-		urls = manifest_utils.getManifestUrls(url1.rsplit('/', 1)[0], body, mimeType, {})
+		urls = manifest_utils.getManifestUrls(url1.rsplit('/', 1)[0], body, mimeType, {'Host':hostHeader})
 		urls = map(lambda x: urlBase1 + urlparse(x).path, urls)		# the urls may contain the host header
 
 		result = True

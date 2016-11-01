@@ -4,3 +4,7 @@ URL1_BASE = ['http://localhost:8001']
 URL2_BASE = ['http://localhost:8001']
 
 EXTRA_HEADERS = {}
+
+LOG_LEVEL = {
+                "UrlCompareLog": True
+            }
