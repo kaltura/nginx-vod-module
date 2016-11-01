@@ -23,14 +23,26 @@ ngx_http_vod_hds_handle_manifest(
 	ngx_str_t* response,
 	ngx_str_t* content_type)
 {
+	ngx_http_vod_loc_conf_t* conf = submodule_context->conf;
+	ngx_str_t base_url = ngx_null_string;
 	vod_status_t rc;
+
+	if (conf->hds.absolute_manifest_urls)
+	{
+		rc = ngx_http_vod_get_base_url(submodule_context->r, conf->base_url, &submodule_context->r->uri, &base_url);
+		if (rc != NGX_OK)
+		{
+			return rc;
+		}
+	}
 
 	rc = hds_packager_build_manifest(
 		&submodule_context->request_context,
-		&submodule_context->conf->hds.manifest_config,
+		&conf->hds.manifest_config,
+		&base_url,
 		&submodule_context->r->uri,
 		&submodule_context->media_set,
-		submodule_context->conf->drm_enabled,
+		conf->drm_enabled,
 		response);
 	if (rc != VOD_OK)
 	{
@@ -162,6 +174,7 @@ ngx_http_vod_hds_create_loc_conf(
 	ngx_conf_t *cf,
 	ngx_http_vod_hds_loc_conf_t *conf)
 {
+	conf->absolute_manifest_urls = NGX_CONF_UNSET;
 	conf->fragment_config.generate_moof_atom = NGX_CONF_UNSET;
 }
 
@@ -172,6 +185,7 @@ ngx_http_vod_hds_merge_loc_conf(
 	ngx_http_vod_hds_loc_conf_t *conf,
 	ngx_http_vod_hds_loc_conf_t *prev)
 {
+	ngx_conf_merge_value(conf->absolute_manifest_urls, prev->absolute_manifest_urls, 0);
 	ngx_conf_merge_str_value(conf->manifest_config.fragment_file_name_prefix, prev->manifest_config.fragment_file_name_prefix, "frag");
 	ngx_conf_merge_str_value(conf->manifest_config.bootstrap_file_name_prefix, prev->manifest_config.bootstrap_file_name_prefix, "bootstrap");
 	ngx_conf_merge_str_value(conf->manifest_file_name_prefix, prev->manifest_file_name_prefix, "manifest");

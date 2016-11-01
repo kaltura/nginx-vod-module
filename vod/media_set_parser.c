@@ -1049,18 +1049,6 @@ media_set_live_init_clip_times(
 	media_set_t* media_set, 
 	vod_json_value_t** params)
 {
-	vod_status_t rc;
-
-	// parse clip times into original_times
-	if (params[MEDIA_SET_PARAM_CLIP_TIMES] != NULL)
-	{
-		rc = media_set_parse_clip_times(request_context, media_set, params);
-		if (rc != VOD_OK)
-		{
-			return rc;
-		}
-	}
-
 	if (params[MEDIA_SET_PARAM_CLIP_TIMES] == NULL ||
 		!media_set->use_discontinuity)
 	{
@@ -1901,6 +1889,16 @@ media_set_parse_json(
 	if (rc != VOD_OK)
 	{
 		return rc;
+	}
+
+	// parse clip times into original_times
+	if (params[MEDIA_SET_PARAM_CLIP_TIMES] != NULL)
+	{
+		rc = media_set_parse_clip_times(request_context, result, params);
+		if (rc != VOD_OK)
+		{
+			return rc;
+		}
 	}
 
 	// live params

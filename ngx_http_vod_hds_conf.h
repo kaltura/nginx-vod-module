@@ -9,6 +9,7 @@
 // typedefs
 typedef struct
 {
+	ngx_flag_t absolute_manifest_urls;
 	ngx_str_t manifest_file_name_prefix;
 	hds_manifest_config_t manifest_config;
 	hds_fragment_config_t fragment_config;

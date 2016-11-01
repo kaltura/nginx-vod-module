@@ -1287,6 +1287,13 @@ Sets the MPD format, available options are:
 
 ### Configuration directives - HDS
 
+#### vod_hds_absolute_manifest_urls
+* **syntax**: `vod_hds_absolute_manifest_urls on/off`
+* **default**: `on`
+* **context**: `http`, `server`, `location`
+
+When enabled the server returns the base URL in the F4M manifest
+
 #### vod_hds_manifest_file_name_prefix
 * **syntax**: `vod_hds_manifest_file_name_prefix name`
 * **default**: `manifest`
