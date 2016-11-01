@@ -1073,6 +1073,45 @@ media_set_live_init_clip_times(
 }
 
 static vod_status_t
+media_set_parse_first_clip_start_offset(
+	request_context_t* request_context,
+	media_clip_timing_t* timing,
+	int64_t first_clip_start_offset)
+{
+	uint64_t segment_base_time;
+
+	if (first_clip_start_offset < 0)
+	{
+		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+			"media_set_parse_first_clip_start_offset: firstClipStartOffset cannot be negative");
+		return VOD_BAD_MAPPING;
+	}
+
+	if (timing->segment_base_time != SEGMENT_BASE_TIME_RELATIVE)
+	{
+		segment_base_time = timing->segment_base_time;
+	}
+	else
+	{
+		segment_base_time = 0;
+	}
+
+	if (timing->first_time - segment_base_time < (uint64_t)first_clip_start_offset)
+	{
+		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+			"media_set_parse_first_clip_start_offset: firstClipStartOffset %L greater than firstClipTime %L minus segmentBaseTime %L",
+			first_clip_start_offset,
+			timing->first_time,
+			segment_base_time);
+		return VOD_BAD_MAPPING;
+	}
+
+	timing->first_clip_start_offset = first_clip_start_offset;
+
+	return VOD_OK;
+}
+
+static vod_status_t
 media_set_parse_live_params(
 	request_context_t* request_context,
 	request_params_t* request_params,
@@ -1152,6 +1191,19 @@ media_set_parse_live_params(
 			"media_set_parse_live_params: segment base time %uL is larger than first clip time %uL",
 			media_set->timing.segment_base_time, media_set->timing.first_time);
 		return VOD_BAD_MAPPING;
+	}
+
+	// first clip start offset
+	if (params[MEDIA_SET_PARAM_FIRST_CLIP_START_OFFSET] != NULL)
+	{
+		rc = media_set_parse_first_clip_start_offset(
+			request_context,
+			&media_set->timing,
+			params[MEDIA_SET_PARAM_FIRST_CLIP_START_OFFSET]->v.num.num);
+		if (rc != VOD_OK)
+		{
+			return rc;
+		}
 	}
 
 	return VOD_OK;
@@ -1657,44 +1709,6 @@ media_set_parse_key_frame_offsets(
 	return VOD_OK;
 }
 
-static vod_status_t
-media_set_update_original_clip_time(
-	request_context_t* request_context,
-	media_clip_timing_t* timing,
-	int64_t first_clip_start_offset)
-{
-	uint64_t segment_base_time;
-
-	if (first_clip_start_offset < 0)
-	{
-		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-			"media_set_update_original_clip_time: firstClipStartOffset cannot be negative");
-		return VOD_BAD_MAPPING;
-	}
-
-	if (timing->segment_base_time != SEGMENT_BASE_TIME_RELATIVE)
-	{
-		segment_base_time = timing->segment_base_time;
-	}
-	else
-	{
-		segment_base_time = 0;
-	}
-
-	if (timing->original_first_time - segment_base_time < (uint64_t)first_clip_start_offset)
-	{
-		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-			"media_set_update_original_clip_time: firstClipStartOffset %L greater than firstClipTime %L minus segmentBaseTime %L",
-			first_clip_start_offset,
-			timing->original_first_time,
-			segment_base_time);
-		return VOD_BAD_MAPPING;
-	}
-
-	timing->original_first_time -= first_clip_start_offset;
-	return VOD_OK;
-}
-
 vod_status_t
 media_set_parse_json(
 	request_context_t* request_context, 
@@ -2136,19 +2150,6 @@ media_set_parse_json(
 				if (rc != VOD_OK)
 				{
 					return rc;
-				}
-
-				if (context.clip_ranges.min_clip_index == 0 &&
-					params[MEDIA_SET_PARAM_FIRST_CLIP_START_OFFSET] != NULL)
-				{
-					rc = media_set_update_original_clip_time(
-						request_context,
-						&result->timing,
-						params[MEDIA_SET_PARAM_FIRST_CLIP_START_OFFSET]->v.num.num);
-					if (rc != VOD_OK)
-					{
-						return rc;
-					}
 				}
 			}
 			else if (parse_all_clips)
