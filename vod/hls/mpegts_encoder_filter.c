@@ -80,8 +80,16 @@ static const u_char pmt_entry_template_aac[] = {
 };
 
 static const u_char pmt_entry_template_mp3[] = {
-	0x03, 0xe0, 0x00, 0xf0, 0x06,
-	0x0a, 0x04, 0x75, 0x6e, 0x64, 0x00
+	0x03, 0xe0, 0x00, 0xf0, 0x00,
+};
+
+static const u_char pmt_entry_template_ac3[] = {
+	0x81, 0xe0, 0x00, 0xf0, 0x00,
+};
+
+static const u_char pmt_entry_template_eac3[] = {
+	0x06, 0xe0, 0x00, 0xf0, 0x03,
+	0x7a, 0x01, 0x00,
 };
 
 static const u_char pmt_entry_template_sample_aes_avc[] = {
@@ -502,6 +510,16 @@ mpegts_encoder_add_stream(
 			case VOD_CODEC_ID_MP3:
 				pmt_entry = pmt_entry_template_mp3;
 				pmt_entry_size = sizeof(pmt_entry_template_mp3);
+				break;
+
+			case VOD_CODEC_ID_AC3:
+				pmt_entry = pmt_entry_template_ac3;
+				pmt_entry_size = sizeof(pmt_entry_template_ac3);
+				break;
+
+			case VOD_CODEC_ID_EAC3:
+				pmt_entry = pmt_entry_template_eac3;
+				pmt_entry_size = sizeof(pmt_entry_template_eac3);
 				break;
 
 			default:
