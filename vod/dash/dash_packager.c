@@ -2125,12 +2125,19 @@ dash_packager_build_init_mp4(
 static uint64_t 
 dash_packager_get_earliest_pres_time(media_set_t* media_set, media_track_t* track)
 {
-	uint64_t result = track->first_frame_time_offset;
+	uint64_t result;
+	uint64_t clip_start_time;
 	
-	if (!media_set->use_discontinuity)
+	if (media_set->use_discontinuity)
 	{
-		result += dash_rescale_millis(track->clip_start_time - media_set->timing.segment_base_time);
+		clip_start_time = media_set->timing.original_first_time;
 	}
+	else
+	{
+		clip_start_time = media_set->timing.segment_base_time;
+	}
+
+	result = dash_rescale_millis(track->clip_start_time - clip_start_time) + track->first_frame_time_offset;
 
 	if (track->frame_count > 0)
 	{
