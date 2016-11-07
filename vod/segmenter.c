@@ -1065,49 +1065,54 @@ segmenter_get_live_window_start_end(
 		}
 	}
 
-	// snap start to segment boundary
-	if (timing->segment_base_time == SEGMENT_BASE_TIME_RELATIVE)
+	if (!media_set->use_discontinuity ||
+		start_clip_offset > 0 || 
+		(start_clip_index <= 0 && timing->first_clip_start_offset > 0))
 	{
-		segment_base_time = timing->times[start_clip_index];
-	}
-	else
-	{
-		segment_base_time = timing->segment_base_time;
-	}
-
-	start_time = segment_base_time +
-		vod_div_ceil(start_time - segment_base_time, conf->segment_duration) * conf->segment_duration;
-
-	// align start to key frames
-	clip_end_time = timing->times[start_clip_index] + timing->durations[start_clip_index];
-
-	if (sequence->key_frame_durations != NULL &&
-		start_time > timing->times[start_clip_index])
-	{
-		align_context.request_context = request_context;
-		align_context.part = sequence->key_frame_durations;
-		align_context.offset = timing->first_time + sequence->first_key_frame_offset;
-		align_context.cur_pos = align_context.part->first;
-
-		start_time = segmenter_align_to_key_frames(&align_context, start_time, clip_end_time);
-	}
-
-	if (start_time >= clip_end_time)
-	{
-		// start slipped to the next clip
-		start_clip_index++;
-		if (start_clip_index > end_clip_index)
+		// snap start to segment boundary
+		if (timing->segment_base_time == SEGMENT_BASE_TIME_RELATIVE)
 		{
-			vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-				"segmenter_get_live_window_start_end: empty window (1)");
-			return VOD_BAD_MAPPING;
+			segment_base_time = timing->times[start_clip_index];
 		}
-		start_clip_offset = 0;
-		start_time = timing->times[start_clip_index];
-	}
-	else
-	{
-		start_clip_offset = start_time - timing->times[start_clip_index];
+		else
+		{
+			segment_base_time = timing->segment_base_time;
+		}
+
+		start_time = segment_base_time +
+			vod_div_ceil(start_time - segment_base_time, conf->segment_duration) * conf->segment_duration;
+
+		// align start to key frames
+		clip_end_time = timing->times[start_clip_index] + timing->durations[start_clip_index];
+
+		if (sequence->key_frame_durations != NULL &&
+			start_time > timing->times[start_clip_index])
+		{
+			align_context.request_context = request_context;
+			align_context.part = sequence->key_frame_durations;
+			align_context.offset = timing->first_time + sequence->first_key_frame_offset;
+			align_context.cur_pos = align_context.part->first;
+
+			start_time = segmenter_align_to_key_frames(&align_context, start_time, clip_end_time);
+		}
+
+		if (start_time >= clip_end_time)
+		{
+			// start slipped to the next clip
+			start_clip_index++;
+			if (start_clip_index > end_clip_index)
+			{
+				vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+					"segmenter_get_live_window_start_end: empty window (1)");
+				return VOD_BAD_MAPPING;
+			}
+			start_clip_offset = 0;
+			start_time = timing->times[start_clip_index];
+		}
+		else
+		{
+			start_clip_offset = start_time - timing->times[start_clip_index];
+		}
 	}
 
 	if (end_time <= start_time)
@@ -1260,6 +1265,10 @@ segmenter_get_live_window(
 	// trim the clip times array
 	timing->times += window.start_clip_index;
 	timing->original_first_time = timing->times[0];
+	if (window.start_clip_index <= 0)
+	{
+		timing->original_first_time -= timing->first_clip_start_offset;
+	}
 	timing->times[0] = window.start_time;
 	timing->first_time = window.start_time;
 

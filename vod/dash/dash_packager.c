@@ -33,7 +33,11 @@
 	"    publishTime=\"%04d-%02d-%02dT%02d:%02d:%02dZ\"\n"						\
 	"    timeShiftBufferDepth=\"PT%uD.%03uDS\"\n"								\
 	"    minBufferTime=\"PT%uD.%03uDS\"\n"										\
-	"    profiles=\"%V\">\n"
+	"    suggestedPresentationDelay=\"PT%uD.%03uDS\"\n"							\
+	"    profiles=\"%V\">\n"													\
+	"  <UTCTiming\n"															\
+	"    schemeIdUri=\"urn:mpeg:dash:utc:direct:2014\"\n"						\
+	"    value=\"%04d-%02d-%02dT%02d:%02d:%02dZ\"/>\n"
 
 #define VOD_DASH_MANIFEST_PERIOD_HEADER											\
 	"  <Period>\n"
@@ -1227,6 +1231,54 @@ dash_packager_remove_redundant_tracks(
 	}
 }
 
+static uint64_t 
+dash_packager_get_segment_time(
+	segment_durations_t* segment_durations,
+	uint32_t skip_count)
+{
+	segment_duration_item_t *cur_item = segment_durations->items + segment_durations->item_count - 1;
+
+	for (;;)
+	{
+		if (cur_item->repeat_count >= skip_count)
+		{
+			return cur_item->time + (cur_item->repeat_count - skip_count) * cur_item->duration;
+		}
+
+		if (cur_item->discontinuity || cur_item <= segment_durations->items)
+		{
+			break;
+		}
+
+		skip_count -= cur_item->repeat_count;
+		cur_item--;
+	}
+
+	return cur_item->time;
+}
+
+static uint32_t
+dash_packager_get_presentation_delay(segment_durations_t* segment_durations)
+{
+	uint64_t reference_time;
+	uint64_t current_time;
+
+	if (segment_durations->item_count <= 0)
+	{
+		return 0;
+	}
+
+	reference_time = dash_packager_get_segment_time(segment_durations, 3);
+	current_time = ngx_time() * 1000;
+
+	if (current_time > reference_time)
+	{
+		return current_time - reference_time;
+	}
+
+	return 0;
+}
+
 vod_status_t 
 dash_packager_build_mpd(
 	request_context_t* request_context,
@@ -1245,10 +1297,12 @@ dash_packager_build_mpd(
 	media_track_t* cur_track;
 	vod_tm_t publish_time_gmt;
 	vod_tm_t avail_time_gmt;
+	vod_tm_t cur_time_gmt;
 	size_t base_url_temp_buffer_size = 0;
 	size_t base_period_size;
 	size_t result_size = 0;
 	size_t urls_length;
+	uint32_t presentation_delay;
 	uint32_t min_update_period;
 	uint32_t window_size;
 	uint32_t period_count = media_set->use_discontinuity ? media_set->timing.total_count : 1;
@@ -1341,7 +1395,7 @@ dash_packager_build_mpd(
 		break;
 
 	case MEDIA_SET_LIVE:
-		result_size = sizeof(VOD_DASH_MANIFEST_HEADER_LIVE) - 1 + 6 * VOD_INT32_LEN + 12 * VOD_INT64_LEN + conf->profiles.len;
+		result_size = sizeof(VOD_DASH_MANIFEST_HEADER_LIVE) - 1 + 8 * VOD_INT32_LEN + 18 * VOD_INT64_LEN + conf->profiles.len;
 		break;
 	}
 
@@ -1467,6 +1521,10 @@ dash_packager_build_mpd(
 
 		vod_gmtime(context.segment_durations[media_type].end_time / 1000, &publish_time_gmt);
 
+		vod_gmtime(ngx_time(), &cur_time_gmt);
+
+		presentation_delay = dash_packager_get_presentation_delay(&context.segment_durations[media_type]);
+
 		p = vod_sprintf(result->data,
 			VOD_DASH_MANIFEST_HEADER_LIVE,
 			(uint32_t)(min_update_period / 1000),
@@ -1479,7 +1537,11 @@ dash_packager_build_mpd(
 			(uint32_t)(window_size % 1000),
 			(uint32_t)(segmenter_conf->max_segment_duration / 1000),
 			(uint32_t)(segmenter_conf->max_segment_duration % 1000),
-			&conf->profiles);
+			(uint32_t)(presentation_delay / 1000),
+			(uint32_t)(presentation_delay % 1000),
+			&conf->profiles,
+			cur_time_gmt.vod_tm_year, cur_time_gmt.vod_tm_mon, cur_time_gmt.vod_tm_mday,
+			cur_time_gmt.vod_tm_hour, cur_time_gmt.vod_tm_min, cur_time_gmt.vod_tm_sec);
 		break;
 	}
 
@@ -2125,12 +2187,19 @@ dash_packager_build_init_mp4(
 static uint64_t 
 dash_packager_get_earliest_pres_time(media_set_t* media_set, media_track_t* track)
 {
-	uint64_t result = track->first_frame_time_offset;
+	uint64_t result;
+	uint64_t clip_start_time;
 	
-	if (!media_set->use_discontinuity)
+	if (media_set->use_discontinuity)
 	{
-		result += dash_rescale_millis(track->clip_start_time - media_set->timing.segment_base_time);
+		clip_start_time = media_set->timing.original_first_time;
 	}
+	else
+	{
+		clip_start_time = media_set->timing.segment_base_time;
+	}
+
+	result = dash_rescale_millis(track->clip_start_time - clip_start_time) + track->first_frame_time_offset;
 
 	if (track->frame_count > 0)
 	{
