@@ -2080,7 +2080,7 @@ media_set_parse_json(
 		}
 
 		// update original first time
-		// Note: not updating other timing fields ssince they are not required for segment requests
+		// Note: not updating other timing fields since they are not required for segment requests
 		result->timing.original_first_time = context.clip_ranges.clip_time;
 		if (context.clip_ranges.min_clip_index <= 0)
 		{
