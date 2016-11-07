@@ -86,6 +86,7 @@ typedef struct {
 	uint64_t total_duration;			// = sum(durations)
 	uint64_t first_time;				// = times[0]
 	uint64_t original_first_time;		// start time of the first clip before it was trimmed to the live window
+	uint64_t first_clip_start_offset;	// difference between first clip time and the original first time of this clip
 	uint32_t first_segment_alignment_offset;	// difference between unaligned first segment time and first_time
 } media_clip_timing_t;
 
