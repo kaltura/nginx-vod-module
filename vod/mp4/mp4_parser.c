@@ -1807,10 +1807,10 @@ mp4_parser_parse_audio_atoms(void* ctx, atom_info_t* atom_info)
 		break;			// handled outside the switch
 
 	case ATOM_NAME_DAC3:
-		if (atom_info->size > 0)
+		if (atom_info->size > 1)
 		{
-			ac3_mode = (atom_info->ptr[0] >> 1) & 0x7;
-			ac3_low_freq = (atom_info->ptr[0]) & 0x1;
+			ac3_mode = (atom_info->ptr[1] >> 3) & 0x7;
+			ac3_low_freq = (atom_info->ptr[1] >> 2) & 0x1;
 			context->media_info.u.audio.channels =
 				mp4_parser_get_ac3_channel_count(ac3_mode, ac3_low_freq);
 		}
