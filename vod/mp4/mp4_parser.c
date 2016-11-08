@@ -1782,14 +1782,54 @@ mp4_parser_read_config_descriptor(metadata_parse_context_t* context, simple_read
 	return VOD_OK;
 }
 
+static uint16_t
+mp4_parser_get_ac3_channel_count(uint8_t mode, uint8_t low_freq)
+{
+	return ac3_mode_channels[mode] + low_freq;
+}
+
 static vod_status_t 
-mp4_parser_parse_audio_esds_atom(void* ctx, atom_info_t* atom_info)
+mp4_parser_parse_audio_atoms(void* ctx, atom_info_t* atom_info)
 {
 	metadata_parse_context_t* context = (metadata_parse_context_t*)ctx;
 	simple_read_stream_t stream;
-	int tag;
 	vod_status_t rc;
+	uint8_t ac3_low_freq;
+	uint8_t ac3_mode;
+	int tag;
 
+	switch (atom_info->name)
+	{
+	case ATOM_NAME_SINF:
+		return mp4_parser_parse_sinf_atom(atom_info, context);
+
+	case ATOM_NAME_ESDS:
+		break;			// handled outside the switch
+
+	case ATOM_NAME_DAC3:
+		if (atom_info->size > 0)
+		{
+			ac3_mode = (atom_info->ptr[0] >> 1) & 0x7;
+			ac3_low_freq = (atom_info->ptr[0]) & 0x1;
+			context->media_info.u.audio.channels =
+				mp4_parser_get_ac3_channel_count(ac3_mode, ac3_low_freq);
+		}
+		return VOD_OK;
+
+	case ATOM_NAME_DEC3:
+		if (atom_info->size > 3)
+		{
+			ac3_mode = (atom_info->ptr[3] >> 1) & 0x7;
+			ac3_low_freq = (atom_info->ptr[3]) & 0x1;
+			context->media_info.u.audio.channels =
+				mp4_parser_get_ac3_channel_count(ac3_mode, ac3_low_freq);
+		}
+		return VOD_OK;
+
+	default:
+		return VOD_OK;
+	}
+	
 	stream.cur_pos = atom_info->ptr;
 	stream.end_pos = stream.cur_pos + atom_info->size;
 	
@@ -1817,65 +1857,28 @@ mp4_parser_parse_audio_esds_atom(void* ctx, atom_info_t* atom_info)
 	return VOD_OK;
 }
 
-static uint16_t
-mp4_parser_get_ac3_channel_count(uint8_t mode, uint8_t low_freq)
-{
-	return ac3_mode_channels[mode] + low_freq;
-}
-
 static vod_status_t
 mp4_parser_parse_audio_extra_data_atom(void* ctx, atom_info_t* atom_info)
 {
 	metadata_parse_context_t* context = (metadata_parse_context_t*)ctx;
-	uint8_t ac3_low_freq;
-	uint8_t ac3_mode;
+	vod_status_t rc;
 
-	switch (atom_info->name)
+	if (atom_info->name == ATOM_NAME_WAVE && atom_info->size > 8)
 	{
-	case ATOM_NAME_WAVE:
-		if (atom_info->size > 8)
-		{
-			return mp4_parser_parse_atoms(
-				context->request_context,
-				atom_info->ptr,
-				atom_info->size,
-				TRUE,
-				mp4_parser_parse_audio_esds_atom,
-				context);
-		}
-		break;
-
-	case ATOM_NAME_SINF:
-		return mp4_parser_parse_sinf_atom(atom_info, context);
-
-	case ATOM_NAME_ESDS:
-		return mp4_parser_parse_audio_esds_atom(ctx, atom_info);
-
-	case ATOM_NAME_DAC3:
-		if (atom_info->size > 0)
-		{
-			ac3_mode = (atom_info->ptr[0] >> 1) & 0x7;
-			ac3_low_freq = (atom_info->ptr[0]) & 0x1;
-			context->media_info.u.audio.channels = 
-				mp4_parser_get_ac3_channel_count(ac3_mode, ac3_low_freq);
-		}
-		break;
-
-	case ATOM_NAME_DEC3:
-		if (atom_info->size > 3)
-		{
-			ac3_mode = (atom_info->ptr[3] >> 1) & 0x7;
-			ac3_low_freq = (atom_info->ptr[3]) & 0x1;
-			context->media_info.u.audio.channels =
-				mp4_parser_get_ac3_channel_count(ac3_mode, ac3_low_freq);
-		}
-		break;
-
-	default:
-		return VOD_OK;
+		rc = mp4_parser_parse_atoms(
+			context->request_context,
+			atom_info->ptr,
+			atom_info->size,
+			TRUE,
+			mp4_parser_parse_audio_atoms,
+			context);
+	}
+	else
+	{
+		rc = mp4_parser_parse_audio_atoms(ctx, atom_info);
 	}
 
-	return VOD_OK;
+	return rc;
 }
 
 static const u_char* 
