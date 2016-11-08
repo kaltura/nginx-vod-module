@@ -160,9 +160,11 @@ typedef struct {
 	int atom_info_offset;
 } raw_atom_mapping_t;
 
-const raw_atom_mapping_t raw_atom_mapping[] = {
+static const raw_atom_mapping_t raw_atom_mapping[] = {
 	{ RTA_STSD, offsetof(trak_atom_infos_t, stsd) },
 };
+
+static const uint16_t ac3_mode_channels[] = { 2, 1, 2, 3, 3, 4, 4, 5 };
 
 // compressed moov
 typedef struct {
@@ -1780,14 +1782,22 @@ mp4_parser_read_config_descriptor(metadata_parse_context_t* context, simple_read
 	return VOD_OK;
 }
 
+static uint16_t
+mp4_parser_get_ac3_channel_count(uint8_t mode, uint8_t low_freq)
+{
+	return ac3_mode_channels[mode] + low_freq;
+}
+
 static vod_status_t 
-mp4_parser_parse_audio_esds_atom(void* ctx, atom_info_t* atom_info)
+mp4_parser_parse_audio_atoms(void* ctx, atom_info_t* atom_info)
 {
 	metadata_parse_context_t* context = (metadata_parse_context_t*)ctx;
 	simple_read_stream_t stream;
-	int tag;
 	vod_status_t rc;
-	
+	uint8_t ac3_low_freq;
+	uint8_t ac3_mode;
+	int tag;
+
 	switch (atom_info->name)
 	{
 	case ATOM_NAME_SINF:
@@ -1795,6 +1805,26 @@ mp4_parser_parse_audio_esds_atom(void* ctx, atom_info_t* atom_info)
 
 	case ATOM_NAME_ESDS:
 		break;			// handled outside the switch
+
+	case ATOM_NAME_DAC3:
+		if (atom_info->size > 1)
+		{
+			ac3_mode = (atom_info->ptr[1] >> 3) & 0x7;
+			ac3_low_freq = (atom_info->ptr[1] >> 2) & 0x1;
+			context->media_info.u.audio.channels =
+				mp4_parser_get_ac3_channel_count(ac3_mode, ac3_low_freq);
+		}
+		return VOD_OK;
+
+	case ATOM_NAME_DEC3:
+		if (atom_info->size > 3)
+		{
+			ac3_mode = (atom_info->ptr[3] >> 1) & 0x7;
+			ac3_low_freq = (atom_info->ptr[3]) & 0x1;
+			context->media_info.u.audio.channels =
+				mp4_parser_get_ac3_channel_count(ac3_mode, ac3_low_freq);
+		}
+		return VOD_OK;
 
 	default:
 		return VOD_OK;
@@ -1836,16 +1866,16 @@ mp4_parser_parse_audio_extra_data_atom(void* ctx, atom_info_t* atom_info)
 	if (atom_info->name == ATOM_NAME_WAVE && atom_info->size > 8)
 	{
 		rc = mp4_parser_parse_atoms(
-			context->request_context, 
-			atom_info->ptr, 
-			atom_info->size, 
-			TRUE, 
-			mp4_parser_parse_audio_esds_atom, 
+			context->request_context,
+			atom_info->ptr,
+			atom_info->size,
+			TRUE,
+			mp4_parser_parse_audio_atoms,
 			context);
 	}
 	else
 	{
-		rc = mp4_parser_parse_audio_esds_atom(ctx, atom_info);
+		rc = mp4_parser_parse_audio_atoms(ctx, atom_info);
 	}
 
 	return rc;
@@ -2212,7 +2242,6 @@ mp4_parser_process_moov_atom_callback(void* ctx, atom_info_t* atom_info)
 	uint32_t duration_millis;
 	uint32_t track_index;
 	bool_t extra_data_required;
-	bool_t format_supported;
 	vod_status_t rc;
 	int parse_type;
 
@@ -2258,7 +2287,7 @@ mp4_parser_process_moov_atom_callback(void* ctx, atom_info_t* atom_info)
 
 	// make sure the codec is supported
 	extra_data_required = TRUE;
-	format_supported = FALSE;
+	metadata_parse_context.media_info.codec_id = VOD_CODEC_ID_INVALID;
 	switch (metadata_parse_context.media_info.media_type)
 	{
 	case MEDIA_TYPE_VIDEO:
@@ -2268,25 +2297,23 @@ mp4_parser_process_moov_atom_callback(void* ctx, atom_info_t* atom_info)
 		case FORMAT_h264:
 		case FORMAT_H264:
 			metadata_parse_context.media_info.codec_id = VOD_CODEC_ID_AVC;
-			format_supported = TRUE;
 			break;
 
 		case FORMAT_HEV1:
 		case FORMAT_HVC1:
 			metadata_parse_context.media_info.codec_id = VOD_CODEC_ID_HEVC;
-			format_supported = TRUE;
 			break;
 
 		case FORMAT_VP09:
 			metadata_parse_context.media_info.codec_id = VOD_CODEC_ID_VP9;
-			format_supported = TRUE;
 			break;
 		}
 		break;
 
 	case MEDIA_TYPE_AUDIO:
-		if (metadata_parse_context.media_info.format == FORMAT_MP4A)
+		switch (metadata_parse_context.media_info.format)
 		{
+		case FORMAT_MP4A:
 			switch (metadata_parse_context.media_info.u.audio.object_type_id)
 			{
 			case 0x40:
@@ -2294,21 +2321,30 @@ mp4_parser_process_moov_atom_callback(void* ctx, atom_info_t* atom_info)
 			case 0x67:
 			case 0x68:
 				metadata_parse_context.media_info.codec_id = VOD_CODEC_ID_AAC;
-				format_supported = TRUE;
 				break;
 
 			case 0x69:
 			case 0x6B:
 				metadata_parse_context.media_info.codec_id = VOD_CODEC_ID_MP3;
-				format_supported = TRUE;
 				extra_data_required = FALSE;
 				break;
 			}
+			break;
+
+		case FORMAT_AC3:
+			metadata_parse_context.media_info.codec_id = VOD_CODEC_ID_AC3;
+			extra_data_required = FALSE;
+			break;
+
+		case FORMAT_EAC3:
+			metadata_parse_context.media_info.codec_id = VOD_CODEC_ID_EAC3;
+			extra_data_required = FALSE;
+			break;
 		}
 		break;
 	}
 
-	if (!format_supported)
+	if (metadata_parse_context.media_info.codec_id == VOD_CODEC_ID_INVALID)
 	{
 		vod_log_debug3(VOD_LOG_DEBUG_LEVEL, context->request_context->log, 0,
 			"mp4_parser_process_moov_atom_callback: unsupported format - media type %uD format 0x%uxD object type id 0x%uxD",

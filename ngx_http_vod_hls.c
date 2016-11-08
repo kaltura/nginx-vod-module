@@ -6,7 +6,13 @@
 #include "vod/udrm.h"
 
 // constants
-#define SUPPORTED_CODECS (VOD_CODEC_FLAG(AVC) | VOD_CODEC_FLAG(HEVC) | VOD_CODEC_FLAG(AAC) | VOD_CODEC_FLAG(MP3))
+#define SUPPORTED_CODECS \
+	(VOD_CODEC_FLAG(AVC) | \
+	VOD_CODEC_FLAG(HEVC) | \
+	VOD_CODEC_FLAG(AAC) | \
+	VOD_CODEC_FLAG(AC3) | \
+	VOD_CODEC_FLAG(EAC3) | \
+	VOD_CODEC_FLAG(MP3))
 
 // content types
 static u_char m3u8_content_type[] = "application/vnd.apple.mpegurl";

@@ -36,6 +36,8 @@
 #define ATOM_NAME_HVCC (0x43637668)		// high efficiency video codec configuration
 #define ATOM_NAME_VPCC (0x43637076)		// vp9 codec configuration
 #define ATOM_NAME_ESDS (0x73647365)		// elementary stream description
+#define ATOM_NAME_DAC3 (0x33636164)
+#define ATOM_NAME_DEC3 (0x33636564)
 #define ATOM_NAME_WAVE (0x65766177)		// 
 #define ATOM_NAME_DINF (0x666e6964)		// data information
 #define ATOM_NAME_TKHD (0x64686b74)		// track header
@@ -69,6 +71,8 @@
 
 // aac 4cc tag
 #define FORMAT_MP4A    (0x6134706d)
+#define FORMAT_AC3     (0x332d6361)
+#define FORMAT_EAC3    (0x332d6365)
 
 // MP4 constants from ffmpeg
 #define MP4ODescrTag				0x01
