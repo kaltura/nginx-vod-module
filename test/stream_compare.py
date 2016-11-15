@@ -31,9 +31,9 @@ class TestThread(stress_base.TestThreadBase):
 
 	def compareUrls(self, hostHeader, url1, url2):
 
-		for retry in xrange(3):
+		for retry in xrange(URL_COMPARE_RETRIES):
 			if retry != 0:
-				time.sleep(2)
+				time.sleep(URL_COMPARE_RETRIES_SLEEP_INTERVAL)
 
 			if LOG_LEVEL['UrlCompareLog']:
 				self.writeOutput('Compare %s with %s  (retry %d)' % (url1, url2, retry))
@@ -53,7 +53,11 @@ class TestThread(stress_base.TestThreadBase):
 				self.writeOutput('Notice: got status code %s, url1=%s, url2=%s' % (code1, url1, url2))
 
 			if body1 != body2:
-				self.writeOutput('Error: comparison failed, url1=%s, url2=%s\n%s\n%s' % (url1, url2, convertBody(body1), convertBody(body2)))
+				if retry >= URL_COMPARE_RETRIES-1:
+					severity = "Error"
+				else:
+					severity = "Notice"
+				self.writeOutput('%s: comparison failed, url1=%s, url2=%s\n%s\n%s' % (severity, url1, url2, convertBody(body1), convertBody(body2)))
 				continue
 
 			return code1, headers1, body1
