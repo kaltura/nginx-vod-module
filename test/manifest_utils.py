@@ -9,7 +9,7 @@ import time
 CHUNK_LIST_ITEMS_TO_COMPARE = 0
 
 #filter array by taking evenly spaced elements must must include first and last
-def filter_chunk_list(arr):
+def filterChunkList(arr):
 	n = len(arr) - 2
 	m = CHUNK_LIST_ITEMS_TO_COMPARE - 2
 	if CHUNK_LIST_ITEMS_TO_COMPARE > 0 and n > m:
@@ -48,7 +48,7 @@ def getHlsMediaPlaylistUrls(baseUrl, urlContent):
 			result.append(getAbsoluteUrl(spilttedLine[1].split('"')[0], baseUrl))
 			continue
 		result.append(getAbsoluteUrl(curLine, baseUrl))
-	result = filter_chunk_list(result)
+	result = filterChunkList(result)
 	return result
 	
 def getHlsMasterPlaylistUrls(baseUrl, urlContent, headers):
@@ -203,7 +203,7 @@ def getDashManifestUrls(baseUrl, urlContent, headers):
 				for repId in repIds:
 					result.append(getAbsoluteUrl(url.replace('$Number$', '%s' % (curSeg + 1)).replace('$RepresentationID$', repId)))
 
-	result = filter_chunk_list(result)
+	result = filterChunkList(result)
 	return result
 
 def getHdsSegmentIndexes(data):
@@ -262,7 +262,7 @@ def getHdsManifestUrls(baseUrl, urlContent, headers):
 		for curSeg in segmentIndexes[bootstrapId]:
 			fragments.append(getAbsoluteUrl('%s/%sSeg1-Frag%s' % (baseUrl, url, curSeg)))
 
-		result += filter_chunk_list(fragments)
+		result += filterChunkList(fragments)
 
 	return result
 
@@ -293,7 +293,7 @@ def getMssManifestUrls(baseUrl, urlContent, headers):
 			for timestamp in timestamps:
 				result.append(getAbsoluteUrl('%s/%s' % (baseUrl, url.replace('{bitrate}', bitrate).replace('{start time}', timestamp))))
 
-	result = filter_chunk_list(result)
+	result = filterChunkList(result)
 	return result
 
 PARSER_BY_MIME_TYPE = {
