@@ -10,7 +10,7 @@ import re
 from stream_compare_params import *
 
 manifest_utils.CHUNK_LIST_ITEMS_TO_COMPARE = CHUNK_LIST_ITEMS_TO_COMPARE
-def convert_body(body):
+def convertBody(body):
 	try:
 		return body.decode('ascii')
 	except UnicodeDecodeError:
@@ -53,7 +53,7 @@ class TestThread(stress_base.TestThreadBase):
 				self.writeOutput('Notice: got status code %s, url1=%s, url2=%s' % (code1, url1, url2))
 
 			if body1 != body2:
-				self.writeOutput('Error: comparison failed, url1=%s, url2=%s\n%s\n%s' % (url1, url2, convert_body(body1), convert_body(body2)))
+				self.writeOutput('Error: comparison failed, url1=%s, url2=%s\n%s\n%s' % (url1, url2, convertBody(body1), convertBody(body2)))
 				continue
 
 			return code1, headers1, body1
