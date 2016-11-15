@@ -6,6 +6,18 @@ import base64
 import math
 import time
 
+CHUNK_LIST_ITEMS_TO_COMPARE = 0
+
+#filter array by taking evenly spaced elements must must include first and last
+def filter_chunk_list(arr):
+	n = len(arr) - 2
+	m = CHUNK_LIST_ITEMS_TO_COMPARE - 2
+	if CHUNK_LIST_ITEMS_TO_COMPARE > 0 and n > m:
+		print "Taking only %d segments from the %d segments available" % (CHUNK_LIST_ITEMS_TO_COMPARE, len(arr))
+		#Bresenham's line algorithm, but take first and last as well
+		return arr[0:1]+[arr[1 + i * n // m + len(arr) // (2 * m)] for i in range(m)] + [arr[-1]]
+	return arr
+
 def getAttributesDict(node):
 	result = {}
 	for attIndex in xrange(len(node.attributes)):
@@ -36,6 +48,7 @@ def getHlsMediaPlaylistUrls(baseUrl, urlContent):
 			result.append(getAbsoluteUrl(spilttedLine[1].split('"')[0], baseUrl))
 			continue
 		result.append(getAbsoluteUrl(curLine, baseUrl))
+	result = filter_chunk_list(result)
 	return result
 	
 def getHlsMasterPlaylistUrls(baseUrl, urlContent, headers):
@@ -189,6 +202,8 @@ def getDashManifestUrls(baseUrl, urlContent, headers):
 			for curSeg in xrange(startNumber, startNumber + segmentCount):
 				for repId in repIds:
 					result.append(getAbsoluteUrl(url.replace('$Number$', '%s' % (curSeg + 1)).replace('$RepresentationID$', repId)))
+
+	result = filter_chunk_list(result)
 	return result
 
 def getHdsSegmentIndexes(data):
@@ -243,8 +258,11 @@ def getHdsManifestUrls(baseUrl, urlContent, headers):
 			continue
 		
 		url = atts['url']
+		fragments = []
 		for curSeg in segmentIndexes[bootstrapId]:
-			result.append(getAbsoluteUrl('%s/%sSeg1-Frag%s' % (baseUrl, url, curSeg)))
+			fragments.append(getAbsoluteUrl('%s/%sSeg1-Frag%s' % (baseUrl, url, curSeg)))
+
+		result += filter_chunk_list(fragments)
 
 	return result
 
@@ -274,6 +292,8 @@ def getMssManifestUrls(baseUrl, urlContent, headers):
 		for bitrate in bitrates:
 			for timestamp in timestamps:
 				result.append(getAbsoluteUrl('%s/%s' % (baseUrl, url.replace('{bitrate}', bitrate).replace('{start time}', timestamp))))
+
+	result = filter_chunk_list(result)
 	return result
 
 PARSER_BY_MIME_TYPE = {

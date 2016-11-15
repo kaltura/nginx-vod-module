@@ -8,3 +8,5 @@ EXTRA_HEADERS = {}
 LOG_LEVEL = {
                 "UrlCompareLog": True
             }
+
+CHUNK_LIST_ITEMS_TO_COMPARE = 0 #0 is all

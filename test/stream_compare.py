@@ -6,15 +6,15 @@ import http_utils
 import random
 import time
 import re
-import binascii
 
 from stream_compare_params import *
 
+manifest_utils.CHUNK_LIST_ITEMS_TO_COMPARE = CHUNK_LIST_ITEMS_TO_COMPARE
 def convert_body(body):
 	try:
 		return body.decode('ascii')
 	except UnicodeDecodeError:
-		return binascii.hexlify(bytearray(body))
+		return body.encode('hex')
 
 
 class TestThread(stress_base.TestThreadBase):
@@ -31,8 +31,8 @@ class TestThread(stress_base.TestThreadBase):
 
 	def compareUrls(self, hostHeader, url1, url2):
 
-		for retry in range(1,3,1):
-			if retry != 1:
+		for retry in xrange(3):
+			if retry != 0:
 				time.sleep(2)
 
 			if LOG_LEVEL['UrlCompareLog']:
