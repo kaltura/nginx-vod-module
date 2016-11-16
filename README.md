@@ -394,6 +394,7 @@ Mandatory fields:
 	The mapping has to contain at least one sequence and up to 32 sequences.
 	
 Optional fields:
+* `id` - a string that identifies the set. The id can be retrieved by `$vod_set_id`.
 * `playlistType` - string, can be set to `live` or `vod`, default is `vod`.
 * `durations` - an array of integers representing clip durations in milliseconds.
 	This field is mandatory if the mapping contains more than a single clip per sequence.
@@ -1487,6 +1488,7 @@ The module adds the following nginx variables:
   `$vod_suburi` will have the value `http://<domain>/<location>/<prefix><middle1><postfix>/<filename>` 
   when processing the first uri.
 * `$vod_filepath` - in local / mapped modes, the file path of current sub uri. In remote mode, has the same value as `$vod_suburi`.
+* `$vod_set_id` - contains the id of the set.
 * `$vod_sequence_id` - contains the id of the current sequence, if no id was specified in the mapping json this variable will be the same as `$vod_suburi`.
 * `$vod_clip_id` - the id of the current clip, this variable has a value during these phases:
   1. Mapping of dynamic clips to concat clips

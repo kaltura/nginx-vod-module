@@ -12,51 +12,10 @@
 #include "vod/common.h"
 #include "vod/udrm.h"
 
-// macros
-#define DEFINE_VAR(name) \
-	{ ngx_string("vod_" #name), ngx_http_vod_set_##name##_var }
-
-// typedefs
-typedef struct {
-	ngx_str_t name;
-	ngx_http_get_variable_pt handler;
-} ngx_http_vod_variable_t;
-
 // globals
 static ngx_str_t ngx_http_vod_last_modified_default_types[] = {
 	ngx_null_string
 };
-
-static ngx_http_vod_variable_t ngx_http_vod_variables[] = {
-	DEFINE_VAR(filepath),
-	DEFINE_VAR(suburi),
-	DEFINE_VAR(sequence_id),
-	DEFINE_VAR(clip_id),
-	DEFINE_VAR(dynamic_mapping),
-	DEFINE_VAR(request_params),
-	DEFINE_VAR(notification_id),
-};
-
-static ngx_int_t
-ngx_http_vod_add_variables(ngx_conf_t *cf)
-{
-	ngx_http_vod_variable_t* vars_cur = ngx_http_vod_variables;
-	ngx_http_vod_variable_t* vars_end = vars_cur + vod_array_entries(ngx_http_vod_variables);
-	ngx_http_variable_t  *var;
-
-	for (; vars_cur < vars_end; vars_cur++)
-	{
-		var = ngx_http_add_variable(cf, &vars_cur->name, NGX_HTTP_VAR_NOCACHEABLE);
-		if (var == NULL)
-		{
-			return NGX_ERROR;
-		}
-
-		var->get_handler = vars_cur->handler;
-	}
-
-	return NGX_OK;
-}
 
 static ngx_int_t
 ngx_http_vod_init_parsers(ngx_conf_t *cf)
