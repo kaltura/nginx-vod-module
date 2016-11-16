@@ -22,7 +22,7 @@
 // constants
 static const u_char m3u8_header[] = "#EXTM3U\n";
 static const u_char m3u8_footer[] = "#EXT-X-ENDLIST\n";
-static const char m3u8_stream_inf_video[] = "#EXT-X-STREAM-INF:PROGRAM-ID=1,BANDWIDTH=%uD,RESOLUTION=%uDx%uD,CODECS=\"%V";
+static const char m3u8_stream_inf_video[] = "#EXT-X-STREAM-INF:PROGRAM-ID=1,BANDWIDTH=%uD,RESOLUTION=%uDx%uD,FRAME-RATE=%uD.%03uD,CODECS=\"%V";
 static const char m3u8_stream_inf_audio[] = "#EXT-X-STREAM-INF:PROGRAM-ID=1,BANDWIDTH=%uD,CODECS=\"%V";
 static const u_char m3u8_discontinuity[] = "#EXT-X-DISCONTINUITY\n";
 static const char byte_range_tag_format[] = "#EXT-X-BYTERANGE:%uD@%uD\n";
@@ -773,7 +773,7 @@ m3u8_builder_build_master_playlist(
 	result_size = sizeof(m3u8_header);
 
 	max_video_stream_inf =
-		sizeof(m3u8_stream_inf_video) - 1 + 3 * VOD_INT32_LEN + MAX_CODEC_NAME_SIZE +
+		sizeof(m3u8_stream_inf_video) - 1 + 5 * VOD_INT32_LEN + MAX_CODEC_NAME_SIZE +
 		MAX_CODEC_NAME_SIZE + 1 +		// 1 = ,
 		sizeof("\"\n\n") - 1;
 
@@ -905,6 +905,8 @@ m3u8_builder_build_master_playlist(
 				bitrate,
 				(uint32_t)video->u.video.width,
 				(uint32_t)video->u.video.height,
+				(uint32_t)(video->timescale / video->min_frame_duration),
+				(uint32_t)((((uint64_t)video->timescale * 1000) / video->min_frame_duration) % 1000),
 				&video->codec_name);
 			if (tracks[MEDIA_TYPE_AUDIO] != NULL)
 			{
