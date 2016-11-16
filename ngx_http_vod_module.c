@@ -132,6 +132,7 @@ struct ngx_http_vod_ctx_s {
 	off_t alignment;
 	int state;
 	u_char request_key[BUFFER_CACHE_KEY_SIZE];
+	u_char child_request_key[BUFFER_CACHE_KEY_SIZE];
 	ngx_http_vod_state_machine_t state_machine;
 
 	// iterators
@@ -1013,7 +1014,7 @@ ngx_http_vod_drm_info_request_finished(void* context, ngx_int_t rc, ngx_buf_t* r
 		if (ngx_buffer_cache_store_perf(
 			ctx->perf_counters,
 			conf->drm_info_cache,
-			ctx->cur_sequence->uri_key,
+			ctx->child_request_key,
 			drm_info.data,
 			drm_info.len))
 		{
@@ -1054,20 +1055,46 @@ ngx_http_vod_state_machine_get_drm_info(ngx_http_vod_ctx_t *ctx)
 	ngx_http_request_t* r = ctx->submodule_context.r;
 	ngx_int_t rc;
 	ngx_str_t drm_info;
+	ngx_str_t base_uri;
+	ngx_md5_t md5;
 
 	for (;
 		ctx->cur_sequence < ctx->submodule_context.media_set.sequences_end;
 		ctx->cur_sequence++)
 	{
+		// get the request uri
+		if (conf->drm_request_uri != NULL)
+		{
+			if (ngx_http_complex_value(
+				r,
+				conf->drm_request_uri,
+				&base_uri) != NGX_OK)
+			{
+				ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+					"ngx_http_vod_state_machine_get_drm_info: ngx_http_complex_value failed");
+				return NGX_ERROR;
+			}
+		}
+		else
+		{
+			base_uri = ctx->cur_sequence->stripped_uri;
+		}
+
 		if (conf->drm_info_cache != NULL)
 		{
+			// generate a request key
+			ngx_md5_init(&md5);
+			ngx_md5_update(&md5, conf->drm_upstream_location.data, conf->drm_upstream_location.len);
+			ngx_md5_update(&md5, base_uri.data, base_uri.len);
+			ngx_md5_final(ctx->child_request_key, &md5);
+
 			// try to read the drm info from cache
 			if (ngx_buffer_cache_fetch_copy_perf(
 				r, 
 				ctx->perf_counters, 
 				&conf->drm_info_cache, 
 				1, 
-				ctx->cur_sequence->uri_key, 
+				ctx->child_request_key,
 				&drm_info.data, 
 				&drm_info.len) >= 0)
 			{
@@ -1099,25 +1126,10 @@ ngx_http_vod_state_machine_get_drm_info(ngx_http_vod_ctx_t *ctx)
 			return rc;
 		}
 
+		// start the drm request
 		ngx_memzero(&child_params, sizeof(child_params));
 		child_params.method = NGX_HTTP_GET;
-
-		if (conf->drm_request_uri != NULL)
-		{
-			if (ngx_http_complex_value(
-				r,
-				conf->drm_request_uri,
-				&child_params.base_uri) != NGX_OK)
-			{
-				ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
-					"ngx_http_vod_state_machine_get_drm_info: ngx_http_complex_value failed");
-				return NGX_ERROR;
-			}
-		}
-		else
-		{
-			child_params.base_uri = ctx->cur_sequence->stripped_uri;
-		}
+		child_params.base_uri = base_uri;
 
 		ngx_perf_counter_start(ctx->perf_counter_context);
 
@@ -3126,20 +3138,6 @@ finalize_request:
 }
 
 static void
-ngx_http_vod_init_uri_key(media_sequence_t* cur_sequence, ngx_str_t* prefix)
-{
-	ngx_md5_t md5;
-
-	ngx_md5_init(&md5);
-	if (prefix != NULL)
-	{
-		ngx_md5_update(&md5, prefix->data, prefix->len);
-	}
-	ngx_md5_update(&md5, cur_sequence->stripped_uri.data, cur_sequence->stripped_uri.len);
-	ngx_md5_final(cur_sequence->uri_key, &md5);
-}
-
-static void
 ngx_http_vod_init_file_key(media_clip_source_t* cur_source, ngx_str_t* prefix)
 {
 	ngx_md5_t md5;
@@ -3246,11 +3244,6 @@ ngx_http_vod_start_processing_media_file(ngx_http_vod_ctx_t *ctx)
 			ctx->cur_sequence < ctx->submodule_context.media_set.sequences_end;
 			ctx->cur_sequence++)
 		{
-			if (conf->drm_enabled)
-			{
-				ngx_http_vod_init_uri_key(ctx->cur_sequence, ctx->file_key_prefix);
-			}
-
 			rc = ngx_http_vod_init_encryption_key(r, conf, ctx->cur_sequence);
 			if (rc != NGX_OK)
 			{

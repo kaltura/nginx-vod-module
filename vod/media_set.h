@@ -61,7 +61,6 @@ struct media_sequence_s {
 	vod_str_t mapped_uri;
 
 	// initialized when the main state machine starts
-	u_char uri_key[MEDIA_CLIP_KEY_SIZE];
 	u_char encryption_key[MEDIA_CLIP_KEY_SIZE];
 	void* drm_info;
 
