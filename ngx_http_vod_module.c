@@ -27,6 +27,11 @@
 #include "vod/manifest_utils.h"
 #include "vod/thumb/thumb_grabber.h"
 
+// macros
+#define DEFINE_VAR(name) \
+	{ ngx_string("vod_" #name), ngx_http_vod_set_##name##_var }
+
+// constants
 #define OPEN_FILE_FALLBACK_ENABLED (0x80000000)
 #define MAX_STALE_RETRIES (2)
 
@@ -185,6 +190,12 @@ struct ngx_http_vod_ctx_s {
 	media_notification_t* notification;
 };
 
+// typedefs
+typedef struct {
+	ngx_str_t name;
+	ngx_http_get_variable_pt handler;
+} ngx_http_vod_variable_t;
+
 // forward declarations
 static ngx_int_t ngx_http_vod_run_state_machine(ngx_http_vod_ctx_t *ctx);
 static ngx_int_t ngx_http_vod_process_init(ngx_cycle_t *cycle);
@@ -251,14 +262,13 @@ static ngx_http_vod_reader_t reader_http = {
 
 ////// Variables
 
-ngx_int_t
+static ngx_int_t
 ngx_http_vod_set_filepath_var(ngx_http_request_t *r, ngx_http_variable_value_t *v, uintptr_t data)
 {
 	ngx_http_vod_ctx_t *ctx;
 	ngx_str_t* value;
 
 	ctx = ngx_http_get_module_ctx(r, ngx_http_vod_module);
-
 	if (ctx == NULL ||
 		ctx->cur_sequence < ctx->submodule_context.media_set.sequences ||
 		ctx->cur_sequence >= ctx->submodule_context.media_set.sequences_end)
@@ -283,14 +293,13 @@ ngx_http_vod_set_filepath_var(ngx_http_request_t *r, ngx_http_variable_value_t *
 	return NGX_OK;
 }
 
-ngx_int_t
+static ngx_int_t
 ngx_http_vod_set_suburi_var(ngx_http_request_t *r, ngx_http_variable_value_t *v, uintptr_t data)
 {
 	ngx_http_vod_ctx_t *ctx;
 	ngx_str_t* value;
 
 	ctx = ngx_http_get_module_ctx(r, ngx_http_vod_module);
-
 	if (ctx == NULL ||
 		ctx->cur_sequence < ctx->submodule_context.media_set.sequences ||
 		ctx->cur_sequence >= ctx->submodule_context.media_set.sequences_end)
@@ -315,14 +324,42 @@ ngx_http_vod_set_suburi_var(ngx_http_request_t *r, ngx_http_variable_value_t *v,
 	return NGX_OK;
 }
 
-ngx_int_t
+static ngx_int_t
+ngx_http_vod_set_set_id_var(ngx_http_request_t *r, ngx_http_variable_value_t *v, uintptr_t data)
+{
+	ngx_http_vod_ctx_t *ctx;
+	ngx_str_t* value;
+
+	ctx = ngx_http_get_module_ctx(r, ngx_http_vod_module);
+	if (ctx == NULL)
+	{
+		v->not_found = 1;
+		return NGX_OK;
+	}
+
+	value = &ctx->submodule_context.media_set.id;
+	if (value->len == 0)
+	{
+		v->not_found = 1;
+		return NGX_OK;
+	}
+
+	v->valid = 1;
+	v->no_cacheable = 1;
+	v->not_found = 0;
+	v->len = value->len;
+	v->data = value->data;
+
+	return NGX_OK;
+}
+
+static ngx_int_t
 ngx_http_vod_set_sequence_id_var(ngx_http_request_t *r, ngx_http_variable_value_t *v, uintptr_t data)
 {
 	ngx_http_vod_ctx_t *ctx;
 	ngx_str_t* value;
 
 	ctx = ngx_http_get_module_ctx(r, ngx_http_vod_module);
-
 	if (ctx == NULL ||
 		ctx->cur_sequence < ctx->submodule_context.media_set.sequences ||
 		ctx->cur_sequence >= ctx->submodule_context.media_set.sequences_end)
@@ -351,7 +388,7 @@ ngx_http_vod_set_sequence_id_var(ngx_http_request_t *r, ngx_http_variable_value_
 	return NGX_OK;
 }
 
-ngx_int_t
+static ngx_int_t
 ngx_http_vod_set_clip_id_var(ngx_http_request_t *r, ngx_http_variable_value_t *v, uintptr_t data)
 {
 	ngx_http_vod_ctx_t *ctx;
@@ -398,7 +435,7 @@ not_found:
 	return NGX_OK;
 }
 
-ngx_int_t
+static ngx_int_t
 ngx_http_vod_set_dynamic_mapping_var(ngx_http_request_t *r, ngx_http_variable_value_t *v, uintptr_t data)
 {
 	ngx_http_vod_ctx_t *ctx;
@@ -432,7 +469,7 @@ ngx_http_vod_set_dynamic_mapping_var(ngx_http_request_t *r, ngx_http_variable_va
 	return NGX_OK;
 }
 
-ngx_int_t
+static ngx_int_t
 ngx_http_vod_set_request_params_var(ngx_http_request_t *r, ngx_http_variable_value_t *v, uintptr_t data)
 {
 	request_params_t* request_params;
@@ -479,7 +516,7 @@ ngx_http_vod_set_request_params_var(ngx_http_request_t *r, ngx_http_variable_val
 	return NGX_OK;
 }
 
-ngx_int_t
+static ngx_int_t
 ngx_http_vod_set_notification_id_var(ngx_http_request_t *r, ngx_http_variable_value_t *v, uintptr_t data)
 {
 	ngx_http_vod_ctx_t *ctx;
@@ -498,6 +535,38 @@ ngx_http_vod_set_notification_id_var(ngx_http_request_t *r, ngx_http_variable_va
 	v->valid = 1;
 	v->no_cacheable = 1;
 	v->not_found = 0;
+
+	return NGX_OK;
+}
+
+static ngx_http_vod_variable_t ngx_http_vod_variables[] = {
+	DEFINE_VAR(filepath),
+	DEFINE_VAR(suburi),
+	DEFINE_VAR(set_id),
+	DEFINE_VAR(sequence_id),
+	DEFINE_VAR(clip_id),
+	DEFINE_VAR(dynamic_mapping),
+	DEFINE_VAR(request_params),
+	DEFINE_VAR(notification_id),
+};
+
+ngx_int_t
+ngx_http_vod_add_variables(ngx_conf_t *cf)
+{
+	ngx_http_vod_variable_t* vars_cur = ngx_http_vod_variables;
+	ngx_http_vod_variable_t* vars_end = vars_cur + vod_array_entries(ngx_http_vod_variables);
+	ngx_http_variable_t  *var;
+
+	for (; vars_cur < vars_end; vars_cur++)
+	{
+		var = ngx_http_add_variable(cf, &vars_cur->name, NGX_HTTP_VAR_NOCACHEABLE);
+		if (var == NULL)
+		{
+			return NGX_ERROR;
+		}
+
+		var->get_handler = vars_cur->handler;
+	}
 
 	return NGX_OK;
 }

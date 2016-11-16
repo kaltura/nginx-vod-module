@@ -14,6 +14,7 @@
 
 // typedefs
 enum {
+	MEDIA_SET_PARAM_ID,
 	MEDIA_SET_PARAM_DISCONTINUITY,
 	MEDIA_SET_PARAM_CONSISTENT_SEQUENCE_MEDIA_INFO,
 	MEDIA_SET_PARAM_DURATIONS,
@@ -122,6 +123,7 @@ static json_object_key_def_t media_clip_params[] = {
 };
 
 static json_object_key_def_t media_set_params[] = {
+	{ vod_string("id"),								VOD_JSON_STRING,MEDIA_SET_PARAM_ID },
 	{ vod_string("discontinuity"),					VOD_JSON_BOOL,	MEDIA_SET_PARAM_DISCONTINUITY },
 	{ vod_string("consistentSequenceMediaInfo"),	VOD_JSON_BOOL,	MEDIA_SET_PARAM_CONSISTENT_SEQUENCE_MEDIA_INFO },
 	{ vod_string("durations"),						VOD_JSON_ARRAY, MEDIA_SET_PARAM_DURATIONS },
@@ -1764,6 +1766,18 @@ media_set_parse_json(
 	result->uri = *uri;
 	result->timing.segment_base_time = SEGMENT_BASE_TIME_RELATIVE;
 	result->version = request_params->version;
+
+	if (params[MEDIA_SET_PARAM_ID] != NULL)
+	{
+		rc = media_set_parse_null_term_string(
+			&request_context,
+			params[MEDIA_SET_PARAM_ID],
+			&result->id);
+		if (rc != VOD_OK)
+		{
+			return rc;
+		}
+	}
 
 	if (params[MEDIA_SET_PARAM_DURATIONS] == NULL)
 	{

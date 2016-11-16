@@ -105,6 +105,7 @@ typedef struct {
 	struct segmenter_conf_s* segmenter_conf;
 	uint32_t version;
 
+	vod_str_t id;
 	uint32_t type;
 	media_clip_timing_t timing;
 	bool_t use_discontinuity;
