@@ -1064,10 +1064,17 @@ The name of the tracks request parameter.
 
 #### vod_speed_param_name
 * **syntax**: `vod_speed_param_name name`
-* **default**: `tracks`
+* **default**: `speed`
 * **context**: `http`, `server`, `location`
 
 The name of the speed request parameter.
+
+#### vod_lang_param_name
+* **syntax**: `vod_lang_param_name name`
+* **default**: `lang`
+* **context**: `http`, `server`, `location`
+
+The name of the language request parameter.
 
 ### Configuration directives - response headers
 
