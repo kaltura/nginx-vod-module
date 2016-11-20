@@ -19,14 +19,14 @@ typedef struct {
 	media_track_t* head;
 	media_track_t* tail;
 	uint32_t count;
-	ngx_queue_t list_node;
-	ngx_rbtree_node_t rbtree_node;
+	vod_queue_t list_node;
+	vod_rbtree_node_t rbtree_node;
 } track_group_t;
 
 typedef struct {
-	ngx_rbtree_t rbtree;
-	ngx_rbtree_node_t sentinel;
-	ngx_queue_t list;
+	vod_rbtree_t rbtree;
+	vod_rbtree_node_t sentinel;
+	vod_queue_t list;
 	uint32_t count;
 } track_groups_t;
 
@@ -406,7 +406,7 @@ track_group_key_init(
 static uint32_t
 track_group_key_get_hash(track_group_key_t* key)
 {
-	return key->codec_id + ngx_crc32_short(key->label.data, key->label.len);
+	return key->codec_id + vod_crc32_short(key->label.data, key->label.len);
 }
 
 static int
@@ -432,11 +432,11 @@ track_group_key_compare(track_group_key_t* key1, track_group_key_t* key2)
 
 static void
 track_group_rbtree_insert_value(
-	ngx_rbtree_node_t *temp,
-	ngx_rbtree_node_t *node,
-	ngx_rbtree_node_t *sentinel)
+	vod_rbtree_node_t *temp,
+	vod_rbtree_node_t *node,
+	vod_rbtree_node_t *sentinel)
 {
-	ngx_rbtree_node_t **p;
+	vod_rbtree_node_t **p;
 	track_group_t *n, *t;
 
 	for (;;)
@@ -466,15 +466,15 @@ track_group_rbtree_insert_value(
 	node->parent = temp;
 	node->left = sentinel;
 	node->right = sentinel;
-	ngx_rbt_red(node);
+	vod_rbt_red(node);
 }
 
 static track_group_t *
-track_group_rbtree_lookup(ngx_rbtree_t *rbtree, track_group_key_t* key, uint32_t hash)
+track_group_rbtree_lookup(vod_rbtree_t *rbtree, track_group_key_t* key, uint32_t hash)
 {
-	ngx_rbtree_node_t *node, *sentinel;
+	vod_rbtree_node_t *node, *sentinel;
 	track_group_t *n;
-	ngx_int_t rc;
+	vod_int_t rc;
 
 	node = rbtree->root;
 	sentinel = rbtree->sentinel;
@@ -535,8 +535,8 @@ track_group_create(
 	track->next = NULL;
 
 	// add to the groups
-	ngx_queue_insert_tail(&groups->list, &group->list_node);
-	ngx_rbtree_insert(&groups->rbtree, &group->rbtree_node);
+	vod_queue_insert_tail(&groups->list, &group->list_node);
+	vod_rbtree_insert(&groups->rbtree, &group->rbtree_node);
 	groups->count++;
 
 	return VOD_OK;
@@ -600,8 +600,8 @@ track_groups_init(
 	for (media_type = 0; media_type < MEDIA_TYPE_COUNT; media_type++)
 	{
 		groups = &result[media_type];
-		ngx_rbtree_init(&groups->rbtree, &groups->sentinel, track_group_rbtree_insert_value);
-		ngx_queue_init(&groups->list);
+		vod_rbtree_init(&groups->rbtree, &groups->sentinel, track_group_rbtree_insert_value);
+		vod_queue_init(&groups->list);
 		groups->count = 0;
 	}
 }
@@ -617,7 +617,7 @@ track_groups_from_media_set(
 	media_track_t* last_track;
 	media_track_t* cur_track;
 	track_groups_t* groups;
-	track_group_key_t key;
+	track_group_key_t key = { 0, vod_null_string };
 	track_group_t* group;
 	vod_status_t rc;
 	uint32_t cur_media_type;
@@ -681,10 +681,10 @@ track_groups_to_adaptation_sets(
 {
 	media_track_t** cur_track_ptr = *cur_track_ptr_arg;
 	track_group_t* group;
-	ngx_queue_t* list = &groups->list;
-	ngx_queue_t* node;
+	vod_queue_t* list = &groups->list;
+	vod_queue_t* node;
 
-	for (node = ngx_queue_head(list); node != list; node = node->next)
+	for (node = vod_queue_head(list); node != list; node = node->next)
 	{
 		group = vod_container_of(node, track_group_t, list_node);
 
@@ -888,7 +888,7 @@ manifest_utils_get_unmuxed_adaptation_sets(
 	{
 		// initialize the muxed adaptation set
 		first_audio_group = vod_container_of(
-			ngx_queue_head(&groups[MEDIA_TYPE_AUDIO].list), track_group_t, list_node);
+			vod_queue_head(&groups[MEDIA_TYPE_AUDIO].list), track_group_t, list_node);
 
 		output->first_by_type[ADAPTATION_TYPE_MUXED] = cur_adaptation_set;
 		rc = manifest_utils_get_muxed_adaptation_set(
@@ -902,7 +902,7 @@ manifest_utils_get_unmuxed_adaptation_sets(
 			return rc;
 		}
 		cur_adaptation_set++;
-		ngx_queue_remove(&first_audio_group->list_node);	// do not output this label separately
+		vod_queue_remove(&first_audio_group->list_node);	// do not output this label separately
 
 		// start from audio (video already added)
 		media_type = MEDIA_TYPE_AUDIO;
@@ -970,9 +970,9 @@ manifest_utils_get_adaptation_sets(
 
 		if (all_flags_set(flags, ADAPTATION_SETS_FLAG_MULTI_AUDIO | ADAPTATION_SETS_FLAG_DEFAULT_LANG_LAST))
 		{
-			ngx_queue_t* first = ngx_queue_head(&groups[MEDIA_TYPE_AUDIO].list);
-			ngx_queue_remove(first);
-			ngx_queue_insert_tail(&groups[MEDIA_TYPE_AUDIO].list, first);
+			vod_queue_t* first = vod_queue_head(&groups[MEDIA_TYPE_AUDIO].list);
+			vod_queue_remove(first);
+			vod_queue_insert_tail(&groups[MEDIA_TYPE_AUDIO].list, first);
 		}
 
 		rc = manifest_utils_get_unmuxed_adaptation_sets(

@@ -146,7 +146,6 @@ VOD_DEPS="$ngx_addon_dir/ngx_async_open_file_cache.h          \
           $ngx_addon_dir/vod/json_parser.h                    \
           $ngx_addon_dir/vod/language_code.h                  \
           $ngx_addon_dir/vod/languages_x.h                    \
-          $ngx_addon_dir/vod/list_entry.h                     \
           $ngx_addon_dir/vod/manifest_utils.h                 \
           $ngx_addon_dir/vod/media_clip.h                     \
           $ngx_addon_dir/vod/media_format.h                   \
