@@ -17,7 +17,7 @@ write_buffer_queue_init(
 	queue->write_context = write_context;
 	queue->reuse_buffers = reuse_buffers;
 
-	initialize_list_head(&queue->buffers);
+	vod_queue_init(&queue->buffers);
 	queue->cur_write_buffer = NULL;
 	queue->last_writer_context = NULL;
 	queue->cur_offset = 0;
@@ -63,7 +63,7 @@ write_buffer_queue_get_buffer(write_buffer_queue_t* queue, uint32_t size, void* 
 			return NULL;
 		}
 		write_buffer->start_pos = NULL;
-		insert_tail_list(&queue->buffers, &write_buffer->link);
+		vod_queue_insert_tail(&queue->buffers, &write_buffer->link);
 		queue->cur_write_buffer = write_buffer;
 	}
 
@@ -105,9 +105,9 @@ write_buffer_queue_send(write_buffer_queue_t* queue, off_t max_offset)
 	buffer_header_t* cur_buffer;
 	vod_status_t rc;
 
-	while (!is_list_empty(&queue->buffers))
+	while (!vod_queue_empty(&queue->buffers))
 	{
-		cur_buffer = (buffer_header_t*)queue->buffers.next;
+		cur_buffer = (buffer_header_t*)vod_queue_head(&queue->buffers);
 		if (cur_buffer->cur_pos <= cur_buffer->start_pos)
 		{
 			break;
@@ -118,7 +118,7 @@ write_buffer_queue_send(write_buffer_queue_t* queue, off_t max_offset)
 			break;
 		}
 
-		remove_entry_list(&cur_buffer->link);
+		vod_queue_remove(&cur_buffer->link);
 		if (cur_buffer == queue->cur_write_buffer)
 		{
 			queue->cur_write_buffer = NULL;
@@ -137,7 +137,7 @@ write_buffer_queue_send(write_buffer_queue_t* queue, off_t max_offset)
 			cur_buffer->start_pos = NULL;
 		}
 		cur_buffer->cur_pos = cur_buffer->start_pos;
-		insert_tail_list(&queue->buffers, &cur_buffer->link);
+		vod_queue_insert_tail(&queue->buffers, &cur_buffer->link);
 	}
 
 	return VOD_OK;
@@ -149,10 +149,10 @@ write_buffer_queue_flush(write_buffer_queue_t* queue)
 	buffer_header_t* cur_buffer;
 	vod_status_t rc;
 
-	while (!is_list_empty(&queue->buffers))
+	while (!vod_queue_empty(&queue->buffers))
 	{
-		cur_buffer = (buffer_header_t*)queue->buffers.next;
-		remove_entry_list(&cur_buffer->link);
+		cur_buffer = (buffer_header_t*)vod_queue_head(&queue->buffers);
+		vod_queue_remove(&cur_buffer->link);
 
 		if (cur_buffer->cur_pos <= cur_buffer->start_pos)
 		{

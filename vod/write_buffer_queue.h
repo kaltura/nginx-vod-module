@@ -2,12 +2,11 @@
 #define __WRITE_BUFFER_QUEUE_H__
 
 // includes
-#include "list_entry.h"
 #include "common.h"
 
 // typedefs
 typedef struct {
-	list_entry_t link;
+	vod_queue_t link;
 	u_char* start_pos;
 	u_char* cur_pos;
 	u_char* end_pos;
@@ -22,7 +21,7 @@ typedef struct {
 	void* write_context;
 	bool_t reuse_buffers;
 
-	list_entry_t buffers;
+	vod_queue_t buffers;
 	buffer_header_t* cur_write_buffer;
 
 	void* last_writer_context;

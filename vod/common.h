@@ -151,6 +151,18 @@ void vod_log_error(vod_uint_t level, vod_log_t *log, int err,
 #define vod_array_push_n(array, count) ngx_array_push_n(array, count)
 #define vod_array_destroy(a) ngx_array_destroy(array)
 
+// queue macros
+#define vod_queue_init(q) ngx_queue_init(q)
+#define vod_queue_empty(h) ngx_queue_empty(h)
+#define vod_queue_insert_tail(h, x) ngx_queue_insert_tail(h, x)
+#define vod_queue_head(h) ngx_queue_head(h)
+#define vod_queue_remove(x) ngx_queue_remove(x)
+
+// rbtree functions
+#define vod_rbtree_init(tree, s, i) ngx_rbtree_init(tree, s, i)
+#define vod_rbtree_insert(tree, node) ngx_rbtree_insert(tree, node)
+#define vod_rbt_red(node) ngx_rbt_red(node)
+
 // hash functions
 #define vod_hash(key, c) ngx_hash(key, c)
 #define vod_hash_key_lc ngx_hash_key_lc
@@ -188,6 +200,9 @@ void vod_log_error(vod_uint_t level, vod_log_t *log, int err,
 #define vod_buf_t ngx_buf_t
 #define vod_chain_t ngx_chain_t
 #define vod_tm_t ngx_tm_t
+#define vod_queue_t ngx_queue_t
+#define vod_rbtree_t ngx_rbtree_t
+#define vod_rbtree_node_t ngx_rbtree_node_t
 
 #define vod_string(str) ngx_string(str)
 #define vod_null_string ngx_null_string
@@ -195,6 +210,7 @@ void vod_log_error(vod_uint_t level, vod_log_t *log, int err,
 #define vod_decode_base64(binary, base64) ngx_decode_base64(binary, base64)
 #define vod_base64_encoded_length(len) ngx_base64_encoded_length(len)
 #define vod_base64_decoded_length(len) ngx_base64_decoded_length(len)
+#define vod_crc32_short(p, len) ngx_crc32_short(p, len)
 
 #define VOD_LOG_STDERR            NGX_LOG_STDERR 
 #define VOD_LOG_EMERG             NGX_LOG_EMERG  
