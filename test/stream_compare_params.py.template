@@ -4,3 +4,13 @@ URL1_BASE = ['http://localhost:8001']
 URL2_BASE = ['http://localhost:8001']
 
 EXTRA_HEADERS = {}
+
+LOG_LEVEL = {
+                "UrlCompareLog": True
+            }
+
+CHUNK_LIST_ITEMS_TO_COMPARE = 0 #0 is all
+
+URL_COMPARE_RETRIES = 3
+
+URL_COMPARE_RETRIES_SLEEP_INTERVAL = 5
