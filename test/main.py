@@ -18,8 +18,6 @@ from main_params import *
 
 MSS_BITRATE = 0x41000        # actual bitrate does not matter, only the file index & stream index (both 0)
 
-RUN_ONLY_PATH = ''       # use for running only some tests, e.g. MainTestSuite.RemoteTestSuite.MemoryUpstreamTestSuite
-
 # nginx config derivatives
 NGINX_LOG_PATH = '/var/log/nginx/error.log'
 NGINX_HOST = 'http://localhost:8001'
@@ -277,42 +275,47 @@ def sendHttp10Request(url):
     s.close()
     return result
 
-def serveFileHandler(s, path, mimeType, headers):
+def serveFileHandler(s, path, mimeType, headers, maxSize = -1):
+    if maxSize < 0:
+        maxSize = os.path.getsize(path)
+
     # handle head
     if headers.startswith('HEAD'):
-        socketSendAndShutdown(s, getHttpResponse(length=os.path.getsize(path), headers={'Content-Type':mimeType}))
+        socketSendAndShutdown(s, getHttpResponse(length=maxSize, headers={'Content-Type':mimeType}))
         return
     
     # get the request body
     f = file(path, 'rb')
-    fileSize = os.path.getsize(path)
     range = getHttpHeader(headers, 'range')
     if range != None:
         assertStartsWith(range, 'bytes=')
         range = range.split('=', 1)[1].strip()
         if range.endswith('-'):
             startOffset = int(range[:-1].strip())
-            endOffset = fileSize - 1
+            endOffset = maxSize
         elif range.startswith('-'):
-            startOffset = fileSize - int(range[1:].strip())
-            endOffset = fileSize - 1
+            startOffset = maxSize - int(range[1:].strip())
+            endOffset = maxSize
         else:
             startOffset, endOffset = map(lambda x: int(x.strip()), range.split('-', 1))
+            endOffset += 1
+        startOffset = min(startOffset, maxSize)
+        endOffset = min(endOffset, maxSize)
         f.seek(startOffset, os.SEEK_SET)
-        body = f.read(endOffset - startOffset + 1)
+        body = f.read(endOffset - startOffset)
         status = '206 Partial Content'
     else:
-        body = f.read()
+        body = f.read(maxSize)
         status = '200 OK'
     f.close()
 
     # build the response
     socketSendAndShutdown(s, getHttpResponse(body, status, headers={'Content-Type':mimeType}))
 
-def serveFile(s, path, mimeType):
+def serveFile(s, path, mimeType, maxSize = -1):
     try:
         headers = socketReadHttpHeaders(s)
-        serveFileHandler(s, path, mimeType, headers)
+        serveFileHandler(s, path, mimeType, headers, maxSize)
     except SocketException:
         pass
     except IOError:
@@ -989,7 +992,7 @@ class RemoteTestSuite(ModeTestSuite):
         self.logTracker.assertContains('read failed')
 
     def testZeroBytesRead(self):
-        TcpServer(API_SERVER_PORT, lambda s: socketSendAndShutdown(s, getHttpResponse('')))
+        TcpServer(API_SERVER_PORT, lambda s: serveFile(s, TEST_FILES_ROOT + TEST_FLAVOR_FILE, TEST_FILE_TYPE, 4096))
         assertRequestFails(self.getUrl(HLS_PREFIX, HLS_PLAYLIST_FILE), 404)
         self.logTracker.assertContains('bytes read is zero')
 
