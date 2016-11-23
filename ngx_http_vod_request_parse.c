@@ -828,7 +828,7 @@ ngx_http_vod_extract_uri_params(
 						&rate_filter);
 					if (rc != VOD_OK)
 					{
-						return ngx_http_vod_status_to_ngx_error(r, VOD_BAD_REQUEST);
+						return ngx_http_vod_status_to_ngx_error(r, rc);
 					}
 
 					if (rate_filter->rate.num != rate_filter->rate.denom)
@@ -900,6 +900,8 @@ ngx_http_vod_parse_uri_path(
 	int uri_count;
 
 	media_set->uri = *uri;		// must save the uri before calling ngx_http_vod_parse_multi_uri as it may change
+
+	multi_uri.parts_count = 0;
 
 	rc = ngx_http_vod_parse_multi_uri(r, uri, multi_uri_suffix, &multi_uri);
 	if (rc != NGX_OK)
