@@ -48,7 +48,7 @@ ngx_http_vod_hds_handle_manifest(
 	{
 		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, submodule_context->request_context.log, 0,
 			"ngx_http_vod_hds_handle_manifest: hds_packager_build_manifest failed %i", rc);
-		return ngx_http_vod_status_to_ngx_error(submodule_context, rc);
+		return ngx_http_vod_status_to_ngx_error(submodule_context->r, rc);
 	}
 
 	content_type->data = f4m_content_type;
@@ -73,7 +73,7 @@ ngx_http_vod_hds_handle_bootstrap(
 	{
 		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, submodule_context->request_context.log, 0,
 			"ngx_http_vod_hds_handle_bootstrap: hds_packager_build_bootstrap failed %i", rc);
-		return ngx_http_vod_status_to_ngx_error(submodule_context, rc);
+		return ngx_http_vod_status_to_ngx_error(submodule_context->r, rc);
 	}
 
 	content_type->data = abst_content_type;
@@ -126,7 +126,7 @@ ngx_http_vod_hds_init_frame_processor(
 	{
 		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, submodule_context->request_context.log, 0,
 			"ngx_http_vod_hds_init_frame_processor: hds_muxer_init_fragment failed %i", rc);
-		return ngx_http_vod_status_to_ngx_error(submodule_context, rc);
+		return ngx_http_vod_status_to_ngx_error(submodule_context->r, rc);
 	}
 
 	*frame_processor = (ngx_http_vod_frame_processor_t)hds_muxer_process_frames;
@@ -224,7 +224,7 @@ ngx_http_vod_hds_parse_uri_file_name(
 		{
 			ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
 				"ngx_http_vod_hds_parse_uri_file_name: failed to parse fragment index");
-			return NGX_HTTP_BAD_REQUEST;
+			return ngx_http_vod_status_to_ngx_error(r, VOD_BAD_REQUEST);
 		}
 
 		request_params->segment_index--;		// convert to 0-based
@@ -236,7 +236,7 @@ ngx_http_vod_hds_parse_uri_file_name(
 		{
 			ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
 				"ngx_http_vod_hds_parse_uri_file_name: invalid segment / fragment requested");
-			return NGX_HTTP_BAD_REQUEST;
+			return ngx_http_vod_status_to_ngx_error(r, VOD_BAD_REQUEST);
 		}
 
 		*request = &hds_fragment_request;
@@ -260,7 +260,7 @@ ngx_http_vod_hds_parse_uri_file_name(
 	{
 		ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
 			"ngx_http_vod_hds_parse_uri_file_name: unidentified request");
-		return NGX_HTTP_BAD_REQUEST;
+		return ngx_http_vod_status_to_ngx_error(r, VOD_BAD_REQUEST);
 	}
 
 	// parse the required tracks string

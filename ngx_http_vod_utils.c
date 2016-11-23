@@ -77,7 +77,7 @@ ngx_http_vod_send_response(ngx_http_request_t *r, ngx_str_t *response, ngx_str_t
 	{
 		ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
 			"ngx_http_vod_send_response: ngx_pcalloc failed");
-		return NGX_HTTP_INTERNAL_SERVER_ERROR;
+		return ngx_http_vod_status_to_ngx_error(r, VOD_ALLOC_FAILED);
 	}
 
 	b->pos = response->data;
@@ -106,7 +106,7 @@ ngx_http_vod_send_response(ngx_http_request_t *r, ngx_str_t *response, ngx_str_t
 
 ngx_int_t 
 ngx_http_vod_status_to_ngx_error(
-	ngx_http_vod_submodule_context_t* submodule_context, 
+	ngx_http_request_t* r, 
 	vod_status_t rc)
 {
 	ngx_http_variable_value_t *vv;
@@ -122,7 +122,7 @@ ngx_http_vod_status_to_ngx_error(
 	// update the status variable
 	// Note: need to explicitly set the value (instead of calculating it in get_handler)
 	//		so that it won't get lost in case of a redirect to an error page
-	vv = &submodule_context->r->variables[ngx_http_vod_status_index];
+	vv = &r->variables[ngx_http_vod_status_index];
 
 	vv->valid = 1;
 	vv->not_found = 0;
@@ -307,7 +307,7 @@ ngx_http_vod_merge_string_parts(ngx_http_request_t* r, ngx_str_t* parts, uint32_
 	{
 		ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
 			"ngx_http_vod_merge_string_parts: ngx_palloc failed");
-		return NGX_HTTP_INTERNAL_SERVER_ERROR;
+		return ngx_http_vod_status_to_ngx_error(r, VOD_ALLOC_FAILED);
 	}
 
 	result->data = p;
