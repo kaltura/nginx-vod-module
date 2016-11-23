@@ -66,7 +66,7 @@ ngx_http_vod_mss_handle_manifest(
 	{
 		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, submodule_context->request_context.log, 0,
 			"ngx_http_vod_mss_handle_manifest: mss_packager_build_manifest failed %i", rc);
-		return ngx_http_vod_status_to_ngx_error(rc);
+		return ngx_http_vod_status_to_ngx_error(submodule_context, rc);
 	}
 
 	content_type->data = manifest_content_type;
@@ -110,7 +110,7 @@ ngx_http_vod_mss_init_frame_processor(
 		{
 			ngx_log_debug1(NGX_LOG_DEBUG_HTTP, submodule_context->request_context.log, 0,
 				"ngx_http_vod_mss_init_frame_processor: mss_playready_get_fragment_writer failed %i", rc);
-			return ngx_http_vod_status_to_ngx_error(rc);
+			return ngx_http_vod_status_to_ngx_error(submodule_context, rc);
 		}
 
 		if (drm_writer.write_tail != NULL)
@@ -135,7 +135,7 @@ ngx_http_vod_mss_init_frame_processor(
 		{
 			ngx_log_debug1(NGX_LOG_DEBUG_HTTP, submodule_context->request_context.log, 0,
 				"ngx_http_vod_mss_init_frame_processor: mss_packager_build_fragment_header failed %i", rc);
-			return ngx_http_vod_status_to_ngx_error(rc);
+			return ngx_http_vod_status_to_ngx_error(submodule_context, rc);
 		}
 	}
 
@@ -152,7 +152,7 @@ ngx_http_vod_mss_init_frame_processor(
 		{
 			ngx_log_debug1(NGX_LOG_DEBUG_HTTP, submodule_context->request_context.log, 0,
 				"ngx_http_vod_mss_init_frame_processor: mp4_builder_frame_writer_init failed %i", rc);
-			return ngx_http_vod_status_to_ngx_error(rc);
+			return ngx_http_vod_status_to_ngx_error(submodule_context, rc);
 		}
 
 		*frame_processor = (ngx_http_vod_frame_processor_t)mp4_builder_frame_writer_process;
@@ -192,7 +192,7 @@ ngx_http_vod_mss_handle_ttml_fragment(
 	{
 		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, submodule_context->request_context.log, 0,
 			"ngx_http_vod_mss_handle_ttml_fragment: ttml_build_mp4 failed %i", rc);
-		return ngx_http_vod_status_to_ngx_error(rc);
+		return ngx_http_vod_status_to_ngx_error(submodule_context, rc);
 	}
 
 	content_type->len = sizeof(mp4_video_content_type) - 1;

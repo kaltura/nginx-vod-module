@@ -828,7 +828,7 @@ ngx_http_vod_extract_uri_params(
 						&rate_filter);
 					if (rc != VOD_OK)
 					{
-						return ngx_http_vod_status_to_ngx_error(rc);
+						return NGX_HTTP_BAD_REQUEST;
 					}
 
 					if (rate_filter->rate.num != rate_filter->rate.denom)

@@ -115,7 +115,7 @@ ngx_http_vod_hls_handle_master_playlist(
 	{
 		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, submodule_context->request_context.log, 0,
 			"ngx_http_vod_hls_handle_master_playlist: m3u8_builder_build_master_playlist failed %i", rc);
-		return ngx_http_vod_status_to_ngx_error(rc);
+		return ngx_http_vod_status_to_ngx_error(submodule_context, rc);
 	}
 
 	content_type->data = m3u8_content_type;
@@ -198,7 +198,7 @@ ngx_http_vod_hls_handle_index_playlist(
 	{
 		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, submodule_context->request_context.log, 0,
 			"ngx_http_vod_hls_handle_index_playlist: m3u8_builder_build_index_playlist failed %i", rc);
-		return ngx_http_vod_status_to_ngx_error(rc);
+		return ngx_http_vod_status_to_ngx_error(submodule_context, rc);
 	}
 
 	content_type->data = m3u8_content_type;
@@ -221,14 +221,14 @@ ngx_http_vod_hls_handle_iframe_playlist(
 	{
 		ngx_log_error(NGX_LOG_ERR, submodule_context->request_context.log, 0,
 			"ngx_http_vod_hls_handle_iframe_playlist: iframes playlist not supported with encryption");
-		return NGX_HTTP_BAD_REQUEST;
+		return ngx_http_vod_status_to_ngx_error(submodule_context, VOD_BAD_REQUEST);
 	}
 
 	if (submodule_context->media_set.audio_filtering_needed)
 	{
 		ngx_log_error(NGX_LOG_ERR, submodule_context->request_context.log, 0,
 			"ngx_http_vod_hls_handle_iframe_playlist: iframes playlist not supported with audio filtering");
-		return NGX_HTTP_BAD_REQUEST;
+		return ngx_http_vod_status_to_ngx_error(submodule_context, VOD_BAD_REQUEST);
 	}
 
 	if (conf->hls.absolute_iframe_urls)
@@ -252,7 +252,7 @@ ngx_http_vod_hls_handle_iframe_playlist(
 	{
 		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, submodule_context->request_context.log, 0,
 			"ngx_http_vod_hls_handle_iframe_playlist: m3u8_builder_build_iframe_playlist failed %i", rc);
-		return ngx_http_vod_status_to_ngx_error(rc);
+		return ngx_http_vod_status_to_ngx_error(submodule_context, rc);
 	}
 
 	content_type->data = m3u8_content_type;
@@ -274,7 +274,7 @@ ngx_http_vod_hls_handle_encryption_key(
 	{
 		ngx_log_debug0(NGX_LOG_DEBUG_HTTP, submodule_context->request_context.log, 0,
 			"ngx_http_vod_hls_handle_encryption_key: ngx_palloc failed");
-		return NGX_HTTP_INTERNAL_SERVER_ERROR;
+		return ngx_http_vod_status_to_ngx_error(submodule_context, VOD_ALLOC_FAILED);
 	}
 
 	ngx_memcpy(encryption_key, submodule_context->media_set.sequences[0].encryption_key, BUFFER_CACHE_KEY_SIZE);
@@ -320,7 +320,7 @@ ngx_http_vod_hls_init_ts_frame_processor(
 	{
 		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, submodule_context->request_context.log, 0,
 			"ngx_http_vod_hls_init_ts_frame_processor: hls_muxer_init failed %i", rc);
-		return ngx_http_vod_status_to_ngx_error(rc);
+		return ngx_http_vod_status_to_ngx_error(submodule_context, rc);
 	}
 
 	*frame_processor = (ngx_http_vod_frame_processor_t)hls_muxer_process;
@@ -348,7 +348,7 @@ ngx_http_vod_hls_handle_vtt_segment(
 	{
 		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, submodule_context->request_context.log, 0,
 			"ngx_http_vod_hls_handle_vtt_segment: webvtt_builder_build failed %i", rc);
-		return ngx_http_vod_status_to_ngx_error(rc);
+		return ngx_http_vod_status_to_ngx_error(submodule_context, rc);
 	}
 
 	content_type->len = sizeof(vtt_content_type) - 1;

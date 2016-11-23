@@ -91,7 +91,7 @@ ngx_http_vod_dash_handle_manifest(
 	{
 		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, submodule_context->request_context.log, 0,
 			"ngx_http_vod_dash_handle_manifest: (e)dash_packager_build_mpd failed %i", rc);
-		return ngx_http_vod_status_to_ngx_error(rc);
+		return ngx_http_vod_status_to_ngx_error(submodule_context, rc);
 	}
 
 	content_type->data = mpd_content_type;
@@ -133,7 +133,7 @@ ngx_http_vod_dash_mp4_handle_init_segment(
 	{
 		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, submodule_context->request_context.log, 0,
 			"ngx_http_vod_dash_mp4_handle_init_segment: (e)dash_packager_build_init_mp4 failed %i", rc);
-		return ngx_http_vod_status_to_ngx_error(rc);
+		return ngx_http_vod_status_to_ngx_error(submodule_context, rc);
 	}
 
 	if (submodule_context->media_set.track_count[MEDIA_TYPE_VIDEO] != 0)
@@ -187,7 +187,7 @@ ngx_http_vod_dash_mp4_init_frame_processor(
 		{
 			ngx_log_debug1(NGX_LOG_DEBUG_HTTP, submodule_context->request_context.log, 0,
 				"ngx_http_vod_dash_mp4_init_frame_processor: edash_packager_get_fragment_writer failed %i", rc);
-			return ngx_http_vod_status_to_ngx_error(rc);
+			return ngx_http_vod_status_to_ngx_error(submodule_context, rc);
 		}
 
 		if (edash_writer.write_tail != NULL)
@@ -214,7 +214,7 @@ ngx_http_vod_dash_mp4_init_frame_processor(
 		{
 			ngx_log_debug1(NGX_LOG_DEBUG_HTTP, submodule_context->request_context.log, 0,
 				"ngx_http_vod_dash_mp4_init_frame_processor: dash_packager_build_fragment_header failed %i", rc);
-			return ngx_http_vod_status_to_ngx_error(rc);
+			return ngx_http_vod_status_to_ngx_error(submodule_context, rc);
 		}
 	}
 
@@ -232,7 +232,7 @@ ngx_http_vod_dash_mp4_init_frame_processor(
 		{
 			ngx_log_debug1(NGX_LOG_DEBUG_HTTP, submodule_context->request_context.log, 0,
 				"ngx_http_vod_dash_mp4_init_frame_processor: mp4_builder_frame_writer_init failed %i", rc);
-			return ngx_http_vod_status_to_ngx_error(rc);
+			return ngx_http_vod_status_to_ngx_error(submodule_context, rc);
 		}
 
 		*frame_processor = (ngx_http_vod_frame_processor_t)mp4_builder_frame_writer_process;
@@ -282,7 +282,7 @@ ngx_http_vod_dash_webm_handle_init_segment(
 	{
 		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, submodule_context->request_context.log, 0,
 			"ngx_http_vod_dash_webm_handle_init_segment: mkv_build_init_segment failed %i", rc);
-		return ngx_http_vod_status_to_ngx_error(rc);
+		return ngx_http_vod_status_to_ngx_error(submodule_context, rc);
 	}
 
 	if (submodule_context->media_set.track_count[MEDIA_TYPE_VIDEO] != 0)
@@ -344,7 +344,7 @@ ngx_http_vod_dash_webm_init_frame_processor(
 	{
 		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, submodule_context->request_context.log, 0,
 			"ngx_http_vod_dash_webm_init_frame_processor: mkv_builder_frame_writer_init failed %i", rc);
-		return ngx_http_vod_status_to_ngx_error(rc);
+		return ngx_http_vod_status_to_ngx_error(submodule_context, rc);
 	}
 
 	*frame_processor = (ngx_http_vod_frame_processor_t)mkv_builder_frame_writer_process;
@@ -380,7 +380,7 @@ ngx_http_vod_dash_handle_vtt_file(
 	{
 		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, submodule_context->request_context.log, 0,
 			"ngx_http_vod_dash_handle_vtt_file: webvtt_builder_build failed %i", rc);
-		return ngx_http_vod_status_to_ngx_error(rc);
+		return ngx_http_vod_status_to_ngx_error(submodule_context, rc);
 	}
 
 	content_type->len = sizeof(vtt_content_type) - 1;

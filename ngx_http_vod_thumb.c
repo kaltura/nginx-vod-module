@@ -34,7 +34,7 @@ ngx_http_vod_thumb_init_frame_processor(
 	{
 		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, submodule_context->request_context.log, 0,
 			"ngx_http_vod_thumb_init_frame_processor: thumb_grabber_init_state failed %i", rc);
-		return ngx_http_vod_status_to_ngx_error(rc);
+		return ngx_http_vod_status_to_ngx_error(submodule_context, rc);
 	}
 
 	*frame_processor = (ngx_http_vod_frame_processor_t)thumb_grabber_process;
@@ -147,7 +147,7 @@ ngx_http_vod_thumb_parse_drm_info(
 {
 	ngx_log_error(NGX_LOG_ERR, submodule_context->request_context.log, 0,
 		"ngx_http_vod_thumb_parse_drm_info: unexpected - drm enabled on thumbnail request");
-	return NGX_HTTP_BAD_REQUEST;
+	return ngx_http_vod_status_to_ngx_error(submodule_context, VOD_BAD_REQUEST);
 }
 
 DEFINE_SUBMODULE(thumb);

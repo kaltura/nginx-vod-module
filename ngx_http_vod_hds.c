@@ -48,7 +48,7 @@ ngx_http_vod_hds_handle_manifest(
 	{
 		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, submodule_context->request_context.log, 0,
 			"ngx_http_vod_hds_handle_manifest: hds_packager_build_manifest failed %i", rc);
-		return ngx_http_vod_status_to_ngx_error(rc);
+		return ngx_http_vod_status_to_ngx_error(submodule_context, rc);
 	}
 
 	content_type->data = f4m_content_type;
@@ -73,7 +73,7 @@ ngx_http_vod_hds_handle_bootstrap(
 	{
 		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, submodule_context->request_context.log, 0,
 			"ngx_http_vod_hds_handle_bootstrap: hds_packager_build_bootstrap failed %i", rc);
-		return ngx_http_vod_status_to_ngx_error(rc);
+		return ngx_http_vod_status_to_ngx_error(submodule_context, rc);
 	}
 
 	content_type->data = abst_content_type;
@@ -126,7 +126,7 @@ ngx_http_vod_hds_init_frame_processor(
 	{
 		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, submodule_context->request_context.log, 0,
 			"ngx_http_vod_hds_init_frame_processor: hds_muxer_init_fragment failed %i", rc);
-		return ngx_http_vod_status_to_ngx_error(rc);
+		return ngx_http_vod_status_to_ngx_error(submodule_context, rc);
 	}
 
 	*frame_processor = (ngx_http_vod_frame_processor_t)hds_muxer_process_frames;

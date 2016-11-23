@@ -1499,6 +1499,16 @@ The module adds the following nginx variables:
   1. The segment index (for a segment request)
   2. The sequence index
   3. A selection of audio/video tracks
+* `$vod_status` - the internal error code of the module, provides a more fine grained classification of errors than http status.
+	the following values are defined:
+	`BAD_REQUEST` - the request is invalid, for example, `clipFrom` is larger than the video duration
+	`NO_STREAMS` - an invalid segment index was requested
+	`EMPTY_MAPPING` - the mapping response is empty
+	`BAD_MAPPING` - the mapping json is invalid, for example, the `sequences` element is missing
+	`BAD_DATA` - the video file is corrupt
+	`EXPIRED` - the current server time is larger than `expirationTime`
+	`ALLOC_FAILED` - the module failed to allocate memory
+	`UNEXPECTED` - a scenario that is not supposed to happen, most likely a bug in the module
   
 Note: Configuration directives that can accept variables are explicitly marked as such.
 
