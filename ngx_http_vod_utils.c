@@ -7,8 +7,29 @@ static const ngx_int_t error_map[VOD_ERROR_LAST - VOD_ERROR_FIRST] = {
 	NGX_HTTP_BAD_REQUEST,			// VOD_BAD_REQUEST
 	NGX_HTTP_SERVICE_UNAVAILABLE,	// VOD_BAD_MAPPING
 	NGX_HTTP_NOT_FOUND,				// VOD_EXPIRED
+	NGX_HTTP_NOT_FOUND,				// VOD_NO_STREAMS
+	NGX_HTTP_NOT_FOUND,				// VOD_EMPTY_MAPPING
 	NGX_HTTP_INTERNAL_SERVER_ERROR, // VOD_NOT_FOUND (not expected to reach top level)
 };
+
+static ngx_str_t error_codes[VOD_ERROR_LAST - VOD_ERROR_FIRST] = {
+	ngx_string("BAD_DATA"),
+	ngx_string("ALLOC_FAILED"),
+	ngx_string("UNEXPECTED"),
+	ngx_string("BAD_REQUEST"),
+	ngx_string("BAD_MAPPING"),
+	ngx_string("EXPIRED"),
+	ngx_string("NO_STREAMS"),
+	ngx_string("EMPTY_MAPPING"),
+	ngx_string("UNEXPECTED"),
+};
+
+static ngx_uint_t ngx_http_vod_status_index;
+
+void ngx_http_vod_set_status_index(ngx_uint_t index)
+{
+	ngx_http_vod_status_index = index;
+}
 
 ngx_int_t
 ngx_http_vod_send_response(ngx_http_request_t *r, ngx_str_t *response, ngx_str_t* content_type)
@@ -56,7 +77,7 @@ ngx_http_vod_send_response(ngx_http_request_t *r, ngx_str_t *response, ngx_str_t
 	{
 		ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
 			"ngx_http_vod_send_response: ngx_pcalloc failed");
-		return NGX_HTTP_INTERNAL_SERVER_ERROR;
+		return ngx_http_vod_status_to_ngx_error(r, VOD_ALLOC_FAILED);
 	}
 
 	b->pos = response->data;
@@ -84,14 +105,33 @@ ngx_http_vod_send_response(ngx_http_request_t *r, ngx_str_t *response, ngx_str_t
 }
 
 ngx_int_t 
-ngx_http_vod_status_to_ngx_error(vod_status_t rc)
+ngx_http_vod_status_to_ngx_error(
+	ngx_http_request_t* r, 
+	vod_status_t rc)
 {
-	if (rc >= VOD_ERROR_FIRST && rc < VOD_ERROR_LAST)
-	{
-		return error_map[rc - VOD_ERROR_FIRST];
-	}
+	ngx_http_variable_value_t *vv;
+	ngx_int_t index;
 
-	return NGX_HTTP_INTERNAL_SERVER_ERROR;
+	if (rc < VOD_ERROR_FIRST || rc >= VOD_ERROR_LAST)
+	{
+		return NGX_HTTP_INTERNAL_SERVER_ERROR;
+	}
+	
+	index = rc - VOD_ERROR_FIRST;
+
+	// update the status variable
+	// Note: need to explicitly set the value (instead of calculating it in get_handler)
+	//		so that it won't get lost in case of a redirect to an error page
+	vv = &r->variables[ngx_http_vod_status_index];
+
+	vv->valid = 1;
+	vv->not_found = 0;
+	vv->no_cacheable = 0;
+
+	vv->data = error_codes[index].data;
+	vv->len = error_codes[index].len;
+
+	return error_map[index];
 }
 
 ngx_flag_t
@@ -267,7 +307,7 @@ ngx_http_vod_merge_string_parts(ngx_http_request_t* r, ngx_str_t* parts, uint32_
 	{
 		ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
 			"ngx_http_vod_merge_string_parts: ngx_palloc failed");
-		return NGX_HTTP_INTERNAL_SERVER_ERROR;
+		return ngx_http_vod_status_to_ngx_error(r, VOD_ALLOC_FAILED);
 	}
 
 	result->data = p;

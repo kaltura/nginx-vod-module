@@ -8,9 +8,13 @@
 #include "vod/common.h"
 
 // functions
+void ngx_http_vod_set_status_index(ngx_uint_t index);
+
 ngx_int_t ngx_http_vod_send_response(ngx_http_request_t *r, ngx_str_t *response, ngx_str_t* content_type);
 
-ngx_int_t ngx_http_vod_status_to_ngx_error(vod_status_t rc);
+ngx_int_t ngx_http_vod_status_to_ngx_error(
+	ngx_http_request_t* r,
+	vod_status_t rc);
 
 ngx_flag_t ngx_http_vod_header_exists(ngx_http_request_t* r, ngx_str_t* searched_header);
 

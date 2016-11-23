@@ -264,6 +264,14 @@ static ngx_http_vod_reader_t reader_http = {
 ////// Variables
 
 static ngx_int_t
+ngx_http_vod_set_status_var(ngx_http_request_t *r, ngx_http_variable_value_t *v, uintptr_t data)
+{
+	// this variable is explicitly set when an error is mapped, if we got here, there's no value
+	v->not_found = 1;
+	return NGX_OK;
+}
+
+static ngx_int_t
 ngx_http_vod_set_filepath_var(ngx_http_request_t *r, ngx_http_variable_value_t *v, uintptr_t data)
 {
 	ngx_http_vod_ctx_t *ctx;
@@ -541,6 +549,7 @@ ngx_http_vod_set_notification_id_var(ngx_http_request_t *r, ngx_http_variable_va
 }
 
 static ngx_http_vod_variable_t ngx_http_vod_variables[] = {
+	DEFINE_VAR(status),
 	DEFINE_VAR(filepath),
 	DEFINE_VAR(suburi),
 	DEFINE_VAR(set_id),
@@ -557,6 +566,7 @@ ngx_http_vod_add_variables(ngx_conf_t *cf)
 	ngx_http_vod_variable_t* vars_cur = ngx_http_vod_variables;
 	ngx_http_vod_variable_t* vars_end = vars_cur + vod_array_entries(ngx_http_vod_variables);
 	ngx_http_variable_t  *var;
+	ngx_int_t rc;
 
 	for (; vars_cur < vars_end; vars_cur++)
 	{
@@ -568,6 +578,14 @@ ngx_http_vod_add_variables(ngx_conf_t *cf)
 
 		var->get_handler = vars_cur->handler;
 	}
+
+	rc = ngx_http_get_variable_index(cf, &ngx_http_vod_variables[0].name);
+	if (rc == NGX_ERROR) 
+	{
+		return NGX_ERROR;
+	}
+
+	ngx_http_vod_set_status_index(rc);
 
 	return NGX_OK;
 }
@@ -947,7 +965,7 @@ ngx_http_vod_alloc_read_buffer(ngx_http_vod_ctx_t *ctx, size_t size, int alloc_p
 		{
 			ngx_log_debug1(NGX_LOG_DEBUG_HTTP, ctx->submodule_context.request_context.log, 0,
 				"ngx_http_vod_alloc_read_buffer: failed to allocate read buffer of size %uz", size);
-			return NGX_HTTP_INTERNAL_SERVER_ERROR;
+			return ngx_http_vod_status_to_ngx_error(ctx->submodule_context.r, VOD_ALLOC_FAILED);
 		}
 
 		ctx->read_buffer.start = start;
@@ -1212,7 +1230,7 @@ ngx_http_vod_parse_metadata(
 		{
 			ngx_log_error(NGX_LOG_ERR, request_context->log, 0,
 				"ngx_http_vod_parse_metadata: clip from value %uL too large", cur_source->clip_from);
-			return NGX_HTTP_BAD_REQUEST;
+			return ngx_http_vod_status_to_ngx_error(ctx->submodule_context.r, VOD_BAD_REQUEST);
 		}
 
 		parse_params.clip_to = UINT_MAX;
@@ -1223,7 +1241,7 @@ ngx_http_vod_parse_metadata(
 		{
 			ngx_log_error(NGX_LOG_ERR, request_context->log, 0,
 				"ngx_http_vod_parse_metadata: clip to value %uL too large", cur_source->clip_to);
-			return NGX_HTTP_BAD_REQUEST;
+			return ngx_http_vod_status_to_ngx_error(ctx->submodule_context.r, VOD_BAD_REQUEST);
 		}
 
 		parse_params.clip_to = cur_source->clip_to;
@@ -1238,7 +1256,7 @@ ngx_http_vod_parse_metadata(
 		{
 			ngx_log_error(NGX_LOG_ERR, request_context->log, 0,
 				"ngx_http_vod_parse_metadata: clipping not supported for %V", &ctx->format->name);
-			return NGX_HTTP_BAD_REQUEST;
+			return ngx_http_vod_status_to_ngx_error(ctx->submodule_context.r, VOD_BAD_REQUEST);
 		}
 
 		rc = ctx->format->clipper_parse(
@@ -1252,7 +1270,7 @@ ngx_http_vod_parse_metadata(
 		{
 			ngx_log_debug2(NGX_LOG_DEBUG_HTTP, request_context->log, 0,
 				"ngx_http_vod_parse_metadata: clipper_parse(%V) failed %i", &ctx->format->name, rc);
-			return ngx_http_vod_status_to_ngx_error(rc);
+			return ngx_http_vod_status_to_ngx_error(ctx->submodule_context.r, rc);
 		}
 
 		return NGX_OK;
@@ -1303,7 +1321,7 @@ ngx_http_vod_parse_metadata(
 	{
 		ngx_log_debug2(NGX_LOG_DEBUG_HTTP, request_context->log, 0,
 			"ngx_http_vod_parse_metadata: parse_metadata(%V) failed %i", &ctx->format->name, rc);
-		return ngx_http_vod_status_to_ngx_error(rc);
+		return ngx_http_vod_status_to_ngx_error(ctx->submodule_context.r, rc);
 	}
 
 	if (ctx->base_metadata->tracks.nelts == 0)
@@ -1403,7 +1421,7 @@ ngx_http_vod_parse_metadata(
 			{
 				ngx_log_debug1(NGX_LOG_DEBUG_HTTP, request_context->log, 0,
 					"ngx_http_vod_parse_metadata: segmenter_get_start_end_ranges_no_discontinuity failed %i", rc);
-				return ngx_http_vod_status_to_ngx_error(rc);
+				return ngx_http_vod_status_to_ngx_error(ctx->submodule_context.r, rc);
 			}
 
 			if (clip_ranges.clip_count == 0)
@@ -1455,7 +1473,7 @@ ngx_http_vod_parse_metadata(
 	default:
 		ngx_log_debug2(NGX_LOG_DEBUG_HTTP, request_context->log, 0,
 			"ngx_http_vod_parse_metadata: read_frames(%V) failed %i", &ctx->format->name, rc);
-		return ngx_http_vod_status_to_ngx_error(rc);
+		return ngx_http_vod_status_to_ngx_error(ctx->submodule_context.r, rc);
 	}
 
 	ngx_http_vod_update_source_tracks(request_context, cur_source);
@@ -1483,7 +1501,7 @@ ngx_http_vod_identify_format(ngx_http_vod_ctx_t* ctx)
 		{
 			ngx_log_error(NGX_LOG_ERR, ctx->submodule_context.request_context.log, 0,
 				"ngx_http_vod_identify_format: failed to identify the file format");
-			return ngx_http_vod_status_to_ngx_error(VOD_BAD_DATA);
+			return ngx_http_vod_status_to_ngx_error(ctx->submodule_context.r, VOD_BAD_DATA);
 		}
 
 		rc = cur_format->init_metadata_reader(
@@ -1500,7 +1518,7 @@ ngx_http_vod_identify_format(ngx_http_vod_ctx_t* ctx)
 		{
 			ngx_log_debug2(NGX_LOG_DEBUG_HTTP, ctx->submodule_context.request_context.log, 0,
 				"ngx_http_vod_identify_format: init_metadata_reader(%V) failed %i", &cur_format->name, rc);
-			return ngx_http_vod_status_to_ngx_error(rc);
+			return ngx_http_vod_status_to_ngx_error(ctx->submodule_context.r, rc);
 		}
 
 		ctx->format = cur_format;
@@ -1523,7 +1541,7 @@ ngx_http_vod_init_format(ngx_http_vod_ctx_t* ctx, uint32_t format_id)
 		{
 			ngx_log_error(NGX_LOG_ERR, ctx->submodule_context.request_context.log, 0,
 				"ngx_http_vod_init_format: format id %uD not found", format_id);
-			return NGX_HTTP_INTERNAL_SERVER_ERROR;
+			return ngx_http_vod_status_to_ngx_error(ctx->submodule_context.r, VOD_UNEXPECTED);
 		}
 
 		if (cur_format->id != format_id)
@@ -1652,7 +1670,7 @@ ngx_http_vod_get_async_read_result(ngx_http_vod_ctx_t* ctx, vod_str_t* read_buff
 		ngx_log_error(NGX_LOG_ERR, ctx->submodule_context.request_context.log, 0,
 			"ngx_http_vod_get_async_read_result: buffer size %uz is smaller than buffer offset %O", 
 			buffer_size, buffer_offset);
-		return ngx_http_vod_status_to_ngx_error(VOD_BAD_DATA);
+		return ngx_http_vod_status_to_ngx_error(ctx->submodule_context.r, VOD_BAD_DATA);
 	}
 
 	// null terminate the buffer
@@ -1660,7 +1678,7 @@ ngx_http_vod_get_async_read_result(ngx_http_vod_ctx_t* ctx, vod_str_t* read_buff
 	{
 		ngx_log_error(NGX_LOG_ERR, ctx->submodule_context.request_context.log, 0,
 			"ngx_http_vod_get_async_read_result: not enough room for null terminator");
-		return NGX_HTTP_INTERNAL_SERVER_ERROR;
+		return ngx_http_vod_status_to_ngx_error(ctx->submodule_context.r, VOD_UNEXPECTED);
 	}
 
 	*ctx->read_buffer.last = '\0';
@@ -1713,7 +1731,7 @@ ngx_http_vod_read_metadata(ngx_http_vod_ctx_t* ctx)
 		{
 			ngx_log_debug2(NGX_LOG_DEBUG_HTTP, ctx->submodule_context.request_context.log, 0,
 				"ngx_http_vod_read_metadata: read_metadata(%V) failed %i", &ctx->format->name, rc);
-			return ngx_http_vod_status_to_ngx_error(rc);
+			return ngx_http_vod_status_to_ngx_error(ctx->submodule_context.r, rc);
 		}
 
 		// issue another read request
@@ -1762,7 +1780,7 @@ ngx_http_vod_read_frames(ngx_http_vod_ctx_t *ctx)
 		{
 			ngx_log_debug2(NGX_LOG_DEBUG_HTTP, request_context->log, 0,
 				"ngx_http_vod_read_frames: read_frames(%V) failed %i", &ctx->format->name, rc);
-			return ngx_http_vod_status_to_ngx_error(rc);
+			return ngx_http_vod_status_to_ngx_error(ctx->submodule_context.r, rc);
 		}
 
 		// issue another read request
@@ -1998,7 +2016,7 @@ ngx_http_vod_state_machine_parse_metadata(ngx_http_vod_ctx_t *ctx)
 		default:
 			ngx_log_error(NGX_LOG_ERR, ctx->submodule_context.request_context.log, 0,
 				"ngx_http_vod_state_machine_parse_metadata: invalid state %d", ctx->state);
-			return NGX_HTTP_INTERNAL_SERVER_ERROR;
+			return ngx_http_vod_status_to_ngx_error(r, VOD_UNEXPECTED);
 		}
 	}
 
@@ -2014,13 +2032,13 @@ ngx_http_vod_validate_streams(ngx_http_vod_ctx_t *ctx)
 		{
 			ngx_log_error(NGX_LOG_ERR, ctx->submodule_context.request_context.log, 0,
 				"ngx_http_vod_validate_streams: no matching streams were found, probably invalid segment index");
-			return NGX_HTTP_NOT_FOUND;
+			return ngx_http_vod_status_to_ngx_error(ctx->submodule_context.r, VOD_NO_STREAMS);
 		}
 		else
 		{
 			ngx_log_error(NGX_LOG_ERR, ctx->submodule_context.request_context.log, 0,
 				"ngx_http_vod_validate_streams: no matching streams were found");
-			return NGX_HTTP_BAD_REQUEST;
+			return ngx_http_vod_status_to_ngx_error(ctx->submodule_context.r, VOD_BAD_REQUEST);
 		}
 	}
 	
@@ -2030,7 +2048,7 @@ ngx_http_vod_validate_streams(ngx_http_vod_ctx_t *ctx)
 		{
 			ngx_log_error(NGX_LOG_ERR, ctx->submodule_context.request_context.log, 0,
 				"ngx_http_vod_validate_streams: request has more than one sequence while only one is supported");
-			return NGX_HTTP_BAD_REQUEST;
+			return ngx_http_vod_status_to_ngx_error(ctx->submodule_context.r, VOD_BAD_REQUEST);
 		}
 
 		if (ctx->submodule_context.media_set.total_track_count != 1)
@@ -2038,7 +2056,7 @@ ngx_http_vod_validate_streams(ngx_http_vod_ctx_t *ctx)
 			ngx_log_error(NGX_LOG_ERR, ctx->submodule_context.request_context.log, 0,
 				"ngx_http_vod_validate_streams: got %uD streams while only a single stream is supported",
 				ctx->submodule_context.media_set.total_track_count);
-			return NGX_HTTP_BAD_REQUEST;
+			return ngx_http_vod_status_to_ngx_error(ctx->submodule_context.r, VOD_BAD_REQUEST);
 		}
 	}
 	else if ((ctx->request->flags & REQUEST_FLAG_SINGLE_TRACK_PER_MEDIA_TYPE) != 0)
@@ -2047,7 +2065,7 @@ ngx_http_vod_validate_streams(ngx_http_vod_ctx_t *ctx)
 		{
 			ngx_log_error(NGX_LOG_ERR, ctx->submodule_context.request_context.log, 0,
 				"ngx_http_vod_validate_streams: invalid sequence count %uD", ctx->submodule_context.media_set.sequence_count);
-			return NGX_HTTP_BAD_REQUEST;
+			return ngx_http_vod_status_to_ngx_error(ctx->submodule_context.r, VOD_BAD_REQUEST);
 		}
 
 		if (ctx->submodule_context.media_set.track_count[MEDIA_TYPE_VIDEO] > 1 ||
@@ -2057,7 +2075,7 @@ ngx_http_vod_validate_streams(ngx_http_vod_ctx_t *ctx)
 				"ngx_http_vod_validate_streams: one stream at most per media type is allowed video=%uD audio=%uD",
 				ctx->submodule_context.media_set.track_count[MEDIA_TYPE_VIDEO],
 				ctx->submodule_context.media_set.track_count[MEDIA_TYPE_AUDIO]);
-			return NGX_HTTP_BAD_REQUEST;
+			return ngx_http_vod_status_to_ngx_error(ctx->submodule_context.r, VOD_BAD_REQUEST);
 		}
 
 		if (ctx->submodule_context.media_set.track_count[MEDIA_TYPE_SUBTITLE] > 0 &&
@@ -2065,7 +2083,7 @@ ngx_http_vod_validate_streams(ngx_http_vod_ctx_t *ctx)
 		{
 			ngx_log_error(NGX_LOG_ERR, ctx->submodule_context.request_context.log, 0,
 				"ngx_http_vod_validate_streams: cannot have more than a single subtitle track and it cannot be mixed with other track types");
-			return NGX_HTTP_BAD_REQUEST;
+			return ngx_http_vod_status_to_ngx_error(ctx->submodule_context.r, VOD_BAD_REQUEST);
 		}
 	}
 	
@@ -2158,7 +2176,7 @@ ngx_http_vod_update_track_timescale(
 	{
 		ngx_log_error(NGX_LOG_ERR, ctx->submodule_context.request_context.log, 0,
 			"ngx_http_vod_update_track_timescale: full duration is zero following rescale");
-		return ngx_http_vod_status_to_ngx_error(VOD_BAD_DATA);
+		return ngx_http_vod_status_to_ngx_error(ctx->submodule_context.r, VOD_BAD_DATA);
 	}
 
 	if (track->media_info.media_type == MEDIA_TYPE_VIDEO)
@@ -2533,7 +2551,7 @@ ngx_http_vod_init_frame_processing(ngx_http_vod_ctx_t *ctx)
 		{
 			ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
 				"ngx_http_vod_init_frame_processing: write_tail failed %i", rc);
-			return ngx_http_vod_status_to_ngx_error(rc);
+			return ngx_http_vod_status_to_ngx_error(ctx->submodule_context.r, rc);
 		}
 
 		// in case of a range request that is fully contained in the output buffer (e.g. 0-0), we're done
@@ -2555,7 +2573,7 @@ ngx_http_vod_init_frame_processing(ngx_http_vod_ctx_t *ctx)
 	{
 		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
 			"ngx_http_vod_init_frame_processing: read_cache_allocate_buffer_slots failed %i", rc);
-		return ngx_http_vod_status_to_ngx_error(rc);
+		return ngx_http_vod_status_to_ngx_error(ctx->submodule_context.r, rc);
 	}
 
 	return NGX_OK;
@@ -2589,7 +2607,7 @@ ngx_http_vod_process_media_frames(ngx_http_vod_ctx_t *ctx)
 		default:
 			ngx_log_debug1(NGX_LOG_DEBUG_HTTP, ctx->submodule_context.request_context.log, 0,
 				"ngx_http_vod_process_media_frames: frame_processor failed %i", rc);
-			return ngx_http_vod_status_to_ngx_error(rc);
+			return ngx_http_vod_status_to_ngx_error(ctx->submodule_context.r, rc);
 		}
 
 		// get a buffer to read into
@@ -2667,7 +2685,7 @@ ngx_http_vod_finalize_segment_response(ngx_http_vod_ctx_t *ctx)
 	{
 		ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
 			"ngx_http_vod_finalize_segment_response: no buffers were written");
-		return NGX_HTTP_INTERNAL_SERVER_ERROR;
+		return ngx_http_vod_status_to_ngx_error(r, VOD_UNEXPECTED);
 	}
 
 	ctx->write_segment_buffer_context.chain_end->next = NULL;
@@ -2747,7 +2765,7 @@ ngx_http_vod_send_clip_header(ngx_http_vod_ctx_t *ctx)
 	{
 		ngx_log_debug2(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
 			"ngx_http_vod_send_clip_header: clipper_build_header(%V) failed %i", &ctx->format->name, rc);
-		return ngx_http_vod_status_to_ngx_error(rc);
+		return ngx_http_vod_status_to_ngx_error(r, rc);
 	}
 
 	// send the response header
@@ -2878,7 +2896,7 @@ ngx_http_vod_run_state_machine(ngx_http_vod_ctx_t *ctx)
 			{
 				ngx_log_debug1(NGX_LOG_DEBUG_HTTP, ctx->submodule_context.request_context.log, 0,
 					"ngx_http_vod_run_state_machine: filter_init_filtered_clips failed %i", rc);
-				return ngx_http_vod_status_to_ngx_error(rc);
+				return ngx_http_vod_status_to_ngx_error(ctx->submodule_context.r, rc);
 			}
 
 			rc = ngx_http_vod_validate_streams(ctx);
@@ -2963,7 +2981,7 @@ ngx_http_vod_run_state_machine(ngx_http_vod_ctx_t *ctx)
 			{
 				ngx_log_debug1(NGX_LOG_DEBUG_HTTP, ctx->submodule_context.request_context.log, 0,
 					"ngx_http_vod_run_state_machine: filter_init_state failed %i", rc);
-				return ngx_http_vod_status_to_ngx_error(rc);
+				return ngx_http_vod_status_to_ngx_error(ctx->submodule_context.r, rc);
 			}
 
 			ctx->frame_processor = filter_run_state_machine;
@@ -3038,7 +3056,7 @@ ngx_http_vod_run_state_machine(ngx_http_vod_ctx_t *ctx)
 
 	ngx_log_error(NGX_LOG_ERR, ctx->submodule_context.request_context.log, 0,
 		"ngx_http_vod_run_state_machine: invalid state %d", ctx->state);
-	return NGX_HTTP_INTERNAL_SERVER_ERROR;
+	return ngx_http_vod_status_to_ngx_error(ctx->submodule_context.r, VOD_UNEXPECTED);
 }
 
 static void
@@ -3078,7 +3096,7 @@ ngx_http_vod_handle_read_completed(void* context, ngx_int_t rc, ngx_buf_t* buf, 
 			ngx_log_error(NGX_LOG_ERR, ctx->submodule_context.request_context.log, 0,
 				"ngx_http_vod_handle_read_completed: read size %z different than expected %z, probably a truncated file", 
 				bytes_read, expected_size);
-			rc = ngx_http_vod_status_to_ngx_error(VOD_BAD_DATA);
+			rc = ngx_http_vod_status_to_ngx_error(ctx->submodule_context.r, VOD_BAD_DATA);
 			goto finalize_request;
 		}
 	}
@@ -3099,7 +3117,7 @@ ngx_http_vod_handle_read_completed(void* context, ngx_int_t rc, ngx_buf_t* buf, 
 		default:
 			ngx_log_error(NGX_LOG_ERR, ctx->submodule_context.request_context.log, 0,
 				"ngx_http_vod_handle_read_completed: bytes read is zero");
-			rc = ngx_http_vod_status_to_ngx_error(VOD_BAD_DATA);
+			rc = ngx_http_vod_status_to_ngx_error(ctx->submodule_context.r, VOD_BAD_DATA);
 			goto finalize_request;
 		}
 	}
@@ -3412,7 +3430,7 @@ ngx_http_vod_init_file_reader_internal(ngx_http_request_t *r, ngx_str_t* path, v
 	{
 		ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
 			"ngx_http_vod_init_file_reader_internal: ngx_pcalloc failed");
-		return NGX_HTTP_INTERNAL_SERVER_ERROR;
+		return ngx_http_vod_status_to_ngx_error(r, VOD_ALLOC_FAILED);
 	}
 
 	*context = state;
@@ -3651,7 +3669,7 @@ ngx_http_vod_http_reader_open_file(ngx_http_request_t* r, ngx_str_t* path, uint3
 	{
 		ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
 			"ngx_http_vod_http_reader_open_file: ngx_palloc failed");
-		return NGX_HTTP_INTERNAL_SERVER_ERROR;
+		return ngx_http_vod_status_to_ngx_error(r, VOD_ALLOC_FAILED);
 	}
 
 	// Note: for http, no need to open any files, just save the remote uri
@@ -3796,14 +3814,14 @@ ngx_http_vod_map_run_step(ngx_http_vod_ctx_t *ctx)
 			{
 				ngx_log_error(NGX_LOG_ERR, ctx->submodule_context.request_context.log, 0,
 					"ngx_http_vod_map_run_step: empty mapping response");
-				return NGX_HTTP_NOT_FOUND;
+				return ngx_http_vod_status_to_ngx_error(ctx->submodule_context.r, VOD_EMPTY_MAPPING);
 			}
 			else if (read_size > ctx->mapping.max_response_size)
 			{
 				ngx_log_error(NGX_LOG_ERR, ctx->submodule_context.request_context.log, 0,
 					"ngx_http_vod_map_run_step: mapping size %uz greater than limit %uz", 
 					read_size, ctx->mapping.max_response_size);
-				return NGX_HTTP_SERVICE_UNAVAILABLE;
+				return ngx_http_vod_status_to_ngx_error(ctx->submodule_context.r, VOD_BAD_MAPPING);
 			}
 		}
 		else
@@ -3844,7 +3862,7 @@ ngx_http_vod_map_run_step(ngx_http_vod_ctx_t *ctx)
 		{
 			ngx_log_error(NGX_LOG_ERR, ctx->submodule_context.request_context.log, 0,
 				"ngx_http_vod_map_run_step: empty mapping response");
-			return NGX_HTTP_NOT_FOUND;
+			return ngx_http_vod_status_to_ngx_error(ctx->submodule_context.r, VOD_EMPTY_MAPPING);
 		}
 
 		// apply the mapping
@@ -3852,7 +3870,7 @@ ngx_http_vod_map_run_step(ngx_http_vod_ctx_t *ctx)
 		{
 			ngx_log_error(NGX_LOG_ERR, ctx->submodule_context.request_context.log, 0,
 				"ngx_http_vod_map_run_step: not enough room in buffer for null terminator");
-			return NGX_HTTP_BAD_GATEWAY;
+			return ngx_http_vod_status_to_ngx_error(ctx->submodule_context.r, VOD_BAD_MAPPING);
 		}
 
 		*response->last = '\0';
@@ -3895,7 +3913,7 @@ ngx_http_vod_map_run_step(ngx_http_vod_ctx_t *ctx)
 	default:
 		ngx_log_error(NGX_LOG_ERR, ctx->submodule_context.request_context.log, 0,
 			"ngx_http_vod_map_run_step: invalid state %d", ctx->state);
-		return NGX_HTTP_INTERNAL_SERVER_ERROR;
+		return ngx_http_vod_status_to_ngx_error(ctx->submodule_context.r, VOD_UNEXPECTED);
 	}
 
 	return NGX_OK;
@@ -3957,7 +3975,7 @@ ngx_http_vod_map_source_clip_apply(ngx_http_vod_ctx_t *ctx, ngx_str_t* mapping, 
 	{
 		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, ctx->submodule_context.request_context.log, 0,
 			"ngx_http_vod_map_source_clip_apply: media_set_map_source failed %i", rc);
-		return ngx_http_vod_status_to_ngx_error(rc);
+		return ngx_http_vod_status_to_ngx_error(ctx->submodule_context.r, rc);
 	}
 
 	*cache_index = 0;
@@ -4154,7 +4172,7 @@ ngx_http_vod_map_dynamic_clip_apply(ngx_http_vod_ctx_t *ctx, ngx_str_t* mapping,
 	{
 		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, ctx->submodule_context.request_context.log, 0,
 			"ngx_http_vod_map_dynamic_clip_apply: dynamic_clip_apply_mapping_json failed %i", rc);
-		return ngx_http_vod_status_to_ngx_error(rc);
+		return ngx_http_vod_status_to_ngx_error(ctx->submodule_context.r, rc);
 	}
 
 	*cache_index = 0;
@@ -4231,7 +4249,7 @@ ngx_http_vod_map_dynamic_clip_apply_from_string(ngx_http_vod_ctx_t *ctx)
 	{
 		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, ctx->submodule_context.request_context.log, 0,
 			"ngx_http_vod_map_dynamic_clip_apply_from_string: dynamic_clip_apply_mapping_string failed %i", rc);
-		return ngx_http_vod_status_to_ngx_error(rc);
+		return ngx_http_vod_status_to_ngx_error(ctx->submodule_context.r, rc);
 	}
 
 	return NGX_OK;
@@ -4296,7 +4314,7 @@ ngx_http_vod_map_media_set_apply(ngx_http_vod_ctx_t *ctx, ngx_str_t* mapping, in
 			rc = ngx_http_vod_dump_request_to_fallback(ctx->submodule_context.r);
 			if (rc != NGX_AGAIN)
 			{
-				rc = NGX_HTTP_NOT_FOUND;
+				rc = ngx_http_vod_status_to_ngx_error(ctx->submodule_context.r, VOD_EMPTY_MAPPING);
 			}
 			return rc;
 		}
@@ -4309,7 +4327,7 @@ ngx_http_vod_map_media_set_apply(ngx_http_vod_ctx_t *ctx, ngx_str_t* mapping, in
 		{
 			ngx_log_debug0(NGX_LOG_DEBUG_HTTP, ctx->submodule_context.request_context.log, 0,
 				"ngx_http_vod_map_media_set_apply: ngx_palloc failed");
-			return NGX_HTTP_INTERNAL_SERVER_ERROR;
+			return ngx_http_vod_status_to_ngx_error(ctx->submodule_context.r, VOD_ALLOC_FAILED);
 		}
 
 		path.len = 0;
@@ -4319,7 +4337,7 @@ ngx_http_vod_map_media_set_apply(ngx_http_vod_ctx_t *ctx, ngx_str_t* mapping, in
 		{
 			ngx_log_error(NGX_LOG_ERR, ctx->submodule_context.request_context.log, 0,
 				"ngx_http_vod_map_media_set_apply: vod_json_decode_string failed %i", rc);
-			return NGX_HTTP_SERVICE_UNAVAILABLE;
+			return ngx_http_vod_status_to_ngx_error(ctx->submodule_context.r, VOD_BAD_MAPPING);
 		}
 
 		path.data[path.len] = '\0';
@@ -4368,7 +4386,7 @@ ngx_http_vod_map_media_set_apply(ngx_http_vod_ctx_t *ctx, ngx_str_t* mapping, in
 	{
 		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, ctx->submodule_context.request_context.log, 0,
 			"ngx_http_vod_map_media_set_apply: media_set_parse_json failed %i", rc);
-		return ngx_http_vod_status_to_ngx_error(rc);
+		return ngx_http_vod_status_to_ngx_error(ctx->submodule_context.r, rc);
 	}
 
 	ngx_perf_counter_end(ctx->perf_counters, perf_counter_context, PC_PARSE_MEDIA_SET);
@@ -4403,7 +4421,7 @@ ngx_http_vod_map_media_set_apply(ngx_http_vod_ctx_t *ctx, ngx_str_t* mapping, in
 	{
 		ngx_log_error(NGX_LOG_ERR, ctx->submodule_context.request_context.log, 0,
 			"ngx_http_vod_map_media_set_apply: unsupported - non-trivial mapping in progressive download");
-		return NGX_HTTP_BAD_REQUEST;
+		return ngx_http_vod_status_to_ngx_error(ctx->submodule_context.r, VOD_BAD_REQUEST);
 	}
 
 	if (ctx->submodule_context.media_set.sequence_count == 1 &&
@@ -4424,7 +4442,7 @@ ngx_http_vod_map_media_set_apply(ngx_http_vod_ctx_t *ctx, ngx_str_t* mapping, in
 	ngx_log_error(NGX_LOG_ERR, ctx->submodule_context.request_context.log, 0,
 		"ngx_http_vod_map_media_set_apply: unsupported - multi uri/filtered request %V did not return a simple json",
 		&cur_source->stripped_uri);
-	return NGX_HTTP_BAD_REQUEST;
+	return ngx_http_vod_status_to_ngx_error(ctx->submodule_context.r, VOD_BAD_REQUEST);
 }
 
 static ngx_int_t
@@ -4580,7 +4598,7 @@ ngx_http_vod_parse_uri(
 	{
 		ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
 			"ngx_http_vod_parse_uri: ngx_http_vod_split_uri_file_name failed");
-		return NGX_HTTP_BAD_REQUEST;
+		return ngx_http_vod_status_to_ngx_error(r, VOD_BAD_REQUEST);
 	}
 
 	request_params->segment_index = INVALID_SEGMENT_INDEX;
@@ -4614,7 +4632,7 @@ ngx_http_vod_parse_uri(
 		{
 			ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
 				"ngx_http_vod_parse_uri: request has more than one sub uri while only one is supported");
-			return NGX_HTTP_BAD_REQUEST;
+			return ngx_http_vod_status_to_ngx_error(r, VOD_BAD_REQUEST);
 		}
 
 		if (media_set->sequence_count != 2 &&
@@ -4622,7 +4640,7 @@ ngx_http_vod_parse_uri(
 		{
 			ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
 				"ngx_http_vod_parse_uri: request has more than two sub uris while only a single track per media type is allowed");
-			return NGX_HTTP_BAD_REQUEST;
+			return ngx_http_vod_status_to_ngx_error(r, VOD_BAD_REQUEST);
 		}
 	}
 
@@ -4731,7 +4749,7 @@ ngx_http_vod_handler(ngx_http_request_t *r)
 		{
 			ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
 				"ngx_http_vod_handler: request has more than one sub uri while only one is supported");
-			rc = NGX_HTTP_BAD_REQUEST;
+			rc = ngx_http_vod_status_to_ngx_error(r, VOD_BAD_REQUEST);
 			goto done;
 		}
 	}
