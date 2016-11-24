@@ -1,15 +1,98 @@
 #include <ngx_http.h>
 
-#if (NGX_HAVE_LIB_AV_CODEC)
+#if 1//(NGX_HAVE_LIB_AV_CODEC)
 
 #include "ngx_http_vod_submodule.h"
 #include "ngx_http_vod_utils.h"
 #include "vod/thumb/thumb_grabber.h"
+#include "vod/manifest_utils.h"
 
 #define THUMB_TIMESCALE (1000)
 
 static const u_char jpg_file_ext[] = ".jpg";
 static u_char jpeg_content_type[] = "image/jpeg";
+
+ngx_int_t ngx_http_vod_thumb_get_url(
+	ngx_http_vod_submodule_context_t* submodule_context,
+	uint32_t sequences_mask,
+	ngx_str_t* result)
+{
+	ngx_http_vod_loc_conf_t* conf = submodule_context->conf;
+	ngx_http_request_t* r = submodule_context->r;
+	request_params_t* request_params = &submodule_context->request_params;
+	ngx_str_t request_params_str;
+	ngx_str_t base_url = ngx_null_string;
+	vod_status_t rc;
+	size_t result_size;
+	u_char* p;
+
+	// get the base url
+	rc = ngx_http_vod_get_base_url(
+		r,
+		conf->segments_base_url != NULL ? conf->segments_base_url : conf->base_url,
+		&r->uri,
+		&base_url);
+	if (rc != VOD_OK)
+	{
+		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, submodule_context->request_context.log, 0,
+			"ngx_http_vod_thumb_get_url: ngx_http_vod_get_base_url failed %i", rc);
+		return ngx_http_vod_status_to_ngx_error(r, rc);
+	}
+
+	// get the request params string
+	rc = manifest_utils_build_request_params_string(
+		&submodule_context->request_context,
+		request_params->tracks_mask,
+		INVALID_SEGMENT_INDEX,
+		sequences_mask,
+		NULL,
+		request_params->tracks_mask,
+		&request_params_str);
+	if (rc != VOD_OK)
+	{
+		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, submodule_context->request_context.log, 0,
+			"ngx_http_vod_thumb_get_url: manifest_utils_build_request_params_string failed %i", rc);
+		return ngx_http_vod_status_to_ngx_error(r, rc);
+	}
+
+	// get the result size
+	result_size = base_url.len + conf->thumb.file_name_prefix.len + 
+		1 + VOD_INT64_LEN + request_params_str.len + sizeof(jpg_file_ext) - 1;
+
+	// allocate the result buffer
+	p = ngx_pnalloc(submodule_context->request_context.pool, result_size);
+	if (p == NULL)
+	{
+		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
+			"ngx_http_vod_thumb_get_url: vod_alloc failed");
+		return ngx_http_vod_status_to_ngx_error(r, VOD_ALLOC_FAILED);
+	}
+
+	result->data = p;
+
+	// write the result
+	if (base_url.len != 0)
+	{
+		p = vod_copy(p, base_url.data, base_url.len);
+	}
+
+	p = vod_copy(p, conf->thumb.file_name_prefix.data, conf->thumb.file_name_prefix.len);
+	p = vod_sprintf(p, "-%uL", request_params->segment_time);
+	p = vod_copy(p, request_params_str.data, request_params_str.len);
+	p = vod_copy(p, jpg_file_ext, sizeof(jpg_file_ext) - 1);
+
+	result->len = p - result->data;
+
+	if (result->len > result_size)
+	{
+		vod_log_error(VOD_LOG_ERR, submodule_context->request_context.log, 0,
+			"ngx_http_vod_thumb_get_url: result length %uz exceeded allocated length %uz",
+			result->len, result_size);
+		return ngx_http_vod_status_to_ngx_error(r, VOD_UNEXPECTED);
+	}
+
+	return NGX_OK;
+}
 
 static ngx_int_t
 ngx_http_vod_thumb_init_frame_processor(
@@ -88,7 +171,8 @@ ngx_http_vod_thumb_parse_uri_file_name(
 	request_params_t* request_params,
 	const ngx_http_vod_request_t** request)
 {
-	uint64_t time;
+	bool_t negative;
+	int64_t time;
 	ngx_int_t rc;
 
 	if (ngx_http_vod_match_prefix_postfix(start_pos, end_pos, &conf->thumb.file_name_prefix, jpg_file_ext))
@@ -110,6 +194,13 @@ ngx_http_vod_thumb_parse_uri_file_name(
 		start_pos++;		// skip the -
 	}
 
+	negative = 0;
+	if (start_pos < end_pos && *start_pos == '-')
+	{
+		start_pos++;		// skip the -
+		negative = 1;
+	}
+
 	if (start_pos >= end_pos || *start_pos < '0' || *start_pos > '9')
 	{
 		ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
@@ -122,6 +213,11 @@ ngx_http_vod_thumb_parse_uri_file_name(
 	{
 		time = time * 10 + *start_pos++ - '0';
 	} while (start_pos < end_pos && *start_pos >= '0' && *start_pos <= '9');
+
+	if (negative)
+	{
+		time = -time;
+	}
 
 	// parse the required tracks string
 	rc = ngx_http_vod_parse_uri_file_name(r, start_pos, end_pos, 0, request_params);

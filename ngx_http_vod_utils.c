@@ -10,6 +10,7 @@ static const ngx_int_t error_map[VOD_ERROR_LAST - VOD_ERROR_FIRST] = {
 	NGX_HTTP_NOT_FOUND,				// VOD_NO_STREAMS
 	NGX_HTTP_NOT_FOUND,				// VOD_EMPTY_MAPPING
 	NGX_HTTP_INTERNAL_SERVER_ERROR, // VOD_NOT_FOUND (not expected to reach top level)
+	NGX_HTTP_INTERNAL_SERVER_ERROR, // VOD_REDIRECT (not expected to reach top level)
 };
 
 static ngx_str_t error_codes[VOD_ERROR_LAST - VOD_ERROR_FIRST] = {
@@ -21,6 +22,7 @@ static ngx_str_t error_codes[VOD_ERROR_LAST - VOD_ERROR_FIRST] = {
 	ngx_string("EXPIRED"),
 	ngx_string("NO_STREAMS"),
 	ngx_string("EMPTY_MAPPING"),
+	ngx_string("UNEXPECTED"),
 	ngx_string("UNEXPECTED"),
 };
 

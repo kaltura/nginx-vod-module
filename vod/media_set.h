@@ -11,7 +11,7 @@
 #define SEGMENT_BASE_TIME_RELATIVE (ULLONG_MAX)
 #define INVALID_SEQUENCE_INDEX (UINT_MAX)
 #define INVALID_SEGMENT_INDEX (UINT_MAX)
-#define INVALID_SEGMENT_TIME (ULLONG_MAX)
+#define INVALID_SEGMENT_TIME (LLONG_MAX)
 #define INVALID_CLIP_INDEX (UINT_MAX)
 
 #define MAX_LOOK_AHEAD_SEGMENTS (2)
@@ -142,7 +142,7 @@ typedef struct {
 } media_set_t;
 
 typedef struct {
-	uint64_t segment_time;		// used in mss
+	int64_t segment_time;		// used in mss
 	uint32_t segment_index;
 	uint32_t clip_index;
 	uint32_t pts_delay;

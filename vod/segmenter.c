@@ -410,16 +410,9 @@ segmenter_get_start_end_ranges_gop(
 	uint32_t* clip_durations = params->timing.durations;
 	uint32_t* end_duration = clip_durations + params->timing.total_count;
 	uint32_t* cur_duration;
-	uint64_t segment_base_time;
 	uint64_t time = params->time;
 	uint32_t clip_duration;
 	uint32_t clip_index;
-
-	segment_base_time = params->timing.segment_base_time;
-	if (segment_base_time != SEGMENT_BASE_TIME_RELATIVE)
-	{
-		time += segment_base_time;
-	}
 
 	for (cur_duration = clip_durations, cur_clip_time = params->timing.times;
 		;
