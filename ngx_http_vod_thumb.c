@@ -1,6 +1,6 @@
 #include <ngx_http.h>
 
-#if 1//(NGX_HAVE_LIB_AV_CODEC)
+#if (NGX_HAVE_LIB_AV_CODEC)
 
 #include "ngx_http_vod_submodule.h"
 #include "ngx_http_vod_utils.h"
