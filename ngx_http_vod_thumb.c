@@ -63,7 +63,7 @@ ngx_int_t ngx_http_vod_thumb_get_url(
 	p = ngx_pnalloc(submodule_context->request_context.pool, result_size);
 	if (p == NULL)
 	{
-		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
+		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, submodule_context->request_context.log, 0,
 			"ngx_http_vod_thumb_get_url: vod_alloc failed");
 		return ngx_http_vod_status_to_ngx_error(r, VOD_ALLOC_FAILED);
 	}
