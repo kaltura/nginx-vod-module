@@ -4281,6 +4281,7 @@ ngx_http_vod_map_media_set_get_uri(ngx_http_vod_ctx_t *ctx, ngx_str_t* uri)
 	return NGX_OK;
 }
 
+#if (NGX_HAVE_LIB_AV_CODEC)
 static ngx_int_t
 ngx_http_vod_handle_thumb_redirect(
 	ngx_http_vod_ctx_t *ctx, 
@@ -4320,6 +4321,7 @@ ngx_http_vod_handle_thumb_redirect(
 
 	return r->headers_out.status;
 }
+#endif // (NGX_HAVE_LIB_AV_CODEC)
 
 static ngx_int_t
 ngx_http_vod_map_media_set_apply(ngx_http_vod_ctx_t *ctx, ngx_str_t* mapping, int* cache_index)
@@ -4426,8 +4428,10 @@ ngx_http_vod_map_media_set_apply(ngx_http_vod_ctx_t *ctx, ngx_str_t* mapping, in
 	case VOD_OK:
 		break;		// handled outside the switch
 
+#if (NGX_HAVE_LIB_AV_CODEC)
 	case VOD_REDIRECT:
 		return ngx_http_vod_handle_thumb_redirect(ctx, &mapped_media_set);
+#endif // (NGX_HAVE_LIB_AV_CODEC)
 
 	default:
 		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, ctx->submodule_context.request_context.log, 0,
