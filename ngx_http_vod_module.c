@@ -26,6 +26,7 @@
 #include "vod/media_set_parser.h"
 #include "vod/manifest_utils.h"
 #include "vod/thumb/thumb_grabber.h"
+#include "ngx_http_vod_thumb.h"
 
 // macros
 #define DEFINE_VAR(name) \
@@ -4280,6 +4281,48 @@ ngx_http_vod_map_media_set_get_uri(ngx_http_vod_ctx_t *ctx, ngx_str_t* uri)
 	return NGX_OK;
 }
 
+#if (NGX_HAVE_LIB_AV_CODEC)
+static ngx_int_t
+ngx_http_vod_handle_thumb_redirect(
+	ngx_http_vod_ctx_t *ctx, 
+	media_set_t* media_set)
+{
+	ngx_http_request_t* r = ctx->submodule_context.r;
+	ngx_str_t location;
+	ngx_int_t rc;
+
+	rc = ngx_http_vod_thumb_get_url(
+		&ctx->submodule_context,
+		media_set->has_multi_sequences ? (uint32_t)(1 << media_set->sequences[0].index) : 0xffffffff,
+		&location);
+	if (rc != NGX_OK)
+	{
+		return rc;
+	}
+
+	if (ngx_http_discard_request_body(r) != NGX_OK)
+	{
+		return NGX_HTTP_INTERNAL_SERVER_ERROR;
+	}
+
+	r->headers_out.status = NGX_HTTP_MOVED_TEMPORARILY;
+
+	ngx_http_clear_location(r);
+
+	r->headers_out.location = ngx_list_push(&r->headers_out.headers);
+	if (r->headers_out.location == NULL)
+	{
+		return NGX_HTTP_INTERNAL_SERVER_ERROR;
+	}
+
+	r->headers_out.location->hash = 1;
+	ngx_str_set(&r->headers_out.location->key, "Location");
+	r->headers_out.location->value = location;
+
+	return r->headers_out.status;
+}
+#endif // (NGX_HAVE_LIB_AV_CODEC)
+
 static ngx_int_t
 ngx_http_vod_map_media_set_apply(ngx_http_vod_ctx_t *ctx, ngx_str_t* mapping, int* cache_index)
 {
@@ -4371,8 +4414,9 @@ ngx_http_vod_map_media_set_apply(ngx_http_vod_ctx_t *ctx, ngx_str_t* mapping, in
 		request_flags,
 		&mapped_media_set);
 
-	if (rc == VOD_NOT_FOUND)
+	switch (rc)
 	{
+	case VOD_NOT_FOUND:
 		// file not found, try the fallback
 		rc = ngx_http_vod_dump_request_to_fallback(ctx->submodule_context.r);
 		if (rc != NGX_AGAIN)
@@ -4380,10 +4424,16 @@ ngx_http_vod_map_media_set_apply(ngx_http_vod_ctx_t *ctx, ngx_str_t* mapping, in
 			rc = NGX_HTTP_NOT_FOUND;
 		}
 		return rc;
-	}
 
-	if (rc != VOD_OK)
-	{
+	case VOD_OK:
+		break;		// handled outside the switch
+
+#if (NGX_HAVE_LIB_AV_CODEC)
+	case VOD_REDIRECT:
+		return ngx_http_vod_handle_thumb_redirect(ctx, &mapped_media_set);
+#endif // (NGX_HAVE_LIB_AV_CODEC)
+
+	default:
 		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, ctx->submodule_context.request_context.log, 0,
 			"ngx_http_vod_map_media_set_apply: media_set_parse_json failed %i", rc);
 		return ngx_http_vod_status_to_ngx_error(ctx->submodule_context.r, rc);

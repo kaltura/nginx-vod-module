@@ -1711,6 +1711,34 @@ media_set_parse_key_frame_offsets(
 	return VOD_OK;
 }
 
+static uint64_t
+media_set_end_relative_offset_to_absolute(
+	media_clip_timing_t* timing, 
+	uint64_t time_left)
+{
+	uint32_t clip_duration;
+	uint32_t clip_index;
+
+	for (clip_index = timing->total_count - 1;; clip_index--)
+	{
+		clip_duration = timing->durations[clip_index];
+		if (clip_duration >= time_left)
+		{
+			break;
+		}
+
+		if (clip_index <= 0)
+		{
+			// Note: this is not supposed to happen since the relative offset was verified to be less than total duration
+			break;
+		}
+
+		time_left -= clip_duration;
+	}
+
+	return timing->times[clip_index] + clip_duration - time_left;
+}
+
 vod_status_t
 media_set_parse_json(
 	request_context_t* request_context, 
@@ -1726,6 +1754,7 @@ media_set_parse_json(
 	vod_json_value_t* params[MEDIA_SET_PARAM_COUNT];
 	vod_json_value_t json;
 	vod_status_t rc;
+	uint64_t segment_time;
 	int64_t current_time;
 	uint32_t margin;
 	bool_t parse_all_clips;
@@ -1983,7 +2012,7 @@ media_set_parse_json(
 			}
 			else
 			{
-				if (request_params->segment_time < result->timing.first_time)
+				if ((uint64_t)request_params->segment_time < result->timing.first_time)
 				{
 					vod_log_error(VOD_LOG_ERR, request_context->log, 0,
 						"media_set_parse_json: segment time %uL is smaller than first clip time %uL",
@@ -2055,8 +2084,24 @@ media_set_parse_json(
 		else
 		{
 			// thumb
-			get_ranges_params.time = request_params->segment_time;
+			if (request_params->segment_time < 0)
+			{
+				segment_time = -request_params->segment_time;
+				if (segment_time > result->timing.total_duration)
+				{
+					vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+						"media_set_parse_json: relative time %uL greater than the total duration %uL",
+						segment_time, result->timing.total_duration);
+					return VOD_BAD_REQUEST;
+				}
 
+				request_params->segment_time = media_set_end_relative_offset_to_absolute(
+					&result->timing,
+					segment_time);
+				return VOD_REDIRECT;
+			}
+
+			get_ranges_params.time = request_params->segment_time;
 			rc = segmenter_get_start_end_ranges_gop(
 				&get_ranges_params,
 				&context.clip_ranges);
