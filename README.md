@@ -1446,6 +1446,16 @@ The name of the manifest file (has no extension).
 
 The name of the thumbnail file (a jpg extension is implied).
 
+#### vod_thumb_accurate_positioning
+* **syntax**: `vod_thumb_accurate_positioning on/off`
+* **default**: `on`
+* **context**: `http`, `server`, `location`
+
+When enabled, the module grabs the frame that is closest to the requested offset.
+When disabled, the module uses the keyframe that is closest to the requested offset.
+Setting this parameter to off can result in faster thumbnail capture, since the module 
+always decodes a single video frame per request.
+
 #### vod_gop_look_behind
 * **syntax**: `vod_gop_look_behind millis`
 * **default**: `10000`

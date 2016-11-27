@@ -207,6 +207,7 @@ thumb_grabber_truncate_frames(
 	request_context_t* request_context,
 	media_track_t* track, 
 	uint64_t requested_time, 
+	bool_t accurate,
 	uint32_t* skip_count)
 {
 	frame_list_part_t* last_key_frame_part = NULL;
@@ -222,6 +223,13 @@ thumb_grabber_truncate_frames(
 	uint32_t last_key_frame_index;
 	uint32_t min_index = 0;
 	uint32_t index;
+
+	if (track->frame_count <= 0)
+	{
+		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+			"thumb_grabber_truncate_frames: did not find any frames (1)");
+		return VOD_BAD_REQUEST;
+	}
 
 	part = &track->frames;
 	last_frame = part->last_frame;
@@ -253,7 +261,9 @@ thumb_grabber_truncate_frames(
 		// find the closest frame
 		pts = dts + cur_frame->pts_delay;
 		cur_diff = (pts >= requested_time) ? (pts - requested_time) : (requested_time - pts);
-		if (cur_diff <= min_diff && last_key_frame != NULL)
+		if (cur_diff <= min_diff && 
+			(cur_frame->key_frame || 
+			(accurate && last_key_frame != NULL)))
 		{
 			min_index = index - last_key_frame_index;
 			min_diff = cur_diff;
@@ -269,7 +279,7 @@ thumb_grabber_truncate_frames(
 	if (min_part == NULL)
 	{
 		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-			"thumb_grabber_truncate_frames: did not find any frames");
+			"thumb_grabber_truncate_frames: did not find any frames (2)");
 		return VOD_UNEXPECTED;
 	}
 
@@ -286,6 +296,7 @@ thumb_grabber_init_state(
 	request_context_t* request_context,
 	media_track_t* track, 
 	uint64_t requested_time,
+	bool_t accurate,
 	write_callback_t write_callback,
 	void* write_context,
 	void** result)
@@ -302,7 +313,7 @@ thumb_grabber_init_state(
 		return VOD_BAD_REQUEST;
 	}
 
-	rc = thumb_grabber_truncate_frames(request_context, track, requested_time, &frame_index);
+	rc = thumb_grabber_truncate_frames(request_context, track, requested_time, accurate, &frame_index);
 	if (rc != VOD_OK)
 	{
 		return rc;
