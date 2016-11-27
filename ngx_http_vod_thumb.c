@@ -111,6 +111,7 @@ ngx_http_vod_thumb_init_frame_processor(
 		&submodule_context->request_context,
 		submodule_context->media_set.filtered_tracks,
 		submodule_context->request_params.segment_time,
+		submodule_context->conf->thumb.accurate,
 		segment_writer->write_tail,
 		segment_writer->context,
 		frame_processor_state);
@@ -144,6 +145,7 @@ ngx_http_vod_thumb_create_loc_conf(
 	ngx_conf_t *cf,
 	ngx_http_vod_thumb_loc_conf_t *conf)
 {
+	conf->accurate = NGX_CONF_UNSET;
 }
 
 static char *
@@ -154,6 +156,7 @@ ngx_http_vod_thumb_merge_loc_conf(
 	ngx_http_vod_thumb_loc_conf_t *prev)
 {
 	ngx_conf_merge_str_value(conf->file_name_prefix, prev->file_name_prefix, "thumb");
+	ngx_conf_merge_value(conf->accurate, prev->accurate, 1);
 	return NGX_CONF_OK;
 }
 

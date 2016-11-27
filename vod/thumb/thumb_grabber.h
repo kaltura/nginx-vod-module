@@ -11,6 +11,7 @@ vod_status_t thumb_grabber_init_state(
 	request_context_t* request_context,
 	media_track_t* track,
 	uint64_t requested_time,
+	bool_t accurate,
 	write_callback_t write_callback,
 	void* write_context,
 	void** result);
