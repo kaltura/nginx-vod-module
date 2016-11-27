@@ -12,7 +12,8 @@
 static const u_char jpg_file_ext[] = ".jpg";
 static u_char jpeg_content_type[] = "image/jpeg";
 
-ngx_int_t ngx_http_vod_thumb_get_url(
+ngx_int_t 
+ngx_http_vod_thumb_get_url(
 	ngx_http_vod_submodule_context_t* submodule_context,
 	uint32_t sequences_mask,
 	ngx_str_t* result)
@@ -36,7 +37,7 @@ ngx_int_t ngx_http_vod_thumb_get_url(
 	{
 		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, submodule_context->request_context.log, 0,
 			"ngx_http_vod_thumb_get_url: ngx_http_vod_get_base_url failed %i", rc);
-		return ngx_http_vod_status_to_ngx_error(r, rc);
+		return rc;
 	}
 
 	// get the request params string
@@ -64,7 +65,7 @@ ngx_int_t ngx_http_vod_thumb_get_url(
 	if (p == NULL)
 	{
 		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, submodule_context->request_context.log, 0,
-			"ngx_http_vod_thumb_get_url: vod_alloc failed");
+			"ngx_http_vod_thumb_get_url: ngx_pnalloc failed");
 		return ngx_http_vod_status_to_ngx_error(r, VOD_ALLOC_FAILED);
 	}
 
