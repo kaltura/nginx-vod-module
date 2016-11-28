@@ -1260,10 +1260,11 @@ dash_packager_get_segment_time(
 }
 
 static uint32_t
-dash_packager_get_presentation_delay(segment_durations_t* segment_durations)
+dash_packager_get_presentation_delay(
+	uint64_t current_time, 
+	segment_durations_t* segment_durations)
 {
 	uint64_t reference_time;
-	uint64_t current_time;
 
 	if (segment_durations->item_count <= 0)
 	{
@@ -1271,7 +1272,6 @@ dash_packager_get_presentation_delay(segment_durations_t* segment_durations)
 	}
 
 	reference_time = dash_packager_get_segment_time(segment_durations, 3);
-	current_time = ngx_time() * 1000;
 
 	if (current_time > reference_time)
 	{
@@ -1300,6 +1300,7 @@ dash_packager_build_mpd(
 	vod_tm_t publish_time_gmt;
 	vod_tm_t avail_time_gmt;
 	vod_tm_t cur_time_gmt;
+	time_t current_time;
 	size_t base_url_temp_buffer_size = 0;
 	size_t base_period_size;
 	size_t result_size = 0;
@@ -1523,9 +1524,12 @@ dash_packager_build_mpd(
 
 		vod_gmtime(context.segment_durations[media_type].end_time / 1000, &publish_time_gmt);
 
-		vod_gmtime(ngx_time(), &cur_time_gmt);
+		current_time = vod_time(request_context);
+		vod_gmtime(current_time, &cur_time_gmt);
 
-		presentation_delay = dash_packager_get_presentation_delay(&context.segment_durations[media_type]);
+		presentation_delay = dash_packager_get_presentation_delay(
+			(uint64_t)current_time * 1000, 
+			&context.segment_durations[media_type]);
 
 		p = vod_sprintf(result->data,
 			VOD_DASH_MANIFEST_HEADER_LIVE,
