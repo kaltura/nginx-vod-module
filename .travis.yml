@@ -8,11 +8,12 @@ before_install:
     - sudo dpkg -i libvdpau1_0.4.1-3ubuntu1.2_amd64.deb
     - sudo dpkg -i kaltura-ffmpeg_amd64.deb
 language: c
-compiler:
-    - clang
-    env: CFLAGS="$CFLAGS -Werror -Weverything"
-    - gcc
-    env: CFLAGS="$CFLAGS -Wuninitialized -Werror"
+    matrix:
+        include:
+            - compiler: gcc
+            env: CFLAGS="$CFLAGS -Wuninitialized -Werror" 
+            - compiler: clang
+            env: CFLAGS="$CFLAGS -Werror -Weverything"
 env:
   - NGX_VOD_MODULE=--add-module=./nginx-vod-module
   - NGX_VOD_MODULE=--add-dynamic-module=./nginx-vod-module
