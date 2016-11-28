@@ -10,9 +10,9 @@ before_install:
 language: c
 compiler:
     - clang
-        env: CFLAGS="$CFLAGS -Werror -Weverything"
+    env: CFLAGS="$CFLAGS -Werror -Weverything"
     - gcc
-        env: CFLAGS="$CFLAGS -Wuninitialized -Werror"
+    env: CFLAGS="$CFLAGS -Wuninitialized -Werror"
 env:
   - NGX_VOD_MODULE=--add-module=./nginx-vod-module
   - NGX_VOD_MODULE=--add-dynamic-module=./nginx-vod-module
