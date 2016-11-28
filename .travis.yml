@@ -12,6 +12,7 @@ env:
   global:
     - NGX_VOD_MODULE=--add-module=./nginx-vod-module
     - NGX_VOD_MODULE=--add-dynamic-module=./nginx-vod-module
+    - CFLAGS="$CFLAGS -O3"
 
 matrix:
   include:

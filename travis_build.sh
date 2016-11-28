@@ -53,6 +53,5 @@ export LD_LIBRARY_PATH LIBRARY_PATH C_INCLUDE_PATH
         --with-ipv6 \
         --with-debug \
         --with-threads \
-        --with-cc-opt="$CFLAGS -O3 " \
         $*
 make
