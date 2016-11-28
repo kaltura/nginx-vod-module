@@ -19,7 +19,7 @@ cd nginx-$NGINX_VERSION
 LD_LIBRARY_PATH=/opt/kaltura/ffmpeg-2.1.3/lib
 LIBRARY_PATH=/opt/kaltura/ffmpeg-2.1.3/lib
 C_INCLUDE_PATH=/opt/kaltura/ffmpeg-2.1.3/include
-export LD_LIBRARY_PATH LIBRARY_PATH C_INCLUDE_PATH
+export LD_LIBRARY_PATH LIBRARY_PATH C_INCLUDE_PATH CC 
 
 ./configure \
         --prefix=/etc/nginx \
@@ -53,5 +53,6 @@ export LD_LIBRARY_PATH LIBRARY_PATH C_INCLUDE_PATH
         --with-ipv6 \
         --with-debug \
         --with-threads \
+	--with-cc-opt="-O3" \
         $*
 make
