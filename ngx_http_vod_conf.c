@@ -84,6 +84,14 @@ ngx_http_vod_create_loc_conf(ngx_conf_t *cf)
 	conf->ignore_edit_list = NGX_CONF_UNSET;
 	conf->max_mapping_response_size = NGX_CONF_UNSET_SIZE;
 
+	conf->metadata_cache = NGX_CONF_UNSET_PTR;
+	conf->dynamic_mapping_cache = NGX_CONF_UNSET_PTR;
+	for (type = 0; type < CACHE_TYPE_COUNT; type++)
+	{
+		conf->response_cache[type] = NGX_CONF_UNSET_PTR;
+		conf->mapping_cache[type] = NGX_CONF_UNSET_PTR;
+	}
+
 	for (type = 0; type < EXPIRES_TYPE_COUNT; type++)
 	{
 		conf->expires[type] = NGX_CONF_UNSET;
@@ -93,6 +101,7 @@ ngx_http_vod_create_loc_conf(ngx_conf_t *cf)
 	conf->drm_enabled = NGX_CONF_UNSET;
 	conf->drm_clear_lead_segment_count = NGX_CONF_UNSET_UINT;
 	conf->drm_max_info_length = NGX_CONF_UNSET_SIZE;
+	conf->drm_info_cache = NGX_CONF_UNSET_PTR;
 	conf->min_single_nalu_per_frame_segment = NGX_CONF_UNSET_UINT;
 
 #if (NGX_THREADS)
@@ -161,27 +170,13 @@ ngx_http_vod_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child)
 		conf->segments_base_url = prev->segments_base_url;
 	}
 
-	if (conf->metadata_cache == NULL)
-	{
-		conf->metadata_cache = prev->metadata_cache;
-	}
-
-	if (conf->dynamic_mapping_cache == NULL)
-	{
-		conf->dynamic_mapping_cache = prev->dynamic_mapping_cache;
-	}
+	ngx_conf_merge_ptr_value(conf->metadata_cache, prev->metadata_cache, NULL);
+	ngx_conf_merge_ptr_value(conf->dynamic_mapping_cache, prev->dynamic_mapping_cache, NULL);
 
 	for (type = 0; type < CACHE_TYPE_COUNT; type++)
 	{
-		if (conf->response_cache[type] == NULL)
-		{
-			conf->response_cache[type] = prev->response_cache[type];
-		}
-
-		if (conf->mapping_cache[type] == NULL)
-		{
-			conf->mapping_cache[type] = prev->mapping_cache[type];
-		}
+		ngx_conf_merge_ptr_value(conf->response_cache[type], prev->response_cache[type], NULL);
+		ngx_conf_merge_ptr_value(conf->mapping_cache[type], prev->mapping_cache[type], NULL);
 	}
 
 	for (type = 0; type < EXPIRES_TYPE_COUNT; type++)
@@ -255,10 +250,7 @@ ngx_http_vod_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child)
 	ngx_conf_merge_uint_value(conf->drm_clear_lead_segment_count, prev->drm_clear_lead_segment_count, 1);
 	ngx_conf_merge_str_value(conf->drm_upstream_location, prev->drm_upstream_location, "");
 	ngx_conf_merge_size_value(conf->drm_max_info_length, prev->drm_max_info_length, 4096);
-	if (conf->drm_info_cache == NULL)
-	{
-		conf->drm_info_cache = prev->drm_info_cache;
-	}
+	ngx_conf_merge_ptr_value(conf->drm_info_cache, prev->drm_info_cache, NULL);
 	if (conf->drm_request_uri == NULL)
 	{
 		conf->drm_request_uri = prev->drm_request_uri;
@@ -593,7 +585,7 @@ ngx_http_vod_cache_command(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
 
 	value = cf->args->elts;
 
-	if (*cache != NULL) 
+	if (*cache != NGX_CONF_UNSET_PTR)
 	{
 		return "is duplicate";
 	}

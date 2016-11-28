@@ -28,6 +28,8 @@ static ngx_str_t error_codes[VOD_ERROR_LAST - VOD_ERROR_FIRST] = {
 
 static ngx_uint_t ngx_http_vod_status_index;
 
+static ngx_str_t empty_string = ngx_null_string;
+
 void ngx_http_vod_set_status_index(ngx_uint_t index)
 {
 	ngx_http_vod_status_index = index;
@@ -204,6 +206,11 @@ ngx_http_vod_get_base_url(
 		{
 			// conf base url evaluated to empty string, use relative URLs
 			return NGX_OK;
+		}
+
+		if (base_url.data[base_url.len - 1] == '/')
+		{
+			file_uri = &empty_string;
 		}
 
 		result_size = base_url.len;

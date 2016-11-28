@@ -307,18 +307,32 @@ static ngx_int_t
 ngx_http_vod_set_suburi_var(ngx_http_request_t *r, ngx_http_variable_value_t *v, uintptr_t data)
 {
 	ngx_http_vod_ctx_t *ctx;
+	media_sequence_t* sequence;
 	ngx_str_t* value;
 
 	ctx = ngx_http_get_module_ctx(r, ngx_http_vod_module);
-	if (ctx == NULL ||
-		ctx->cur_sequence < ctx->submodule_context.media_set.sequences ||
-		ctx->cur_sequence >= ctx->submodule_context.media_set.sequences_end)
+	if (ctx == NULL)
 	{
 		v->not_found = 1;
 		return NGX_OK;
 	}
 
-	value = &ctx->cur_sequence->stripped_uri;
+	if (ctx->cur_sequence >= ctx->submodule_context.media_set.sequences &&
+		ctx->cur_sequence < ctx->submodule_context.media_set.sequences_end)
+	{
+		sequence = ctx->cur_sequence;
+	}
+	else if (ctx->cur_source != NULL)
+	{
+		sequence = ctx->cur_source->sequence;
+	}
+	else
+	{
+		v->not_found = 1;
+		return NGX_OK;
+	}
+
+	value = &sequence->stripped_uri;
 	if (value->len == 0)
 	{
 		v->not_found = 1;
@@ -2344,6 +2358,7 @@ ngx_http_vod_state_machine_open_files(ngx_http_vod_ctx_t *ctx)
 		}
 	}
 
+	ctx->cur_source = NULL;
 	return NGX_OK;
 }
 

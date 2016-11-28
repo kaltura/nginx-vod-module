@@ -1016,6 +1016,8 @@ Configures the shared memory object name of the performance counters
 
 Sets the base URL (scheme + domain) that should be returned in manifest responses.
 The parameter value can contain variables, if the parameter evaluates to an empty string, relative URLs will be used.
+If the parameter evaluates to a string ending with /, it is assumed to be a full URL - the module only appends the
+file name to it, instead of a full URI.
 If not set, the base URL is determined as follows:
 1. If the request did not contain a host header (HTTP/1.0) relative URLs will be returned
 2. Otherwise, the base URL will be `$scheme://$http_host`
