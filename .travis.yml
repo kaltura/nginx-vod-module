@@ -16,7 +16,6 @@ compiler:
 env:
   - NGX_VOD_MODULE=--add-module=./nginx-vod-module
   - NGX_VOD_MODULE=--add-dynamic-module=./nginx-vod-module
-  - CFLAGS="$CFLAGS -Werror"
 script: ./travis_build.sh $NGX_VOD_MODULE
 notifications:
   email:
