@@ -521,13 +521,13 @@ ngx_http_vod_parse_multi_uri(
 
 	result->prefix.data = uri->data;
 	result->prefix.len = uri->len;
-	result->postfix.data = NULL;
-	result->postfix.len = 0;
 
 	if (uri->len < multi_uri_suffix->len ||
 		ngx_memcmp(multi_uri_suffix->data, uri->data + uri->len - multi_uri_suffix->len, multi_uri_suffix->len) != 0)
 	{
 		// not a multi uri
+		result->postfix.data = NULL;
+		result->postfix.len = 0;
 		result->middle_parts[0].data = NULL;
 		result->middle_parts[0].len = 0;
 		result->parts_count = 1;
