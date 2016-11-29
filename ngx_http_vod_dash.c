@@ -41,6 +41,7 @@ ngx_http_vod_dash_handle_manifest(
 	ngx_str_t* response,
 	ngx_str_t* content_type)
 {
+	dash_manifest_extensions_t extensions;
 	ngx_http_vod_loc_conf_t* conf = submodule_context->conf;
 	ngx_str_t base_url = ngx_null_string;
 	vod_status_t rc;
@@ -72,18 +73,19 @@ ngx_http_vod_dash_handle_manifest(
 			&conf->dash.mpd_config,
 			&base_url,
 			&submodule_context->media_set,
+			conf->drm_single_key,
 			response);
 	}
 	else
 	{
+		vod_memzero(&extensions, sizeof(extensions));
+
 		rc = dash_packager_build_mpd(
 			&submodule_context->request_context,
 			&conf->dash.mpd_config,
 			&base_url,
 			&submodule_context->media_set,
-			0,
-			NULL,
-			NULL,
+			&extensions,
 			response);
 	}
 
@@ -108,13 +110,26 @@ ngx_http_vod_dash_mp4_handle_init_segment(
 {
 	ngx_http_vod_loc_conf_t* conf = submodule_context->conf;
 	vod_status_t rc;
+	uint32_t flags;
 
 	if (conf->drm_enabled)
 	{
+		flags = 0;
+
+		if (conf->dash.init_mp4_pssh)
+		{
+			flags |= EDASH_INIT_MP4_WRITE_PSSH;
+		}
+
+		if (conf->drm_clear_lead_segment_count > 0)
+		{
+			flags |= EDASH_INIT_MP4_HAS_CLEAR_LEAD;
+		}
+
 		rc = edash_packager_build_init_mp4(
 			&submodule_context->request_context,
 			&submodule_context->media_set,
-			conf->drm_clear_lead_segment_count > 0,
+			flags,
 			ngx_http_vod_submodule_size_only(submodule_context),
 			response);
 	}
@@ -465,8 +480,10 @@ ngx_http_vod_dash_create_loc_conf(
 	ngx_http_vod_dash_loc_conf_t *conf)
 {
 	conf->absolute_manifest_urls = NGX_CONF_UNSET;
+	conf->init_mp4_pssh = NGX_CONF_UNSET;
 	conf->mpd_config.manifest_format = NGX_CONF_UNSET_UINT;
 	conf->mpd_config.duplicate_bitrate_threshold = NGX_CONF_UNSET_UINT;
+	conf->mpd_config.write_playready_kid = NGX_CONF_UNSET;
 }
 
 static char *
@@ -477,6 +494,7 @@ ngx_http_vod_dash_merge_loc_conf(
 	ngx_http_vod_dash_loc_conf_t *prev)
 {
 	ngx_conf_merge_value(conf->absolute_manifest_urls, prev->absolute_manifest_urls, 1);
+	ngx_conf_merge_value(conf->init_mp4_pssh, prev->init_mp4_pssh, 1);
 
 	ngx_conf_merge_str_value(conf->manifest_file_name_prefix, prev->manifest_file_name_prefix, "manifest");
 	ngx_conf_merge_str_value(conf->mpd_config.profiles, prev->mpd_config.profiles, "urn:mpeg:dash:profile:isoff-main:2011");
@@ -485,6 +503,7 @@ ngx_http_vod_dash_merge_loc_conf(
 	ngx_conf_merge_str_value(conf->mpd_config.subtitle_file_name_prefix, prev->mpd_config.subtitle_file_name_prefix, "sub");
 	ngx_conf_merge_uint_value(conf->mpd_config.manifest_format, prev->mpd_config.manifest_format, FORMAT_SEGMENT_TIMELINE);
 	ngx_conf_merge_uint_value(conf->mpd_config.duplicate_bitrate_threshold, prev->mpd_config.duplicate_bitrate_threshold, 4096);
+	ngx_conf_merge_value(conf->mpd_config.write_playready_kid, prev->mpd_config.write_playready_kid, 0);
 
 	return NGX_CONF_OK;
 }

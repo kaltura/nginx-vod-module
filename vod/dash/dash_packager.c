@@ -183,8 +183,7 @@ typedef struct {
 	dash_manifest_config_t* conf;
 	vod_str_t* base_url;
 	media_set_t* media_set;
-	write_tags_callback_t write_representation_tags;
-	void* representation_tags_writer_context;
+	dash_manifest_extensions_t extensions;
 	u_char* base_url_temp_buffer;
 	segment_durations_t segment_durations[MEDIA_TYPE_COUNT];
 	segment_duration_item_t** cur_duration_items;
@@ -969,6 +968,14 @@ dash_packager_write_mpd_period(
 			continue;
 		}
 
+		if (context->extensions.adaptation_set.write != NULL)
+		{
+			p = context->extensions.adaptation_set.write(
+				context->extensions.adaptation_set.context,
+				p,
+				reference_track);
+		}
+
 		// get the segment index start number
 		start_number = (*cur_duration_items)[0].segment_index;
 
@@ -1079,9 +1086,12 @@ dash_packager_write_mpd_period(
 			}
 
 			// write any additional tags
-			if (context->write_representation_tags != NULL)
+			if (context->extensions.representation.write != NULL)
 			{
-				p = context->write_representation_tags(context->representation_tags_writer_context, p, cur_track);
+				p = context->extensions.representation.write(
+					context->extensions.representation.context,
+					p, 
+					cur_track);
 			}
 
 			p = vod_copy(p, VOD_DASH_MANIFEST_REPRESENTATION_FOOTER, sizeof(VOD_DASH_MANIFEST_REPRESENTATION_FOOTER) - 1);
@@ -1287,9 +1297,7 @@ dash_packager_build_mpd(
 	dash_manifest_config_t* conf,
 	vod_str_t* base_url,
 	media_set_t* media_set,
-	size_t representation_tags_size,
-	write_tags_callback_t write_representation_tags,
-	void* representation_tags_writer_context,
+	dash_manifest_extensions_t* extensions,
 	vod_str_t* result)
 {
 	segment_duration_item_t** cur_duration_items;
@@ -1389,7 +1397,8 @@ dash_packager_build_mpd(
 			base_url->len + conf->subtitle_file_name_prefix.len + MAX_CLIP_SPEC_LENGTH + MAX_TRACK_SPEC_LENGTH) *
 			context.adaptation_sets.count[ADAPTATION_TYPE_SUBTITLE] +
 		sizeof(VOD_DASH_MANIFEST_PERIOD_FOOTER) - 1 +
-		representation_tags_size;
+		extensions->representation.size + 
+		extensions->adaptation_set.size;
 
 	switch (media_set->type)
 	{
@@ -1492,8 +1501,7 @@ dash_packager_build_mpd(
 	context.conf = conf;
 	context.base_url = base_url;
 	context.media_set = media_set;
-	context.write_representation_tags = write_representation_tags;
-	context.representation_tags_writer_context = representation_tags_writer_context;
+	context.extensions = *extensions;
 
 	// print the manifest header
 	switch (media_set->type)

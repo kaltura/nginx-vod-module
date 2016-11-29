@@ -997,6 +997,20 @@ ngx_http_vod_alloc_read_buffer(ngx_http_vod_ctx_t *ctx, size_t size, int alloc_p
 ////// DRM
 
 static void
+ngx_http_vod_copy_drm_info(ngx_http_vod_ctx_t *ctx)
+{
+	media_sequence_t* ref_sequence = ctx->cur_sequence;
+	media_sequence_t* cur_sequence;
+
+	for (cur_sequence = ref_sequence + 1;
+		cur_sequence < ctx->submodule_context.media_set.sequences_end;
+		cur_sequence++)
+	{
+		cur_sequence->drm_info = ref_sequence->drm_info;
+	}
+}
+
+static void
 ngx_http_vod_drm_info_request_finished(void* context, ngx_int_t rc, ngx_buf_t* response, ssize_t content_length)
 {
 	ngx_http_vod_loc_conf_t *conf;
@@ -1061,7 +1075,15 @@ ngx_http_vod_drm_info_request_finished(void* context, ngx_int_t rc, ngx_buf_t* r
 		}
 	}
 
-	ctx->cur_sequence++;
+	if (conf->drm_single_key)
+	{
+		ngx_http_vod_copy_drm_info(ctx);
+		ctx->cur_sequence = ctx->submodule_context.media_set.sequences_end;
+	}
+	else
+	{
+		ctx->cur_sequence++;
+	}
 
 	rc = ngx_http_vod_run_state_machine(ctx);
 	if (rc == NGX_AGAIN)
@@ -1140,6 +1162,12 @@ ngx_http_vod_state_machine_get_drm_info(ngx_http_vod_ctx_t *ctx)
 					ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
 						"ngx_http_vod_state_machine_get_drm_info: invalid drm info in cache %V", &drm_info);
 					return rc;
+				}
+
+				if (conf->drm_single_key)
+				{
+					ngx_http_vod_copy_drm_info(ctx);
+					ctx->cur_sequence = ctx->submodule_context.media_set.sequences_end - 1;
 				}
 
 				continue;

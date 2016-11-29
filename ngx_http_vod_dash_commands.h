@@ -7,6 +7,13 @@
 	BASE_OFFSET + offsetof(ngx_http_vod_dash_loc_conf_t, absolute_manifest_urls),
 	NULL },
 	
+	{ ngx_string("vod_dash_init_mp4_pssh"),
+	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1,
+	ngx_conf_set_flag_slot,
+	NGX_HTTP_LOC_CONF_OFFSET,
+	BASE_OFFSET + offsetof(ngx_http_vod_dash_loc_conf_t, init_mp4_pssh),
+	NULL },
+
 	{ ngx_string("vod_dash_manifest_file_name_prefix"),
 	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1,
 	ngx_conf_set_str_slot,
@@ -56,4 +63,11 @@
 	BASE_OFFSET + offsetof(ngx_http_vod_dash_loc_conf_t, mpd_config.duplicate_bitrate_threshold),
 	NULL },
 	
+	{ ngx_string("vod_dash_write_playready_kid"),
+	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1,
+	ngx_conf_set_flag_slot,
+	NGX_HTTP_LOC_CONF_OFFSET,
+	BASE_OFFSET + offsetof(ngx_http_vod_dash_loc_conf_t, mpd_config.write_playready_kid),
+	NULL },
+
 #undef BASE_OFFSET
