@@ -72,6 +72,7 @@ struct ngx_http_vod_loc_conf_s {
 	ngx_array_t *last_modified_types_keys;
 
 	ngx_flag_t drm_enabled;
+	ngx_flag_t drm_single_key;
 	ngx_uint_t drm_clear_lead_segment_count;
 	ngx_str_t drm_upstream_location;
 	size_t drm_max_info_length;

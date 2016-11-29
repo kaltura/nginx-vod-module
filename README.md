@@ -1189,6 +1189,16 @@ See the list of nginx variables added by this module below.
 When enabled, the module encrypts the media segments according to the response it gets from the drm upstream.
 Currently supported only for dash and mss (play ready).
 
+#### vod_drm_single_key
+* **syntax**: `vod_drm_single_key on/off`
+* **default**: `off`
+* **context**: `http`, `server`, `location`
+
+When enabled, the module requests the drm info only for the first sequence and applies it to all sequences.
+When disabled, the drm info is requested for each sequence separately.
+In addition, in DASH, enabling this setting makes the module place the ContentProtection tag under AdaptationSet,
+otherwise, it is placed under Representation.
+
 #### vod_drm_clear_lead_segment_count
 * **syntax**: `vod_drm_clear_lead_segment_count count`
 * **default**: `1`
@@ -1287,6 +1297,14 @@ Sets the MPD format, available options are:
 * `segmentlist` - uses SegmentList and SegmentURL tags, in this format the URL of each fragment is explicitly set in the MPD
 * `segmenttemplate` - uses SegmentTemplate, reporting a single duration for all fragments
 * `segmenttimeline` - uses SegmentTemplate and SegmentTimeline to explicitly set the duration of the fragments
+
+#### vod_dash_init_mp4_pssh
+* **syntax**: `vod_dash_init_mp4_pssh on/off`
+* **default**: `on`
+* **context**: `http`, `server`, `location`
+
+When enabled, the DRM pssh boxes are returned in the DASH init segment and in the manifest.
+When disabled, the pssh boxes are returned only in the manifest.
 
 ### Configuration directives - HDS
 

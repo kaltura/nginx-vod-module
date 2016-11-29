@@ -31,13 +31,25 @@ typedef struct {
 } atom_writer_t;
 
 typedef struct {
+	size_t size;
+	write_tags_callback_t write;
+	void* context;
+} tags_writer_t;
+
+typedef struct {
 	vod_str_t profiles;
 	vod_str_t init_file_name_prefix;
 	vod_str_t fragment_file_name_prefix;
 	vod_str_t subtitle_file_name_prefix;
 	vod_uint_t manifest_format;
 	vod_uint_t duplicate_bitrate_threshold;
+	bool_t write_playready_kid;		// TODO: remove
 } dash_manifest_config_t;
+
+typedef struct {
+	tags_writer_t representation;
+	tags_writer_t adaptation_set;
+} dash_manifest_extensions_t;
 
 typedef struct {
 	size_t extra_traf_atoms_size;
@@ -51,9 +63,7 @@ vod_status_t dash_packager_build_mpd(
 	dash_manifest_config_t* conf,
 	vod_str_t* base_url,
 	media_set_t* media_set,
-	size_t representation_tags_size,
-	write_tags_callback_t write_representation_tags,
-	void* representation_tags_writer_context,
+	dash_manifest_extensions_t* extensions,
 	vod_str_t* result);
 
 vod_status_t dash_packager_build_init_mp4(

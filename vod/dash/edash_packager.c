@@ -26,17 +26,29 @@
 	"</cenc:pssh>\n"																\
 	"        </ContentProtection>\n"
 
+// TODO: remove this - always generate a default_KID for PlayReady
 #define VOD_EDASH_MANIFEST_CONTENT_PROTECTION_PLAYREADY_PART1						\
 	"        <ContentProtection xmlns:mspr=\"urn:microsoft:playready\" schemeIdUri=\"urn:uuid:"
 
-#define VOD_EDASH_MANIFEST_CONTENT_PROTECTION_PLAYREADY_PART2						\
+#define VOD_EDASH_MANIFEST_CONTENT_PROTECTION_PLAYREADY_V2_PART1					\
+	"        <ContentProtection xmlns:cenc=\"urn:mpeg:cenc:2013\" xmlns:mspr=\"urn:microsoft:playready\" schemeIdUri=\"urn:uuid:"
+
+#define VOD_EDASH_MANIFEST_CONTENT_PROTECTION_PLAYREADY_V2_PART2					\
+	"\" value=\"2.0\" cenc:default_KID=\""
+
+#define VOD_EDASH_MANIFEST_CONTENT_PROTECTION_PLAYREADY_PART3						\
 	"\">\n"																			\
 	"          <mspr:pro>"
 
-#define VOD_EDASH_MANIFEST_CONTENT_PROTECTION_PLAYREADY_PART3						\
+#define VOD_EDASH_MANIFEST_CONTENT_PROTECTION_PLAYREADY_PART4						\
 	"</mspr:pro>\n"																	\
 	"        </ContentProtection>\n"
 
+// mpd types
+typedef struct {
+	u_char* temp_buffer;
+	bool_t write_playready_kid;
+} write_content_protection_context_t;
 
 // init segment types
 typedef struct {
@@ -104,8 +116,9 @@ edash_packager_write_pssh(u_char* p, drm_system_info_t* cur_info)
 }
 
 static u_char* 
-edash_packager_write_content_protection(void* context, u_char* p, media_track_t* track)
+edash_packager_write_content_protection(void* ctx, u_char* p, media_track_t* track)
 {
+	write_content_protection_context_t* context = ctx;
 	drm_info_t* drm_info = (drm_info_t*)track->file_info.drm_info;
 	drm_system_info_t* cur_info;
 	vod_str_t base64;
@@ -116,15 +129,25 @@ edash_packager_write_content_protection(void* context, u_char* p, media_track_t*
 	{
 		if (vod_memcmp(cur_info->system_id, edash_playready_system_id, sizeof(edash_playready_system_id)) == 0)
 		{
-			p = vod_copy(p, VOD_EDASH_MANIFEST_CONTENT_PROTECTION_PLAYREADY_PART1, sizeof(VOD_EDASH_MANIFEST_CONTENT_PROTECTION_PLAYREADY_PART1) - 1);
-			p = mp4_encrypt_write_guid(p, cur_info->system_id);
-			p = vod_copy(p, VOD_EDASH_MANIFEST_CONTENT_PROTECTION_PLAYREADY_PART2, sizeof(VOD_EDASH_MANIFEST_CONTENT_PROTECTION_PLAYREADY_PART2) - 1);
+			if (context->write_playready_kid)
+			{
+				p = vod_copy(p, VOD_EDASH_MANIFEST_CONTENT_PROTECTION_PLAYREADY_V2_PART1, sizeof(VOD_EDASH_MANIFEST_CONTENT_PROTECTION_PLAYREADY_V2_PART1) - 1);
+				p = mp4_encrypt_write_guid(p, cur_info->system_id);
+				p = vod_copy(p, VOD_EDASH_MANIFEST_CONTENT_PROTECTION_PLAYREADY_V2_PART2, sizeof(VOD_EDASH_MANIFEST_CONTENT_PROTECTION_PLAYREADY_V2_PART2) - 1);
+				p = mp4_encrypt_write_guid(p, drm_info->key_id);
+			}
+			else
+			{
+				p = vod_copy(p, VOD_EDASH_MANIFEST_CONTENT_PROTECTION_PLAYREADY_PART1, sizeof(VOD_EDASH_MANIFEST_CONTENT_PROTECTION_PLAYREADY_PART1) - 1);
+				p = mp4_encrypt_write_guid(p, cur_info->system_id);
+			}
+			p = vod_copy(p, VOD_EDASH_MANIFEST_CONTENT_PROTECTION_PLAYREADY_PART3, sizeof(VOD_EDASH_MANIFEST_CONTENT_PROTECTION_PLAYREADY_PART3) - 1);
 
 			base64.data = p;
 			vod_encode_base64(&base64, &cur_info->data);
 			p += base64.len;
 
-			p = vod_copy(p, VOD_EDASH_MANIFEST_CONTENT_PROTECTION_PLAYREADY_PART3, sizeof(VOD_EDASH_MANIFEST_CONTENT_PROTECTION_PLAYREADY_PART3) - 1);
+			p = vod_copy(p, VOD_EDASH_MANIFEST_CONTENT_PROTECTION_PLAYREADY_PART4, sizeof(VOD_EDASH_MANIFEST_CONTENT_PROTECTION_PLAYREADY_PART4) - 1);
 		}
 		else
 		{
@@ -134,7 +157,7 @@ edash_packager_write_content_protection(void* context, u_char* p, media_track_t*
 			p = mp4_encrypt_write_guid(p, drm_info->key_id);
 			p = vod_copy(p, VOD_EDASH_MANIFEST_CONTENT_PROTECTION_CENC_PART3, sizeof(VOD_EDASH_MANIFEST_CONTENT_PROTECTION_CENC_PART3) - 1);
 
-			pssh.data = (u_char*)context;
+			pssh.data = context->temp_buffer;
 			pssh.len = edash_packager_write_pssh(pssh.data, cur_info) - pssh.data;
 
 			base64.data = p;
@@ -153,12 +176,15 @@ edash_packager_build_mpd(
 	dash_manifest_config_t* conf,
 	vod_str_t* base_url,
 	media_set_t* media_set,
+	bool_t drm_single_key,
 	vod_str_t* result)
 {
+	write_content_protection_context_t context;
+	dash_manifest_extensions_t extensions;
 	media_sequence_t* cur_sequence;
 	drm_system_info_t* cur_info;
+	tags_writer_t content_prot_writer;
 	drm_info_t* drm_info;
-	u_char* pssh_temp_buffer = NULL;
 	size_t representation_tags_size;
 	size_t cur_drm_tags_size;
 	size_t cur_pssh_size;
@@ -178,11 +204,13 @@ edash_packager_build_mpd(
 			if (vod_memcmp(cur_info->system_id, edash_playready_system_id, sizeof(edash_playready_system_id)) == 0)
 			{
 				cur_drm_tags_size +=
-					sizeof(VOD_EDASH_MANIFEST_CONTENT_PROTECTION_PLAYREADY_PART1) - 1 +
+					sizeof(VOD_EDASH_MANIFEST_CONTENT_PROTECTION_PLAYREADY_V2_PART1) - 1 +
 					VOD_GUID_LENGTH +
-					sizeof(VOD_EDASH_MANIFEST_CONTENT_PROTECTION_PLAYREADY_PART2) - 1 +
+					sizeof(VOD_EDASH_MANIFEST_CONTENT_PROTECTION_PLAYREADY_V2_PART2) - 1 +
+					VOD_GUID_LENGTH +
+					sizeof(VOD_EDASH_MANIFEST_CONTENT_PROTECTION_PLAYREADY_PART3) - 1 +
 					vod_base64_encoded_length(cur_info->data.len) +
-					sizeof(VOD_EDASH_MANIFEST_CONTENT_PROTECTION_PLAYREADY_PART3) - 1;
+					sizeof(VOD_EDASH_MANIFEST_CONTENT_PROTECTION_PLAYREADY_PART4) - 1;
 			}
 			else
 			{
@@ -208,10 +236,11 @@ edash_packager_build_mpd(
 		representation_tags_size += cur_drm_tags_size * cur_sequence->total_track_count;
 	}
 
+	context.write_playready_kid = conf->write_playready_kid;
 	if (max_pssh_size > 0)
 	{
-		pssh_temp_buffer = vod_alloc(request_context->pool, max_pssh_size);
-		if (pssh_temp_buffer == NULL)
+		context.temp_buffer = vod_alloc(request_context->pool, max_pssh_size);
+		if (context.temp_buffer == NULL)
 		{
 			vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
 				"edash_packager_build_mpd: vod_alloc failed");
@@ -219,14 +248,29 @@ edash_packager_build_mpd(
 		}
 	}
 
+	content_prot_writer.size = representation_tags_size;
+	content_prot_writer.write = edash_packager_write_content_protection;
+	content_prot_writer.context = &context;
+
+	if (drm_single_key)
+	{
+		// write the ContentProtection tags under AdaptationSet
+		extensions.adaptation_set = content_prot_writer;
+		vod_memzero(&extensions.representation, sizeof(extensions.representation));
+	}
+	else
+	{
+		// write the ContentProtection tags under Representation
+		vod_memzero(&extensions.adaptation_set, sizeof(extensions.adaptation_set));
+		extensions.representation = content_prot_writer;
+	}
+
 	rc = dash_packager_build_mpd(
 		request_context,
 		conf,
 		base_url,
 		media_set,
-		representation_tags_size,
-		edash_packager_write_content_protection,
-		pssh_temp_buffer,
+		&extensions,
 		result);
 	if (rc != VOD_OK)
 	{
@@ -354,7 +398,7 @@ vod_status_t
 edash_packager_build_init_mp4(
 	request_context_t* request_context,
 	media_set_t* media_set,
-	bool_t has_clear_lead,
+	uint32_t flags,
 	bool_t size_only,
 	vod_str_t* result)
 {
@@ -370,7 +414,7 @@ edash_packager_build_init_mp4(
 		request_context,
 		first_track->media_info.media_type,
 		&first_track->raw_atoms[RTA_STSD],
-		has_clear_lead,
+		(flags & EDASH_INIT_MP4_HAS_CLEAR_LEAD) != 0,
 		drm_info->key_id,
 		&stsd_writer_context);
 	if (rc != VOD_OK)
@@ -398,7 +442,7 @@ edash_packager_build_init_mp4(
 		request_context,
 		media_set,
 		size_only,
-		&pssh_atom_writer,
+		(flags & EDASH_INIT_MP4_WRITE_PSSH) != 0 ? &pssh_atom_writer : NULL,
 		&stsd_atom_writer,
 		result);
 	if (rc != VOD_OK)

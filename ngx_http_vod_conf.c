@@ -99,6 +99,7 @@ ngx_http_vod_create_loc_conf(ngx_conf_t *cf)
 	conf->last_modified_time = NGX_CONF_UNSET;
 
 	conf->drm_enabled = NGX_CONF_UNSET;
+	conf->drm_single_key = NGX_CONF_UNSET;
 	conf->drm_clear_lead_segment_count = NGX_CONF_UNSET_UINT;
 	conf->drm_max_info_length = NGX_CONF_UNSET_SIZE;
 	conf->drm_info_cache = NGX_CONF_UNSET_PTR;
@@ -247,6 +248,7 @@ ngx_http_vod_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child)
 	}
 
 	ngx_conf_merge_value(conf->drm_enabled, prev->drm_enabled, 0);
+	ngx_conf_merge_value(conf->drm_single_key, prev->drm_single_key, 0);
 	ngx_conf_merge_uint_value(conf->drm_clear_lead_segment_count, prev->drm_clear_lead_segment_count, 1);
 	ngx_conf_merge_str_value(conf->drm_upstream_location, prev->drm_upstream_location, "");
 	ngx_conf_merge_size_value(conf->drm_max_info_length, prev->drm_max_info_length, 4096);
@@ -1135,6 +1137,13 @@ ngx_command_t ngx_http_vod_commands[] = {
 	ngx_conf_set_flag_slot,
 	NGX_HTTP_LOC_CONF_OFFSET,
 	offsetof(ngx_http_vod_loc_conf_t, drm_enabled),
+	NULL },
+
+	{ ngx_string("vod_drm_single_key"),
+	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1,
+	ngx_conf_set_flag_slot,
+	NGX_HTTP_LOC_CONF_OFFSET,
+	offsetof(ngx_http_vod_loc_conf_t, drm_single_key),
 	NULL },
 
 	{ ngx_string("vod_drm_clear_lead_segment_count"),
