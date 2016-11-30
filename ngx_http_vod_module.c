@@ -1550,6 +1550,7 @@ ngx_http_vod_identify_format(ngx_http_vod_ctx_t* ctx)
 		rc = cur_format->init_metadata_reader(
 			&ctx->submodule_context.request_context,
 			&buffer,
+			ctx->submodule_context.conf->initial_read_size,
 			ctx->submodule_context.conf->max_metadata_size,
 			&ctx->metadata_reader_context);
 		if (rc == VOD_NOT_FOUND)
