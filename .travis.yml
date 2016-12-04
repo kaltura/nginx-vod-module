@@ -2,9 +2,11 @@ before_install:
     - sudo apt-get update -qq
     - sudo apt-get install -y libssl-dev libpcre3-dev wget unzip libopencore-amrwb0 libopencore-amrnb0 libass4 libgsm1 libmp3lame0 libopenjpeg2 libschroedinger-1.0-0 libspeex1 libtheora0  libva1  libvpx1 libxvidcore4
     - sudo wget http://installrepo.kaltura.org/repo/apt/debian-nightly/pool/main/k/kaltura-ffmpeg/kaltura-ffmpeg_3.1.3-2+b2_amd64.deb -O kaltura-ffmpeg_amd64.deb
-    - sudo wget http://installrepo.kaltura.org/releases/kaltura-ffmpeg-deb-deps/libx264-123_0.123.2189+git35cf912-1_amd64.deb
+    - sudo wget http://installrepo.kaltura.org/repo/apt/debian-nightly/pool/main/x/x264/libx264-148_0.148-1_amd64.deb
+    - sudo wget http://installrepo.kaltura.org/repo/apt/debian-nightly/pool/main/x/x265/libx265-87_2.0-4_amd64.deb
     - sudo wget http://installrepo.kaltura.org/releases/kaltura-ffmpeg-deb-deps/libvdpau1_0.4.1-3ubuntu1.2_amd64.deb
-    - sudo dpkg -i libx264-123_0.123.2189+git35cf912-1_amd64.deb
+    - sudo dpkg -i libx264-148_0.148-1_amd64.deb
+    - sudo dpkg -i libx265-87_2.0-4_amd64.deb
     - sudo dpkg -i libvdpau1_0.4.1-3ubuntu1.2_amd64.deb
     - sudo dpkg -i kaltura-ffmpeg_amd64.deb
 language: c
