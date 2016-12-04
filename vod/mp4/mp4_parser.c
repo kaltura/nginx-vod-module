@@ -1016,6 +1016,7 @@ mp4_parser_parse_ctts_atom_initial_pts_delay(atom_info_t* atom_info, frames_pars
 static vod_status_t 
 mp4_parser_parse_ctts_atom(atom_info_t* atom_info, frames_parse_context_t* context)
 {
+	const ctts_entry_t* first_entry;
 	const ctts_entry_t* last_entry;
 	const ctts_entry_t* cur_entry;
 	input_frame_t* cur_frame = context->frames;
@@ -1039,8 +1040,9 @@ mp4_parser_parse_ctts_atom(atom_info_t* atom_info, frames_parse_context_t* conte
 		return rc;
 	}
 
-	cur_entry = (const ctts_entry_t*)(atom_info->ptr + sizeof(ctts_atom_t));
-	last_entry = cur_entry + entries;
+	first_entry = (const ctts_entry_t*)(atom_info->ptr + sizeof(ctts_atom_t));
+	last_entry = first_entry + entries;
+	cur_entry = first_entry;
 
 	// parse the first entry
 	if (cur_entry >= last_entry)
@@ -1115,6 +1117,10 @@ mp4_parser_parse_ctts_atom(atom_info_t* atom_info, frames_parse_context_t* conte
 	}
 	
 	context->dts_shift = dts_shift;
+	if (context->media_info->media_type == MEDIA_TYPE_VIDEO)
+	{
+		context->media_info->u.video.initial_pts_delay = dts_shift + parse_be32(first_entry->duration);
+	}
 	return VOD_OK;
 }
 
@@ -2696,7 +2702,7 @@ mp4_parser_parse_frames(
 	request_context_t* request_context,
 	media_base_metadata_t* base_metadata,
 	media_parse_params_t* parse_params,
-	segmenter_conf_t* segmenter,
+	struct segmenter_conf_s* segmenter,
 	read_cache_state_t* read_cache_state,
 	vod_str_t* frame_data,
 	media_format_read_request_t* read_req,

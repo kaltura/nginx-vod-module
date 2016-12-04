@@ -2147,8 +2147,10 @@ ngx_http_vod_update_track_timescale(
 	uint64_t next_scaled_dts;
 	uint64_t last_frame_dts;
 	uint64_t clip_start_dts;
+	uint64_t clip_end_pts;
 	uint64_t clip_end_dts;
 	uint64_t scaled_dts;
+	uint64_t scaled_pts;
 	uint64_t dts;
 	uint64_t pts;
 	uint32_t cur_timescale = track->media_info.timescale;
@@ -2161,13 +2163,34 @@ ngx_http_vod_update_track_timescale(
 	track->first_frame_time_offset = scaled_dts;
 	track->total_frames_duration = 0;
 
+	// initialize the first part
 	part = &track->frames;
+	cur_frame = part->first_frame;
 	last_frame = part->last_frame;
-	for (cur_frame = part->first_frame;; cur_frame++)
+	if (part->clip_to != UINT_MAX && cur_frame < last_frame)
+	{
+		clip_end_dts = rescale_time(part->clip_to, 1000, new_timescale);
+		if (track->media_info.media_type == MEDIA_TYPE_VIDEO)
+		{
+			clip_end_pts = clip_end_dts + rescale_time(track->media_info.u.video.initial_pts_delay,
+				cur_timescale, new_timescale);
+		}
+		else
+		{
+			clip_end_pts = ULLONG_MAX;
+		}
+	}
+	else
+	{
+		clip_end_dts = ULLONG_MAX;
+		clip_end_pts = ULLONG_MAX;
+	}
+
+	for (;; cur_frame++)
 	{
 		if (cur_frame >= last_frame)
 		{
-			if (part->first_frame < last_frame && part->clip_to != UINT_MAX)
+			if (clip_end_dts != ULLONG_MAX)
 			{
 				clip_end_dts = rescale_time(part->clip_to, 1000, new_timescale);
 				last_frame_dts = scaled_dts - cur_frame[-1].duration;
@@ -2196,14 +2219,36 @@ ngx_http_vod_update_track_timescale(
 				break;
 			}
 
+			// initialize the next part
 			part = part->next;
 			cur_frame = part->first_frame;
 			last_frame = part->last_frame;
+			if (part->clip_to != UINT_MAX && cur_frame < last_frame)
+			{
+				clip_end_dts = rescale_time(part->clip_to, 1000, new_timescale);
+				if (track->media_info.media_type == MEDIA_TYPE_VIDEO)
+				{
+					clip_end_pts = clip_end_dts + rescale_time(track->media_info.u.video.initial_pts_delay,
+						cur_timescale, new_timescale);
+				}
+			}
+			else
+			{
+				clip_end_dts = ULLONG_MAX;
+				clip_end_pts = ULLONG_MAX;
+			}
 		}
 
+		// get the pts delay
 		pts = dts + cur_frame->pts_delay;
-		cur_frame->pts_delay = rescale_time(pts, cur_timescale, new_timescale) - scaled_dts + pts_delay;
+		scaled_pts = rescale_time(pts, cur_timescale, new_timescale);
+		if (scaled_pts > clip_end_pts)
+		{
+			scaled_pts = ngx_max(clip_end_pts, scaled_dts);
+		}
+		cur_frame->pts_delay = scaled_pts - scaled_dts + pts_delay;
 
+		// get the duration
 		dts += cur_frame->duration;
 		next_scaled_dts = rescale_time(dts, cur_timescale, new_timescale);
 		cur_frame->duration = next_scaled_dts - scaled_dts;
