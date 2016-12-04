@@ -11,6 +11,7 @@
 
 // typedefs
 typedef struct {
+	size_t initial_read_size;
 	size_t size_limit;
 	bool_t first_time;
 	vod_str_t buffer;
@@ -145,6 +146,7 @@ static vod_status_t
 webvtt_reader_init(
 	request_context_t* request_context,
 	vod_str_t* buffer,
+	size_t initial_read_size,
 	size_t max_metadata_size,
 	void** ctx)
 {
@@ -173,6 +175,7 @@ webvtt_reader_init(
 
 	state->first_time = TRUE;
 	state->size_limit = 2 * 1024 * 1024;			// XXXXX support configuring different metadata size limits per format
+	state->initial_read_size = initial_read_size;
 
 	*ctx = state;
 	return VOD_OK;
@@ -187,7 +190,7 @@ webvtt_reader_read(
 {
 	webvtt_reader_state_t* state = ctx;
 
-	if (!state->first_time)
+	if (buffer->len < state->initial_read_size || !state->first_time)
 	{
 		state->buffer = *buffer;
 		result->parts = &state->buffer;
