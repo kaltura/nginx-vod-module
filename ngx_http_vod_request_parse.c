@@ -627,10 +627,35 @@ ngx_http_vod_parse_tracks_param(ngx_str_t* value, void* output, int offset)
 	return NGX_OK;
 }
 
+static ngx_int_t
+ngx_http_vod_parse_lang_param(ngx_str_t* value, void* output, int offset)
+{
+	media_clip_source_t* clip = output;
+	media_sequence_t* sequence = clip->sequence;
+	language_id_t result;
+
+	if (value->len < LANG_ISO639_2_LEN)
+	{
+		return NGX_HTTP_BAD_REQUEST;
+	}
+
+	result = lang_parse_iso639_2_code(iso639_2_str_to_int(value->data));
+	if (result == 0)
+	{
+		return NGX_HTTP_BAD_REQUEST;
+	}
+
+	sequence->language = result;
+	lang_get_native_name(result, &sequence->label);
+
+	return VOD_OK;
+}
+
 static ngx_http_vod_uri_param_def_t uri_param_defs[] = {
 	{ offsetof(ngx_http_vod_loc_conf_t, clip_to_param_name), "clip to", ngx_http_vod_parse_uint64_param, offsetof(media_clip_source_t, clip_to) },
 	{ offsetof(ngx_http_vod_loc_conf_t, clip_from_param_name), "clip from", ngx_http_vod_parse_uint64_param, offsetof(media_clip_source_t, clip_from) },
 	{ offsetof(ngx_http_vod_loc_conf_t, tracks_param_name), "tracks", ngx_http_vod_parse_tracks_param, offsetof(media_clip_source_t, tracks_mask) },
+	{ offsetof(ngx_http_vod_loc_conf_t, lang_param_name), "lang", ngx_http_vod_parse_lang_param, 0 },
 	{ offsetof(ngx_http_vod_loc_conf_t, speed_param_name), "speed", NULL, 0 },
 	{ -1, NULL, NULL, 0}
 };
@@ -957,6 +982,17 @@ ngx_http_vod_parse_uri_path(
 			continue;
 		}
 
+		cur_sequence->clips = cur_clip_ptr;
+		cur_sequence->index = i;
+		cur_sequence->stripped_uri = cur_source->stripped_uri;
+		cur_sequence->mapped_uri = cur_source->stripped_uri;
+		cur_sequence->id.len = 0;
+		cur_sequence->language = 0;
+		cur_sequence->label.len = 0;
+		cur_sequence->first_key_frame_offset = 0;
+		cur_sequence->key_frame_durations = NULL;
+		cur_sequence->drm_info = NULL;
+
 		parts[1] = multi_uri.middle_parts[i];
 		rc = ngx_http_vod_merge_string_parts(r, parts, 3, &cur_uri);
 		if (rc != NGX_OK)
@@ -993,17 +1029,6 @@ ngx_http_vod_parse_uri_path(
 
 		cur_source->next = sources_head;
 		sources_head = cur_source;
-
-		cur_sequence->clips = cur_clip_ptr;
-		cur_sequence->index = i;
-		cur_sequence->stripped_uri = cur_source->stripped_uri;
-		cur_sequence->mapped_uri = cur_source->stripped_uri;
-		cur_sequence->id.len = 0;
-		cur_sequence->language = 0;
-		cur_sequence->label.len = 0;
-		cur_sequence->first_key_frame_offset = 0;
-		cur_sequence->key_frame_durations = NULL;
-		cur_sequence->drm_info = NULL;
 
 		cur_source++;
 		cur_sequence++;
