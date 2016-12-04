@@ -931,14 +931,14 @@ mp4_parser_parse_stts_atom(atom_info_t* atom_info, frames_parse_context_t* conte
 		if (key_frame_index != UINT_MAX)
 		{
 			range->end = accum_duration - clip_from_accum_duration;
-			if (clip_to < range->end)
-			{
-				range->end = clip_to;
-			}
 		}
 		else
 		{
 			range->end = ULLONG_MAX;
+		}
+		if (clip_to < range->end)
+		{
+			range->end = clip_to;
 		}
 		context->clip_from = clip_from_accum_duration;
 	}
