@@ -982,10 +982,6 @@ ngx_http_vod_parse_uri_path(
 			continue;
 		}
 
-		cur_sequence->clips = cur_clip_ptr;
-		cur_sequence->index = i;
-		cur_sequence->stripped_uri = cur_source->stripped_uri;
-		cur_sequence->mapped_uri = cur_source->stripped_uri;
 		cur_sequence->id.len = 0;
 		cur_sequence->language = 0;
 		cur_sequence->label.len = 0;
@@ -1029,6 +1025,11 @@ ngx_http_vod_parse_uri_path(
 
 		cur_source->next = sources_head;
 		sources_head = cur_source;
+
+		cur_sequence->clips = cur_clip_ptr;
+		cur_sequence->index = i;
+		cur_sequence->stripped_uri = cur_source->stripped_uri;
+		cur_sequence->mapped_uri = cur_source->stripped_uri;
 
 		cur_source++;
 		cur_sequence++;
