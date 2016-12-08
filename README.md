@@ -409,6 +409,11 @@ Optional fields:
 	the MPD will report the same media parameters in each period element. Setting to false
 	can have severe performance implications for long sequences (nginx-vod-module has 
 	to read the media info of all clips included in the mapping in order to generate the MPD)
+* `referenceClipIndex` - integer, sets the (1-based) index of the clip that should be used 
+	to retrieve the video metadata for manifest requests (codec, width, height etc.)
+	If `consistentSequenceMediaInfo` is set to false, this parameter has no effect -
+	all clips are parsed. If this parameter is not specified, nginx-vod-module uses the last clip 
+	by default.
 * `notifications` - array of notification objects (see below), when a segment is requested,
 	all the notifications that fall between the start/end times of the segment are fired.
 	the notifications must be ordered in an increasing offset order.
@@ -1313,6 +1318,14 @@ Sets the MPD format, available options are:
 When enabled, the DRM pssh boxes are returned in the DASH init segment and in the manifest.
 When disabled, the pssh boxes are returned only in the manifest.
 
+#### vod_dash_duplicate_bitrate_threshold
+* **syntax**: `vod_dash_duplicate_bitrate_threshold threshold`
+* **default**: `4096`
+* **context**: `http`, `server`, `location`
+
+The bitrate threshold for removing identical bitrates, streams whose bitrate differences are less than
+this value will be considered identical.
+
 ### Configuration directives - HDS
 
 #### vod_hds_absolute_manifest_urls
@@ -1464,6 +1477,14 @@ The timestamp is measured in milliseconds since the epoch (unixtime x 1000), the
 
 The name of the manifest file (has no extension).
 
+#### vod_mss_duplicate_bitrate_threshold
+* **syntax**: `vod_mss_duplicate_bitrate_threshold threshold`
+* **default**: `4096`
+* **context**: `http`, `server`, `location`
+
+The bitrate threshold for removing identical bitrates, streams whose bitrate differences are less than
+this value will be considered identical.
+
 ### Configuration directives - thumbnail capture
 
 #### vod_thumb_file_name_prefix
@@ -1501,14 +1522,6 @@ is loaded, however only the frames of the minimum GOP containing `offset` will b
 Sets the interval (in milliseconds) after the thumbnail offset that should be loaded.
 
 ### Configuration directives - misc
-
-#### vod_duplicate_bitrate_threshold
-* **syntax**: `vod_duplicate_bitrate_threshold threshold`
-* **default**: `4096`
-* **context**: `http`, `server`, `location`
-
-The bitrate threshold for removing identical bitrates, streams whose bitrate differences are less than
-this value will be considered identical.
 
 #### vod_ignore_edit_list
 * **syntax**: `vod_ignore_edit_list on/off`
