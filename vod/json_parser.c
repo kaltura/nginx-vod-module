@@ -2,7 +2,7 @@
 #include <ctype.h>
 
 // constants
-#define MAX_JSON_ELEMENTS (65536)
+#define MAX_JSON_ELEMENTS (131072)
 #define MAX_RECURSION_DEPTH (32)
 #define FIRST_PART_COUNT (1)		// XXXXX increase this ! only for testing purpose
 #define MAX_PART_SIZE (65536)
