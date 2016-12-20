@@ -2211,6 +2211,10 @@ dash_packager_get_earliest_pres_time(media_set_t* media_set, media_track_t* trac
 	else
 	{
 		clip_start_time = media_set->timing.segment_base_time;
+		if (clip_start_time == SEGMENT_BASE_TIME_RELATIVE)
+		{
+			clip_start_time = 0;
+		}
 	}
 
 	result = dash_rescale_millis(track->clip_start_time - clip_start_time) + track->first_frame_time_offset;
@@ -2218,12 +2222,12 @@ dash_packager_get_earliest_pres_time(media_set_t* media_set, media_track_t* trac
 	if (track->frame_count > 0)
 	{
 		result += track->frames.first_frame[0].pts_delay;
-	}
 
-	if (track->media_info.media_type == MEDIA_TYPE_VIDEO && 
-		media_set->version == 1)							// TODO: remove this after deployment
-	{
-		result -= track->media_info.u.video.initial_pts_delay;
+		if (track->media_info.media_type == MEDIA_TYPE_VIDEO &&
+			media_set->version == 1)							// TODO: remove this after deployment
+		{
+			result -= track->media_info.u.video.initial_pts_delay;
+		}
 	}
 
 	return result;
@@ -2324,17 +2328,25 @@ dash_packager_init_sidx_params(media_set_t* media_set, media_sequence_t* sequenc
 	media_track_t* track;
 	uint64_t earliest_pres_time;
 	uint64_t total_frames_duration;
+	bool_t frame_found = FALSE;
 
 	// initialize according to the first clip
 	cur_clip = sequence->filtered_clips;
 	track = cur_clip->first_track;
 	total_frames_duration = track->total_frames_duration;
 	earliest_pres_time = dash_packager_get_earliest_pres_time(media_set, track);
+	frame_found = track->frame_count > 0;
 	cur_clip++;
 
 	for (; cur_clip < sequence->filtered_clips_end; cur_clip++)
 	{
-		total_frames_duration += cur_clip->first_track->total_frames_duration;
+		track = cur_clip->first_track;
+		total_frames_duration += track->total_frames_duration;
+		if (!frame_found && track->frame_count > 0)
+		{
+			earliest_pres_time = dash_packager_get_earliest_pres_time(media_set, track);
+			frame_found = TRUE;
+		}
 	}
 
 	result->total_frames_duration = total_frames_duration;
@@ -2355,7 +2367,6 @@ dash_packager_build_fragment_header(
 {
 	media_sequence_t* sequence = &media_set->sequences[0];
 	media_track_t* first_track = sequence->filtered_clips[0].first_track;
-	uint64_t earliest_pres_time = dash_packager_get_earliest_pres_time(media_set, first_track);
 	sidx_params_t sidx_params;
 	size_t first_frame_offset;
 	size_t mdat_atom_size;
@@ -2381,7 +2392,7 @@ dash_packager_build_fragment_header(
 	traf_atom_size =
 		ATOM_HEADER_SIZE +
 		tfhd_atom_size +
-		ATOM_HEADER_SIZE + (earliest_pres_time > UINT_MAX ? sizeof(tfdt64_atom_t) : sizeof(tfdt_atom_t)) +
+		ATOM_HEADER_SIZE + (sidx_params.earliest_pres_time > UINT_MAX ? sizeof(tfdt64_atom_t) : sizeof(tfdt_atom_t)) +
 		trun_atom_size + 
 		extensions->extra_traf_atoms_size;
 
@@ -2441,13 +2452,13 @@ dash_packager_build_fragment_header(
 	p = dash_packager_write_tfhd_atom(p, sample_description_index);
 
 	// moof.traf.tfdt
-	if (earliest_pres_time > UINT_MAX)
+	if (sidx_params.earliest_pres_time > UINT_MAX)
 	{
-		p = dash_packager_write_tfdt64_atom(p, earliest_pres_time);
+		p = dash_packager_write_tfdt64_atom(p, sidx_params.earliest_pres_time);
 	}
 	else
 	{
-		p = dash_packager_write_tfdt_atom(p, (uint32_t)earliest_pres_time);
+		p = dash_packager_write_tfdt_atom(p, (uint32_t)sidx_params.earliest_pres_time);
 	}
 
 	// moof.traf.trun

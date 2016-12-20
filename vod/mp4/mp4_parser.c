@@ -637,6 +637,10 @@ mp4_parser_parse_stts_atom(atom_info_t* atom_info, frames_parse_context_t* conte
 
 		context->clip_from_frame_offset = clip_from_accum_duration - clip_from;
 	}
+	else
+	{
+		clip_from = 0;
+	}
 
 	// skip to the sample containing the start time
 	start_time = ((range->start + context->clip_from) * timescale) / range->timescale;
@@ -936,9 +940,9 @@ mp4_parser_parse_stts_atom(atom_info_t* atom_info, frames_parse_context_t* conte
 		{
 			range->end = ULLONG_MAX;
 		}
-		if (clip_to < range->end)
+		if (clip_to - clip_from < range->end)
 		{
-			range->end = clip_to;
+			range->end = clip_to - clip_from;
 		}
 		context->clip_from = clip_from_accum_duration;
 	}
@@ -951,7 +955,7 @@ mp4_parser_parse_stts_atom(atom_info_t* atom_info, frames_parse_context_t* conte
 	context->last_frame = first_frame + frames_array.nelts;
 
 	if (clip_to != ULLONG_MAX &&
-		(cur_entry >= last_entry || (accum_duration - clip_from_accum_duration) > clip_to))
+		(cur_entry >= last_entry || (accum_duration - clip_from_accum_duration) > clip_to - clip_from))
 	{
 		context->clip_to = context->parse_params.clip_to - context->parse_params.clip_from;
 	}
