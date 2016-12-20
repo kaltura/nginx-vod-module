@@ -1,6 +1,7 @@
 #include "../media_format.h"
 #include "../media_clip.h"
 #include "../media_set.h"
+#include <ctype.h>
 
 // constants
 #define UTF8_BOM ("\xEF\xBB\xBF")
