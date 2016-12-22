@@ -223,6 +223,13 @@ ngx_http_vod_thumb_parse_uri_file_name(
 		time = -time;
 	}
 
+	if (time == INVALID_SEGMENT_TIME)
+	{
+		ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
+			"ngx_http_vod_thumb_parse_uri_file_name: failed to parse thumbnail time");
+		return ngx_http_vod_status_to_ngx_error(r, VOD_BAD_REQUEST);
+	}
+
 	// parse the required tracks string
 	rc = ngx_http_vod_parse_uri_file_name(r, start_pos, end_pos, 0, request_params);
 	if (rc != NGX_OK)
