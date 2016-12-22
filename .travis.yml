@@ -8,12 +8,21 @@ before_install:
     - sudo dpkg -i libvdpau1_0.4.1-3ubuntu1.2_amd64.deb
     - sudo dpkg -i kaltura-ffmpeg_amd64.deb
 language: c
-compiler:
-    - clang
-    - gcc
 env:
-  - NGX_VOD_MODULE=--add-module=./nginx-vod-module
-  - NGX_VOD_MODULE=--add-dynamic-module=./nginx-vod-module
+  global:
+    - NGX_VOD_MODULE=--add-module=./nginx-vod-module
+    - NGX_VOD_MODULE=--add-dynamic-module=./nginx-vod-module
+
+matrix:
+  include:
+    - os: linux
+      env: CFLAGS="$CFLAGS -Wuninitialized -Wsometimes-uninitialized -Werror"
+      compiler: clang
+        
+    - os: linux
+      env: CFLAGS="$CFLAGS -Wuninitialized -Werror"
+      compiler: gcc
+
 script: ./travis_build.sh $NGX_VOD_MODULE
 notifications:
   email:
