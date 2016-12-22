@@ -631,9 +631,60 @@ mp4_parser_parse_stts_atom(atom_info_t* atom_info, frames_parse_context_t* conte
 			next_accum_duration = accum_duration + (uint64_t)sample_duration * sample_count;
 		}
 
-		// calculate the clip from duration
 		skip_count = vod_div_ceil(clip_from - accum_duration, sample_duration);
-		clip_from_accum_duration = accum_duration + (uint64_t)skip_count * sample_duration;
+		sample_count -= skip_count;
+		frame_index += skip_count;
+		accum_duration += (uint64_t)skip_count * sample_duration;
+
+		if (context->stss_entries != 0)
+		{
+			// jump to the first key frame after the clip position
+			key_frame_stss_index = mp4_parser_find_stss_entry(frame_index, context->stss_start_pos, context->stss_entries);
+			if (key_frame_stss_index >= context->stss_entries)
+			{
+				// can't find any key frame after the clip position
+				range->start = 0;
+				range->end = 0;
+				return VOD_OK;
+			}
+
+			stss_entry = context->stss_start_pos + key_frame_stss_index;
+			key_frame_index = parse_be32(stss_entry) - 1;
+
+			// skip to the sample containing the key frame
+			while (key_frame_index >= frame_index + sample_count)
+			{
+				frame_index += sample_count;
+				accum_duration = next_accum_duration;
+
+				// fetch next sample duration and count
+				cur_entry++;
+				if (cur_entry >= last_entry)
+				{
+					vod_log_error(VOD_LOG_ERR, context->request_context->log, 0,
+						"mp4_parser_parse_stts_atom: atom ended before the first key frame");
+					return VOD_BAD_DATA;
+				}
+
+				sample_duration = parse_be32(cur_entry->duration);
+				sample_count = parse_be32(cur_entry->count);
+				next_accum_duration = accum_duration + (uint64_t)sample_duration * sample_count;
+			}
+
+			// skip to the key frame within the current entry
+			skip_count = key_frame_index - frame_index;
+			sample_count -= skip_count;
+			frame_index = key_frame_index;
+			accum_duration += (uint64_t)skip_count * sample_duration;
+
+			// update the parse params clip from so that subsequent tracks will
+			// have their timestamps start from the same position
+			context->parse_params.clip_from = (accum_duration * 1000) / timescale;
+			clip_from = (((uint64_t)context->parse_params.clip_from * timescale) / 1000);
+		}
+
+		// calculate the clip from duration
+		clip_from_accum_duration = accum_duration;
 
 		context->clip_from_frame_offset = clip_from_accum_duration - clip_from;
 	}
