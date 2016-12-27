@@ -20,6 +20,9 @@ LD_LIBRARY_PATH=/opt/kaltura/ffmpeg-3.2/lib
 LIBRARY_PATH=/opt/kaltura/ffmpeg-3.2/lib
 C_INCLUDE_PATH=/opt/kaltura/ffmpeg-3.2/include
 export LD_LIBRARY_PATH LIBRARY_PATH C_INCLUDE_PATH
+ls -al $C_INCLUDE_PATH/libavcodec/
+ls -al /opt/kaltura/ffmpeg-3.2/lib
+ldd /opt/kaltura/ffmpeg-3.2/lib/libavcodec.so
 
 ./configure \
         --prefix=/etc/nginx \
