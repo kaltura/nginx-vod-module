@@ -220,7 +220,7 @@ thumb_grabber_truncate_frames(
 	uint64_t pts;
 	uint64_t cur_diff;
 	uint64_t min_diff = ULLONG_MAX;
-	uint32_t last_key_frame_index;
+	uint32_t last_key_frame_index = 0;
 	uint32_t min_index = 0;
 	uint32_t index;
 
@@ -237,7 +237,7 @@ thumb_grabber_truncate_frames(
 
 	requested_time += cur_frame->pts_delay;
 
-	for (;; cur_frame++, index++)
+	for (index = 0;; cur_frame++, index++)
 	{
 		if (cur_frame >= last_frame)
 		{
