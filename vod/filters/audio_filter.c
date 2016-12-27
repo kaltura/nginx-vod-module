@@ -1024,32 +1024,38 @@ audio_filter_flush_encoder(audio_filter_state_t* state)
 {
 	AVPacket output_packet;
 	vod_status_t rc;
-	int got_packet;
 	int avrc;
-	
+
+	avrc = avcodec_send_frame(state->sink.encoder, NULL);
+	if (avrc < 0)
+	{
+		vod_log_error(VOD_LOG_ERR, state->request_context->log, 0,
+			"audio_filter_flush_encoder: avcodec_send_frame failed %d", avrc);
+		return VOD_UNEXPECTED;
+	}
+
 	for (;;)
 	{
 		av_init_packet(&output_packet);
 		output_packet.data = NULL; // packet data will be allocated by the encoder
 		output_packet.size = 0;
 		
-		got_packet = 0;
-		avrc = avcodec_encode_audio2(state->sink.encoder, &output_packet, NULL, &got_packet);
-		if (avrc < 0)
-		{
-			vod_log_error(VOD_LOG_ERR, state->request_context->log, 0,
-				"audio_filter_flush_encoder: avcodec_encode_audio2 failed %d", avrc);
-			return VOD_UNEXPECTED;
-		}
-		
-		if (!got_packet)
+		avrc = avcodec_receive_packet(state->sink.encoder, &output_packet);
+		if (avrc == AVERROR_EOF)
 		{
 			break;
 		}
 
+		if (avrc < 0)
+		{
+			vod_log_error(VOD_LOG_ERR, state->request_context->log, 0,
+				"audio_filter_flush_encoder: avcodec_receive_packet failed %d", avrc);
+			return VOD_UNEXPECTED;
+		}
+
 		rc = audio_filter_write_frame(state, &output_packet);
 
-		av_free_packet(&output_packet);
+		av_packet_unref(&output_packet);
 
 		if (rc != VOD_OK)
 		{
@@ -1084,7 +1090,6 @@ audio_filter_read_filter_sink(audio_filter_state_t* state)
 {
 	AVPacket output_packet;
 	vod_status_t rc;
-	int got_packet;
 	int avrc;
 #ifdef AUDIO_FILTER_DEBUG
 	size_t data_size;
@@ -1119,28 +1124,38 @@ audio_filter_read_filter_sink(audio_filter_state_t* state)
 		output_packet.data = NULL; // packet data will be allocated by the encoder
 		output_packet.size = 0;
 
-		got_packet = 0;
-		avrc = avcodec_encode_audio2(state->sink.encoder, &output_packet, state->filtered_frame, &got_packet);
+		avrc = avcodec_send_frame(state->sink.encoder, state->filtered_frame);
 
 		av_frame_unref(state->filtered_frame);
 
 		if (avrc < 0)
 		{
 			vod_log_error(VOD_LOG_ERR, state->request_context->log, 0,
-				"audio_filter_read_filter_sink: avcodec_encode_audio2 failed %d", avrc);
+				"audio_filter_read_filter_sink: avcodec_send_frame failed %d", avrc);
+			return VOD_UNEXPECTED;
+		}
+
+		avrc = avcodec_receive_packet(state->sink.encoder, &output_packet);
+
+		if (avrc == AVERROR(EAGAIN))
+		{
+			continue;
+		}
+
+		if (avrc < 0)
+		{
+			vod_log_error(VOD_LOG_ERR, state->request_context->log, 0,
+				"audio_filter_read_filter_sink: avcodec_receive_packet failed %d", avrc);
 			return VOD_ALLOC_FAILED;
 		}
 
-		if (got_packet)
+		rc = audio_filter_write_frame(state, &output_packet);
+
+		av_packet_unref(&output_packet);
+
+		if (rc != VOD_OK)
 		{
-			rc = audio_filter_write_frame(state, &output_packet);
-
-			av_free_packet(&output_packet);
-
-			if (rc != VOD_OK)
-			{
-				return rc;
-			}
+			return rc;
 		}
 	}
 
@@ -1155,7 +1170,6 @@ audio_filter_process_frame(audio_filter_state_t* state, u_char* buffer)
 	AVPacket input_packet;
 	u_char original_pad[VOD_BUFFER_PADDING_SIZE];
 	u_char* frame_end;
-	int got_frame;
 	int avrc;
 #ifdef AUDIO_FILTER_DEBUG
 	size_t data_size;
@@ -1176,25 +1190,32 @@ audio_filter_process_frame(audio_filter_state_t* state, u_char* buffer)
 	
 	av_frame_unref(state->decoded_frame);
 
-	got_frame = 0;
-
 	frame_end = buffer + frame->size;
 	vod_memcpy(original_pad, frame_end, sizeof(original_pad));
 	vod_memzero(frame_end, sizeof(original_pad));
 
-	avrc = avcodec_decode_audio4(source->decoder, state->decoded_frame, &got_frame, &input_packet);
+	avrc = avcodec_send_packet(source->decoder, &input_packet);
 	if (avrc < 0) 
 	{
 		vod_log_error(VOD_LOG_ERR, state->request_context->log, 0,
-			"audio_filter_process_frame: avcodec_decode_audio4 failed %d", avrc);
+			"audio_filter_process_frame: avcodec_send_packet failed %d", avrc);
 		return VOD_BAD_DATA;
 	}
 
+	avrc = avcodec_receive_frame(source->decoder, state->decoded_frame);
+
 	vod_memcpy(frame_end, original_pad, sizeof(original_pad));
 
-	if (!got_frame)
+	if (avrc == AVERROR(EAGAIN))
 	{
 		return VOD_OK;
+	}
+
+	if (avrc < 0)
+	{
+		vod_log_error(VOD_LOG_ERR, state->request_context->log, 0,
+			"audio_filter_process_frame: avcodec_receive_frame failed %d", avrc);
+		return VOD_BAD_DATA;
 	}
 
 #ifdef AUDIO_FILTER_DEBUG
