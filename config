@@ -57,7 +57,7 @@ ngx_feature_run=no
 ngx_feature_incs="#include <libavcodec/avcodec.h>"
 ngx_feature_path=
 ngx_feature_libs="$LIB_AV_CODEC"
-ngx_feature_test="avcodec_register_all()"
+ngx_feature_test="avcodec_send_packet(NULL, NULL)"
 . auto/feature
 
 if [ $ngx_found = yes ]; then

@@ -4544,12 +4544,11 @@ ngx_http_vod_map_media_set_apply(ngx_http_vod_ctx_t *ctx, ngx_str_t* mapping, in
 		{
 			// mapping result is a simple file path, set the uri of the current source
 			ctx->submodule_context.media_set.id = mapped_media_set.id;
-
-                        sequence = cur_source->sequence;
+			sequence = cur_source->sequence;
 			sequence->mapped_uri = mapped_source->mapped_uri;
 			sequence->language = mapped_media_set.sequences->language;
 			sequence->label = mapped_media_set.sequences->label;
-                        sequence->id = mapped_media_set.sequences->id;
+			sequence->id = mapped_media_set.sequences->id;
 			cur_source->mapped_uri = mapped_source->mapped_uri;
 			cur_source->encryption_key = mapped_source->encryption_key;
 

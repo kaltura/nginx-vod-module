@@ -16,9 +16,9 @@ wget $NGINX_URI -O kaltura-nginx-$NGINX_VERSION.tar.gz
 tar zxvf kaltura-nginx-$NGINX_VERSION.tar.gz
 cd nginx-$NGINX_VERSION
 
-LD_LIBRARY_PATH=/opt/kaltura/ffmpeg-2.1.3/lib
-LIBRARY_PATH=/opt/kaltura/ffmpeg-2.1.3/lib
-C_INCLUDE_PATH=/opt/kaltura/ffmpeg-2.1.3/include
+LD_LIBRARY_PATH=/opt/kaltura/ffmpeg-3.2/lib
+LIBRARY_PATH=/opt/kaltura/ffmpeg-3.2/lib
+C_INCLUDE_PATH=/opt/kaltura/ffmpeg-3.2/include
 export LD_LIBRARY_PATH LIBRARY_PATH C_INCLUDE_PATH
 
 ./configure \

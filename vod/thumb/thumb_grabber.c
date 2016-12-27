@@ -220,7 +220,7 @@ thumb_grabber_truncate_frames(
 	uint64_t pts;
 	uint64_t cur_diff;
 	uint64_t min_diff = ULLONG_MAX;
-	uint32_t last_key_frame_index;
+	uint32_t last_key_frame_index = 0;
 	uint32_t min_index = 0;
 	uint32_t index;
 
@@ -237,7 +237,7 @@ thumb_grabber_truncate_frames(
 
 	requested_time += cur_frame->pts_delay;
 
-	for (;; cur_frame++, index++)
+	for (index = 0;; cur_frame++, index++)
 	{
 		if (cur_frame >= last_frame)
 		{
@@ -393,12 +393,16 @@ thumb_grabber_init_state(
 static vod_status_t
 thumb_grabber_decode_flush(thumb_grabber_state_t* state)
 {
-	AVPacket input_packet;
 	AVFrame* decoded_frame;
-	int got_frame;
 	int avrc;
 
-	vod_memzero(&input_packet, sizeof(input_packet));
+	avrc = avcodec_send_packet(state->decoder, NULL);
+	if (avrc < 0)
+	{
+		vod_log_error(VOD_LOG_ERR, state->request_context->log, 0,
+			"thumb_grabber_decode_flush: avcodec_send_packet failed %d", avrc);
+		return VOD_BAD_DATA;
+	}
 
 	for (; state->missing_frames > 0; state->missing_frames--)
 	{
@@ -410,21 +414,19 @@ thumb_grabber_decode_flush(thumb_grabber_state_t* state)
 			return VOD_ALLOC_FAILED;
 		}
 
-		got_frame = 0;
+		avrc = avcodec_receive_frame(state->decoder, decoded_frame);
+		if (avrc == AVERROR_EOF)
+		{
+			av_frame_free(&decoded_frame);
+			break;
+		}
 
-		avrc = avcodec_decode_video2(state->decoder, decoded_frame, &got_frame, &input_packet);
 		if (avrc < 0)
 		{
 			av_frame_free(&decoded_frame);
 			vod_log_error(VOD_LOG_ERR, state->request_context->log, 0,
 				"thumb_grabber_decode_flush: avcodec_decode_video2 failed %d", avrc);
 			return VOD_BAD_DATA;
-		}
-
-		if (!got_frame)
-		{
-			av_frame_free(&decoded_frame);
-			break;
 		}
 
 		av_frame_free(&state->decoded_frame);
@@ -461,20 +463,31 @@ thumb_grabber_decode_frame(thumb_grabber_state_t* state, u_char* buffer)
 	vod_memcpy(original_pad, frame_end, sizeof(original_pad));
 	vod_memzero(frame_end, sizeof(original_pad));
 
-	avrc = avcodec_decode_video2(state->decoder, state->decoded_frame, &state->has_frame, &input_packet);
-	if (avrc < 0) 
+	avrc = avcodec_send_packet(state->decoder, &input_packet);
+	if (avrc < 0)
 	{
 		vod_log_error(VOD_LOG_ERR, state->request_context->log, 0,
-			"thumb_grabber_decode_frame: avcodec_decode_video2 failed %d", avrc);
+			"thumb_grabber_decode_frame: avcodec_send_packet failed %d", avrc);
 		return VOD_BAD_DATA;
 	}
 
-	vod_memcpy(frame_end, original_pad, sizeof(original_pad));
-
-	if (!state->has_frame)
+	avrc = avcodec_receive_frame(state->decoder, state->decoded_frame);
+	if (avrc == AVERROR(EAGAIN))
 	{
 		state->missing_frames++;
 	}
+	else if (avrc < 0)
+	{
+		vod_log_error(VOD_LOG_ERR, state->request_context->log, 0,
+			"thumb_grabber_decode_frame: avcodec_receive_frame failed %d", avrc);
+		return VOD_BAD_DATA;
+	}
+	else
+	{
+		state->has_frame = 1;
+	}
+
+	vod_memcpy(frame_end, original_pad, sizeof(original_pad));
 
 	return VOD_OK;
 }
@@ -483,7 +496,6 @@ static vod_status_t
 thumb_grabber_write_frame(thumb_grabber_state_t* state)
 {
 	vod_status_t rc;
-	int got_packet = 0;
 	int avrc;
 
 	if (state->missing_frames > 0)
@@ -502,18 +514,19 @@ thumb_grabber_write_frame(thumb_grabber_state_t* state)
 		return VOD_UNEXPECTED;
 	}
 
-	avrc = avcodec_encode_video2(state->encoder, &state->output_packet, state->decoded_frame, &got_packet);
+	avrc = avcodec_send_frame(state->encoder, state->decoded_frame);
 	if (avrc < 0)
 	{
 		vod_log_error(VOD_LOG_ERR, state->request_context->log, 0,
-			"thumb_grabber_write_frame: avcodec_encode_video2 failed %d", avrc);
+			"thumb_grabber_write_frame: avcodec_send_frame failed %d", avrc);
 		return VOD_UNEXPECTED;
 	}
 
-	if (!got_packet)
+	avrc = avcodec_receive_packet(state->encoder, &state->output_packet);
+	if (avrc < 0)
 	{
 		vod_log_error(VOD_LOG_ERR, state->request_context->log, 0,
-			"thumb_grabber_write_frame: avcodec_encode_video2 did not return a packet");
+			"thumb_grabber_write_frame: avcodec_receive_packet failed %d", avrc);
 		return VOD_UNEXPECTED;
 	}
 
