@@ -13,12 +13,13 @@ mkdir -p /tmp/builddir/nginx-$NGINX_VERSION
 cp -r . /tmp/builddir/nginx-$NGINX_VERSION/nginx-vod-module
 cd /tmp/builddir
 wget $NGINX_URI -O kaltura-nginx-$NGINX_VERSION.tar.gz
-tar zxvf kaltura-nginx-$NGINX_VERSION.tar.gz
+tar zxf kaltura-nginx-$NGINX_VERSION.tar.gz
 cd nginx-$NGINX_VERSION
 
-LD_LIBRARY_PATH=/opt/kaltura/ffmpeg-3.2/lib
-LIBRARY_PATH=/opt/kaltura/ffmpeg-3.2/lib
-C_INCLUDE_PATH=/opt/kaltura/ffmpeg-3.2/include
+FFMPEG_VERSION=3.2
+LD_LIBRARY_PATH=/opt/kaltura/ffmpeg-$FFMPEG_VERSION/lib
+LIBRARY_PATH=/opt/kaltura/ffmpeg-$FFMPEG_VERSION/lib
+C_INCLUDE_PATH=/opt/kaltura/ffmpeg-$FFMPEG_VERSION/include
 export LD_LIBRARY_PATH LIBRARY_PATH C_INCLUDE_PATH
 
 ./configure \
