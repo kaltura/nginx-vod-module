@@ -101,7 +101,7 @@ If you wish to make use of the following features:
 - Thumbnail capture
 - Playback rate change - 0.5x up to 2x
 
-Please also make sure you have the ffmpeg libs and headers in your the build ENV.
+Please also make sure you have the ffmpeg (>= 3.2) libs and headers in your the build ENV.
 
 #### RHEL/CentOS RPM
 If you are using RHEL or CentOS 6, you can install by setting up the repo:
@@ -131,7 +131,7 @@ If you wish to make use of the following features:
 - Thumbnail capture
 - Playback rate change - 0.5x up to 2x
 
-You will also need to install the kaltura-ffmpeg package.
+You will also need to install the kaltura-ffmpeg (>= 3.2) package.
 
 ### URL structure
 
