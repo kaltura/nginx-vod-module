@@ -39,6 +39,9 @@
 	"    schemeIdUri=\"urn:mpeg:dash:utc:direct:2014\"\n"						\
 	"    value=\"%04d-%02d-%02dT%02d:%02d:%02dZ\"/>\n"
 
+#define VOD_DASH_MANIFEST_BASEURL												\
+	"  <BaseURL>%V</BaseURL>\n"
+
 #define VOD_DASH_MANIFEST_PERIOD_HEADER											\
 	"  <Period>\n"
 
@@ -181,7 +184,7 @@
 //typedefs
 typedef struct {
 	dash_manifest_config_t* conf;
-	vod_str_t* base_url;
+	vod_str_t base_url;
 	media_set_t* media_set;
 	dash_manifest_extensions_t extensions;
 	u_char* base_url_temp_buffer;
@@ -642,30 +645,29 @@ dash_packager_get_segment_list_base_url(
 	vod_str_t* result,
 	uint32_t* sequence_index)
 {
-	vod_str_t* base_url = context->base_url;
+	vod_str_t* base_url = &context->base_url;
 	u_char* base_url_temp_buffer = context->base_url_temp_buffer;
 
-	if (base_url->len != 0)
-	{
-		result->data = base_url_temp_buffer;
-		base_url_temp_buffer = vod_copy(base_url_temp_buffer, base_url->data, base_url->len);
-		if (cur_track->file_info.uri.len != 0)
-		{
-			base_url_temp_buffer = vod_copy(base_url_temp_buffer, cur_track->file_info.uri.data, cur_track->file_info.uri.len);
-			*sequence_index = INVALID_SEQUENCE_INDEX;		// no need to pass the sequence index since we have a direct uri
-		}
-		else
-		{
-			base_url_temp_buffer = vod_copy(base_url_temp_buffer, context->media_set->uri.data, context->media_set->uri.len);
-		}
-		*base_url_temp_buffer++ = '/';
-		result->len = base_url_temp_buffer - result->data;
-	}
-	else
+	if (base_url->len == 0)
 	{
 		result->data = NULL;
 		result->len = 0;
+		return;
 	}
+
+	result->data = base_url_temp_buffer;
+	base_url_temp_buffer = vod_copy(base_url_temp_buffer, base_url->data, base_url->len);
+	if (cur_track->file_info.uri.len != 0)
+	{
+		base_url_temp_buffer = vod_copy(base_url_temp_buffer, cur_track->file_info.uri.data, cur_track->file_info.uri.len);
+		*sequence_index = INVALID_SEQUENCE_INDEX;		// no need to pass the sequence index since we have a direct uri
+	}
+	else
+	{
+		base_url_temp_buffer = vod_copy(base_url_temp_buffer, context->media_set->uri.data, context->media_set->uri.len);
+	}
+	*base_url_temp_buffer++ = '/';
+	result->len = base_url_temp_buffer - result->data;
 }
 
 static u_char*
@@ -940,7 +942,7 @@ dash_packager_write_mpd_period(
 			}
 			else
 			{
-				cur_base_url = *context->base_url;
+				cur_base_url = context->base_url;
 			}
 
 			dash_packager_get_track_spec(
@@ -996,7 +998,7 @@ dash_packager_write_mpd_period(
 				clip_spec,
 				media_set,
 				reference_track,
-				context->base_url);
+				&context->base_url);
 			break;
 
 		case FORMAT_SEGMENT_TIMELINE:
@@ -1009,7 +1011,7 @@ dash_packager_write_mpd_period(
 				reference_track,
 				&context->segment_durations[media_type],
 				cur_duration_items,
-				context->base_url);
+				&context->base_url);
 			break;
 
 		case FORMAT_SEGMENT_LIST:
@@ -1373,8 +1375,28 @@ dash_packager_build_mpd(
 		}
 	}
 
+	// get the base url
+	if (base_url->len != 0)
+	{
+		if (conf->use_base_url_tag)
+		{
+			result_size += sizeof(VOD_DASH_MANIFEST_BASEURL) - 1 + base_url->len;
+			context.base_url.data = NULL;
+			context.base_url.len = 0;
+		}
+		else
+		{
+			context.base_url = *base_url;
+		}
+	}
+	else
+	{
+		context.base_url.data = NULL;
+		context.base_url.len = 0;
+	}
+
 	// calculate the total size
-	urls_length = 2 * base_url->len + 2 * MAX_FILE_EXT_SIZE +
+	urls_length = 2 * context.base_url.len + 2 * MAX_FILE_EXT_SIZE +
 		conf->init_file_name_prefix.len + MAX_CLIP_SPEC_LENGTH +
 		conf->fragment_file_name_prefix.len;
 
@@ -1394,7 +1416,7 @@ dash_packager_build_mpd(
 			sizeof(VOD_DASH_MANIFEST_REPRESENTATION_FOOTER) - 1) * media_set->track_count[MEDIA_TYPE_AUDIO] +
 			// subtitle adaptations
 			(sizeof(VOD_DASH_MANIFEST_ADAPTATION_SUBTITLE) - 1 + 2 * LANG_ISO639_1_LEN + VOD_INT32_LEN +
-			base_url->len + conf->subtitle_file_name_prefix.len + MAX_CLIP_SPEC_LENGTH + MAX_TRACK_SPEC_LENGTH) *
+			context.base_url.len + conf->subtitle_file_name_prefix.len + MAX_CLIP_SPEC_LENGTH + MAX_TRACK_SPEC_LENGTH) *
 			context.adaptation_sets.count[ADAPTATION_TYPE_SUBTITLE] +
 		sizeof(VOD_DASH_MANIFEST_PERIOD_FOOTER) - 1 +
 		extensions->representation.size + 
@@ -1403,11 +1425,11 @@ dash_packager_build_mpd(
 	switch (media_set->type)
 	{
 	case MEDIA_SET_VOD:
-		result_size = sizeof(VOD_DASH_MANIFEST_HEADER_VOD) - 1 + 3 * VOD_INT32_LEN + conf->profiles.len;
+		result_size += sizeof(VOD_DASH_MANIFEST_HEADER_VOD) - 1 + 3 * VOD_INT32_LEN + conf->profiles.len;
 		break;
 
 	case MEDIA_SET_LIVE:
-		result_size = sizeof(VOD_DASH_MANIFEST_HEADER_LIVE) - 1 + 8 * VOD_INT32_LEN + 18 * VOD_INT64_LEN + conf->profiles.len;
+		result_size += sizeof(VOD_DASH_MANIFEST_HEADER_LIVE) - 1 + 8 * VOD_INT32_LEN + 18 * VOD_INT64_LEN + conf->profiles.len;
 		break;
 	}
 
@@ -1445,7 +1467,7 @@ dash_packager_build_mpd(
 			conf,
 			media_set,
 			context.segment_durations,
-			base_url,
+			&context.base_url,
 			&base_url_temp_buffer_size);
 		break;
 	}
@@ -1499,7 +1521,6 @@ dash_packager_build_mpd(
 
 	context.clip_index = 0;
 	context.conf = conf;
-	context.base_url = base_url;
 	context.media_set = media_set;
 	context.extensions = *extensions;
 
@@ -1557,6 +1578,11 @@ dash_packager_build_mpd(
 			cur_time_gmt.vod_tm_year, cur_time_gmt.vod_tm_mon, cur_time_gmt.vod_tm_mday,
 			cur_time_gmt.vod_tm_hour, cur_time_gmt.vod_tm_min, cur_time_gmt.vod_tm_sec);
 		break;
+	}
+
+	if (conf->use_base_url_tag && base_url->len != 0)
+	{
+		p = vod_sprintf(p, VOD_DASH_MANIFEST_BASEURL, base_url);
 	}
 
 	for (;;)

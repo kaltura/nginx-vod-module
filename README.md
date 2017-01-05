@@ -1326,6 +1326,14 @@ When disabled, the pssh boxes are returned only in the manifest.
 The bitrate threshold for removing identical bitrates, streams whose bitrate differences are less than
 this value will be considered identical.
 
+#### vod_dash_use_base_url_tag
+* **syntax**: `vod_dash_use_base_url_tag on/off`
+* **default**: `off`
+* **context**: `http`, `server`, `location`
+
+When enabled, a BaseURL tag will be used to specify the fragments/init segment base url.
+Otherwise, the media/initialization attributes under SegmentTemplate will contain absolute URLs. 
+
 ### Configuration directives - HDS
 
 #### vod_hds_absolute_manifest_urls
