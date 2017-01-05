@@ -44,6 +44,7 @@ typedef struct {
 	vod_uint_t manifest_format;
 	vod_uint_t duplicate_bitrate_threshold;
 	bool_t write_playready_kid;		// TODO: remove
+	bool_t use_base_url_tag;		// TODO: remove - if supported by all devices, always use BaseURL
 } dash_manifest_config_t;
 
 typedef struct {

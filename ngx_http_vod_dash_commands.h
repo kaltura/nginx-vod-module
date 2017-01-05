@@ -70,4 +70,11 @@
 	BASE_OFFSET + offsetof(ngx_http_vod_dash_loc_conf_t, mpd_config.write_playready_kid),
 	NULL },
 
+	{ ngx_string("vod_dash_use_base_url_tag"),
+	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1,
+	ngx_conf_set_flag_slot,
+	NGX_HTTP_LOC_CONF_OFFSET,
+	BASE_OFFSET + offsetof(ngx_http_vod_dash_loc_conf_t, mpd_config.use_base_url_tag),
+	NULL },
+
 #undef BASE_OFFSET
