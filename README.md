@@ -70,12 +70,18 @@ without the overhead of short segments for the whole duration of the video
 
 #### Build
 
-cd to NGINX source directory and execute:
+To link statically against nginx, cd to nginx source directory and execute:
 
     ./configure --add-module=/path/to/nginx-vod-module
     make
     make install
-	
+
+To compile as a dynamic module (nginx 1.9.11+), use:
+  
+	./configure --add-dynamic-module=/path/to/nginx-vod-module
+
+In this case, the `load_module` directive should be used in nginx.conf to load the module.
+
 For asynchronous I/O support add `--with-file-aio` (highly recommended, local and mapped modes only)
 
     ./configure --add-module=/path/to/nginx-vod-module --with-file-aio
