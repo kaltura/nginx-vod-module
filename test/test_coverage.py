@@ -2,6 +2,34 @@ import sys
 import re
 import os
 
+def countArgs(argsSpec):
+    result = 0
+    parentCount = 0
+    for curCh in argsSpec:
+        if curCh == '(':
+            parentCount += 1
+        elif curCh == ')':
+            parentCount -= 1
+        elif curCh == ',' and parentCount == 0:
+            result += 1
+    return result
+
+def validateLogParams(fileName, fileData):
+    logBlock = None
+    for curLine in fileData.split('\n'):
+        if re.match('^\s*(?:ngx|vod)_log_(?:debug|error)', curLine):
+            logBlock = ''
+        if logBlock == None:
+            continue
+        logBlock += curLine.strip()
+        if logBlock.count('(') > logBlock.count(')'):
+            continue
+        logMessage = logBlock[logBlock.find('"'):logBlock.rfind('"')]
+        args = logBlock[logBlock.rfind('"'):]
+        if countArgs(args) != logMessage.count('%') + logMessage.count('%*'):
+            print logBlock
+        logBlock = None
+
 if len(sys.argv) < 2:
     print 'Usage:\n\t%s <nginx-vod code root> [<error log file>]' % os.path.basename(__file__)
     sys.exit(1)
@@ -18,9 +46,9 @@ for root, dirs, files in os.walk(nginxVodRoot):
         if os.path.splitext(name)[1] != '.c':
             continue
         fileData = file(os.path.join(root, name), 'rb').read()
+        validateLogParams(name, fileData)
         for curLog in re.findall('(?:ngx|vod)_log_(?:debug|error)[^\(]*\([^\)]+\)', fileData):
             logMessage = curLog.split(',')[3].strip()
-            
             if logMessage.endswith('")'):
                 logMessage = logMessage[:-1]
             if logMessage.endswith('"'):

@@ -329,7 +329,7 @@ mp4_parser_parse_elst_atom(atom_info_t* atom_info, metadata_parse_context_t* con
 	if (entries > 2)
 	{
 		vod_log_error(VOD_LOG_ERR, context->request_context->log, 0,
-			"mp4_parser_parse_elst_atom: unsupported edit - atom has %uD entries");
+			"mp4_parser_parse_elst_atom: unsupported edit - atom has %uD entries", entries);
 	}
 
 	if (atom->version[0] == 1)

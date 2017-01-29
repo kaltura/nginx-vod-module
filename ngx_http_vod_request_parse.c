@@ -932,7 +932,7 @@ ngx_http_vod_parse_uri_path(
 	if (rc != NGX_OK)
 	{
 		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
-			"ngx_http_vod_parse_uri_path: ngx_http_vod_parse_multi_uri failed", rc);
+			"ngx_http_vod_parse_uri_path: ngx_http_vod_parse_multi_uri failed %i", rc);
 		return rc;
 	}
 
@@ -994,7 +994,7 @@ ngx_http_vod_parse_uri_path(
 		if (rc != NGX_OK)
 		{
 			ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
-				"ngx_http_vod_parse_uri_path: ngx_http_vod_merge_string_parts failed", rc);
+				"ngx_http_vod_parse_uri_path: ngx_http_vod_merge_string_parts failed %i", rc);
 			return rc;
 		}
 
@@ -1002,7 +1002,7 @@ ngx_http_vod_parse_uri_path(
 		if (rc != NGX_OK)
 		{
 			ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
-				"ngx_http_vod_parse_uri_path: ngx_http_vod_extract_uri_params failed", rc);
+				"ngx_http_vod_parse_uri_path: ngx_http_vod_extract_uri_params failed %i", rc);
 			return rc;
 		}
 
