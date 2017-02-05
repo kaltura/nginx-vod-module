@@ -269,7 +269,7 @@ mp4_to_annexb_flush_frame(void* context, bool_t last_stream_frame)
 	vod_status_t rc;
 	int32_t cur_size;
 
-	if (state->nal_packet_size_length == 4)
+	if (state->nal_packet_size_length == 4 && state->sample_aes_context == NULL)
 	{
 		if (state->frame_size_left < 0)
 		{
