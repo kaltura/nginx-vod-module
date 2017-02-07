@@ -50,3 +50,9 @@ def getAtomInternal(splittedPath, baseAtom):
 
 def getAtom(inputAtoms, path):
     return getAtomInternal(path.split('.'), inputAtoms)
+
+def getAtomData(inputData, inputAtoms, path):
+	atom = getAtom(inputAtoms, path)
+	if atom == None:
+		return False
+	return inputData[(atom[0] + atom[1]):atom[2]]
