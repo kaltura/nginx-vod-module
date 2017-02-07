@@ -207,25 +207,28 @@ def getDashManifestUrls(baseUrl, urlContent, headers):
 	return result
 
 def getHdsSegmentIndexes(data):
-    result = []
-    mediaTime = struct.unpack('>Q', data[0x15:0x1d])[0]
-    curPos = 0x5a
-    prevDuration = 0
-    while curPos < len(data):
-        index, timestamp, duration = struct.unpack('>LQL', data[curPos:(curPos + 0x10)])
+	result = []
+	mediaTime = struct.unpack('>Q', data[0x15:0x1d])[0]
+	curPos = 0x5a
+	prevDuration = 0
+	while curPos < len(data):
+		index, timestamp, duration = struct.unpack('>LQL', data[curPos:(curPos + 0x10)])
+		curPos += 0x10
+		if duration == 0:
+			curPos += 1
 
-        curPos += 0x10
-        if duration == 0:
-            curPos += 1
+		if prevDuration != 0:
+			if (index, timestamp, duration) == (0, 0, 0):
+				repeatCount = (mediaTime - prevTimestamp) / prevDuration
+			else:
+				repeatCount = index - prevIndex
+			result += range(prevIndex, prevIndex + repeatCount)
+		(prevIndex, prevTimestamp, prevDuration) = (index, timestamp, duration)
 
-        if prevDuration != 0:
-            if (index, timestamp, duration) == (0, 0, 0):
-                repeatCount = (mediaTime - prevTimestamp) / prevDuration
-            else:
-                repeatCount = index - prevIndex
-            result += range(prevIndex, prevIndex + repeatCount)
-        (prevIndex, prevTimestamp, prevDuration) = (index, timestamp, duration)
-    return result
+	if prevDuration != 0 and mediaTime > prevTimestamp:
+		repeatCount = (mediaTime - prevTimestamp) / prevDuration
+		result += range(prevIndex, prevIndex + repeatCount)
+	return result
 	
 def getHdsManifestUrls(baseUrl, urlContent, headers):
 	result = []
@@ -258,6 +261,7 @@ def getHdsManifestUrls(baseUrl, urlContent, headers):
 			continue
 		
 		url = atts['url']
+		url = url.split('?')[0]
 		fragments = []
 		for curSeg in segmentIndexes[bootstrapId]:
 			fragments.append(getAbsoluteUrl('%s/%sSeg1-Frag%s' % (baseUrl, url, curSeg)))

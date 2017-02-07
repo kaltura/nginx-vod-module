@@ -135,3 +135,21 @@ pmtEntry = BitStruct("pmtEntry",
 	BitField("reserved3", 2),	# 00
 	BitField("esInfoLength", 10),
 	)
+
+adtsHeader = BitStruct("mpegTsHeader",
+	BitField("syncword", 12),
+	Flag("id"),
+	BitField("layer", 2),
+	Flag("protection_absent"),
+	BitField("profile_object_type", 2),
+	BitField("sample_rate_index", 4),
+	Flag("private_bit"),
+	BitField("channel_configuration", 3),
+	Flag("original_copy"),
+	Flag("home"),
+	Flag("copyright_identification_bit"),
+	Flag("copyright_identification_start"),
+	BitField("aac_frame_length", 13),
+	BitField("adts_buffer_fullness", 11),
+	BitField("number_of_raw_data_blocks_in_frame", 2),
+	)
