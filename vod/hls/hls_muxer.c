@@ -1,5 +1,6 @@
 #include "../input/frames_source_memory.h"
 #include "../input/frames_source_cache.h"
+#include "sample_aes_aac_filter.h"
 #include "frame_joiner_filter.h"
 #include "id3_encoder_filter.h"
 #include "hls_muxer.h"
@@ -64,7 +65,7 @@ hls_muxer_init_track(
 		if (track->media_info.codec_id == VOD_CODEC_ID_AAC)
 		{
 			rc = adts_encoder_set_media_info(
-				cur_stream->top_filter_context,
+				cur_stream->adts_state,
 				&track->media_info);
 			if (rc != VOD_OK)
 			{
@@ -404,8 +405,8 @@ hls_muxer_init_base(
 
 			if (track->media_info.codec_id == VOD_CODEC_ID_AAC)
 			{
-				cur_stream->top_filter_context = vod_alloc(request_context->pool, sizeof(adts_encoder_state_t));
-				if (cur_stream->top_filter_context == NULL)
+				cur_stream->adts_state = vod_alloc(request_context->pool, sizeof(adts_encoder_state_t));
+				if (cur_stream->adts_state == NULL)
 				{
 					vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
 						"hls_muxer_init_base: vod_alloc failed (5)");
@@ -413,7 +414,7 @@ hls_muxer_init_base(
 				}
 
 				rc = adts_encoder_init(
-					cur_stream->top_filter_context,
+					cur_stream->adts_state,
 					request_context,
 					encryption_params,
 					next_filter,
@@ -424,19 +425,36 @@ hls_muxer_init_base(
 				}
 
 				cur_stream->top_filter = &adts_encoder;
+				next_filter_context = cur_stream->adts_state;
 			}
-			else
+
+			if (encryption_params->type == HLS_ENC_SAMPLE_AES)
 			{
-				if (encryption_params->type == HLS_ENC_SAMPLE_AES)
+				if (track->media_info.codec_id != VOD_CODEC_ID_AAC &&
+					track->media_info.codec_id != VOD_CODEC_ID_AC3)
 				{
 					vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-						"hls_muxer_init_base: sample aes encryption is supported only for aac");
+						"hls_muxer_init_base: sample aes encryption is supported only for aac/ac3");
 					return VOD_BAD_REQUEST;
 				}
 
-				cur_stream->top_filter = next_filter;
-				cur_stream->top_filter_context = next_filter_context;
+				rc = sample_aes_aac_filter_init(
+					&next_filter_context,
+					request_context,
+					next_filter,
+					next_filter_context,
+					encryption_params->key,
+					encryption_params->iv);
+				if (rc != VOD_OK)
+				{
+					return rc;
+				}
+
+				next_filter = &sample_aes_aac;
 			}
+
+			cur_stream->top_filter = next_filter;
+			cur_stream->top_filter_context = next_filter_context;
 			break;
 		}
 

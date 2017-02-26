@@ -28,6 +28,8 @@
 #define FF_PROFILE_AAC_HE_V2 (28)
 #endif
 
+#define SAMPLE_AES_AC3_EXTRA_DATA_SIZE (10)
+
 // sample aes structs
 typedef struct {
 	u_char descriptor_tag[1];
@@ -98,13 +100,24 @@ static const u_char pmt_entry_template_sample_aes_avc[] = {
 };
 
 static const u_char pmt_entry_template_sample_aes_aac[] = {
-	0xcf, 0xe1, 0x01, 0xf0, 0x00,
+	0xcf, 0xe1, 0x00, 0xf0, 0x00,
 	0x0f, 0x04, 0x61, 0x61, 0x63, 0x64		// private_data_indicator_descriptor('aacd')
+};
+
+static const u_char pmt_entry_template_sample_aes_ac3[] = {
+	0xc1, 0xe1, 0x00, 0xf0, 0x00,
+	0x0f, 0x04, 0x61, 0x63, 0x33, 0x64		// private_data_indicator_descriptor('ac3d')
 };
 
 static const u_char pmt_entry_template_id3[] = {
 	0x15, 0xe0, 0x00, 0xf0, 0x0f, 0x26, 0x0d, 0xff, 0xff, 0x49,
 	0x44, 0x33, 0x20, 0xff, 0x49, 0x44, 0x33, 0x20, 0x00, 0x0f,
+};
+
+// Note: according to the sample-aes spec, this should be the first 10 bytes of the audio data
+//		in practice, sending only the ac-3 syncframe magic is good enough (without the magic it doesn't play)
+static u_char ac3_extra_data[SAMPLE_AES_AC3_EXTRA_DATA_SIZE] = {
+	0x0b, 0x77, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
 };
 
 // from ffmpeg
@@ -410,45 +423,73 @@ mpegts_encoder_init_streams(
 }
 
 static void
-mpegts_encoder_write_sample_aes_aac_pmt_entry(
+mpegts_encoder_write_sample_aes_audio_pmt_entry(
 	request_context_t* request_context,
 	u_char* start,
 	int entry_size,
-	media_track_t* track)
+	media_info_t* media_info)
 {
+	vod_str_t extra_data;
 	u_char* p;
 
-	p = vod_copy(start, pmt_entry_template_sample_aes_aac, sizeof(pmt_entry_template_sample_aes_aac));
+	switch (media_info->codec_id)
+	{
+	case VOD_CODEC_ID_AC3:
+		extra_data.data = ac3_extra_data;
+		extra_data.len = sizeof(ac3_extra_data);
+		p = vod_copy(
+			start,
+			pmt_entry_template_sample_aes_ac3,
+			sizeof(pmt_entry_template_sample_aes_ac3));
+		break;
+
+	default:
+		extra_data = media_info->extra_data;
+		p = vod_copy(
+			start, 
+			pmt_entry_template_sample_aes_aac, 
+			sizeof(pmt_entry_template_sample_aes_aac));
+		break;
+	}
 	pmt_entry_set_es_info_length(start, entry_size - sizeof_pmt_entry);
 
 	// registration_descriptor
 	*p++ = 0x05;		// descriptor tag
 	*p++ =				// descriptor length
 		member_size(registration_descriptor_t, format_identifier) +
-		sizeof(audio_setup_information_t)+
-		track->media_info.extra_data.len;
+		sizeof(audio_setup_information_t) +
+		extra_data.len;
 	*p++ = 'a';		*p++ = 'p';		*p++ = 'a';		*p++ = 'd';			// apad
 
-	// audio_setup_information
-	switch (track->media_info.u.audio.codec_config.object_type - 1)
+	switch (media_info->codec_id)
 	{
-	case FF_PROFILE_AAC_HE:
-		*p++ = 'z';		*p++ = 'a';		*p++ = 'c';		*p++ = 'h';			// zach
-		break;
-
-	case FF_PROFILE_AAC_HE_V2:
-		*p++ = 'z';		*p++ = 'a';		*p++ = 'c';		*p++ = 'p';			// zacp
+	case VOD_CODEC_ID_AC3:
+		*p++ = 'z';		*p++ = 'a';		*p++ = 'c';		*p++ = '3';			// zac3
 		break;
 
 	default:
-		*p++ = 'z';		*p++ = 'a';		*p++ = 'a';		*p++ = 'c';			// zaac
+		// audio_setup_information
+		switch (media_info->u.audio.codec_config.object_type - 1)
+		{
+		case FF_PROFILE_AAC_HE:
+			*p++ = 'z';		*p++ = 'a';		*p++ = 'c';		*p++ = 'h';			// zach
+			break;
+
+		case FF_PROFILE_AAC_HE_V2:
+			*p++ = 'z';		*p++ = 'a';		*p++ = 'c';		*p++ = 'p';			// zacp
+			break;
+
+		default:
+			*p++ = 'z';		*p++ = 'a';		*p++ = 'a';		*p++ = 'c';			// zaac
+			break;
+		}
 		break;
 	}
 
 	*p++ = 0;	*p++ = 0;		// priming
 	*p++ = 1;					// version
-	*p++ = track->media_info.extra_data.len;
-	vod_memcpy(p, track->media_info.extra_data.data, track->media_info.extra_data.len);
+	*p++ = extra_data.len;
+	vod_memcpy(p, extra_data.data, extra_data.len);
 }
 
 static vod_status_t 
@@ -497,11 +538,24 @@ mpegts_encoder_add_stream(
 		stream_info->sid = stream_state->cur_audio_sid++;
 		if (stream_state->encryption_params->type == HLS_ENC_SAMPLE_AES)
 		{
-			pmt_entry = pmt_entry_template_sample_aes_aac;
-			pmt_entry_size = sizeof(pmt_entry_template_sample_aes_aac) + 
-				sizeof(registration_descriptor_t) + 
-				sizeof(audio_setup_information_t) + 
-				track->media_info.extra_data.len;
+			switch (track->media_info.codec_id)
+			{
+			case VOD_CODEC_ID_AC3:
+				pmt_entry = pmt_entry_template_sample_aes_ac3;
+				pmt_entry_size = sizeof(pmt_entry_template_sample_aes_ac3) +
+					sizeof(registration_descriptor_t) +
+					sizeof(audio_setup_information_t) +
+					SAMPLE_AES_AC3_EXTRA_DATA_SIZE;
+				break;
+
+			default:
+				pmt_entry = pmt_entry_template_sample_aes_aac;
+				pmt_entry_size = sizeof(pmt_entry_template_sample_aes_aac) +
+					sizeof(registration_descriptor_t) +
+					sizeof(audio_setup_information_t) +
+					track->media_info.extra_data.len;
+				break;
+			}
 		}
 		else
 		{
@@ -550,13 +604,14 @@ mpegts_encoder_add_stream(
 		return VOD_BAD_DATA;
 	}
 
-	if (pmt_entry == pmt_entry_template_sample_aes_aac)
+	if (stream_info->media_type == MEDIA_TYPE_AUDIO &&
+		stream_state->encryption_params->type == HLS_ENC_SAMPLE_AES)
 	{
-		mpegts_encoder_write_sample_aes_aac_pmt_entry(
+		mpegts_encoder_write_sample_aes_audio_pmt_entry(
 			stream_state->request_context,
 			stream_state->pmt_packet_pos,
 			pmt_entry_size,
-			track);
+			&track->media_info);
 	}
 	else
 	{

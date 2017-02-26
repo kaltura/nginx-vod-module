@@ -57,6 +57,9 @@ typedef struct {
 	// buffer
 	buffer_filter_t* buffer_state;
 
+	// adts
+	void* adts_state;
+
 	// mpegts
 	mpegts_encoder_state_t mpegts_encoder_state;
 } hls_muxer_stream_state_t;

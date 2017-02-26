@@ -13,8 +13,8 @@ typedef struct
 {
 	// fixed input data
 	request_context_t* request_context;
-	media_filter_write_t write_callback;
-	void* write_context;
+	const media_filter_t* next_filter;
+	void* next_filter_context;
 	u_char iv[AES_BLOCK_SIZE];
 	u_char key[SAMPLE_AES_KEY_SIZE];
 	EVP_CIPHER_CTX cipher;
@@ -34,8 +34,8 @@ vod_status_t
 sample_aes_aac_filter_init(
 	void** context,
 	request_context_t* request_context,
-	media_filter_write_t write_callback,
-	void* write_context,
+	const media_filter_t* next_filter,
+	void* next_filter_context,
 	u_char* key,
 	u_char* iv)
 {
@@ -62,8 +62,8 @@ sample_aes_aac_filter_init(
 	cln->data = state;
 
 	state->request_context = request_context;
-	state->write_callback = write_callback;
-	state->write_context = write_context;
+	state->next_filter = next_filter;
+	state->next_filter_context = next_filter_context;
 	vod_memcpy(state->iv, iv, sizeof(state->iv));
 	vod_memcpy(state->key, key, sizeof(state->key));
 
@@ -93,11 +93,11 @@ sample_aes_aac_start_frame(void* context, output_frame_t* frame)
 		}
 	}
 
-	return VOD_OK;
+	return state->next_filter->start_frame(state->next_filter_context, frame);
 }
 
 vod_status_t
-sample_aes_aac_filter_write_frame_body(void* context, const u_char* buffer, uint32_t size)
+sample_aes_aac_write(void* context, const u_char* buffer, uint32_t size)
 {
 	sample_aes_aac_filter_state_t* state = (sample_aes_aac_filter_state_t*)context;
 	uint32_t offset_limit;
@@ -113,7 +113,7 @@ sample_aes_aac_filter_write_frame_body(void* context, const u_char* buffer, uint
 	if (state->cur_offset < CLEAR_LEAD_SIZE)
 	{
 		cur_size = vod_min(size, CLEAR_LEAD_SIZE - state->cur_offset);
-		rc = state->write_callback(state->write_context, buffer, cur_size);
+		rc = state->next_filter->write(state->next_filter_context, buffer, cur_size);
 		if (rc != VOD_OK)
 		{
 			return rc;
@@ -146,7 +146,7 @@ sample_aes_aac_filter_write_frame_body(void* context, const u_char* buffer, uint
 		}
 
 		// write the block
-		rc = state->write_callback(state->write_context, encrypted_buffer, out_size);
+		rc = state->next_filter->write(state->next_filter_context, encrypted_buffer, out_size);
 		if (rc != VOD_OK)
 		{
 			return rc;
@@ -156,11 +156,53 @@ sample_aes_aac_filter_write_frame_body(void* context, const u_char* buffer, uint
 	// clear trail
 	if (state->cur_offset < end_offset)
 	{
-		return state->write_callback(state->write_context, buffer, end_offset - state->cur_offset);
+		return state->next_filter->write(state->next_filter_context, buffer, end_offset - state->cur_offset);
 	}
 
 	return VOD_OK;
 }
+
+static vod_status_t
+sample_aes_aac_flush_frame(void* context, bool_t last_stream_frame)
+{
+	sample_aes_aac_filter_state_t* state = (sample_aes_aac_filter_state_t*)context;
+
+	return state->next_filter->flush_frame(state->next_filter_context, last_stream_frame);
+}
+
+static void
+sample_aes_aac_simulated_start_frame(void* context, output_frame_t* frame)
+{
+	sample_aes_aac_filter_state_t* state = (sample_aes_aac_filter_state_t*)context;
+
+	state->next_filter->simulated_start_frame(state->next_filter_context, frame);
+}
+
+static void
+sample_aes_aac_simulated_write(void* context, uint32_t size)
+{
+	sample_aes_aac_filter_state_t* state = (sample_aes_aac_filter_state_t*)context;
+
+	state->next_filter->simulated_write(state->next_filter_context, size);
+}
+
+static void
+sample_aes_aac_simulated_flush_frame(void* context, bool_t last_stream_frame)
+{
+	sample_aes_aac_filter_state_t* state = (sample_aes_aac_filter_state_t*)context;
+
+	state->next_filter->simulated_flush_frame(state->next_filter_context, last_stream_frame);
+}
+
+
+const media_filter_t sample_aes_aac = {
+	sample_aes_aac_start_frame,
+	sample_aes_aac_write,
+	sample_aes_aac_flush_frame,
+	sample_aes_aac_simulated_start_frame,
+	sample_aes_aac_simulated_write,
+	sample_aes_aac_simulated_flush_frame,
+};
 
 #else
 
@@ -169,24 +211,21 @@ vod_status_t
 sample_aes_aac_filter_init(
 	void** context,
 	request_context_t* request_context,
-	media_filter_write_t write_callback,
-	void* write_context,
+	const media_filter_t* next_filter,
+	void* next_filter_context,
 	u_char* key,
 	u_char* iv)
 {
 	return VOD_UNEXPECTED;
 }
 
-vod_status_t 
-sample_aes_aac_start_frame(void* context, output_frame_t* frame)
-{
-	return VOD_UNEXPECTED;
-}
-
-vod_status_t 
-sample_aes_aac_filter_write_frame_body(void* context, const u_char* buffer, uint32_t size)
-{
-	return VOD_UNEXPECTED;
-}
+const media_filter_t sample_aes_aac = {
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+};
 
 #endif //(VOD_HAVE_OPENSSL_EVP)
