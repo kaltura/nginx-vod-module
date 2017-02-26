@@ -554,11 +554,11 @@ segmenter_get_start_end_ranges_no_discontinuity(
 		&start,
 		&end);
 
-	if (start < start_time)
+	if (end < start_time)
 	{
 		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-			"segmenter_get_start_end_ranges_no_discontinuity: segment start time %uL is less than sequence start time %uL",
-			start, start_time);
+			"segmenter_get_start_end_ranges_no_discontinuity: segment end time %uL is less than sequence start time %uL",
+			end, start_time);
 		return VOD_BAD_REQUEST;
 	}
 
@@ -567,6 +567,11 @@ segmenter_get_start_end_ranges_no_discontinuity(
 		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
 			"segmenter_get_start_end_ranges_no_discontinuity: request for the last segment in a live presentation (1)");
 		return VOD_BAD_REQUEST;
+	}
+
+	if (start < start_time)
+	{
+		start = start_time;
 	}
 
 	if (params->key_frame_durations != NULL)
@@ -1058,7 +1063,7 @@ segmenter_get_live_window_start_end(
 		}
 	}
 
-	if (!media_set->use_discontinuity ||
+	if (!media_set->original_use_discontinuity ||
 		start_clip_offset > 0 || 
 		(start_clip_index <= 0 && timing->first_clip_start_offset > 0))
 	{

@@ -107,6 +107,7 @@ typedef struct {
 	vod_str_t id;
 	uint32_t type;
 	media_clip_timing_t timing;
+	bool_t original_use_discontinuity;		// will be different than use_discontinuity in case force_continuous_timestamps is enabled
 	bool_t use_discontinuity;
 	bool_t presentation_end;
 

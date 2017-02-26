@@ -85,7 +85,6 @@ struct segmenter_conf_s {
 	uint32_t bootstrap_segments_count;
 	uint32_t* bootstrap_segments_durations;
 	uint32_t max_segment_duration;
-	uint32_t min_segment_duration;
 	uint32_t bootstrap_segments_total_duration;
 	uint32_t* bootstrap_segments_start;
 	uint32_t* bootstrap_segments_mid;
