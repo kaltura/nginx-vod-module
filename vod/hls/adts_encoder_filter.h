@@ -17,11 +17,6 @@ typedef struct {
 
 	// fixed
 	u_char header[sizeof_adts_frame_header];
-	media_filter_write_t body_write;
-	void* body_write_context;
-
-	// state
-	void* sample_aes_context;
 } adts_encoder_state_t;
 
 // globals
