@@ -424,7 +424,7 @@ hls_muxer_init_base(
 					return rc;
 				}
 
-				cur_stream->top_filter = &adts_encoder;
+				next_filter = &adts_encoder;
 				next_filter_context = cur_stream->adts_state;
 			}
 
