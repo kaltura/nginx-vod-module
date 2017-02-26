@@ -1905,26 +1905,31 @@ media_set_parse_json(
 	}
 
 	// discontinuity
+	if (params[MEDIA_SET_PARAM_DISCONTINUITY] != NULL)
+	{
+		result->original_use_discontinuity = params[MEDIA_SET_PARAM_DISCONTINUITY]->v.boolean;
+	}
+	else
+	{
+		result->original_use_discontinuity = TRUE;
+	}
+
 	if ((request_flags & REQUEST_FLAG_NO_DISCONTINUITY) != 0)
 	{
 		result->use_discontinuity = FALSE;
 	}
-	else if (params[MEDIA_SET_PARAM_DISCONTINUITY] != NULL)
-	{
-		result->use_discontinuity = params[MEDIA_SET_PARAM_DISCONTINUITY]->v.boolean;
-
-		if (!result->use_discontinuity &&
-			request_params->clip_index != INVALID_CLIP_INDEX &&
-			request_params->clip_index != 0)
-		{
-			vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-				"media_set_parse_json: clip index %uD not allowed in continuous mode", request_params->clip_index);
-			return VOD_BAD_REQUEST;
-		}
-	}
 	else
 	{
-		result->use_discontinuity = TRUE;
+		result->use_discontinuity = result->original_use_discontinuity;
+	}
+
+	if (!result->use_discontinuity &&
+		request_params->clip_index != INVALID_CLIP_INDEX &&
+		request_params->clip_index != 0)
+	{
+		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+			"media_set_parse_json: clip index %uD not allowed in continuous mode", request_params->clip_index);
+		return VOD_BAD_REQUEST;
 	}
 
 	// durations
