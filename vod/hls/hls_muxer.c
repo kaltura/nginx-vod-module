@@ -53,7 +53,7 @@ hls_muxer_init_track(
 	{
 	case MEDIA_TYPE_VIDEO:
 		rc = mp4_to_annexb_set_media_info(
-			cur_stream->top_filter_context, 
+			&cur_stream->filter_context, 
 			&track->media_info);
 		if (rc != VOD_OK)
 		{
@@ -65,7 +65,7 @@ hls_muxer_init_track(
 		if (track->media_info.codec_id == VOD_CODEC_ID_AAC)
 		{
 			rc = adts_encoder_set_media_info(
-				cur_stream->adts_state,
+				&cur_stream->filter_context,
 				&track->media_info);
 			if (rc != VOD_OK)
 			{
@@ -109,6 +109,37 @@ hls_muxer_simulation_supported(
 }
 
 static vod_status_t
+hls_muxer_init_stream(
+	hls_muxer_state_t* state,
+	hls_muxer_conf_t* conf,
+	hls_muxer_stream_state_t* stream,
+	media_track_t* track,
+	mpegts_encoder_init_streams_state_t* init_streams_state)
+{
+	vod_status_t rc;
+
+	stream->segment_limit = ULLONG_MAX;
+	stream->filter_context.request_context = state->request_context;
+	stream->filter_context.context[MEDIA_FILTER_MPEGTS] = &stream->mpegts_encoder_state;
+	stream->filter_context.context[MEDIA_FILTER_BUFFER] = NULL;
+
+	rc = mpegts_encoder_init(
+		&stream->filter,
+		&stream->mpegts_encoder_state,
+		init_streams_state,
+		track,
+		&state->queue,
+		conf->interleave_frames,
+		conf->align_frames);
+	if (rc != VOD_OK)
+	{
+		return rc;
+	}
+
+	return VOD_OK;
+}
+
+static vod_status_t
 hls_muxer_init_id3_stream(
 	hls_muxer_state_t* state,
 	hls_muxer_conf_t* conf,
@@ -127,14 +158,12 @@ hls_muxer_init_id3_stream(
 
 	cur_stream = state->last_stream;
 
-	// init the mpeg ts encoder
-	rc = mpegts_encoder_init(
-		&cur_stream->mpegts_encoder_state,
-		init_streams_state,
+	rc = hls_muxer_init_stream(
+		state,
+		conf,
+		cur_stream,
 		NULL,
-		&state->queue,
-		conf->interleave_frames,
-		conf->align_frames);
+		init_streams_state);
 	if (rc != VOD_OK)
 	{
 		return rc;
@@ -210,15 +239,8 @@ hls_muxer_init_id3_stream(
 
 	context->cur_track = context->first_track + 1;
 
-	// base initialization
-	cur_stream->segment_limit = ULLONG_MAX;
-	cur_stream->buffer_state = NULL;
-
 	// init the id3 encoder
-	id3_encoder_init(&context->encoder, &mpegts_encoder, &cur_stream->mpegts_encoder_state);
-
-	cur_stream->top_filter = &id3_encoder;
-	cur_stream->top_filter_context = &context->encoder;
+	id3_encoder_init(&context->encoder, &cur_stream->filter, &cur_stream->filter_context);
 
 	// update the state
 	state->last_stream++;
@@ -243,8 +265,6 @@ hls_muxer_init_base(
 	mpegts_encoder_init_streams_state_t init_streams_state;
 	media_track_t* track;
 	hls_muxer_stream_state_t* cur_stream;
-	const media_filter_t* next_filter;
-	void* next_filter_context;
 	vod_status_t rc;
 	bool_t reuse_buffers;
 
@@ -258,6 +278,7 @@ hls_muxer_init_base(
 	state->media_set = media_set;
 	state->use_discontinuity = media_set->use_discontinuity;
 
+	// init aes128 if needed
 	if (encryption_params->type == HLS_ENC_AES_128)
 	{
 		rc = aes_cbc_encrypt_init(
@@ -290,7 +311,6 @@ hls_muxer_init_base(
 	rc = mpegts_encoder_init_streams(
 		request_context,
 		encryption_params,
-		&state->queue,
 		&init_streams_state,
 		segment_index);
 	if (rc != VOD_OK)
@@ -304,7 +324,7 @@ hls_muxer_init_base(
 	if (state->first_stream == NULL)
 	{
 		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
-			"hls_muxer_init_base: vod_alloc failed (1)");
+			"hls_muxer_init_base: vod_alloc failed");
 		return VOD_ALLOC_FAILED;
 	}
 
@@ -313,15 +333,12 @@ hls_muxer_init_base(
 	track = media_set->filtered_tracks;
 	for (cur_stream = state->first_stream; cur_stream < state->last_stream; cur_stream++, track++)
 	{
-		cur_stream->segment_limit = ULLONG_MAX;
-
-		rc = mpegts_encoder_init(
-			&cur_stream->mpegts_encoder_state,
-			&init_streams_state,
+		rc = hls_muxer_init_stream(
+			state,
+			conf,
+			cur_stream,
 			track,
-			&state->queue,
-			conf->interleave_frames,
-			conf->align_frames);
+			&init_streams_state);
 		if (rc != VOD_OK)
 		{
 			return rc;
@@ -335,97 +352,51 @@ hls_muxer_init_base(
 				state->video_duration = track->media_info.duration_millis;
 			}
 
-			cur_stream->buffer_state = NULL;
-			cur_stream->top_filter_context = vod_alloc(request_context->pool, sizeof(mp4_to_annexb_state_t));
-			if (cur_stream->top_filter_context == NULL)
-			{
-				vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
-					"hls_muxer_init_base: vod_alloc failed (2)");
-				return VOD_ALLOC_FAILED;
-			}
-
 			rc = mp4_to_annexb_init(
-				cur_stream->top_filter_context,
-				request_context,
-				encryption_params,
-				&mpegts_encoder,
-				&cur_stream->mpegts_encoder_state);
+				&cur_stream->filter,
+				&cur_stream->filter_context,
+				encryption_params);
 			if (rc != VOD_OK)
 			{
 				return rc;
 			}
-
-			cur_stream->top_filter = &mp4_to_annexb;
 			break;
 
 		case MEDIA_TYPE_AUDIO:
 			if (conf->interleave_frames)
 			{
 				// frame interleaving enabled, just join several audio frames according to timestamp
-				cur_stream->buffer_state = NULL;
-
-				next_filter_context = vod_alloc(request_context->pool, sizeof(frame_joiner_t));
-				if (next_filter_context == NULL)
+				rc = frame_joiner_init(
+					&cur_stream->filter,
+					&cur_stream->filter_context);
+				if (rc != VOD_OK)
 				{
-					vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
-						"hls_muxer_init_base: vod_alloc failed (3)");
-					return VOD_ALLOC_FAILED;
+					return rc;
 				}
-
-				frame_joiner_init(next_filter_context, &mpegts_encoder, &cur_stream->mpegts_encoder_state);
-
-				next_filter = &frame_joiner;
 			}
 			else
 			{
 				// no frame interleaving, buffer the audio until it reaches a certain size / delay from video
-				cur_stream->buffer_state = vod_alloc(request_context->pool, sizeof(buffer_filter_t));
-				if (cur_stream->buffer_state == NULL)
-				{
-					vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
-						"hls_muxer_init_base: vod_alloc failed (4)");
-					return VOD_ALLOC_FAILED;
-				}
-
 				rc = buffer_filter_init(
-					cur_stream->buffer_state,
-					request_context,
-					&mpegts_encoder,
-					&cur_stream->mpegts_encoder_state,
+					&cur_stream->filter,
+					&cur_stream->filter_context,
 					conf->align_frames,
 					DEFAULT_PES_PAYLOAD_SIZE);
 				if (rc != VOD_OK)
 				{
 					return rc;
 				}
-
-				next_filter = &buffer_filter;
-				next_filter_context = cur_stream->buffer_state;
 			}
 
 			if (track->media_info.codec_id == VOD_CODEC_ID_AAC)
 			{
-				cur_stream->adts_state = vod_alloc(request_context->pool, sizeof(adts_encoder_state_t));
-				if (cur_stream->adts_state == NULL)
-				{
-					vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
-						"hls_muxer_init_base: vod_alloc failed (5)");
-					return VOD_ALLOC_FAILED;
-				}
-
 				rc = adts_encoder_init(
-					cur_stream->adts_state,
-					request_context,
-					encryption_params,
-					next_filter,
-					next_filter_context);
+					&cur_stream->filter,
+					&cur_stream->filter_context);
 				if (rc != VOD_OK)
 				{
 					return rc;
 				}
-
-				next_filter = &adts_encoder;
-				next_filter_context = cur_stream->adts_state;
 			}
 
 			if (encryption_params->type == HLS_ENC_SAMPLE_AES)
@@ -439,22 +410,14 @@ hls_muxer_init_base(
 				}
 
 				rc = sample_aes_aac_filter_init(
-					&next_filter_context,
-					request_context,
-					next_filter,
-					next_filter_context,
-					encryption_params->key,
-					encryption_params->iv);
+					&cur_stream->filter,
+					&cur_stream->filter_context,
+					encryption_params);
 				if (rc != VOD_OK)
 				{
 					return rc;
 				}
-
-				next_filter = &sample_aes_aac;
 			}
-
-			cur_stream->top_filter = next_filter;
-			cur_stream->top_filter_context = next_filter_context;
 			break;
 		}
 
@@ -702,12 +665,12 @@ hls_muxer_start_frame(hls_muxer_state_t* state)
 		}
 
 		// flush any buffered frames if their delay becomes too big
-		if (cur_stream->buffer_state != NULL)
+		if (cur_stream->filter_context.context[MEDIA_FILTER_BUFFER] != NULL)
 		{
-			if (buffer_filter_get_dts(cur_stream->buffer_state, &buffer_dts) &&
+			if (buffer_filter_get_dts(&cur_stream->filter_context, &buffer_dts) &&
 				cur_frame_dts > buffer_dts + HLS_DELAY / 2)
 			{
-				rc = buffer_filter_force_flush(cur_stream->buffer_state, FALSE);
+				rc = buffer_filter_force_flush(&cur_stream->filter_context, FALSE);
 				if (rc != VOD_OK)
 				{
 					return rc;
@@ -726,8 +689,8 @@ hls_muxer_start_frame(hls_muxer_state_t* state)
 	}
 
 	// set the current top_filter
-	state->cur_writer = selected_stream->top_filter;
-	state->cur_writer_context = selected_stream->top_filter_context;
+	state->cur_writer = &selected_stream->filter;
+	state->cur_writer_context = &selected_stream->filter_context;
 
 	// initialize the mpeg ts frame info
 	output_frame.pts = cur_frame_time_offset + state->cur_frame->pts_delay;
@@ -873,19 +836,19 @@ hls_muxer_simulation_flush_delayed_streams(
 
 	for (cur_stream = state->first_stream; cur_stream < state->last_stream; cur_stream++)
 	{
-		if (selected_stream == cur_stream || cur_stream->buffer_state == NULL)
+		if (selected_stream == cur_stream || cur_stream->filter_context.context[MEDIA_FILTER_BUFFER] == NULL)
 		{
 			continue;
 		}
 
-		if (buffer_filter_get_dts(cur_stream->buffer_state, &buffer_dts) &&
+		if (buffer_filter_get_dts(&cur_stream->filter_context, &buffer_dts) &&
 			frame_dts > buffer_dts + HLS_DELAY / 2)
 		{
 			vod_log_debug2(VOD_LOG_DEBUG_LEVEL, state->request_context->log, 0,
 				"hls_muxer_simulation_flush_delayed_streams: flushing buffered frames buffer dts %L frame dts %L",
 				buffer_dts,
 				frame_dts);
-			buffer_filter_simulated_force_flush(cur_stream->buffer_state, FALSE);
+			buffer_filter_simulated_force_flush(&cur_stream->filter_context, FALSE);
 		}
 	}
 }
@@ -901,9 +864,9 @@ hls_muxer_simulation_write_frame(hls_muxer_stream_state_t* selected_stream, inpu
 	output_frame.key = cur_frame->key_frame;
 	output_frame.header_size = 0;
 
-	selected_stream->top_filter->simulated_start_frame(selected_stream->top_filter_context, &output_frame);
-	selected_stream->top_filter->simulated_write(selected_stream->top_filter_context, cur_frame->size);
-	selected_stream->top_filter->simulated_flush_frame(selected_stream->top_filter_context, last_frame);
+	selected_stream->filter.simulated_start_frame(&selected_stream->filter_context, &output_frame);
+	selected_stream->filter.simulated_write(&selected_stream->filter_context, cur_frame->size);
+	selected_stream->filter.simulated_flush_frame(&selected_stream->filter_context, last_frame);
 }
 
 static void 

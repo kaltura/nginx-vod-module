@@ -2,7 +2,10 @@
 #include "bit_fields.h"
 #include "../common.h"
 
+#define THIS_FILTER (MEDIA_FILTER_MPEGTS)
+
 #define member_size(type, member) sizeof(((type *)0)->member)
+#define get_context(ctx) ((mpegts_encoder_state_t*)ctx->context[THIS_FILTER])
 
 #define PCR_PID (0x100)
 #define PRIVATE_STREAM_1_SID (0xBD)
@@ -374,7 +377,6 @@ vod_status_t
 mpegts_encoder_init_streams(
 	request_context_t* request_context, 
 	hls_encryption_params_t* encryption_params,
-	write_buffer_queue_t* queue, 
 	mpegts_encoder_init_streams_state_t* stream_state, 
 	uint32_t segment_index)
 {
@@ -654,60 +656,6 @@ mpegts_encoder_finalize_streams(mpegts_encoder_init_streams_state_t* stream_stat
 }
 
 // stateful functions
-vod_status_t 
-mpegts_encoder_init(
-	mpegts_encoder_state_t* state,
-	mpegts_encoder_init_streams_state_t* stream_state,
-	media_track_t* track,
-	write_buffer_queue_t* queue,
-	bool_t interleave_frames,
-	bool_t align_frames)
-{
-	request_context_t* request_context = stream_state->request_context;
-	vod_status_t rc;
-
-	vod_memzero(state, sizeof(*state));
-	state->request_context = request_context;
-	state->queue = queue;
-	state->interleave_frames = interleave_frames;
-	state->align_frames = align_frames;
-
-	if (track != NULL)
-	{
-		state->stream_info.media_type = track->media_info.media_type;
-	}
-	else
-	{
-		// id3 track
-		state->stream_info.media_type = MEDIA_TYPE_NONE;
-		state->initial_cc = state->cc = stream_state->segment_index & 0x0f;
-	}
-
-	rc = mpegts_encoder_add_stream(
-		stream_state,
-		track,
-		&state->stream_info);
-	if (rc != VOD_OK)
-	{
-		return rc;
-	}
-
-	if (request_context->simulation_only || !interleave_frames)
-	{
-		return VOD_OK;
-	}
-
-	state->temp_packet = vod_alloc(request_context->pool, MPEGTS_PACKET_SIZE);
-	if (state->temp_packet == NULL)
-	{
-		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
-			"mpegts_encoder_init: vod_alloc failed");
-		return VOD_ALLOC_FAILED;
-	}
-
-	return VOD_OK;
-}
-
 static vod_inline vod_status_t 
 mpegts_encoder_init_packet(mpegts_encoder_state_t* state, bool_t write_direct)
 {
@@ -801,9 +749,9 @@ mpegts_encoder_stuff_cur_packet(mpegts_encoder_state_t* state)
 }
 
 static vod_status_t 
-mpegts_encoder_start_frame(void* context, output_frame_t* frame)
+mpegts_encoder_start_frame(media_filter_context_t* context, output_frame_t* frame)
 {
-	mpegts_encoder_state_t* state = (mpegts_encoder_state_t*)context;
+	mpegts_encoder_state_t* state = get_context(context);
 	mpegts_encoder_state_t* last_writer_state;
 	vod_status_t rc;
 	size_t pes_header_size;
@@ -953,9 +901,9 @@ mpegts_encoder_start_frame(void* context, output_frame_t* frame)
 }
 
 static vod_status_t 
-mpegts_encoder_write(void* context, const u_char* buffer, uint32_t size)
+mpegts_encoder_write(media_filter_context_t* context, const u_char* buffer, uint32_t size)
 {
-	mpegts_encoder_state_t* state = (mpegts_encoder_state_t*)context;
+	mpegts_encoder_state_t* state = get_context(context);
 	uint32_t packet_used_size;
 	uint32_t cur_size;
 	uint32_t initial_size;
@@ -1083,9 +1031,9 @@ mpegts_append_null_packet(mpegts_encoder_state_t* state)
 }
 
 static vod_status_t 
-mpegts_encoder_flush_frame(void* context, bool_t last_stream_frame)
+mpegts_encoder_flush_frame(media_filter_context_t* context, bool_t last_stream_frame)
 {
-	mpegts_encoder_state_t* state = (mpegts_encoder_state_t*)context;
+	mpegts_encoder_state_t* state = get_context(context);
 	unsigned pes_size;
 	vod_status_t rc;
 	bool_t stuff_packet;
@@ -1158,9 +1106,9 @@ mpegts_encoder_flush_frame(void* context, bool_t last_stream_frame)
 }
 
 vod_status_t
-mpegts_encoder_start_sub_frame(void* context, output_frame_t* frame)
+mpegts_encoder_start_sub_frame(media_filter_context_t* context, output_frame_t* frame)
 {
-	mpegts_encoder_state_t* state = (mpegts_encoder_state_t*)context;
+	mpegts_encoder_state_t* state = get_context(context);
 	vod_status_t rc;
 	bool_t write_direct;
 
@@ -1221,9 +1169,9 @@ mpegts_encoder_simulated_stuff_cur_packet(mpegts_encoder_state_t* state)
 }
 
 static void
-mpegts_encoder_simulated_start_frame(void* context, output_frame_t* frame)
+mpegts_encoder_simulated_start_frame(media_filter_context_t* context, output_frame_t* frame)
 {
-	mpegts_encoder_state_t* state = (mpegts_encoder_state_t*)context;
+	mpegts_encoder_state_t* state = get_context(context);
 	write_buffer_queue_t* queue = state->queue;
 	mpegts_encoder_state_t* last_writer_state = queue->last_writer_context;
 
@@ -1264,9 +1212,9 @@ mpegts_encoder_simulated_start_frame(void* context, output_frame_t* frame)
 }
 
 static void
-mpegts_encoder_simulated_write(void* context, uint32_t size)
+mpegts_encoder_simulated_write(media_filter_context_t* context, uint32_t size)
 {
-	mpegts_encoder_state_t* state = (mpegts_encoder_state_t*)context;
+	mpegts_encoder_state_t* state = get_context(context);
 	write_buffer_queue_t* queue;
 	uint32_t packet_count;
 
@@ -1301,9 +1249,9 @@ mpegts_encoder_simulated_write(void* context, uint32_t size)
 }
 
 static void
-mpegts_encoder_simulated_flush_frame(void* context, bool_t last_stream_frame)
+mpegts_encoder_simulated_flush_frame(media_filter_context_t* context, bool_t last_stream_frame)
 {
-	mpegts_encoder_state_t* state = (mpegts_encoder_state_t*)context;
+	mpegts_encoder_state_t* state = get_context(context);
 	write_buffer_queue_t* queue = state->queue;
 
 	if (state->align_frames ||
@@ -1336,3 +1284,60 @@ const media_filter_t mpegts_encoder = {
 	mpegts_encoder_simulated_write,
 	mpegts_encoder_simulated_flush_frame,
 };
+
+vod_status_t
+mpegts_encoder_init(
+	media_filter_t* filter,
+	mpegts_encoder_state_t* state,
+	mpegts_encoder_init_streams_state_t* stream_state,
+	media_track_t* track,
+	write_buffer_queue_t* queue,
+	bool_t interleave_frames,
+	bool_t align_frames)
+{
+	request_context_t* request_context = stream_state->request_context;
+	vod_status_t rc;
+
+	vod_memzero(state, sizeof(*state));
+	state->request_context = request_context;
+	state->queue = queue;
+	state->interleave_frames = interleave_frames;
+	state->align_frames = align_frames;
+
+	if (track != NULL)
+	{
+		state->stream_info.media_type = track->media_info.media_type;
+	}
+	else
+	{
+		// id3 track
+		state->stream_info.media_type = MEDIA_TYPE_NONE;
+		state->initial_cc = state->cc = stream_state->segment_index & 0x0f;
+	}
+
+	rc = mpegts_encoder_add_stream(
+		stream_state,
+		track,
+		&state->stream_info);
+	if (rc != VOD_OK)
+	{
+		return rc;
+	}
+
+	*filter = mpegts_encoder;
+
+	if (request_context->simulation_only || !interleave_frames)
+	{
+		return VOD_OK;
+	}
+
+	state->temp_packet = vod_alloc(request_context->pool, MPEGTS_PACKET_SIZE);
+	if (state->temp_packet == NULL)
+	{
+		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
+			"mpegts_encoder_init: vod_alloc failed");
+		return VOD_ALLOC_FAILED;
+	}
+
+	return VOD_OK;
+}

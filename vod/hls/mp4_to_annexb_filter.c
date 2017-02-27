@@ -3,6 +3,36 @@
 #include "../read_stream.h"
 #include "../avc_defs.h"
 
+// macros
+#define THIS_FILTER (MEDIA_FILTER_MP4_TO_ANNEXB)
+#define get_context(ctx) ((mp4_to_annexb_state_t*)ctx->context[THIS_FILTER])
+
+// typedefs
+typedef struct {
+	// input data
+	media_filter_t next_filter;
+
+	// fixed
+	media_filter_write_t body_write;
+	uint8_t unit_type_mask;
+	uint8_t aud_unit_type;
+	const u_char* aud_nal_packet;
+	uint32_t aud_nal_packet_size;
+	bool_t sample_aes;
+
+	// data parsed from extra data
+	uint32_t nal_packet_size_length;
+	const u_char* extra_data;
+	uint32_t extra_data_size;
+
+	// state
+	int cur_state;
+	bool_t first_frame_packet;
+	uint32_t length_bytes_left;
+	uint32_t packet_size_left;
+	int32_t frame_size_left;
+} mp4_to_annexb_state_t;
+
 // states
 enum {
 	STATE_PACKET_SIZE,
@@ -26,57 +56,17 @@ static const u_char zero_padding[] = {
 	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 };
 
-vod_status_t 
-mp4_to_annexb_init(
-	mp4_to_annexb_state_t* state, 
-	request_context_t* request_context,
-	hls_encryption_params_t* encryption_params,
-	const media_filter_t* next_filter,
-	void* next_filter_context)
-{
-	vod_status_t rc;
-
-	if (encryption_params->type == HLS_ENC_SAMPLE_AES)
-	{
-		rc = sample_aes_avc_filter_init(
-			&state->sample_aes_context, 
-			request_context, 
-			next_filter->write, 
-			next_filter_context, 
-			encryption_params->key,
-			encryption_params->iv);
-		if (rc != VOD_OK)
-		{
-			return rc;
-		}
-
-		state->body_write = sample_aes_avc_filter_write_nal_body;
-		state->body_write_context = state->sample_aes_context;
-	}
-	else
-	{
-		state->sample_aes_context = NULL;
-
-		state->body_write = next_filter->write;
-		state->body_write_context = next_filter_context;
-	}
-
-	state->request_context = request_context;
-	state->next_filter = next_filter;
-	state->next_filter_context = next_filter_context;
-
-	return VOD_OK;
-}
-
 vod_status_t
 mp4_to_annexb_set_media_info(
-	mp4_to_annexb_state_t* state, 
+	media_filter_context_t* context,
 	media_info_t* media_info)
 {
+	mp4_to_annexb_state_t* state = get_context(context);
+
 	state->nal_packet_size_length = media_info->u.video.nal_packet_size_length;
 	if (state->nal_packet_size_length < 1 || state->nal_packet_size_length > 4)
 	{
-		vod_log_error(VOD_LOG_ERR, state->request_context->log, 0,
+		vod_log_error(VOD_LOG_ERR, context->request_context->log, 0,
 			"mp4_to_annexb_set_media_info: invalid nal packet size length %uD", state->nal_packet_size_length);
 		return VOD_BAD_DATA;
 	}
@@ -84,9 +74,9 @@ mp4_to_annexb_set_media_info(
 	switch (media_info->codec_id)
 	{
 	case VOD_CODEC_ID_HEVC:
-		if (state->sample_aes_context != NULL)
+		if (state->sample_aes)
 		{
-			vod_log_error(VOD_LOG_ERR, state->request_context->log, 0,
+			vod_log_error(VOD_LOG_ERR, context->request_context->log, 0,
 				"mp4_to_annexb_set_media_info: hevc with sample-aes is not supported");
 			return VOD_BAD_REQUEST;
 		}
@@ -128,9 +118,9 @@ mp4_to_annexb_simulation_supported(media_info_t* media_info)
 }
 
 static vod_status_t 
-mp4_to_annexb_start_frame(void* context, output_frame_t* frame)
+mp4_to_annexb_start_frame(media_filter_context_t* context, output_frame_t* frame)
 {
-	mp4_to_annexb_state_t* state = (mp4_to_annexb_state_t*)context;
+	mp4_to_annexb_state_t* state = get_context(context);
 	vod_status_t rc;
 
 	state->frame_size_left = frame->size;		// not counting the AUD or extra data since they are written here
@@ -142,7 +132,7 @@ mp4_to_annexb_start_frame(void* context, output_frame_t* frame)
 		frame->size += state->extra_data_size;
 	}
 
-	rc = state->next_filter->start_frame(state->next_filter_context, frame);
+	rc = state->next_filter.start_frame(context, frame);
 	if (rc != VOD_OK)
 	{
 		return rc;
@@ -155,7 +145,7 @@ mp4_to_annexb_start_frame(void* context, output_frame_t* frame)
 	state->packet_size_left = 0;
 
 	// write access unit delimiter packet
-	rc = state->next_filter->write(state->next_filter_context, state->aud_nal_packet, state->aud_nal_packet_size);
+	rc = state->next_filter.write(context, state->aud_nal_packet, state->aud_nal_packet_size);
 	if (rc != VOD_OK)
 	{
 		return rc;
@@ -163,7 +153,7 @@ mp4_to_annexb_start_frame(void* context, output_frame_t* frame)
 
 	if (frame->key)
 	{
-		rc = state->next_filter->write(state->next_filter_context, state->extra_data, state->extra_data_size);
+		rc = state->next_filter.write(context, state->extra_data, state->extra_data_size);
 		if (rc != VOD_OK)
 		{
 			return rc;
@@ -174,9 +164,9 @@ mp4_to_annexb_start_frame(void* context, output_frame_t* frame)
 }
 
 static vod_status_t 
-mp4_to_annexb_write(void* context, const u_char* buffer, uint32_t size)
+mp4_to_annexb_write(media_filter_context_t* context, const u_char* buffer, uint32_t size)
 {
-	mp4_to_annexb_state_t* state = (mp4_to_annexb_state_t*)context;
+	mp4_to_annexb_state_t* state = get_context(context);
 	const u_char* buffer_end = buffer + size;
 	uint32_t write_size;
 	int unit_type;
@@ -206,9 +196,12 @@ mp4_to_annexb_write(void* context, const u_char* buffer, uint32_t size)
 				break;
 			}
 
-			if (state->sample_aes_context != NULL)
+			if (state->sample_aes)
 			{
-				rc = sample_aes_avc_start_nal_unit(state->sample_aes_context, unit_type, state->packet_size_left);
+				rc = sample_aes_avc_start_nal_unit(
+					context, 
+					unit_type, 
+					state->packet_size_left);
 				if (rc != VOD_OK)
 				{
 					return rc;
@@ -219,12 +212,12 @@ mp4_to_annexb_write(void* context, const u_char* buffer, uint32_t size)
 			{
 				state->first_frame_packet = FALSE;
 				state->frame_size_left -= sizeof(nal_marker);
-				rc = state->next_filter->write(state->next_filter_context, nal_marker, sizeof(nal_marker));
+				rc = state->next_filter.write(context, nal_marker, sizeof(nal_marker));
 			}
 			else
 			{
 				state->frame_size_left -= (sizeof(nal_marker) - 1);
-				rc = state->next_filter->write(state->next_filter_context, nal_marker + 1, sizeof(nal_marker) - 1);
+				rc = state->next_filter.write(context, nal_marker + 1, sizeof(nal_marker) - 1);
 			}
 			
 			if (rc != VOD_OK)
@@ -241,7 +234,7 @@ mp4_to_annexb_write(void* context, const u_char* buffer, uint32_t size)
 			if (state->cur_state == STATE_COPY_PACKET)
 			{
 				state->frame_size_left -= write_size;
-				rc = state->body_write(state->body_write_context, buffer, write_size);
+				rc = state->body_write(context, buffer, write_size);
 				if (rc != VOD_OK)
 				{
 					return rc;
@@ -263,17 +256,17 @@ mp4_to_annexb_write(void* context, const u_char* buffer, uint32_t size)
 }
 
 static vod_status_t 
-mp4_to_annexb_flush_frame(void* context, bool_t last_stream_frame)
+mp4_to_annexb_flush_frame(media_filter_context_t* context, bool_t last_stream_frame)
 {
-	mp4_to_annexb_state_t* state = (mp4_to_annexb_state_t*)context;
+	mp4_to_annexb_state_t* state = get_context(context);
 	vod_status_t rc;
 	int32_t cur_size;
 
-	if (state->nal_packet_size_length == 4 && state->sample_aes_context == NULL)
+	if (state->nal_packet_size_length == 4 && !state->sample_aes)
 	{
 		if (state->frame_size_left < 0)
 		{
-			vod_log_error(VOD_LOG_ERR, state->request_context->log, 0,
+			vod_log_error(VOD_LOG_ERR, context->request_context->log, 0,
 				"mp4_to_annexb_flush_frame: frame exceeded the calculated size by %D bytes", -state->frame_size_left);
 			return VOD_UNEXPECTED;
 		}
@@ -283,7 +276,7 @@ mp4_to_annexb_flush_frame(void* context, bool_t last_stream_frame)
 			cur_size = vod_min(state->frame_size_left, (int32_t)sizeof(zero_padding));
 			state->frame_size_left -= cur_size;
 
-			rc = state->next_filter->write(state->next_filter_context, zero_padding, cur_size);
+			rc = state->next_filter.write(context, zero_padding, cur_size);
 			if (rc != VOD_OK)
 			{
 				return rc;
@@ -291,50 +284,82 @@ mp4_to_annexb_flush_frame(void* context, bool_t last_stream_frame)
 		}
 	}
 
-	return state->next_filter->flush_frame(state->next_filter_context, last_stream_frame);
+	return state->next_filter.flush_frame(context, last_stream_frame);
 }
 
 
 static void
-mp4_to_annexb_simulated_start_frame(void* context, output_frame_t* frame)
+mp4_to_annexb_simulated_start_frame(media_filter_context_t* context, output_frame_t* frame)
 {
-	mp4_to_annexb_state_t* state = (mp4_to_annexb_state_t*)context;
+	mp4_to_annexb_state_t* state = get_context(context);
 	uint32_t size;
 
 	frame->header_size += state->aud_nal_packet_size;
 
-	state->next_filter->simulated_start_frame(state->next_filter_context, frame);
+	state->next_filter.simulated_start_frame(context, frame);
 
 	size = state->aud_nal_packet_size;
 	if (frame->key)
 	{
 		size += state->extra_data_size;
 	}
-	state->next_filter->simulated_write(state->next_filter_context, size);
+	state->next_filter.simulated_write(context, size);
 }
 
-static void
-mp4_to_annexb_simulated_write(void* context, uint32_t size)
+
+vod_status_t
+mp4_to_annexb_init(
+	media_filter_t* filter,
+	media_filter_context_t* context,
+	hls_encryption_params_t* encryption_params)
 {
-	mp4_to_annexb_state_t* state = (mp4_to_annexb_state_t*)context;
+	mp4_to_annexb_state_t* state;
+	request_context_t* request_context = context->request_context;
+	vod_status_t rc;
 
-	state->next_filter->simulated_write(state->next_filter_context, size);
+	// allocate state
+	state = vod_alloc(request_context->pool, sizeof(*state));
+	if (state == NULL)
+	{
+		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
+			"mp4_to_annexb_init: vod_alloc failed");
+		return VOD_ALLOC_FAILED;
+	}
+
+	// init sample aes
+	if (encryption_params->type == HLS_ENC_SAMPLE_AES)
+	{
+		rc = sample_aes_avc_filter_init(
+			filter,
+			context,
+			encryption_params->key,
+			encryption_params->iv);
+		if (rc != VOD_OK)
+		{
+			return rc;
+		}
+
+		state->sample_aes = TRUE;
+		state->body_write = sample_aes_avc_filter_write_nal_body;
+	}
+	else
+	{
+		state->sample_aes = FALSE;
+		state->body_write = filter->write;
+	}
+
+	// save required functions
+	state->next_filter = *filter;
+
+	// override functions
+	filter->start_frame = mp4_to_annexb_start_frame;
+	filter->write = mp4_to_annexb_write;
+	filter->flush_frame = mp4_to_annexb_flush_frame;
+	filter->simulated_start_frame = mp4_to_annexb_simulated_start_frame;
+
+	// save the context
+	context->context[THIS_FILTER] = state;
+
+	return VOD_OK;
 }
 
-static void
-mp4_to_annexb_simulated_flush_frame(void* context, bool_t last_stream_frame)
-{
-	mp4_to_annexb_state_t* state = (mp4_to_annexb_state_t*)context;
-
-	state->next_filter->simulated_flush_frame(state->next_filter_context, last_stream_frame);
-}
-
-
-const media_filter_t mp4_to_annexb = {
-	mp4_to_annexb_start_frame,
-	mp4_to_annexb_write,
-	mp4_to_annexb_flush_frame,
-	mp4_to_annexb_simulated_start_frame,
-	mp4_to_annexb_simulated_write,
-	mp4_to_annexb_simulated_flush_frame,
-};

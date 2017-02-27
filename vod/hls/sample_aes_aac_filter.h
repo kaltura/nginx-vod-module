@@ -3,16 +3,12 @@
 
 // include
 #include "media_filter.h"
+#include "hls_encryption.h"
 
 // functions
 vod_status_t sample_aes_aac_filter_init(
-	void** context,
-	request_context_t* request_context,
-	const media_filter_t* next_filter,
-	void* next_filter_context,
-	u_char* key,
-	u_char* iv);
-
-extern const media_filter_t sample_aes_aac;
+	media_filter_t* filter,
+	media_filter_context_t* context,
+	hls_encryption_params_t* encryption_params);
 
 #endif // __SAMPLE_AES_AAC_FILTER_H__
