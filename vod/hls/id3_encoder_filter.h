@@ -32,20 +32,19 @@ typedef struct {
 
 typedef struct {
 	// input
-	const media_filter_t* next_filter;
-	void* next_filter_context;
+	media_filter_start_frame_t start_frame;
+	media_filter_write_t write;
+	media_filter_simulated_start_frame_t simulated_start_frame;
+	media_filter_simulated_write_t simulated_write;
 
 	// fixed
 	id3_text_frame_t header;
 } id3_encoder_state_t;
 
-// globals
-extern const media_filter_t id3_encoder;
-
 // functions
 void id3_encoder_init(
 	id3_encoder_state_t* state,
-	const media_filter_t* next_filter,
-	void* next_filter_context);
+	media_filter_t* filter,
+	media_filter_context_t* context);
 
 #endif // __ID3_ENCODER_FILTER_H__

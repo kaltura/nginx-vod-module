@@ -74,14 +74,10 @@ typedef struct {
 	unsigned cur_audio_sid;
 } mpegts_encoder_init_streams_state_t;
 
-// globals
-extern const media_filter_t mpegts_encoder;
-
 // functions
 vod_status_t mpegts_encoder_init_streams(
 	request_context_t* request_context,
 	hls_encryption_params_t* encryption_params,
-	write_buffer_queue_t* queue,
 	mpegts_encoder_init_streams_state_t* stream_state,
 	uint32_t segment_index);
 
@@ -90,6 +86,7 @@ void mpegts_encoder_finalize_streams(
 	vod_str_t* ts_header);
 
 vod_status_t mpegts_encoder_init(
+	media_filter_t* filter,
 	mpegts_encoder_state_t* state,
 	mpegts_encoder_init_streams_state_t* stream_state,
 	media_track_t* track,
@@ -97,7 +94,9 @@ vod_status_t mpegts_encoder_init(
 	bool_t interleave_frames,
 	bool_t align_frames);
 
-vod_status_t mpegts_encoder_start_sub_frame(void* context, output_frame_t* frame);
+vod_status_t mpegts_encoder_start_sub_frame(
+	media_filter_context_t* context, 
+	output_frame_t* frame);
 
 void mpegts_encoder_simulated_start_segment(write_buffer_queue_t* queue);
 

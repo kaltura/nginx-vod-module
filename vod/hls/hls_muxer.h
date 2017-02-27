@@ -51,14 +51,8 @@ typedef struct {
 	uint64_t prev_frame_pts;
 
 	// top filter
-	const media_filter_t* top_filter;
-	void* top_filter_context;
-	
-	// buffer
-	buffer_filter_t* buffer_state;
-
-	// adts
-	void* adts_state;
+	media_filter_t filter;
+	media_filter_context_t filter_context;
 
 	// mpegts
 	mpegts_encoder_state_t mpegts_encoder_state;
@@ -86,7 +80,7 @@ typedef struct {
 	input_frame_t* cur_frame;
 	bool_t last_stream_frame;
 	const media_filter_t* cur_writer;
-	void* cur_writer_context;
+	media_filter_context_t* cur_writer_context;
 	int cache_slot_id;
 	frames_source_t* frames_source;
 	void* frames_source_context;

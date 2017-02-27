@@ -1,35 +1,31 @@
 #include "adts_encoder_filter.h"
-#include "sample_aes_aac_filter.h"
 #include "../codec_config.h"
 
-vod_status_t 
-adts_encoder_init(
-	adts_encoder_state_t* state, 
-	request_context_t* request_context,
-	hls_encryption_params_t* encryption_params,
-	const media_filter_t* next_filter,
-	void* next_filter_context)
-{
-	state->next_filter = next_filter;
-	state->next_filter_context = next_filter_context;
-	state->request_context = request_context;
-	
-	if (request_context->simulation_only)
-	{
-		return VOD_OK;
-	}
-	
-	return VOD_OK;
-}
+// macros
+#define THIS_FILTER (MEDIA_FILTER_ADTS)
+#define get_context(ctx) ((adts_encoder_state_t*)ctx->context[THIS_FILTER])
+
+// typedefs
+typedef struct {
+	// input data
+	media_filter_start_frame_t start_frame;
+	media_filter_write_t write;
+	media_filter_simulated_start_frame_t simulated_start_frame;
+	media_filter_simulated_write_t simulated_write;
+
+	// fixed
+	u_char header[sizeof_adts_frame_header];
+} adts_encoder_state_t;
 
 vod_status_t
 adts_encoder_set_media_info(
-	adts_encoder_state_t* state,
+	media_filter_context_t* context,
 	media_info_t* media_info)
 {
+	adts_encoder_state_t* state = get_context(context);
 	mp4a_config_t* codec_config = &media_info->u.audio.codec_config;
 
-	if (state->request_context->simulation_only)
+	if (context->request_context->simulation_only)
 	{
 		return VOD_OK;
 	}
@@ -50,15 +46,15 @@ adts_encoder_set_media_info(
 }
 
 static vod_status_t 
-adts_encoder_start_frame(void* context, output_frame_t* frame)
+adts_encoder_start_frame(media_filter_context_t* context, output_frame_t* frame)
 {
-	adts_encoder_state_t* state = (adts_encoder_state_t*)context;
+	adts_encoder_state_t* state = get_context(context);
 	vod_status_t rc;
 
 	frame->size += sizeof(state->header);
 	frame->header_size += 1;
 	
-	rc = state->next_filter->start_frame(state->next_filter_context, frame);
+	rc = state->start_frame(context, frame);
 	if (rc != VOD_OK)
 	{
 		return rc;
@@ -66,59 +62,50 @@ adts_encoder_start_frame(void* context, output_frame_t* frame)
 	
 	adts_frame_header_set_aac_frame_length(state->header, frame->size);
 	
-	return state->next_filter->write(state->next_filter_context, state->header, sizeof(state->header));
-}
-
-static vod_status_t 
-adts_encoder_write(void* context, const u_char* buffer, uint32_t size)
-{
-	adts_encoder_state_t* state = (adts_encoder_state_t*)context;
-
-	return state->next_filter->write(state->next_filter_context, buffer, size);
-}
-
-static vod_status_t 
-adts_encoder_flush_frame(void* context, bool_t last_stream_frame)
-{
-	adts_encoder_state_t* state = (adts_encoder_state_t*)context;
-
-	return state->next_filter->flush_frame(state->next_filter_context, last_stream_frame);
+	return state->write(context, state->header, sizeof(state->header));
 }
 
 
 static void 
-adts_encoder_simulated_start_frame(void* context, output_frame_t* frame)
+adts_encoder_simulated_start_frame(media_filter_context_t* context, output_frame_t* frame)
 {
-	adts_encoder_state_t* state = (adts_encoder_state_t*)context;
+	adts_encoder_state_t* state = get_context(context);
 
 	frame->header_size += 1;
 
-	state->next_filter->simulated_start_frame(state->next_filter_context, frame);
-	state->next_filter->simulated_write(state->next_filter_context, sizeof(state->header));
+	state->simulated_start_frame(context, frame);
+	state->simulated_write(context, sizeof(state->header));
 }
 
-static void 
-adts_encoder_simulated_write(void* context, uint32_t size)
+vod_status_t
+adts_encoder_init(
+	media_filter_t* filter,
+	media_filter_context_t* context)
 {
-	adts_encoder_state_t* state = (adts_encoder_state_t*)context;
+	adts_encoder_state_t* state;
+	request_context_t* request_context = context->request_context;
 
-	state->next_filter->simulated_write(state->next_filter_context, size);
+	// allocate state
+	state = vod_alloc(request_context->pool, sizeof(*state));
+	if (state == NULL)
+	{
+		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
+			"adts_encoder_init: vod_alloc failed");
+		return VOD_ALLOC_FAILED;
+	}
+
+	// save required functions
+	state->start_frame = filter->start_frame;
+	state->write = filter->write;
+	state->simulated_start_frame = filter->simulated_start_frame;
+	state->simulated_write = filter->simulated_write;
+
+	// override functions
+	filter->start_frame = adts_encoder_start_frame;
+	filter->simulated_start_frame = adts_encoder_simulated_start_frame;
+
+	// save the context
+	context->context[THIS_FILTER] = state;
+
+	return VOD_OK;
 }
-
-static void 
-adts_encoder_simulated_flush_frame(void* context, bool_t last_stream_frame)
-{
-	adts_encoder_state_t* state = (adts_encoder_state_t*)context;
-
-	state->next_filter->simulated_flush_frame(state->next_filter_context, last_stream_frame);
-}
-
-
-const media_filter_t adts_encoder = {
-	adts_encoder_start_frame,
-	adts_encoder_write,
-	adts_encoder_flush_frame,
-	adts_encoder_simulated_start_frame,
-	adts_encoder_simulated_write,
-	adts_encoder_simulated_flush_frame,
-};
