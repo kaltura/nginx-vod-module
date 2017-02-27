@@ -86,7 +86,7 @@ frame_encrypt_write(media_filter_context_t* context, const u_char* buffer, uint3
 		if (1 != EVP_EncryptUpdate(&state->cipher, encrypted_buffer, &out_size, buffer, cur_size))
 		{
 			vod_log_error(VOD_LOG_ERR, context->request_context->log, 0,
-				"frame_encrypt_filter_write_frame_body: EVP_EncryptUpdate failed");
+				"frame_encrypt_write: EVP_EncryptUpdate failed");
 			return VOD_UNEXPECTED;
 		}
 
