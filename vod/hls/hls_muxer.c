@@ -1,6 +1,6 @@
 #include "../input/frames_source_memory.h"
 #include "../input/frames_source_cache.h"
-#include "sample_aes_aac_filter.h"
+#include "frame_encrypt_filter.h"
 #include "frame_joiner_filter.h"
 #include "id3_encoder_filter.h"
 #include "hls_muxer.h"
@@ -409,7 +409,7 @@ hls_muxer_init_base(
 					return VOD_BAD_REQUEST;
 				}
 
-				rc = sample_aes_aac_filter_init(
+				rc = frame_encrypt_filter_init(
 					&cur_stream->filter,
 					&cur_stream->filter_context,
 					encryption_params);

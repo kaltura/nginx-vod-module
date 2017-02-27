@@ -1,15 +1,15 @@
-#include "sample_aes_aac_filter.h"
+#include "frame_encrypt_filter.h"
 
 #if (VOD_HAVE_OPENSSL_EVP)
 
 // macros
 #define THIS_FILTER (MEDIA_FILTER_ENCRYPT)
-#define get_context(ctx) ((sample_aes_aac_filter_state_t*)ctx->context[THIS_FILTER])
+#define get_context(ctx) ((frame_encrypt_filter_state_t*)ctx->context[THIS_FILTER])
 
 #include <openssl/aes.h>
 #include "aes_cbc_encrypt.h"
 
-#define SAMPLE_AES_KEY_SIZE (16)
+#define FRAME_ENCRYPT_KEY_SIZE (16)
 #define CLEAR_LEAD_SIZE (16)
 #define ENCRYPTED_BUFFER_SIZE (256)
 
@@ -19,18 +19,18 @@ typedef struct
 	media_filter_start_frame_t start_frame;
 	media_filter_write_t write;
 	u_char iv[AES_BLOCK_SIZE];
-	u_char key[SAMPLE_AES_KEY_SIZE];
+	u_char key[FRAME_ENCRYPT_KEY_SIZE];
 
 	// state
 	EVP_CIPHER_CTX cipher;
 	uint32_t cur_offset;
 	uint32_t max_encrypt_offset;
-} sample_aes_aac_filter_state_t;
+} frame_encrypt_filter_state_t;
 
-vod_status_t
-sample_aes_aac_start_frame(media_filter_context_t* context, output_frame_t* frame)
+static vod_status_t
+frame_encrypt_start_frame(media_filter_context_t* context, output_frame_t* frame)
 {
-	sample_aes_aac_filter_state_t* state = get_context(context);
+	frame_encrypt_filter_state_t* state = get_context(context);
 
 	state->cur_offset = 0;
 	state->max_encrypt_offset = frame->size - frame->size % AES_BLOCK_SIZE;
@@ -41,7 +41,7 @@ sample_aes_aac_start_frame(media_filter_context_t* context, output_frame_t* fram
 		if (1 != EVP_EncryptInit_ex(&state->cipher, EVP_aes_128_cbc(), NULL, state->key, state->iv))
 		{
 			vod_log_error(VOD_LOG_ERR, context->request_context->log, 0,
-				"sample_aes_aac_start_frame: EVP_EncryptInit_ex failed");
+				"frame_encrypt_start_frame: EVP_EncryptInit_ex failed");
 			return VOD_ALLOC_FAILED;
 		}
 	}
@@ -49,10 +49,10 @@ sample_aes_aac_start_frame(media_filter_context_t* context, output_frame_t* fram
 	return state->start_frame(context, frame);
 }
 
-vod_status_t
-sample_aes_aac_write(media_filter_context_t* context, const u_char* buffer, uint32_t size)
+static vod_status_t
+frame_encrypt_write(media_filter_context_t* context, const u_char* buffer, uint32_t size)
 {
-	sample_aes_aac_filter_state_t* state = get_context(context);
+	frame_encrypt_filter_state_t* state = get_context(context);
 	uint32_t offset_limit;
 	uint32_t end_offset;
 	uint32_t cur_size;
@@ -86,7 +86,7 @@ sample_aes_aac_write(media_filter_context_t* context, const u_char* buffer, uint
 		if (1 != EVP_EncryptUpdate(&state->cipher, encrypted_buffer, &out_size, buffer, cur_size))
 		{
 			vod_log_error(VOD_LOG_ERR, context->request_context->log, 0,
-				"sample_aes_aac_filter_write_frame_body: EVP_EncryptUpdate failed");
+				"frame_encrypt_filter_write_frame_body: EVP_EncryptUpdate failed");
 			return VOD_UNEXPECTED;
 		}
 
@@ -116,18 +116,18 @@ sample_aes_aac_write(media_filter_context_t* context, const u_char* buffer, uint
 }
 
 static void
-sample_aes_aac_cleanup(sample_aes_aac_filter_state_t* state)
+frame_encrypt_cleanup(frame_encrypt_filter_state_t* state)
 {
 	EVP_CIPHER_CTX_cleanup(&state->cipher);
 }
 
 vod_status_t
-sample_aes_aac_filter_init(
+frame_encrypt_filter_init(
 	media_filter_t* filter,
 	media_filter_context_t* context,
 	hls_encryption_params_t* encryption_params)
 {
-	sample_aes_aac_filter_state_t* state;
+	frame_encrypt_filter_state_t* state;
 	request_context_t* request_context = context->request_context;
 	vod_pool_cleanup_t *cln;
 
@@ -136,7 +136,7 @@ sample_aes_aac_filter_init(
 	if (state == NULL)
 	{
 		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
-			"sample_aes_aac_filter_init: vod_alloc failed");
+			"frame_encrypt_filter_init: vod_alloc failed");
 		return VOD_ALLOC_FAILED;
 	}
 
@@ -145,11 +145,11 @@ sample_aes_aac_filter_init(
 	if (cln == NULL)
 	{
 		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
-			"sample_aes_aac_filter_init: vod_pool_cleanup_add failed");
+			"frame_encrypt_filter_init: vod_pool_cleanup_add failed");
 		return VOD_ALLOC_FAILED;
 	}
 
-	cln->handler = (vod_pool_cleanup_pt)sample_aes_aac_cleanup;
+	cln->handler = (vod_pool_cleanup_pt)frame_encrypt_cleanup;
 	cln->data = state;
 
 	vod_memcpy(state->iv, encryption_params->iv, sizeof(state->iv));
@@ -162,8 +162,8 @@ sample_aes_aac_filter_init(
 	state->write = filter->write;
 
 	// override functions
-	filter->start_frame = sample_aes_aac_start_frame;
-	filter->write = sample_aes_aac_write;
+	filter->start_frame = frame_encrypt_start_frame;
+	filter->write = frame_encrypt_write;
 
 	// save the context
 	context->context[THIS_FILTER] = state;
@@ -175,7 +175,7 @@ sample_aes_aac_filter_init(
 
 // empty stubs
 vod_status_t
-sample_aes_aac_filter_init(
+frame_encrypt_filter_init(
 	media_filter_t* filter,
 	media_filter_context_t* context,
 	hls_encryption_params_t* encryption_params)
