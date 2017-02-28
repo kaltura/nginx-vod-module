@@ -410,6 +410,16 @@ edash_packager_build_init_mp4(
 	drm_system_info_t* cur_info;
 	vod_status_t rc;
 
+	// create an stsd atom if needed
+	if (first_track->raw_atoms[RTA_STSD].size == 0)
+	{
+		rc = dash_packager_build_stsd_atom(request_context, first_track);
+		if (rc != VOD_OK)
+		{
+			return rc;
+		}
+	}
+
 	rc = edash_packager_init_stsd_writer_context(
 		request_context,
 		first_track->media_info.media_type,

@@ -2138,6 +2138,38 @@ dash_packager_init_mp4_write(
 	return p;
 }
 
+vod_status_t
+dash_packager_build_stsd_atom(
+	request_context_t* request_context,
+	media_track_t* track)
+{
+	size_t atom_size;
+	u_char* p;
+
+	atom_size = dash_packager_get_stsd_atom_size(track);
+	p = vod_alloc(request_context->pool, atom_size);
+	if (p == NULL)
+	{
+		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
+			"dash_packager_build_init_mp4: vod_alloc failed (1)");
+		return VOD_ALLOC_FAILED;
+	}
+
+	track->raw_atoms[RTA_STSD].ptr = p;
+	track->raw_atoms[RTA_STSD].size =
+		dash_packager_write_stsd_atom(p, atom_size, track) - p;
+
+	if (track->raw_atoms[RTA_STSD].size > atom_size)
+	{
+		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+			"dash_packager_build_init_mp4: stsd length %uL greater than allocated length %uz",
+			track->raw_atoms[RTA_STSD].size, atom_size);
+		return VOD_UNEXPECTED;
+	}
+
+	return VOD_OK;
+}
+
 vod_status_t 
 dash_packager_build_init_mp4(
 	request_context_t* request_context,
@@ -2149,31 +2181,16 @@ dash_packager_build_init_mp4(
 {
 	media_track_t* first_track = media_set->sequences[0].filtered_clips[0].first_track;
 	init_mp4_sizes_t sizes;
-	size_t atom_size;
+	vod_status_t rc;
 	u_char* p;
 
 	// create an stsd atom if needed
 	if (first_track->raw_atoms[RTA_STSD].size == 0)
 	{
-		atom_size = dash_packager_get_stsd_atom_size(first_track);
-		p = vod_alloc(request_context->pool, atom_size);
-		if (p == NULL)
+		rc = dash_packager_build_stsd_atom(request_context, first_track);
+		if (rc != VOD_OK)
 		{
-			vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
-				"dash_packager_build_init_mp4: vod_alloc failed (1)");
-			return VOD_ALLOC_FAILED;
-		}
-
-		first_track->raw_atoms[RTA_STSD].ptr = p;
-		first_track->raw_atoms[RTA_STSD].size =
-			dash_packager_write_stsd_atom(p, atom_size, first_track) - p;
-
-		if (first_track->raw_atoms[RTA_STSD].size > atom_size)
-		{
-			vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-				"dash_packager_build_init_mp4: stsd length %uL greater than allocated length %uz",
-				first_track->raw_atoms[RTA_STSD].size, atom_size);
-			return VOD_UNEXPECTED;
+			return rc;
 		}
 	}
 
