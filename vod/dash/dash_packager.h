@@ -67,6 +67,10 @@ vod_status_t dash_packager_build_mpd(
 	dash_manifest_extensions_t* extensions,
 	vod_str_t* result);
 
+vod_status_t dash_packager_build_stsd_atom(
+	request_context_t* request_context,
+	media_track_t* track);
+
 vod_status_t dash_packager_build_init_mp4(
 	request_context_t* request_context,
 	media_set_t* media_set,
