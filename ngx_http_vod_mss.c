@@ -240,7 +240,8 @@ static const ngx_http_vod_request_t mss_ttml_request = {
 	ngx_http_vod_mss_handle_ttml_fragment,
 	NULL,
 };
-void
+
+static void
 ngx_http_vod_mss_create_loc_conf(
 	ngx_conf_t *cf,
 	ngx_http_vod_mss_loc_conf_t *conf)
@@ -260,7 +261,7 @@ ngx_http_vod_mss_merge_loc_conf(
 	return NGX_CONF_OK;
 }
 
-int 
+static int 
 ngx_http_vod_mss_get_file_path_components(ngx_str_t* uri)
 {
 	u_char* end_pos = uri->data + uri->len;
@@ -276,7 +277,7 @@ ngx_http_vod_mss_get_file_path_components(ngx_str_t* uri)
 	}
 }
 
-ngx_int_t
+static ngx_int_t
 ngx_http_vod_mss_parse_uri_file_name(
 	ngx_http_request_t *r,
 	ngx_http_vod_loc_conf_t *conf,
@@ -368,7 +369,7 @@ ngx_http_vod_mss_parse_uri_file_name(
 	}
 }
 
-ngx_int_t
+static ngx_int_t
 ngx_http_vod_mss_parse_drm_info(
 	ngx_http_vod_submodule_context_t* submodule_context,
 	ngx_str_t* drm_info,

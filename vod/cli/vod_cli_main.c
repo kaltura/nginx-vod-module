@@ -9,7 +9,7 @@
 #include "read_cache.h"
 #include "muxer.h"
 
-bool_t 
+static bool_t 
 write_file(void* context, const u_char* buffer, uint32_t size)
 {
 	int* output_fd = (int*)context;
@@ -24,7 +24,7 @@ write_file(void* context, const u_char* buffer, uint32_t size)
 	return TRUE;
 }
 
-size_t 
+static size_t 
 read_file(void* context, u_char *buf, size_t size, off_t offset)
 {
 	int* input_fd = (int*)context;

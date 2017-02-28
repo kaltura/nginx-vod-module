@@ -174,7 +174,7 @@ thumb_grabber_init_encoder(
 	return VOD_OK;
 }
 
-uint32_t
+static uint32_t
 thumb_grabber_get_max_frame_size(media_track_t* track, uint32_t limit)
 {
 	frame_list_part_t* part;

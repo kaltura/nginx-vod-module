@@ -428,7 +428,7 @@ codec_config_get_video_codec_name(request_context_t* request_context, media_info
 	}
 }
 
-vod_status_t
+static vod_status_t
 codec_config_get_mp4a_codec_name(request_context_t* request_context, media_info_t* media_info)
 {
 	u_char* p;
@@ -784,7 +784,7 @@ parse_avc_sps(const u_char* buffer, int buffer_size)
 	return parse_avc_rbsp_trailing_bits(&reader);
 }
 
-vod_status_t
+static vod_status_t
 avcc_config_parse_sps(
 	const u_char* extra_data,
 	uint32_t extra_data_size)
