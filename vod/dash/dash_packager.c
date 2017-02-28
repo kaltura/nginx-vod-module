@@ -2151,7 +2151,7 @@ dash_packager_build_stsd_atom(
 	if (p == NULL)
 	{
 		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
-			"dash_packager_build_init_mp4: vod_alloc failed (1)");
+			"dash_packager_build_stsd_atom: vod_alloc failed (1)");
 		return VOD_ALLOC_FAILED;
 	}
 
@@ -2162,7 +2162,7 @@ dash_packager_build_stsd_atom(
 	if (track->raw_atoms[RTA_STSD].size > atom_size)
 	{
 		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-			"dash_packager_build_init_mp4: stsd length %uL greater than allocated length %uz",
+			"dash_packager_build_stsd_atom: stsd length %uL greater than allocated length %uz",
 			track->raw_atoms[RTA_STSD].size, atom_size);
 		return VOD_UNEXPECTED;
 	}
