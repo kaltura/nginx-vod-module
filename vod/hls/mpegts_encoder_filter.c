@@ -1276,7 +1276,7 @@ mpegts_encoder_simulated_flush_frame(media_filter_context_t* context, bool_t las
 }
 
 
-const media_filter_t mpegts_encoder = {
+static const media_filter_t mpegts_encoder = {
 	mpegts_encoder_start_frame,
 	mpegts_encoder_write,
 	mpegts_encoder_flush_frame,

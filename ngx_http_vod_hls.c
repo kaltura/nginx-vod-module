@@ -417,7 +417,7 @@ static const ngx_http_vod_request_t hls_vtt_segment_request = {
 	NULL,
 };
 
-void
+static void
 ngx_http_vod_hls_create_loc_conf(
 	ngx_conf_t *cf,
 	ngx_http_vod_hls_loc_conf_t *conf)
@@ -571,7 +571,7 @@ ngx_http_vod_hls_parse_uri_file_name(
 	return NGX_OK;
 }
 
-ngx_int_t
+static ngx_int_t
 ngx_http_vod_hls_parse_drm_info(
 	ngx_http_vod_submodule_context_t* submodule_context,
 	ngx_str_t* drm_info,

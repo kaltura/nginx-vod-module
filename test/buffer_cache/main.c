@@ -46,7 +46,7 @@ ngx_shared_memory_add(ngx_conf_t *cf, ngx_str_t *name, size_t size, void *tag)
 }
 
 // buffer cache initialization
-ngx_flag_t
+static ngx_flag_t
 init_buffer_cache(size_t size)
 {
 	ngx_time.sec = 0;
@@ -62,7 +62,7 @@ init_buffer_cache(size_t size)
 	return 1;
 }
 
-void
+static void
 free_buffer_cache()
 {
 	free(shm_zone.shm.addr);

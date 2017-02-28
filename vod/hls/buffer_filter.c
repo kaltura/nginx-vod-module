@@ -427,7 +427,7 @@ buffer_filter_simulated_flush_frame(media_filter_context_t* context, bool_t last
 	}
 }
 
-const media_filter_t buffer_filter = {
+static const media_filter_t buffer_filter = {
 	buffer_filter_start_frame,
 	buffer_filter_write,
 	buffer_filter_flush_frame,

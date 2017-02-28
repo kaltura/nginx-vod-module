@@ -275,7 +275,7 @@ ngx_http_vod_hds_parse_uri_file_name(
 	return NGX_OK;
 }
 
-ngx_int_t
+static ngx_int_t
 ngx_http_vod_hds_parse_drm_info(
 	ngx_http_vod_submodule_context_t* submodule_context,
 	ngx_str_t* drm_info,

@@ -136,7 +136,7 @@ ngx_http_vod_extract_uint32_token_reverse(u_char* start_pos, u_char* end_pos, ui
 	return end_pos;
 }
 
-u_char*
+static u_char*
 ngx_http_vod_extract_track_tokens(u_char* start_pos, u_char* end_pos, uint32_t* result)
 {
 	uint32_t stream_index;

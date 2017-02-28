@@ -421,7 +421,7 @@ ngx_http_vod_set_time_slot(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
 	return NGX_CONF_OK;
 }
 
-char *
+static char *
 ngx_http_vod_set_signed_slot(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
 {
 	char  *p = conf;
