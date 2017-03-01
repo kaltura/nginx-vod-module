@@ -479,7 +479,7 @@ Optional fields:
 	a default label will be automatically derived by it - e.g. if language is `ita`, 
 	by default `italiano` will be used as the label.
 * `bitrate` - an object that can be used to set the bitrate for the different media types,
-	in bytes per second. For example, `{"v": 900000, "a": 64000}`. If the bitrate is not supplied,
+	in bits per second. For example, `{"v": 900000, "a": 64000}`. If the bitrate is not supplied,
 	nginx-vod-module will estimate it based on the last clip in the sequence.
 
 #### Clip (abstract)
