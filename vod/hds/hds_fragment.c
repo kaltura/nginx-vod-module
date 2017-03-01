@@ -153,15 +153,18 @@ typedef struct {
 	u_char iv[AES_BLOCK_SIZE];
 } hds_selective_encryption_filter_params_t;
 
+static vod_status_t hds_muxer_start_frame(hds_muxer_state_t* state);
+
+#if (VOD_HAVE_OPENSSL_EVP)
+
+#define ENCRYPTION_TAG_HEADER_SIZE sizeof(hds_encryption_tag_header)
+
 static u_char hds_encryption_tag_header[] = {
 	0x01,					// num filters
 	0x53, 0x45, 0x00,		// filter name (SE)
 	0x00, 0x00, 0x11,		// params len = sizeof(hds_selective_encryption_filter_params_t)
 };
 
-static vod_status_t hds_muxer_start_frame(hds_muxer_state_t* state);
-
-#if (VOD_HAVE_OPENSSL_EVP)
 ////// encryption functions
 static void
 hds_muxer_encrypt_cleanup(hds_muxer_state_t* state)
@@ -201,7 +204,7 @@ hds_muxer_encrypt_init(
 static u_char*
 hds_muxer_encrypt_write_header(hds_muxer_state_t* state, u_char* p)
 {
-	p = vod_copy(p, hds_encryption_tag_header, sizeof(hds_encryption_tag_header));
+	p = vod_copy(p, hds_encryption_tag_header, ENCRYPTION_TAG_HEADER_SIZE);
 
 	// selective encryption filter params
 	*p++ = 0x80;		// packet is encrypted
@@ -291,6 +294,8 @@ hds_muxer_encrypt_write(
 	return VOD_OK;
 }
 #else
+
+#define ENCRYPTION_TAG_HEADER_SIZE (0)
 
 // empty stubs
 static vod_status_t
@@ -741,7 +746,7 @@ hds_calculate_output_offsets_and_write_afra_entries(
 
 		if (state->enc_type != HDS_ENC_NONE)
 		{
-			cur_offset += sizeof(hds_encryption_tag_header);
+			cur_offset += ENCRYPTION_TAG_HEADER_SIZE;
 		}
 
 		// set the offset (points to the beginning of the actual data)
@@ -1259,10 +1264,10 @@ hds_muxer_start_frame(hds_muxer_state_t* state)
 	if (state->enc_type != HDS_ENC_NONE)
 	{
 		frame_size = 
-			sizeof(hds_encryption_tag_header) +
+			ENCRYPTION_TAG_HEADER_SIZE +
 			sizeof(hds_selective_encryption_filter_params_t) +
 			aes_round_up_to_block(frame_size);
-		alloc_size += sizeof(hds_encryption_tag_header) + sizeof(hds_selective_encryption_filter_params_t);
+		alloc_size += ENCRYPTION_TAG_HEADER_SIZE + sizeof(hds_selective_encryption_filter_params_t);
 	}
 
 	state->frame_header_size = selected_stream->tag_size;
