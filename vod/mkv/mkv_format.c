@@ -1667,7 +1667,7 @@ mkv_prepare_read_frames_request(
 	if (rc == VOD_AGAIN && read_req->read_size > parse_params->max_frames_size)
 	{
 		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-			"mkv_read_frames: read size %uz exceeds the limit %uz",
+			"mkv_prepare_read_frames_request: read size %uz exceeds the limit %uz",
 			read_req->read_size, parse_params->max_frames_size);
 		return VOD_BAD_REQUEST;
 	}
