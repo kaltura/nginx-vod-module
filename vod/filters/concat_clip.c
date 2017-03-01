@@ -3,7 +3,7 @@
 #include "../parse_utils.h"
 
 // constants
-#define MAX_CONCAT_ELEMENTS (10000)
+#define MAX_CONCAT_ELEMENTS (65536)
 
 // typedefs
 typedef struct {

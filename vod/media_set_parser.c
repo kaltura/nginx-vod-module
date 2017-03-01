@@ -82,6 +82,7 @@ static vod_status_t media_set_parse_encryption_key(void* ctx, vod_json_value_t* 
 static vod_status_t media_set_parse_source(void* ctx, vod_json_object_t* element, void** result);
 static vod_status_t media_set_parse_language(void* ctx, vod_json_value_t* value, void* dest);
 static vod_status_t media_set_parse_clips_array(void* ctx, vod_json_value_t* value, void* dest);
+static vod_status_t media_set_parse_bitrate(void* ctx, vod_json_value_t* value, void* dest);
 
 // constants
 static json_parser_union_type_def_t media_clip_union_params[] = {
@@ -107,6 +108,7 @@ static json_object_value_def_t media_sequence_params[] = {
 	{ vod_string("clips"),			VOD_JSON_ARRAY,		offsetof(media_sequence_t, unparsed_clips), media_set_parse_clips_array },
 	{ vod_string("language"),		VOD_JSON_STRING,	offsetof(media_sequence_t, language), media_set_parse_language },
 	{ vod_string("label"),			VOD_JSON_STRING,	offsetof(media_sequence_t, label), media_set_parse_null_term_string },
+	{ vod_string("bitrate"),		VOD_JSON_OBJECT,	offsetof(media_sequence_t, bitrate), media_set_parse_bitrate },
 	{ vod_null_string, 0, 0, NULL }
 };
 
@@ -405,6 +407,52 @@ media_set_parse_clips_array(
 	}
 
 	*(vod_array_part_t**)dest = &array->part;
+
+	return VOD_OK;
+}
+
+static vod_status_t 
+media_set_parse_bitrate(
+	void* ctx,
+	vod_json_value_t* value,
+	void* dest)
+{
+	media_set_parse_sequences_context_t* context = ctx;
+	vod_json_object_t* object = &value->v.obj;
+	vod_json_key_value_t* cur_element = object->elts;
+	vod_json_key_value_t* last_element = cur_element + object->nelts;
+	uint32_t media_type;
+
+	for (; cur_element < last_element; cur_element++)
+	{
+		if (cur_element->key.len != 1)
+		{
+			continue;
+		}
+
+		switch (cur_element->key.data[0])
+		{
+		case 'v':
+			media_type = MEDIA_TYPE_VIDEO;
+			break;
+
+		case 'a':
+			media_type = MEDIA_TYPE_AUDIO;
+			break;
+
+		default:
+			continue;
+		}
+
+		if (cur_element->value.type != VOD_JSON_INT)
+		{
+			vod_log_error(VOD_LOG_ERR, context->request_context->log, 0,
+				"media_set_parse_bitrate: invalid element type %d expected int", cur_element->value.type);
+			return VOD_BAD_MAPPING;
+		}
+
+		((uint32_t*)dest)[media_type] = (uint32_t)cur_element->value.v.num.num;
+	}
 
 	return VOD_OK;
 }
@@ -715,6 +763,7 @@ media_set_parse_sequences(
 		cur_output->first_key_frame_offset = 0;
 		cur_output->key_frame_durations = NULL;
 		cur_output->drm_info = NULL;
+		vod_memzero(cur_output->bitrate, sizeof(cur_output->bitrate));
 
 		rc = vod_json_parse_object_values(
 			cur_pos,

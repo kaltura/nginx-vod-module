@@ -2302,6 +2302,7 @@ mp4_parser_process_moov_atom_callback(void* ctx, atom_info_t* atom_info)
 	media_sequence_t* sequence;
 	uint32_t duration_millis;
 	uint32_t track_index;
+	uint32_t bitrate;
 	bool_t extra_data_required;
 	vod_status_t rc;
 	int parse_type;
@@ -2535,6 +2536,13 @@ mp4_parser_process_moov_atom_callback(void* ctx, atom_info_t* atom_info)
 		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, context->request_context->log, 0,
 			"mp4_parser_process_moov_atom_callback: vod_array_push failed");
 		return VOD_ALLOC_FAILED;
+	}
+
+	// inherit bitrate from sequence
+	bitrate = sequence->bitrate[metadata_parse_context.media_info.media_type];
+	if (bitrate != 0)
+	{
+		metadata_parse_context.media_info.bitrate = bitrate;
 	}
 
 	result_track->trak_atom_infos = trak_atom_infos;

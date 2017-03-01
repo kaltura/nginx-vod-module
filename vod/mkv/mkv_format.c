@@ -881,6 +881,7 @@ mkv_metadata_parse(
 		cur_track->media_info.timescale = timescale;
 		cur_track->media_info.frames_timescale = timescale;
 		cur_track->media_info.codec_delay = track.codec_delay;
+		cur_track->media_info.bitrate = sequence->bitrate[media_type];
 
 		// Note: setting the duration of all tracks to the file duration, since there is no efficient
 		//	way to get the duration of a track
@@ -1211,9 +1212,11 @@ mkv_parse_frames_estimate_bitrate(
 		cur_track = (media_track_t*)base->tracks.elts + i;
 		track_context = context.first_track + i;
 
-		if (track_context->max_frame_timecode > track_context->min_frame_timecode)
+		if (cur_track->media_info.bitrate == 0 &&
+			track_context->max_frame_timecode > track_context->min_frame_timecode)
 		{
-			cur_track->media_info.bitrate = track_context->total_frames_size * base->timescale * 8 / (track_context->max_frame_timecode - track_context->min_frame_timecode);
+			cur_track->media_info.bitrate = track_context->total_frames_size * base->timescale * 8 / 
+				(track_context->max_frame_timecode - track_context->min_frame_timecode);
 		}
 
 		result->track_count[cur_track->media_info.media_type]++;
@@ -1587,6 +1590,92 @@ mkv_parse_frames(
 }
 
 static vod_status_t
+mkv_prepare_read_frames_request(
+	request_context_t* request_context,
+	media_base_metadata_t* base,
+	media_parse_params_t* parse_params,
+	segmenter_conf_t* segmenter,
+	media_format_read_request_t* read_req)
+{
+	mkv_base_metadata_t* metadata = vod_container_of(base, mkv_base_metadata_t, base);
+	media_track_t* first_track;
+	media_track_t* last_track;
+	media_track_t* cur_track;
+	uint32_t end_margin;
+	uint32_t range;
+	bool_t need_bitrate_estimation;
+	vod_status_t rc;
+
+	if ((parse_params->parse_type & (PARSE_FLAG_FRAMES_ALL | PARSE_FLAG_TOTAL_SIZE_ESTIMATE)) ==
+		PARSE_FLAG_TOTAL_SIZE_ESTIMATE)
+	{
+		// check whether there are any tracks without bitrate
+		first_track = (media_track_t*)base->tracks.elts;
+		last_track = first_track + base->tracks.nelts;
+
+		need_bitrate_estimation = FALSE;
+		for (cur_track = first_track; cur_track < last_track; cur_track++)
+		{
+			if (cur_track->media_info.bitrate == 0)
+			{
+				need_bitrate_estimation = TRUE;
+				break;
+			}
+		}
+
+		if (!need_bitrate_estimation)
+		{
+			return VOD_OK;
+		}
+	}
+
+	if ((parse_params->parse_type & PARSE_FLAG_FRAMES_ALL) != 0)
+	{
+		// Note: must save all the data we'll need from parse params (won't be available in parse frames)
+		metadata->start_time = rescale_time(parse_params->range->start, 1000, metadata->base.timescale);
+		metadata->end_time = rescale_time(parse_params->range->end, 1000, metadata->base.timescale);
+		metadata->max_frame_count = parse_params->max_frame_count;
+		metadata->parse_frames = TRUE;
+		end_margin = segmenter->max_segment_duration;
+	}
+	else
+	{
+		range = BITRATE_ESTIMATE_SEC * metadata->base.timescale;
+		if (metadata->base.duration > range)
+		{
+			metadata->start_time = (metadata->base.duration - range) / 2;
+		}
+		else
+		{
+			metadata->start_time = 0;
+		}
+		metadata->end_time = metadata->start_time + range;
+		metadata->parse_frames = FALSE;
+		end_margin = 0;
+	}
+
+	rc = mkv_get_read_frames_request(
+		request_context,
+		metadata,
+		end_margin,
+		read_req);
+	if (rc == VOD_OK)
+	{
+		return VOD_OK;
+	}
+
+	if (rc == VOD_AGAIN && read_req->read_size > parse_params->max_frames_size)
+	{
+		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+			"mkv_prepare_read_frames_request: read size %uz exceeds the limit %uz",
+			read_req->read_size, parse_params->max_frames_size);
+		return VOD_BAD_REQUEST;
+	}
+
+	return rc;
+}
+
+static vod_status_t
 mkv_read_frames(
 	request_context_t* request_context,
 	media_base_metadata_t* base,
@@ -1599,55 +1688,21 @@ mkv_read_frames(
 {
 	mkv_base_metadata_t* metadata = vod_container_of(base, mkv_base_metadata_t, base);
 	media_track_t* cur_track;
-	uint32_t end_margin;
-	uint32_t range;
 	vod_status_t rc;
 
 	// TODO: handle initial pts delay
 
-	if (frame_data == NULL && 
+	if (frame_data == NULL &&
 		(parse_params->parse_type & (PARSE_FLAG_FRAMES_ALL | PARSE_FLAG_TOTAL_SIZE_ESTIMATE)) != 0)
 	{
-		if ((parse_params->parse_type & PARSE_FLAG_FRAMES_ALL) != 0)
-		{
-			// Note: must save all the data we'll need from parse params (won't be available in parse frames)
-			metadata->start_time = rescale_time(parse_params->range->start, 1000, metadata->base.timescale);
-			metadata->end_time = rescale_time(parse_params->range->end, 1000, metadata->base.timescale);
-			metadata->max_frame_count = parse_params->max_frame_count;
-			metadata->parse_frames = TRUE;
-			end_margin = segmenter->max_segment_duration;
-		}
-		else
-		{
-			range = BITRATE_ESTIMATE_SEC * metadata->base.timescale;
-			if (metadata->base.duration > range)
-			{
-				metadata->start_time = (metadata->base.duration - range) / 2;
-			}
-			else
-			{
-				metadata->start_time = 0;
-			}
-			metadata->end_time = metadata->start_time + range;
-			metadata->parse_frames = FALSE;
-			end_margin = 0;
-		}
-
-		rc = mkv_get_read_frames_request(
+		rc = mkv_prepare_read_frames_request(
 			request_context,
-			metadata,
-			end_margin,
+			base,
+			parse_params,
+			segmenter,
 			read_req);
 		if (rc != VOD_OK)
 		{
-			if (rc == VOD_AGAIN && read_req->read_size > parse_params->max_frames_size)
-			{
-				vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-					"mkv_read_frames: read size %uz exceeds the limit %uz",
-					read_req->read_size, parse_params->max_frames_size);
-				return VOD_BAD_REQUEST;
-			}
-
 			return rc;
 		}
 	}
