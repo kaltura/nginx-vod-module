@@ -53,6 +53,7 @@ struct media_sequence_s {
 	vod_str_t id;
 	vod_str_t label;
 	language_id_t language;
+	uint32_t bitrate[MEDIA_TYPE_COUNT];
 	int64_t first_key_frame_offset;
 	vod_array_part_t* key_frame_durations;
 	uint64_t last_key_frame_time;
