@@ -1539,14 +1539,7 @@ dash_packager_build_mpd(
 	case MEDIA_SET_LIVE:
 		media_type = media_set->track_count[MEDIA_TYPE_VIDEO] != 0 ? MEDIA_TYPE_VIDEO : MEDIA_TYPE_AUDIO;
 
-		if (media_set->live_window_duration > 0)
-		{
-			window_size = media_set->live_window_duration;
-		}
-		else
-		{
-			window_size = context.segment_durations[media_type].duration;
-		}
+		window_size = context.segment_durations[media_type].duration;
 		min_update_period = segmenter_conf->segment_duration / 2;
 
 		vod_gmtime(context.segment_base_time / 1000, &avail_time_gmt);
