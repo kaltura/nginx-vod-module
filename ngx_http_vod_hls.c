@@ -1,7 +1,7 @@
 #include <ngx_http.h>
 #include "ngx_http_vod_submodule.h"
 #include "ngx_http_vod_utils.h"
-#include "vod/webvtt/webvtt_builder.h"
+#include "vod/subtitle/webvtt_builder.h"
 #include "vod/hls/hls_muxer.h"
 #include "vod/udrm.h"
 
