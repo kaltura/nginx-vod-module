@@ -2,7 +2,7 @@
 #define __CAP_FORMAT_H__
 
 // includes
-#include "media_format.h"
+#include "../media_format.h"
 
 // globals
 extern media_format_t cap_format;
