@@ -23,10 +23,12 @@
 * Audio codecs: AAC, MP3
 
 * Captions support - 
+  
   Input:
   1. WebVTT
   2. SRT
   3. CAP (Cheetah)
+  
   Output:
   1. DASH - served as a single WebVTT
   2. HLS - segmented WebVTT (m3u8)
