@@ -1308,6 +1308,7 @@ mkv_parse_frame(
 	switch (flags)
 	{
 	case 0:
+	case 1:		// discardable
 		// XXXXX should not cross the clip offset
 
 		if (frame_parse_context->state == FRS_WAIT_START_KEY_FRAME)
