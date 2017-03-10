@@ -1,27 +1,14 @@
 #include "../media_format.h"
 #include "../media_clip.h"
 #include "../media_set.h"
+#include "subtitle_format.h"
 #include <ctype.h>
 
 // constants
 #define UTF8_BOM ("\xEF\xBB\xBF")
 #define WEBVTT_HEADER ("WEBVTT")
-#define WEBVTT_HEADER_NEWLINES ("WEBVTT\r\n\r\n")
 #define WEBVTT_DURATION_ESTIMATE_CUES (10)
 #define WEBVTT_CUE_MARKER ("-->")
-
-// typedefs
-typedef struct {
-	size_t initial_read_size;
-	size_t size_limit;
-	bool_t first_time;
-	vod_str_t buffer;
-} webvtt_reader_state_t;
-
-typedef struct {
-	media_base_metadata_t base;
-	vod_str_t source;
-} webvtt_base_metadata_t;
 
 static int64_t 
 webvtt_read_timestamp(u_char* cur_pos, u_char** end_pos)
@@ -151,7 +138,6 @@ webvtt_reader_init(
 	size_t max_metadata_size,
 	void** ctx)
 {
-	webvtt_reader_state_t* state;
 	u_char* p = buffer->data;
 
 	if (vod_strncmp(p, UTF8_BOM, sizeof(UTF8_BOM) - 1) == 0)
@@ -166,45 +152,10 @@ webvtt_reader_init(
 		return VOD_NOT_FOUND;
 	}
 
-	state = vod_alloc(request_context->pool, sizeof(*state));
-	if (state == NULL)
-	{
-		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
-			"webvtt_reader_init: vod_alloc failed");
-		return VOD_ALLOC_FAILED;
-	}
-
-	state->first_time = TRUE;
-	state->size_limit = 2 * 1024 * 1024;			// XXXXX support configuring different metadata size limits per format
-	state->initial_read_size = initial_read_size;
-
-	*ctx = state;
-	return VOD_OK;
-}
-
-static vod_status_t
-webvtt_reader_read(
-	void* ctx,
-	uint64_t offset,
-	vod_str_t* buffer,
-	media_format_read_metadata_result_t* result)
-{
-	webvtt_reader_state_t* state = ctx;
-
-	if (buffer->len < state->initial_read_size || !state->first_time)
-	{
-		state->buffer = *buffer;
-		result->parts = &state->buffer;
-		result->part_count = 1;
-		return VOD_OK;
-	}
-
-	// read up to the limit
-	state->first_time = FALSE;
-	result->read_req.flags = MEDIA_READ_FLAG_ALLOW_EMPTY_READ;
-	result->read_req.read_offset = 0;
-	result->read_req.read_size = state->size_limit;
-	return VOD_AGAIN;
+	return subtitle_reader_init(
+		request_context,
+		initial_read_size,
+		ctx);
 }
 
 static u_char*
@@ -383,82 +334,13 @@ webvtt_parse(
 	size_t metadata_part_count,
 	media_base_metadata_t** result)
 {
-	webvtt_base_metadata_t* metadata;
-	media_sequence_t* sequence;
-	media_track_t* track;
-	language_id_t lang_id;
-	vod_str_t label;
-	uint64_t full_duration;
-	uint64_t duration;
-
-	metadata = vod_alloc(request_context->pool, sizeof(*metadata));
-	if (metadata == NULL)
-	{
-		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
-			"webvtt_parse: vod_alloc failed");
-		return VOD_ALLOC_FAILED;
-	}
-
-	*result = &metadata->base;
-
-	full_duration = webvtt_estimate_duration(source);
-
-	if (!vod_codec_in_mask(VOD_CODEC_ID_WEBVTT, parse_params->codecs_mask) || 
-		full_duration <= parse_params->clip_from)
-	{
-		metadata->base.tracks.nelts = 0;
-		return VOD_OK;
-	}
-
-	// inherit the sequence language and label
-	sequence = parse_params->source->sequence;
-	if (sequence->label.len != 0)
-	{
-		label = sequence->label;
-		lang_id = sequence->language;
-	}
-	else
-	{
-		// no language, assume English
-		lang_id = VOD_LANG_EN;
-		lang_get_native_name(lang_id, &label);
-	}
-
-	// filter by language
-	if (parse_params->langs_mask != NULL &&
-		!vod_is_bit_set(parse_params->langs_mask, lang_id))
-	{
-		metadata->base.tracks.nelts = 0;
-		return VOD_OK;
-	}
-
-	if (vod_array_init(&metadata->base.tracks, request_context->pool, 1, sizeof(*track)) != VOD_OK)
-	{
-		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
-			"webvtt_parse: vod_array_init failed");
-		return VOD_ALLOC_FAILED;
-	}
-
-	duration = vod_min(full_duration, parse_params->clip_to) - parse_params->clip_from;
-
-	track = vod_array_push(&metadata->base.tracks);		// can't fail
-	vod_memzero(track, sizeof(*track));
-	track->media_info.media_type = MEDIA_TYPE_SUBTITLE;
-	track->media_info.codec_id = VOD_CODEC_ID_WEBVTT;
-	track->media_info.timescale = 1000;
-	track->media_info.frames_timescale = 1000;
-	track->media_info.duration = duration;
-	track->media_info.full_duration = full_duration;
-	track->media_info.duration_millis = duration;
-	track->media_info.label = label;
-	track->media_info.language = lang_id;
-	track->media_info.bitrate = (source->len * 1000 * 8) / full_duration;
-
-	metadata->source = *source;
-	metadata->base.duration = duration;
-	metadata->base.timescale = 1000;
-
-	return VOD_OK;
+	return subtitle_parse(
+		request_context,
+		parse_params,
+		source,
+		webvtt_estimate_duration(source),
+		metadata_part_count,
+		result);
 }
 
 static vod_status_t
@@ -472,7 +354,7 @@ webvtt_parse_frames(
 	media_format_read_request_t* read_req,
 	media_track_array_t* result)
 {
-	webvtt_base_metadata_t* metadata = vod_container_of(base, webvtt_base_metadata_t, base);
+	subtitle_base_metadata_t* metadata = vod_container_of(base, subtitle_base_metadata_t, base);
 	media_track_t* track = base->tracks.elts;
 	input_frame_t* cur_frame = NULL;
 	vod_array_t frames;
@@ -769,7 +651,7 @@ media_format_t webvtt_format = {
 	FORMAT_ID_WEBVTT,
 	vod_string("webvtt"),
 	webvtt_reader_init,
-	webvtt_reader_read,
+	subtitle_reader_read,
 	NULL,			// XXXXX consider implementing
 	NULL,
 	webvtt_parse,
