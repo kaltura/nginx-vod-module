@@ -5,7 +5,7 @@
 #include "vod/dash/dash_packager.h"
 #include "vod/dash/edash_packager.h"
 #include "vod/mkv/mkv_builder.h"
-#include "vod/webvtt/webvtt_builder.h"
+#include "vod/subtitle/webvtt_builder.h"
 #include "vod/udrm.h"
 
 // constants

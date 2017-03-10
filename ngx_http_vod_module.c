@@ -16,7 +16,8 @@
 #include "ngx_buffer_cache.h"
 #include "vod/mp4/mp4_format.h"
 #include "vod/mkv/mkv_format.h"
-#include "vod/webvtt/webvtt_format.h"
+#include "vod/subtitle/webvtt_format.h"
+#include "vod/subtitle/cap_format.h"
 #include "vod/input/read_cache.h"
 #include "vod/filters/audio_filter.h"
 #include "vod/filters/dynamic_clip.h"
@@ -234,6 +235,7 @@ static media_format_t* media_formats[] = {
 	&mp4_format,
 	// XXXXX add &mkv_format,
 	&webvtt_format,
+	&cap_format,
 	NULL
 };
 
