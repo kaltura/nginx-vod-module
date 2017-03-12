@@ -72,7 +72,7 @@ sample_aes_avc_filter_init(
 	if (state->cipher == NULL)
 	{
 		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-			"sample_aes_avc_filter_init: EVP_CIPHER_CTX_new");
+			"sample_aes_avc_filter_init: EVP_CIPHER_CTX_new failed");
 		return VOD_ALLOC_FAILED;
 	}
 

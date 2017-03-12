@@ -32,7 +32,7 @@ mp4_aes_ctr_init(
 	if (state->cipher == NULL)
 	{
 		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-			"mp4_aes_ctr_init: EVP_CIPHER_CTX_new");
+			"mp4_aes_ctr_init: EVP_CIPHER_CTX_new failed");
 		return VOD_ALLOC_FAILED;
 	}
 

@@ -191,7 +191,7 @@ hds_muxer_encrypt_init(
 	if (state->cipher == NULL)
 	{
 		vod_log_error(VOD_LOG_ERR, state->request_context->log, 0,
-			"hds_muxer_encrypt_init: EVP_CIPHER_CTX_new");
+			"hds_muxer_encrypt_init: EVP_CIPHER_CTX_new failed");
 		return VOD_ALLOC_FAILED;
 	}
 
