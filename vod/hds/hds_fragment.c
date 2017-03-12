@@ -144,7 +144,7 @@ struct hds_muxer_state_s {
 #if (VOD_HAVE_OPENSSL_EVP)
 	u_char enc_key[HDS_AES_KEY_SIZE];
 	u_char enc_iv[AES_BLOCK_SIZE];
-	EVP_CIPHER_CTX cipher;
+	EVP_CIPHER_CTX* cipher;
 #endif //(VOD_HAVE_OPENSSL_EVP)
 };
 
@@ -169,7 +169,7 @@ static u_char hds_encryption_tag_header[] = {
 static void
 hds_muxer_encrypt_cleanup(hds_muxer_state_t* state)
 {
-	EVP_CIPHER_CTX_cleanup(&state->cipher);
+	EVP_CIPHER_CTX_free(state->cipher);
 }
 
 static vod_status_t
@@ -187,10 +187,16 @@ hds_muxer_encrypt_init(
 		return VOD_ALLOC_FAILED;
 	}
 
+	state->cipher = EVP_CIPHER_CTX_new();
+	if (state->cipher == NULL)
+	{
+		vod_log_error(VOD_LOG_ERR, state->request_context->log, 0,
+			"hds_muxer_encrypt_init: EVP_CIPHER_CTX_new");
+		return VOD_ALLOC_FAILED;
+	}
+
 	cln->handler = (vod_pool_cleanup_pt)hds_muxer_encrypt_cleanup;
 	cln->data = state;
-
-	EVP_CIPHER_CTX_init(&state->cipher);
 
 	vod_memcpy(state->enc_key, encryption_params->key, sizeof(state->enc_key));
 	vod_memcpy(state->enc_iv, encryption_params->iv, sizeof(state->enc_iv));
@@ -217,7 +223,7 @@ static vod_status_t
 hds_muxer_encrypt_start_frame(hds_muxer_state_t* state)
 {
 	// reset the IV (it is ok to call EVP_EncryptInit_ex several times without cleanup)
-	if (1 != EVP_EncryptInit_ex(&state->cipher, EVP_aes_128_cbc(), NULL, state->enc_key, state->enc_iv))
+	if (1 != EVP_EncryptInit_ex(state->cipher, EVP_aes_128_cbc(), NULL, state->enc_key, state->enc_iv))
 	{
 		vod_log_error(VOD_LOG_ERR, state->request_context->log, 0,
 			"hds_muxer_encrypt_start_frame: EVP_EncryptInit_ex failed");
@@ -258,7 +264,7 @@ hds_muxer_encrypt_write(
 			cur_size = buffer_end - buffer;
 		}
 
-		if (1 != EVP_EncryptUpdate(&state->cipher, out_buffer, &out_size, buffer, cur_size))
+		if (1 != EVP_EncryptUpdate(state->cipher, out_buffer, &out_size, buffer, cur_size))
 		{
 			vod_log_error(VOD_LOG_ERR, state->request_context->log, 0,
 				"hds_muxer_encrypt_write: EVP_EncryptUpdate failed");
@@ -281,7 +287,7 @@ hds_muxer_encrypt_write(
 			return rc;
 		}
 
-		if (1 != EVP_EncryptFinal_ex(&state->cipher, out_buffer, &out_size))
+		if (1 != EVP_EncryptFinal_ex(state->cipher, out_buffer, &out_size))
 		{
 			vod_log_error(VOD_LOG_ERR, state->request_context->log, 0,
 				"hds_muxer_encrypt_write: EVP_EncryptFinal_ex failed");

@@ -21,7 +21,7 @@ typedef struct
 	media_filter_write_t write_callback;
 	u_char iv[AES_BLOCK_SIZE];
 	u_char key[SAMPLE_AES_KEY_SIZE];
-	EVP_CIPHER_CTX cipher;
+	EVP_CIPHER_CTX* cipher;
 
 	// state
 	bool_t encrypt;
@@ -36,7 +36,7 @@ static u_char emulation_prevention_byte[] = { 0x03 };
 static void
 sample_aes_avc_cleanup(sample_aes_avc_filter_state_t* state)
 {
-	EVP_CIPHER_CTX_cleanup(&state->cipher);
+	EVP_CIPHER_CTX_free(state->cipher);
 }
 
 vod_status_t
@@ -67,6 +67,14 @@ sample_aes_avc_filter_init(
 			"sample_aes_avc_filter_init: vod_pool_cleanup_add failed");
 		return VOD_ALLOC_FAILED;
 	}
+	
+	state->cipher = EVP_CIPHER_CTX_new();
+	if (state->cipher == NULL)
+	{
+		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+			"sample_aes_avc_filter_init: EVP_CIPHER_CTX_new");
+		return VOD_ALLOC_FAILED;
+	}
 
 	cln->handler = (vod_pool_cleanup_pt)sample_aes_avc_cleanup;
 	cln->data = state;
@@ -76,8 +84,6 @@ sample_aes_avc_filter_init(
 	vod_memcpy(state->key, key, sizeof(state->key));
 
 	state->encrypt = FALSE;
-
-	EVP_CIPHER_CTX_init(&state->cipher);
 
 	// save the context
 	context->context[THIS_FILTER] = state;
@@ -149,7 +155,7 @@ sample_aes_avc_start_nal_unit(
 	state->last_three_bytes = 1;
 
 	// reset the IV (it is ok to call EVP_EncryptInit_ex several times without cleanup)
-	if (1 != EVP_EncryptInit_ex(&state->cipher, EVP_aes_128_cbc(), NULL, state->key, state->iv))
+	if (1 != EVP_EncryptInit_ex(state->cipher, EVP_aes_128_cbc(), NULL, state->key, state->iv))
 	{
 		vod_log_error(VOD_LOG_ERR, context->request_context->log, 0,
 			"sample_aes_avc_start_nal_unit: EVP_EncryptInit_ex failed");
@@ -196,7 +202,7 @@ sample_aes_avc_filter_write_nal_body(
 		// encrypted block
 		cur_size = vod_min(state->next_encrypt_offset + AES_BLOCK_SIZE, end_offset) - state->cur_offset;
 
-		if (1 != EVP_EncryptUpdate(&state->cipher, encrypted_block, &out_size, buffer, cur_size))
+		if (1 != EVP_EncryptUpdate(state->cipher, encrypted_block, &out_size, buffer, cur_size))
 		{
 			vod_log_error(VOD_LOG_ERR, context->request_context->log, 0,
 				"sample_aes_avc_filter_write_nal_body: EVP_EncryptUpdate failed");

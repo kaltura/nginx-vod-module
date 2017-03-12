@@ -7,7 +7,7 @@
 static void 
 aes_cbc_encrypt_cleanup(aes_cbc_encrypt_context_t* state)
 {
-	EVP_CIPHER_CTX_cleanup(&state->cipher);
+	EVP_CIPHER_CTX_free(state->cipher);
 }
 
 vod_status_t 
@@ -37,6 +37,14 @@ aes_cbc_encrypt_init(
 			"aes_cbc_encrypt_init: vod_pool_cleanup_add failed");
 		return VOD_ALLOC_FAILED;
 	}
+	
+	state->cipher = EVP_CIPHER_CTX_new();
+	if (state->cipher == NULL)
+	{
+		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+			"aes_cbc_encrypt_init: EVP_CIPHER_CTX_new");
+		return VOD_ALLOC_FAILED;
+	}
 
 	cln->handler = (vod_pool_cleanup_pt)aes_cbc_encrypt_cleanup;
 	cln->data = state;	
@@ -44,10 +52,8 @@ aes_cbc_encrypt_init(
 	state->callback = callback;
 	state->callback_context = callback_context;
 	state->request_context = request_context;
-
-	EVP_CIPHER_CTX_init(&state->cipher);
 	
-	if (1 != EVP_EncryptInit_ex(&state->cipher, EVP_aes_128_cbc(), NULL, key, iv))
+	if (1 != EVP_EncryptInit_ex(state->cipher, EVP_aes_128_cbc(), NULL, key, iv))
 	{
 		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
 			"aes_cbc_encrypt_init: EVP_EncryptInit_ex failed");
@@ -77,7 +83,7 @@ aes_cbc_encrypt(
 		return VOD_ALLOC_FAILED;
 	}
 
-	if (1 != EVP_EncryptUpdate(&state->cipher, output, &out_size, src->data, src->len))
+	if (1 != EVP_EncryptUpdate(state->cipher, output, &out_size, src->data, src->len))
 	{
 		vod_log_error(VOD_LOG_ERR, state->request_context->log, 0,
 			"aes_cbc_encrypt: EVP_EncryptUpdate failed");
@@ -89,7 +95,7 @@ aes_cbc_encrypt(
 
 	if (flush)
 	{
-		if (1 != EVP_EncryptFinal_ex(&state->cipher, output + out_size, &out_size))
+		if (1 != EVP_EncryptFinal_ex(state->cipher, output + out_size, &out_size))
 		{
 			vod_log_error(VOD_LOG_ERR, state->request_context->log, 0,
 				"aes_cbc_encrypt: EVP_EncryptFinal_ex failed");
@@ -133,7 +139,7 @@ aes_cbc_encrypt_write(
 		return VOD_UNEXPECTED;
 	}
 
-	if (1 != EVP_EncryptUpdate(&state->cipher, encrypted_buffer, &out_size, buffer, size))
+	if (1 != EVP_EncryptUpdate(state->cipher, encrypted_buffer, &out_size, buffer, size))
 	{
 		vod_log_error(VOD_LOG_ERR, state->request_context->log, 0,
 			"aes_cbc_encrypt_write: EVP_EncryptUpdate failed");
@@ -153,7 +159,7 @@ aes_cbc_encrypt_flush(aes_cbc_encrypt_context_t* state)
 {
 	int last_block_len;
 
-	if (1 != EVP_EncryptFinal_ex(&state->cipher, state->last_block, &last_block_len))
+	if (1 != EVP_EncryptFinal_ex(state->cipher, state->last_block, &last_block_len))
 	{
 		vod_log_error(VOD_LOG_ERR, state->request_context->log, 0,
 			"aes_cbc_encrypt_flush: EVP_EncryptFinal_ex failed");
