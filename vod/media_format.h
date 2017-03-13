@@ -16,7 +16,7 @@
 #define MAX_FRAME_SIZE (10 * 1024 * 1024)
 #define MAX_TRACK_COUNT (1024)
 #define MAX_DURATION_SEC (1000000)
-#define MAX_CLIP_DURATION (86400000)		// 1 day
+#define MAX_CLIP_DURATION (90000000)		// 25h
 #define MAX_SEQUENCE_DURATION (864000000)		// 10 days
 
 // read flags
