@@ -16,7 +16,7 @@ ngx_feature_name="NGX_HAVE_OPENSSL_EVP"
 ngx_feature_run=no
 ngx_feature_incs="#include <openssl/evp.h>"
 ngx_feature_path=
-ngx_feature_libs="$LIB_CRYPTO"
+ngx_feature_libs="$LIB_CRYPTO $NGX_LIBDL"
 ngx_feature_test="EVP_CIPHER_CTX cipher; EVP_CIPHER_CTX_init(&cipher);"
 . auto/feature
 
