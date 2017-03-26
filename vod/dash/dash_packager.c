@@ -485,13 +485,13 @@ dash_packager_get_track_spec(
 	{
 	case MEDIA_TYPE_VIDEO:
 		p = vod_sprintf(p, "v%uD", track_index + 1);
-		p = vod_copy(p, "-x3", sizeof("-x3") - 1);		// TODO: remove this after deployment
 		break;
 
 	case MEDIA_TYPE_AUDIO:
 		p = vod_sprintf(p, "a%uD", track_index + 1);
 		break;
 	}
+	p = vod_copy(p, "-x3", sizeof("-x3") - 1);		// TODO: remove this after deployment
 
 	result->len = p - result->data;
 }
