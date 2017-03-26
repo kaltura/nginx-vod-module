@@ -194,7 +194,6 @@ typedef struct {
 	uint64_t clip_start_time;
 	uint64_t segment_base_time;
 	adaptation_sets_t adaptation_sets;
-	uint32_t max_pts_delay;
 } write_period_context_t;
 
 typedef struct {
@@ -295,6 +294,15 @@ static const u_char ftyp_atom[] = {
 	0x61, 0x76, 0x63, 0x31,		// compatible brand
 };
 
+static const u_char ftyp_atom_v2[] = {
+	0x00, 0x00, 0x00, 0x1c,		// atom size
+	0x66, 0x74, 0x79, 0x70,		// ftyp
+	0x69, 0x73, 0x6f, 0x35,		// major brand
+	0x00, 0x00, 0x00, 0x01,		// minor version
+	0x69, 0x73, 0x6f, 0x35,		// compatible brand
+	0x64, 0x61, 0x73, 0x68,		// compatible brand
+	0x6d, 0x73, 0x69, 0x78,		// compatible brand
+};
 static const u_char hdlr_video_atom[] = {
 	0x00, 0x00, 0x00, 0x2d,		// size
 	0x68, 0x64, 0x6c, 0x72,		// hdlr
@@ -384,6 +392,15 @@ static const u_char styp_atom[] = {
 	0x64, 0x61, 0x73, 0x68,		// compatible brand
 };
 
+static const u_char styp_atom_v2[] = {
+	0x00, 0x00, 0x00, 0x18,		// atom size
+	0x73, 0x74, 0x79, 0x70,		// styp
+	0x6d, 0x73, 0x64, 0x68,		// major brand
+	0x00, 0x00, 0x00, 0x00,		// minor version
+	0x6d, 0x73, 0x64, 0x68,		// compatible brand
+	0x6d, 0x73, 0x69, 0x78,		// compatible brand
+};
+
 static dash_codec_info_t dash_codecs[VOD_CODEC_ID_COUNT] = {
 	{ vod_null_string, vod_null_string, vod_null_string },		// invalid
 
@@ -455,8 +472,7 @@ dash_packager_get_track_spec(
 	media_set_t* media_set,
 	uint32_t sequence_index,
 	uint32_t track_index,
-	uint32_t media_type,
-	uint32_t pts_delay)
+	uint32_t media_type)
 {
 	u_char* p = result->data;
 
@@ -469,13 +485,13 @@ dash_packager_get_track_spec(
 	{
 	case MEDIA_TYPE_VIDEO:
 		p = vod_sprintf(p, "v%uD", track_index + 1);
-		p = vod_copy(p, "-x2", sizeof("-x2") - 1);		// TODO: remove this after deployment
 		break;
 
 	case MEDIA_TYPE_AUDIO:
 		p = vod_sprintf(p, "a%uD", track_index + 1);
 		break;
 	}
+	p = vod_copy(p, "-x3", sizeof("-x3") - 1);		// TODO: remove this after deployment
 
 	result->len = p - result->data;
 }
@@ -699,8 +715,7 @@ dash_packager_write_segment_list(
 		media_set,
 		sequence_index,
 		cur_track->index,
-		cur_track->media_info.media_type,
-		context->max_pts_delay - cur_track->media_info.u.video.initial_pts_delay);
+		cur_track->media_info.media_type);
 
 	// write the header
 	p = vod_sprintf(p,
@@ -950,8 +965,7 @@ dash_packager_write_mpd_period(
 				media_set,
 				sequence_index,
 				cur_track->index,
-				cur_track->media_info.media_type,
-				context->max_pts_delay - cur_track->media_info.u.video.initial_pts_delay);
+				cur_track->media_info.media_type);
 
 			if (representation_id.len > 0 && representation_id.data[representation_id.len - 1] == '-')
 			{
@@ -1041,8 +1055,7 @@ dash_packager_write_mpd_period(
 				media_set, 
 				cur_sequence->index, 
 				cur_track->index, 
-				cur_track->media_info.media_type,
-				context->max_pts_delay - cur_track->media_info.u.video.initial_pts_delay);
+				cur_track->media_info.media_type);
 
 			switch (media_type)
 			{
@@ -1306,7 +1319,6 @@ dash_packager_build_mpd(
 	write_period_context_t context;
 	adaptation_set_t* adaptation_set;
 	segmenter_conf_t* segmenter_conf = media_set->segmenter_conf;
-	media_track_t* cur_track;
 	vod_tm_t publish_time_gmt;
 	vod_tm_t avail_time_gmt;
 	vod_tm_t cur_time_gmt;
@@ -1337,21 +1349,6 @@ dash_packager_build_mpd(
 	if (rc != VOD_OK)
 	{
 		return rc;
-	}
-
-	// get the max pts delay of video tracks
-	context.max_pts_delay = 0;
-	for (cur_track = media_set->filtered_tracks; cur_track < media_set->filtered_tracks_end; cur_track++)
-	{
-		if (cur_track->media_info.media_type != MEDIA_TYPE_VIDEO)
-		{
-			continue;
-		}
-
-		if (cur_track->media_info.u.video.initial_pts_delay > context.max_pts_delay)
-		{
-			context.max_pts_delay = cur_track->media_info.u.video.initial_pts_delay;
-		}
 	}
 
 	// get segment durations and count for each media type
@@ -2013,7 +2010,9 @@ dash_packager_init_mp4_calc_size(
 		result->moov_atom_size += extra_moov_atoms_writer->atom_size;
 	}
 
-	result->total_size = sizeof(ftyp_atom) + result->moov_atom_size;
+	result->total_size = 
+		(media_set->version >= 2 ? sizeof(ftyp_atom_v2) : sizeof(ftyp_atom)) + 
+		result->moov_atom_size;
 }
 
 static u_char*
@@ -2029,7 +2028,14 @@ dash_packager_init_mp4_write(
 	uint64_t duration = media_set->type == MEDIA_SET_LIVE ? 0 : dash_rescale_millis(media_set->timing.total_duration);
 
 	// ftyp
-	p = vod_copy(p, ftyp_atom, sizeof(ftyp_atom));
+	if (media_set->version >= 2)
+	{
+		p = vod_copy(p, ftyp_atom_v2, sizeof(ftyp_atom_v2));
+	}
+	else
+	{
+		p = vod_copy(p, ftyp_atom, sizeof(ftyp_atom));
+	}
 
 	// moov
 	write_atom_header(p, sizes->moov_atom_size, 'm', 'o', 'o', 'v');
@@ -2261,7 +2267,7 @@ dash_packager_get_earliest_pres_time(media_set_t* media_set, media_track_t* trac
 
 #ifndef DISABLE_PTS_DELAY_COMPENSATION
 		if (track->media_info.media_type == MEDIA_TYPE_VIDEO &&
-			media_set->version == 1)							// TODO: remove this after deployment
+			media_set->version >= 1)							// TODO: remove this after deployment
 		{
 			result -= track->media_info.u.video.initial_pts_delay;
 		}
@@ -2440,7 +2446,7 @@ dash_packager_build_fragment_header(
 		traf_atom_size;
 
 	*total_fragment_size = 
-		sizeof(styp_atom) +
+		(media_set->version >= 2 ? sizeof(styp_atom_v2) : sizeof(styp_atom)) +
 		ATOM_HEADER_SIZE + (sidx_params.earliest_pres_time > UINT_MAX ? sizeof(sidx64_atom_t) : sizeof(sidx_atom_t)) +
 		moof_atom_size +
 		mdat_atom_size;
@@ -2465,7 +2471,14 @@ dash_packager_build_fragment_header(
 	result->data = p;
 
 	// styp
-	p = vod_copy(p, styp_atom, sizeof(styp_atom));
+	if (media_set->version >= 2)
+	{
+		p = vod_copy(p, styp_atom_v2, sizeof(styp_atom_v2));
+	}
+	else
+	{
+		p = vod_copy(p, styp_atom, sizeof(styp_atom));
+	}
 
 	// sidx
 	if (sidx_params.earliest_pres_time > UINT_MAX)
@@ -2505,7 +2518,8 @@ dash_packager_build_fragment_header(
 	p = mp4_builder_write_trun_atom(
 		p, 
 		sequence, 
-		first_frame_offset);
+		first_frame_offset,
+		media_set->version >= 2 ? 1 : 0);
 
 	// moof.traf.xxx
 	if (extensions->write_extra_traf_atoms_callback != NULL)

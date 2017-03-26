@@ -59,7 +59,8 @@ size_t mp4_builder_get_trun_atom_size(uint32_t media_type, uint32_t frame_count)
 u_char* mp4_builder_write_trun_atom(
 	u_char* p, 
 	media_sequence_t* sequence, 
-	uint32_t first_frame_offset);
+	uint32_t first_frame_offset,
+	uint32_t version);
 
 vod_status_t mp4_builder_frame_writer_init(
 	request_context_t* request_context,
