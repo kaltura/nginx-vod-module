@@ -27,23 +27,36 @@ mp4_builder_get_trun_atom_size(uint32_t media_type, uint32_t frame_count)
 }
 
 static u_char* 
-mp4_builder_write_video_trun_atom(u_char* p, media_sequence_t* sequence, uint32_t first_frame_offset)
+mp4_builder_write_video_trun_atom(
+	u_char* p, 
+	media_sequence_t* sequence, 
+	uint32_t first_frame_offset,
+	uint32_t version)
 {
 	media_clip_filtered_t* cur_clip;
 	frame_list_part_t* part;
 	input_frame_t* cur_frame;
 	input_frame_t* last_frame;
+	uint32_t initial_pts_delay = 0;
+	uint32_t flags;
+	int32_t pts_delay;
 	size_t atom_size;
 
 	atom_size = ATOM_HEADER_SIZE + sizeof(trun_atom_t) + sequence->total_frame_count * 4 * sizeof(uint32_t);
+	flags = (version << 24) | 0xF01;
 
 	write_atom_header(p, atom_size, 't', 'r', 'u', 'n');
-	write_be32(p, 0xF01);								// flags = data offset, duration, size, key, delay
+	write_be32(p, flags);								// flags = data offset, duration, size, key, delay
 	write_be32(p, sequence->total_frame_count);
 	write_be32(p, first_frame_offset);	// first frame offset relative to moof start offset
 
 	for (cur_clip = sequence->filtered_clips; cur_clip < sequence->filtered_clips_end; cur_clip++)
 	{
+		if (version == 1)
+		{
+			initial_pts_delay = cur_clip->first_track->media_info.u.video.initial_pts_delay;
+		}
+
 		part = &cur_clip->first_track->frames;
 		last_frame = part->last_frame;
 		for (cur_frame = part->first_frame;; cur_frame++)
@@ -69,7 +82,8 @@ mp4_builder_write_video_trun_atom(u_char* p, media_sequence_t* sequence, uint32_
 			{
 				write_be32(p, 0x00010000);
 			}
-			write_be32(p, cur_frame->pts_delay);
+			pts_delay = cur_frame->pts_delay - initial_pts_delay;
+			write_be32(p, pts_delay);
 		}
 	}
 	return p;
@@ -119,12 +133,13 @@ u_char*
 mp4_builder_write_trun_atom(
 	u_char* p, 
 	media_sequence_t* sequence,
-	uint32_t first_frame_offset)
+	uint32_t first_frame_offset,
+	uint32_t version)
 {
 	switch (sequence->media_type)
 	{
 	case MEDIA_TYPE_VIDEO:
-		p = mp4_builder_write_video_trun_atom(p, sequence, first_frame_offset);
+		p = mp4_builder_write_video_trun_atom(p, sequence, first_frame_offset, version);
 		break;
 
 	case MEDIA_TYPE_AUDIO:
