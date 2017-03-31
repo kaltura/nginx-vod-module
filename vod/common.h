@@ -96,6 +96,7 @@ void vod_log_error(vod_uint_t level, vod_log_t *log, int err,
 #define VOD_HAVE_LIB_AV_CODEC NGX_HAVE_LIB_AV_CODEC 
 #define VOD_HAVE_LIB_AV_FILTER NGX_HAVE_LIB_AV_FILTER
 #define VOD_HAVE_OPENSSL_EVP NGX_HAVE_OPENSSL_EVP
+#define VOD_HAVE_LIBXML2 NGX_HAVE_LIBXML2
 
 #if (VOD_HAVE_LIB_AV_CODEC)
 #include <libavcodec/avcodec.h>
@@ -121,6 +122,7 @@ void vod_log_error(vod_uint_t level, vod_log_t *log, int err,
 #define  VOD_AGAIN      NGX_AGAIN
 
 #define vod_inline ngx_inline
+#define vod_cdecl ngx_cdecl
 
 // memory set/copy functions
 #define vod_memcpy(dst, src, n) ngx_memcpy(dst, src, n)
@@ -139,10 +141,13 @@ void vod_log_error(vod_uint_t level, vod_log_t *log, int err,
 // string functions
 #define vod_sprintf ngx_sprintf
 #define vod_snprintf ngx_snprintf
-#define vod_strncmp(s1, s2, n) ngx_strncmp(s1, s2, n)
-#define vod_strncasecmp(s1, s2, n) ngx_strncasecmp(s1, s2, n)
 #define vod_atoi(str, len) ngx_atoi(str, len)
 #define vod_atofp(str, len, point) ngx_atofp(str, len, point)
+#define vod_strstrn ngx_strstrn
+#define vod_strcmp ngx_strcmp
+#define vod_strlen ngx_strlen
+#define vod_strncmp(s1, s2, n) ngx_strncmp(s1, s2, n)
+#define vod_strncasecmp(s1, s2, n) ngx_strncasecmp(s1, s2, n)
 #define vod_pstrdup(pool, src) ngx_pstrdup(pool, src)
 
 // array functions
@@ -211,6 +216,8 @@ void vod_log_error(vod_uint_t level, vod_log_t *log, int err,
 #define vod_base64_encoded_length(len) ngx_base64_encoded_length(len)
 #define vod_base64_decoded_length(len) ngx_base64_decoded_length(len)
 #define vod_crc32_short(p, len) ngx_crc32_short(p, len)
+
+#define VOD_MAX_ERROR_STR NGX_MAX_ERROR_STR
 
 #define VOD_LOG_STDERR            NGX_LOG_STDERR 
 #define VOD_LOG_EMERG             NGX_LOG_EMERG  

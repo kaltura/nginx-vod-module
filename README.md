@@ -27,7 +27,8 @@
   Input:
   1. WebVTT
   2. SRT
-  3. CAP (Cheetah)
+  3. DFXP/TTML
+  4. CAP (Cheetah)
   
   Output:
   1. DASH - served as a single WebVTT

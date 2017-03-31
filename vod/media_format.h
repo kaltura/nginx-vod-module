@@ -93,6 +93,7 @@ enum {
 	FORMAT_ID_MKV,
 	FORMAT_ID_WEBVTT,
 	FORMAT_ID_CAP,
+	FORMAT_ID_DFXP,
 };
 
 enum {			// mp4 only

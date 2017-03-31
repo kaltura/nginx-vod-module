@@ -1266,7 +1266,7 @@ ngx_command_t ngx_http_vod_commands[] = {
 };
 
 ngx_http_module_t  ngx_http_vod_module_ctx = {
-	ngx_http_vod_add_variables,         /* preconfiguration */
+	ngx_http_vod_preconfiguration,      /* preconfiguration */
 	ngx_http_vod_init_parsers,          /* postconfiguration */
 
 	NULL,                               /* create main configuration */
