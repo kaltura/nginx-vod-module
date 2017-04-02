@@ -17,6 +17,7 @@
 #include "vod/mp4/mp4_format.h"
 #include "vod/mkv/mkv_format.h"
 #include "vod/subtitle/webvtt_format.h"
+#include "vod/subtitle/dfxp_format.h"
 #include "vod/subtitle/cap_format.h"
 #include "vod/input/read_cache.h"
 #include "vod/filters/audio_filter.h"
@@ -223,8 +224,8 @@ ngx_module_t  ngx_http_vod_module = {
     ngx_http_vod_process_init,        /* init process */
     NULL,                             /* init thread */
     NULL,                             /* exit thread */
-    NULL,                             /* exit process */
-    NULL,                             /* exit master */
+    dfxp_exit_process,                /* exit process */
+    dfxp_exit_process,                /* exit master */
     NGX_MODULE_V1_PADDING
 };
 
@@ -235,6 +236,9 @@ static media_format_t* media_formats[] = {
 	&mp4_format,
 	// XXXXX add &mkv_format,
 	&webvtt_format,
+#if (VOD_HAVE_LIBXML2)
+	&dfxp_format,
+#endif
 	&cap_format,
 	NULL
 };
@@ -578,7 +582,7 @@ static ngx_http_vod_variable_t ngx_http_vod_variables[] = {
 };
 
 ngx_int_t
-ngx_http_vod_add_variables(ngx_conf_t *cf)
+ngx_http_vod_preconfiguration(ngx_conf_t *cf)
 {
 	ngx_http_vod_variable_t* vars_cur = ngx_http_vod_variables;
 	ngx_http_vod_variable_t* vars_end = vars_cur + vod_array_entries(ngx_http_vod_variables);
@@ -603,6 +607,8 @@ ngx_http_vod_add_variables(ngx_conf_t *cf)
 	}
 
 	ngx_http_vod_set_status_index(rc);
+
+	dfxp_init_process();
 
 	return NGX_OK;
 }

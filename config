@@ -83,6 +83,23 @@ if [ $ngx_found = yes ]; then
     CORE_LIBS="$CORE_LIBS $LIB_AV_FILTER $LIB_AV_UTIL"
 fi
 
+# libxml2
+#
+ngx_feature="libxml2"
+ngx_feature_name="NGX_HAVE_LIBXML2"
+ngx_feature_run=no
+ngx_feature_incs="#include <libxml/parser.h>
+				  #include <libxml/tree.h>"
+ngx_feature_path="/usr/include/libxml2"
+ngx_feature_libs="-lxml2"
+ngx_feature_test="xmlReadMemory(NULL, 0, NULL, NULL, 0);"
+. auto/feature
+
+if [ $ngx_found = yes ]; then
+    CORE_INCS="$CORE_INCS $ngx_feature_path"
+    CORE_LIBS="$CORE_LIBS $ngx_feature_libs"
+fi
+
 VOD_DEPS="$ngx_addon_dir/ngx_async_open_file_cache.h          \
           $ngx_addon_dir/ngx_buffer_cache.h                   \
           $ngx_addon_dir/ngx_buffer_cache_internal.h          \
@@ -176,6 +193,7 @@ VOD_DEPS="$ngx_addon_dir/ngx_async_open_file_cache.h          \
           $ngx_addon_dir/vod/mss/mss_playready.h              \
           $ngx_addon_dir/vod/thumb/thumb_grabber.h            \
           $ngx_addon_dir/vod/subtitle/cap_format.h            \
+          $ngx_addon_dir/vod/subtitle/dfxp_format.h           \
           $ngx_addon_dir/vod/subtitle/subtitle_format.h       \
           $ngx_addon_dir/vod/subtitle/ttml_builder.h          \
           $ngx_addon_dir/vod/subtitle/webvtt_builder.h        \
@@ -257,6 +275,7 @@ VOD_SRCS="$ngx_addon_dir/ngx_async_open_file_cache.c          \
           $ngx_addon_dir/vod/mss/mss_playready.c              \
           $ngx_addon_dir/vod/thumb/thumb_grabber.c            \
           $ngx_addon_dir/vod/subtitle/cap_format.c            \
+          $ngx_addon_dir/vod/subtitle/dfxp_format.c           \
           $ngx_addon_dir/vod/subtitle/subtitle_format.c       \
           $ngx_addon_dir/vod/subtitle/ttml_builder.c          \
           $ngx_addon_dir/vod/subtitle/webvtt_builder.c        \

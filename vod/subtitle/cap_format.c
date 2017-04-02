@@ -146,6 +146,7 @@ cap_parse(
 		request_context,
 		parse_params,
 		source,
+		NULL,
 		cap_get_duration(source),
 		metadata_part_count,
 		result);

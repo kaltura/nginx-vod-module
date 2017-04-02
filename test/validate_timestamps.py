@@ -18,7 +18,12 @@ def getTimingInfoFromTrunAtom(trunAtom, startPts):
 	trunFlags = struct.unpack('>L', trunAtom[:4])[0]
 	durations = []
 	ptsDelays = []
-	if trunFlags == 0xf01:
+	
+	if trunFlags == 0x01000f01:
+		for pos in xrange(12, len(trunAtom), 16):
+			durations.append(struct.unpack('>L', trunAtom[pos:(pos + 4)])[0])
+			ptsDelays.append(struct.unpack('>l', trunAtom[(pos + 12):(pos + 16)])[0])
+	elif trunFlags == 0xf01:
 		for pos in xrange(12, len(trunAtom), 16):
 			durations.append(struct.unpack('>L', trunAtom[pos:(pos + 4)])[0])
 			ptsDelays.append(struct.unpack('>L', trunAtom[(pos + 12):(pos + 16)])[0])
@@ -72,7 +77,9 @@ def parse24be(buf):
 def getFragmentInfoFromDtssPtss(url, segIndex, fileIndex, dtss, ptss, audioPacketsCount = None):
 	result = []
 	for streamId in dtss:
-		if audioPacketsCount == None or streamId != 'a1':
+		if len(dtss[streamId]) == 1:
+			lastDuration = 0
+		elif audioPacketsCount == None or streamId != 'a1':
 			lastDuration = (dtss[streamId][-1] - dtss[streamId][0]) / (len(dtss[streamId]) - 1)
 		else:
 			avgDuration = (dtss[streamId][-1] - dtss[streamId][0]) / sum(audioPacketsCount[:-1])
@@ -140,9 +147,11 @@ def countAdtsPackets(d):
 		theAdtsHeader = adtsHeader.parse(d[curPos:])
 		result += 1
 		curPos += theAdtsHeader.aac_frame_length
+		if theAdtsHeader.aac_frame_length == 0:
+			break
 	return result
 		
-def getHlsFragmentInfo(url):
+def getHlsFragmentInfo(url, fileIndex):
 	d = urllib2.urlopen(url).read()
 	dtss = {}
 	ptss = {}
@@ -207,16 +216,27 @@ def getHlsFragmentInfo(url):
 		adtsCounts.append(countAdtsPackets(audioPacket))
 	urlFilename = url.rsplit('/', 1)[-1]
 	urlFilename = urlFilename.replace('-v1', '').replace('-a1', '').replace('-Seg1-Frag', '-').replace('.ts', '')
-	_, segIndex, fileIndex = urlFilename.split('-')
+	if fileIndex > 0:
+		segIndex = urlFilename.split('-')[1]
+	else:
+		_, segIndex, fileIndex = urlFilename.split('-')
 	return getFragmentInfoFromDtssPtss(url, segIndex, fileIndex, dtss, ptss, adtsCounts)
 
 def getHlsFragmentsInfo(urls):
 	result = []
+	baseUrls = []
 	for url in urls:
+		baseUrl = url.rsplit('/', 1)[0]
+		if url.endswith('.m3u8') and not baseUrl.endswith('.urlset/'):
+			baseUrls.append(baseUrl)
 		if not url.endswith('.ts'):
 			continue
 		print '.',
-		result += getHlsFragmentInfo(url)
+		if baseUrl in baseUrls:
+			fileIndex = baseUrls.index(baseUrl) + 1
+		else:
+			fileIndex = 0
+		result += getHlsFragmentInfo(url, fileIndex)
 	return result
 		
 def getMssFragmentInfo(url):
@@ -254,7 +274,7 @@ def getMssFragmentsInfo(urls):
 		print '.',
 		result += getMssFragmentInfo(url)
 	return result
-		
+	
 res = urllib2.urlopen(URL)
 mimeType = res.info().getheader('Content-Type')
 d = res.read()
@@ -266,11 +286,21 @@ PARSER_BY_MIME_TYPE = {
 	'text/xml': getMssFragmentsInfo,
 }
 
+TIMESCALE = {
+	'application/dash+xml': 90000,
+	'video/f4m': 1000,
+	'application/vnd.apple.mpegurl': 90000,
+	'text/xml': 10000000,
+}
+
 baseUrl = URL.rsplit('/', 1)[0] + '/'
 urls = manifest_utils.getManifestUrls(baseUrl, d, mimeType, {})
 
 print 'processing %s urls' % len(urls)
 fragmentInfos = PARSER_BY_MIME_TYPE[mimeType](urls)
+timescale = TIMESCALE[mimeType]
+
+print ''
 
 # group the results
 byStream = {}
@@ -284,6 +314,8 @@ for (url, segIndex, streamId, fileIndex, timingInfo) in fragmentInfos:
 	bySegIndex.setdefault(key, {})
 	bySegIndex[key][fileIndex] = (url, timingInfo)
 
+errors = []
+	
 # consistency within each stream
 for streamId in byStream:
 	segIndexes = sorted(byStream[streamId].keys())
@@ -296,14 +328,26 @@ for streamId in byStream:
 		if expectedDts != None:
 			gapSize = abs(timingInfo[START_DTS] - expectedDts)
 			if gapSize > THRESHOLD:
-				print 'in-stream dts gap, size=%s, expected=%s, actual=%s, stream=%s, url=%s' % (gapSize, expectedDts, timingInfo[START_DTS], fullStreamId, url)
+				errors.append(['in-stream dts gap', 
+					timingInfo[START_DTS],
+					'size=%s (%.3f)' % (gapSize, gapSize / float(timescale)),
+					'expected=%s (%.3f)' % (expectedDts, expectedDts / float(timescale)), 
+					'actual=%s (%.3f)' % (timingInfo[START_DTS], timingInfo[START_DTS] / float(timescale)), 
+					'stream=%s' % streamId, 
+					'url=%s' % url])
 		expectedDts = timingInfo[END_DTS]
 		
 		# pts
 		if expectedPts != None:
 			gapSize = abs(timingInfo[START_PTS] - expectedPts)
 			if gapSize > THRESHOLD:
-				print 'in-stream pts gap, size=%s, expected=%s, actual=%s, stream=%s, url=%s' % (gapSize, expectedPts, timingInfo[START_PTS], fullStreamId, url)
+				errors.append(['in-stream pts gap', 
+					timingInfo[START_PTS],
+					'size=%s (%.3f)' % (gapSize, gapSize / float(timescale)),
+					'expected=%s (%.3f)' % (expectedPts, expectedPts / float(timescale)), 
+					'actual=%s (%.3f)' % (timingInfo[START_PTS], timingInfo[START_PTS] / float(timescale)), 
+					'stream=%s' % streamId, 
+					'url=%s' % url])
 		expectedPts = timingInfo[END_PTS]
 
 # consistency cross stream
@@ -330,11 +374,28 @@ for segIndex in bySegIndex.keys():
 	# dts
 	gapSize = maxDtsInfo[1][START_DTS] - minDtsInfo[1][START_DTS]
 	if gapSize > THRESHOLD:
-		print 'cross-stream dts gap, size=%s, min=%s, max=%s, minurl=%s maxurl=%s' % (gapSize, minDtsInfo[1][START_DTS], maxDtsInfo[1][START_DTS], minDtsInfo[0], maxDtsInfo[0])
+		errors.append(['cross-stream dts gap', 
+			minDtsInfo[1][START_DTS],
+			'size=%s (%.3f)' % (gapSize, gapSize / float(timescale)),
+			'min=%s (%.3f)' % (minDtsInfo[1][START_DTS], minDtsInfo[1][START_DTS] / float(timescale)), 
+			'max=%s (%.3f)' % (maxDtsInfo[1][START_DTS], maxDtsInfo[1][START_DTS] / float(timescale)), 
+			'stream=%s' % segIndex,
+			'minurl=%s' % minDtsInfo[0], 
+			'maxurl=%s' % maxDtsInfo[0]])
 
 	# pts
 	gapSize = maxPtsInfo[1][START_PTS] - minPtsInfo[1][START_PTS]
 	if gapSize > THRESHOLD:
-		print 'cross-stream pts gap, size=%s, min=%s, max=%s, minurl=%s maxurl=%s' % (gapSize, minPtsInfo[1][START_PTS], maxPtsInfo[1][START_PTS], minPtsInfo[0], maxPtsInfo[0])
+		errors.append(['cross-stream pts gap', 
+			minPtsInfo[1][START_PTS],
+			'size=%s (%.3f)' % (gapSize, gapSize / float(timescale)),
+			'min=%s (%.3f)' % (minPtsInfo[1][START_PTS], minPtsInfo[1][START_PTS] / float(timescale)), 
+			'max=%s (%.3f)' % (maxPtsInfo[1][START_PTS], maxPtsInfo[1][START_PTS] / float(timescale)), 
+			'stream=%s' % segIndex,
+			'minurl=%s' % minPtsInfo[0], 
+			'maxurl=%s' % maxPtsInfo[0]])
 
+for cells in sorted(errors):
+	print cells[0] + ', ' + '\n\t'.join(cells[2:]) + '\n'
+			
 print 'done'

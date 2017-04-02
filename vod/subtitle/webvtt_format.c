@@ -5,7 +5,6 @@
 #include <ctype.h>
 
 // constants
-#define UTF8_BOM ("\xEF\xBB\xBF")
 #define WEBVTT_HEADER ("WEBVTT")
 #define WEBVTT_DURATION_ESTIMATE_CUES (10)
 #define WEBVTT_CUE_MARKER ("-->")
@@ -338,6 +337,7 @@ webvtt_parse(
 		request_context,
 		parse_params,
 		source,
+		NULL,
 		webvtt_estimate_duration(source),
 		metadata_part_count,
 		result);

@@ -63,6 +63,7 @@ subtitle_parse(
 	request_context_t* request_context,
 	media_parse_params_t* parse_params,
 	vod_str_t* source,
+	void* context,
 	uint64_t full_duration,
 	size_t metadata_part_count,
 	media_base_metadata_t** result)
@@ -136,6 +137,7 @@ subtitle_parse(
 	track->media_info.bitrate = (source->len * 1000 * 8) / full_duration;
 
 	metadata->source = *source;
+	metadata->context = context;
 	metadata->base.duration = duration;
 	metadata->base.timescale = 1000;
 
