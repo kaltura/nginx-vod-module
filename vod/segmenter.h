@@ -69,6 +69,11 @@ typedef vod_status_t (*segmenter_get_segment_durations_t)(
 	uint32_t media_type,
 	segment_durations_t* result);
 
+enum {
+	MDP_MAX,
+	MDP_MIN,
+};
+
 struct segmenter_conf_s {
 	// config fields
 	uintptr_t segment_duration;
@@ -77,6 +82,7 @@ struct segmenter_conf_s {
 	intptr_t live_window_duration;
 	segmenter_get_segment_count_t get_segment_count;			// last short / last long / last rounded
 	segmenter_get_segment_durations_t get_segment_durations;	// estimate / accurate
+	vod_uint_t manifest_duration_policy;
 	uintptr_t gop_look_behind;
 	uintptr_t gop_look_ahead;
 
@@ -108,6 +114,14 @@ vod_status_t segmenter_get_live_window(
 	media_set_t* media_set,
 	bool_t parse_all_clips,
 	get_clip_ranges_result_t* clip_ranges);
+
+// manifest duration
+uint64_t segmenter_get_total_duration(
+	segmenter_conf_t* conf,
+	media_set_t* media_set,
+	media_sequence_t* sequence,
+	media_sequence_t* sequences_end,
+	uint32_t media_type);
 
 // get segment durations modes
 vod_status_t segmenter_get_segment_durations_estimate(
