@@ -1540,7 +1540,7 @@ segmenter_get_segment_durations_estimate_internal(
 	return VOD_OK;
 }
 
-static uint64_t
+uint64_t
 segmenter_get_total_duration(
 	segmenter_conf_t* conf,
 	media_set_t* media_set,

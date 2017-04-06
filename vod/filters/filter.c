@@ -259,9 +259,6 @@ filter_init_filtered_clips(
 	media_clip_t* input_clip;
 	media_track_t* new_track;
 	uint32_t track_count[MEDIA_TYPE_COUNT];
-	uint32_t min_media_type;
-	uint32_t max_media_type;
-	uint32_t total_duration;
 	uint32_t clip_index;
 	uint32_t media_type;
 	uint32_t cur_count;
@@ -458,65 +455,12 @@ filter_init_filtered_clips(
 
 	if (media_set->timing.durations == NULL)
 	{
-		// set the total duration
-		if (media_set->track_count[MEDIA_TYPE_VIDEO] + media_set->track_count[MEDIA_TYPE_AUDIO] > 0)
-		{
-			min_media_type = 0;
-			max_media_type = MEDIA_TYPE_SUBTITLE;
-		}
-		else
-		{
-			min_media_type = MEDIA_TYPE_SUBTITLE;
-			max_media_type = MEDIA_TYPE_COUNT;
-		}
-
-		total_duration = 0;
-
-		switch (init_state.manifest_duration_policy)
-		{
-		case MDP_MAX:
-			for (sequence = media_set->sequences; sequence < media_set->sequences_end; sequence++)
-			{
-				output_clip = &sequence->filtered_clips[0];
-
-				for (media_type = min_media_type; media_type < max_media_type; media_type++)
-				{
-					if (output_clip->ref_track[media_type] == NULL)
-					{
-						continue;
-					}
-
-					if (output_clip->ref_track[media_type]->media_info.duration_millis > total_duration)
-					{
-						total_duration = output_clip->ref_track[media_type]->media_info.duration_millis;
-					}
-				}
-			}
-			break;
-
-		case MDP_MIN:
-			for (sequence = media_set->sequences; sequence < media_set->sequences_end; sequence++)
-			{
-				output_clip = &sequence->filtered_clips[0];
-
-				for (media_type = min_media_type; media_type < max_media_type; media_type++)
-				{
-					if (output_clip->ref_track[media_type] == NULL)
-					{
-						continue;
-					}
-
-					if (output_clip->ref_track[media_type]->media_info.duration_millis > 0 &&
-						(total_duration == 0 || output_clip->ref_track[media_type]->media_info.duration_millis < total_duration))
-					{
-						total_duration = output_clip->ref_track[media_type]->media_info.duration_millis;
-					}
-				}
-			}
-			break;
-		}
-
-		media_set->timing.total_duration = total_duration;
+		media_set->timing.total_duration = segmenter_get_total_duration(
+				media_set->segmenter_conf,
+				media_set,
+				media_set->sequences,
+				media_set->sequences_end,
+				MEDIA_TYPE_NONE);
 	}
 
 	return VOD_OK;
