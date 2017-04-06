@@ -3,10 +3,12 @@
 #include "rate_filter.h"
 #include "concat_clip.h"
 #include "../media_set.h"
+#include "../segmenter.h"
 
 // typedefs
 typedef struct {
 	request_context_t* request_context;
+	vod_uint_t manifest_duration_policy;
 	media_sequence_t* sequence;
 	media_clip_filtered_t* output_clip;
 	media_track_t* output_track;
@@ -69,15 +71,36 @@ filter_copy_track_to_clip(
 	media_track_t* track)
 {
 	media_track_t* output_track = state->output_track;
+	media_track_t** ref_track = state->output_clip->ref_track;
 	uint32_t media_type;
 
 	*output_track = *track;
 
 	media_type = output_track->media_info.media_type;
-	if (state->output_clip->longest_track[media_type] == NULL ||
-		state->output_clip->longest_track[media_type]->media_info.duration_millis < output_track->media_info.duration_millis)
+	if (ref_track[media_type] == NULL)
+	{ 
+		ref_track[media_type] = output_track;
+	}
+	else
 	{
-		state->output_clip->longest_track[media_type] = output_track;
+		switch (state->manifest_duration_policy)
+		{
+		case MDP_MAX:
+			if (output_track->media_info.duration_millis > ref_track[media_type]->media_info.duration_millis)
+			{
+				ref_track[media_type] = output_track;
+			}
+			break;
+
+		case MDP_MIN:
+			if (output_track->media_info.duration_millis > 0 && 
+				(ref_track[media_type]->media_info.duration_millis == 0 ||
+				output_track->media_info.duration_millis < ref_track[media_type]->media_info.duration_millis))
+			{
+				ref_track[media_type] = output_track;
+			}
+			break;
+		}
 	}
 
 	if (output_track->media_info.media_type == MEDIA_TYPE_VIDEO)
@@ -236,7 +259,7 @@ filter_init_filtered_clips(
 	media_clip_t* input_clip;
 	media_track_t* new_track;
 	uint32_t track_count[MEDIA_TYPE_COUNT];
-	uint32_t max_duration = 0;
+	uint32_t total_duration;
 	uint32_t clip_index;
 	uint32_t media_type;
 	uint32_t cur_count;
@@ -349,6 +372,7 @@ filter_init_filtered_clips(
 		return VOD_ALLOC_FAILED;
 	}
 	init_state.request_context = request_context;
+	init_state.manifest_duration_policy = media_set->segmenter_conf->manifest_duration_policy;
 
 	media_set->filtered_tracks = init_state.output_track;
 
@@ -363,7 +387,7 @@ filter_init_filtered_clips(
 
 			output_clip->first_track = init_state.output_track;
 
-			vod_memzero(output_clip->longest_track, sizeof(output_clip->longest_track));
+			vod_memzero(output_clip->ref_track, sizeof(output_clip->ref_track));
 
 			// initialize the state
 			init_state.sequence = sequence;
@@ -425,16 +449,6 @@ filter_init_filtered_clips(
 
 				continue;
 			}
-
-			// calculate the max duration, only relevant in case of single clip
-			for (media_type = 0; media_type < MEDIA_TYPE_COUNT; media_type++)
-			{
-				if (output_clip->longest_track[media_type] != NULL &&
-					output_clip->longest_track[media_type]->media_info.duration_millis > max_duration)
-				{
-					max_duration = output_clip->longest_track[media_type]->media_info.duration_millis;
-				}
-			}
 		}
 	}
 
@@ -442,7 +456,58 @@ filter_init_filtered_clips(
 
 	if (media_set->timing.durations == NULL)
 	{
-		media_set->timing.total_duration = max_duration;
+		// set the total duration
+		total_duration = 0;
+
+		switch (init_state.manifest_duration_policy)
+		{
+		case MDP_MAX:
+			for (sequence = media_set->sequences;
+				sequence < media_set->sequences_end;
+				sequence++)
+			{
+				output_clip = &sequence->filtered_clips[0];
+
+				for (media_type = 0; media_type < MEDIA_TYPE_COUNT; media_type++)
+				{
+					if (output_clip->ref_track[media_type] == NULL)
+					{
+						continue;
+					}
+
+					if (output_clip->ref_track[media_type]->media_info.duration_millis > total_duration)
+					{
+						total_duration = output_clip->ref_track[media_type]->media_info.duration_millis;
+					}
+				}
+			}
+			break;
+
+		case MDP_MIN:
+			for (sequence = media_set->sequences;
+				sequence < media_set->sequences_end;
+				sequence++)
+			{
+				output_clip = &sequence->filtered_clips[0];
+
+				for (media_type = 0; media_type < MEDIA_TYPE_COUNT; media_type++)
+				{
+					if (output_clip->ref_track[media_type] == NULL)
+					{
+						continue;
+					}
+
+					if (output_clip->ref_track[media_type]->media_info.duration_millis > 0 &&
+						(total_duration == 0 || output_clip->ref_track[media_type]->media_info.duration_millis < total_duration))
+					{
+						total_duration = output_clip->ref_track[media_type]->media_info.duration_millis;
+					}
+				}
+			}
+			break;
+		}
+
+		media_set->timing.total_duration = total_duration;
 	}
 
 	return VOD_OK;

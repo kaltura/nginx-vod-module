@@ -842,6 +842,15 @@ Configures the policy for calculating the segment count, for segment_duration = 
 * last_long - a file of 33 sec is partitioned as - 10, 10, 13
 * last_rounded - a file of 33 sec is partitioned as - 10, 10, 13, a file of 38 sec is partitioned as 10, 10, 10, 8
 
+#### vod_manifest_duration_policy
+* **syntax**: `vod_manifest_duration_policy min/max`
+* **default**: `max`
+* **context**: `http`, `server`, `location`
+
+Configures the policy for calculating the duration of a manifest containing multiple streams:
+* max - uses the maximum stream duration (default)
+* min - uses the minimum non-zero stream duration
+
 #### vod_manifest_segment_durations_mode
 * **syntax**: `vod_manifest_segment_durations_mode estimate/accurate`
 * **default**: `estimate`

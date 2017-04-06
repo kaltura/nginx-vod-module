@@ -784,7 +784,7 @@ manifest_utils_get_muxed_adaptation_set(
 		}
 
 		// find the audio track
-		audio_track = cur_sequence->filtered_clips[0].longest_track[MEDIA_TYPE_AUDIO];
+		audio_track = cur_sequence->filtered_clips[0].ref_track[MEDIA_TYPE_AUDIO];
 		if ((audio_track == NULL || (label != NULL && !vod_str_equals(*label, audio_track->media_info.label))) &&
 			media_set->track_count[MEDIA_TYPE_AUDIO] > 0)
 		{

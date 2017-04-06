@@ -347,9 +347,22 @@ hls_muxer_init_base(
 		switch (track->media_info.media_type)
 		{
 		case MEDIA_TYPE_VIDEO:
-			if (track->media_info.duration_millis > state->video_duration)
+			switch (media_set->segmenter_conf->manifest_duration_policy)
 			{
-				state->video_duration = track->media_info.duration_millis;
+			case MDP_MAX:
+				if (track->media_info.duration_millis > state->video_duration)
+				{
+					state->video_duration = track->media_info.duration_millis;
+				}
+				break;
+
+			case MDP_MIN:
+				if (track->media_info.duration_millis > 0 &&
+					(state->video_duration == 0 || track->media_info.duration_millis < state->video_duration))
+				{
+					state->video_duration = track->media_info.duration_millis;
+				}
+				break;
 			}
 
 			rc = mp4_to_annexb_init(

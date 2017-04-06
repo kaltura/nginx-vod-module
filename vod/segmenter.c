@@ -1540,6 +1540,93 @@ segmenter_get_segment_durations_estimate_internal(
 	return VOD_OK;
 }
 
+static uint64_t
+segmenter_get_total_duration(
+	segmenter_conf_t* conf,
+	media_sequence_t* sequence,
+	media_sequence_t* sequences_end,
+	uint32_t media_type)
+{
+	media_track_t** ref_track;
+	media_sequence_t* cur_sequence;
+	uint32_t cur_media_type;
+	uint64_t result = 0;
+
+	if (media_type != MEDIA_TYPE_NONE)
+	{
+		for (cur_sequence = sequence; cur_sequence < sequences_end; cur_sequence++)
+		{
+			ref_track = cur_sequence->filtered_clips[0].ref_track;
+
+			if (ref_track[media_type] == NULL)
+			{
+				continue;
+			}
+
+			switch (conf->manifest_duration_policy)
+			{
+			case MDP_MAX:
+				if (ref_track[media_type]->media_info.duration_millis <= result)
+				{
+					continue;
+				}
+				break;
+
+			case MDP_MIN:
+				if (result > 0 && ref_track[media_type]->media_info.duration_millis >= result)
+				{
+					continue;
+				}
+				break;
+			}
+
+			result = ref_track[media_type]->media_info.duration_millis;
+		}
+
+		return result;
+	}
+
+	for (cur_sequence = sequence; cur_sequence < sequences_end; cur_sequence++)
+	{
+		ref_track = cur_sequence->filtered_clips[0].ref_track;
+
+		for (cur_media_type = 0; cur_media_type < MEDIA_TYPE_COUNT; cur_media_type++)
+		{
+			// if there are audio/video tracks, ignore the subtitles
+			if (cur_media_type == MEDIA_TYPE_SUBTITLE && result > 0)
+			{
+				break;
+			}
+
+			if (ref_track[cur_media_type] == NULL)
+			{
+				continue;
+			}
+
+			switch (conf->manifest_duration_policy)
+			{
+			case MDP_MAX:
+				if (ref_track[cur_media_type]->media_info.duration_millis <= result)
+				{
+					continue;
+				}
+				break;
+
+			case MDP_MIN:
+				if (result > 0 && ref_track[cur_media_type]->media_info.duration_millis >= result)
+				{
+					continue;
+				}
+				break;
+			}
+
+			result = ref_track[cur_media_type]->media_info.duration_millis;
+		}
+	}
+
+	return result;
+}
+
 vod_status_t
 segmenter_get_segment_durations_estimate(
 	request_context_t* request_context,
@@ -1550,11 +1637,8 @@ segmenter_get_segment_durations_estimate(
 	segment_durations_t* result)
 {
 	media_clip_timing_t timing;
-	media_track_t** longest_track;
 	media_sequence_t* sequences_end;
-	media_sequence_t* cur_sequence;
 	uint64_t duration_millis;
-	uint32_t cur_media_type;
 
 	if (sequence != NULL)
 	{
@@ -1592,31 +1676,11 @@ segmenter_get_segment_durations_estimate(
 	}
 	else
 	{
-		duration_millis = 0;
-
-		for (cur_sequence = sequence; cur_sequence < sequences_end; cur_sequence++)
-		{
-			longest_track = cur_sequence->filtered_clips[0].longest_track;
-
-			if (media_type != MEDIA_TYPE_NONE)
-			{
-				if (longest_track[media_type] != NULL &&
-					longest_track[media_type]->media_info.duration_millis > duration_millis)
-				{
-					duration_millis = longest_track[media_type]->media_info.duration_millis;
-				}
-				continue;
-			}
-
-			for (cur_media_type = 0; cur_media_type < MEDIA_TYPE_COUNT; cur_media_type++)
-			{
-				if (longest_track[cur_media_type] != NULL &&
-					longest_track[cur_media_type]->media_info.duration_millis > duration_millis)
-				{
-					duration_millis = longest_track[cur_media_type]->media_info.duration_millis;
-				}
-			}
-		}
+		duration_millis = segmenter_get_total_duration(
+			conf,
+			sequence,
+			sequences_end,
+			media_type);
 	}
 
 	result->start_time = media_set->timing.first_time;
@@ -1697,7 +1761,7 @@ segmenter_get_segment_durations_accurate(
 	media_track_t* cur_track;
 	media_track_t* last_track;
 	media_track_t* main_track = NULL;
-	media_track_t* longest_track = NULL;
+	media_track_t* ref_track = NULL;
 	segment_duration_item_t* cur_item;
 	media_sequence_t* sequences_end;
 	media_sequence_t* cur_sequence;
@@ -1754,10 +1818,32 @@ segmenter_get_segment_durations_accurate(
 				main_track = cur_track;
 			}
 
-			if (cur_track->media_info.duration_millis > duration_millis)
+			if (ref_track == NULL)
 			{
-				longest_track = cur_track;
+				ref_track = cur_track;
 				duration_millis = cur_track->media_info.duration_millis;
+			}
+			else
+			{
+				switch (conf->manifest_duration_policy)
+				{
+				case MDP_MAX:
+					if (cur_track->media_info.duration_millis > duration_millis)
+					{
+						ref_track = cur_track;
+						duration_millis = cur_track->media_info.duration_millis;
+					}
+					break;
+
+				case MDP_MIN:
+					if (cur_track->media_info.duration_millis > 0 &&
+						(duration_millis == 0 || cur_track->media_info.duration_millis < duration_millis))
+					{
+						ref_track = cur_track;
+						duration_millis = cur_track->media_info.duration_millis;
+					}
+					break;
+				}
 			}
 		}
 	}
@@ -1895,7 +1981,7 @@ post_bootstrap:
 		segmenter_boundary_iterator_init(&boundary_iterator, conf, result->segment_count);
 		segmenter_boundary_iterator_skip(&boundary_iterator, segment_index);
 
-		total_duration = rescale_time(longest_track->media_info.duration, longest_track->media_info.timescale, result->timescale);
+		total_duration = rescale_time(ref_track->media_info.duration, ref_track->media_info.timescale, result->timescale);
 
 		while (accum_duration < total_duration && 
 			segment_index + 1 < result->segment_count)
