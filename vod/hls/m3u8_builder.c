@@ -747,7 +747,7 @@ m3u8_builder_build_master_playlist(
 	media_track_t** cur_track_ptr;
 	media_track_t* cur_track;
 	media_track_t* tracks[MEDIA_TYPE_COUNT];
-	media_info_t* video;
+	media_info_t* video = NULL;
 	media_info_t* audio = NULL;
 	vod_status_t rc;
 	uint32_t muxed_tracks;
