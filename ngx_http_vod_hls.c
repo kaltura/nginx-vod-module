@@ -108,6 +108,7 @@ ngx_http_vod_hls_handle_master_playlist(
 	rc = m3u8_builder_build_master_playlist(
 		&submodule_context->request_context,
 		&submodule_context->conf->hls.m3u8_config,
+		submodule_context->conf->hls.encryption_method,
 		&base_url,
 		&submodule_context->media_set,
 		response);
@@ -359,7 +360,7 @@ ngx_http_vod_hls_handle_vtt_segment(
 
 static const ngx_http_vod_request_t hls_master_request = {
 	0,
-	PARSE_FLAG_DURATION_LIMITS_AND_TOTAL_SIZE | PARSE_FLAG_CODEC_NAME,
+	PARSE_FLAG_DURATION_LIMITS_AND_TOTAL_SIZE | PARSE_FLAG_KEY_FRAME_BITRATE | PARSE_FLAG_CODEC_NAME,
 	REQUEST_CLASS_OTHER,
 	SUPPORTED_CODECS | VOD_CODEC_FLAG(WEBVTT),
 	HLS_TIMESCALE,
@@ -444,7 +445,7 @@ ngx_http_vod_hls_merge_loc_conf(
 
 	ngx_conf_merge_str_value(conf->master_file_name_prefix, prev->master_file_name_prefix, "master");
 	ngx_conf_merge_str_value(conf->m3u8_config.index_file_name_prefix, prev->m3u8_config.index_file_name_prefix, "index");	
-	ngx_conf_merge_str_value(conf->iframes_file_name_prefix, prev->iframes_file_name_prefix, "iframes");
+	ngx_conf_merge_str_value(conf->m3u8_config.iframes_file_name_prefix, prev->m3u8_config.iframes_file_name_prefix, "iframes");
 	ngx_conf_merge_str_value(conf->m3u8_config.segment_file_name_prefix, prev->m3u8_config.segment_file_name_prefix, "seg");
 
 	ngx_conf_merge_str_value(conf->m3u8_config.encryption_key_file_name, prev->m3u8_config.encryption_key_file_name, "encryption");
@@ -524,10 +525,10 @@ ngx_http_vod_hls_parse_uri_file_name(
 			start_pos += conf->hls.m3u8_config.index_file_name_prefix.len;
 			flags = 0;
 		}
-		else if (ngx_http_vod_starts_with(start_pos, end_pos, &conf->hls.iframes_file_name_prefix))
+		else if (ngx_http_vod_starts_with(start_pos, end_pos, &conf->hls.m3u8_config.iframes_file_name_prefix))
 		{
 			*request = &hls_iframes_request;
-			start_pos += conf->hls.iframes_file_name_prefix.len;
+			start_pos += conf->hls.m3u8_config.iframes_file_name_prefix.len;
 			flags = 0;
 		}
 		else if (ngx_http_vod_starts_with(start_pos, end_pos, &conf->hls.master_file_name_prefix))

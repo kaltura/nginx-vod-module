@@ -24,6 +24,7 @@ static const u_char m3u8_header[] = "#EXTM3U\n";
 static const u_char m3u8_footer[] = "#EXT-X-ENDLIST\n";
 static const char m3u8_stream_inf_video[] = "#EXT-X-STREAM-INF:PROGRAM-ID=1,BANDWIDTH=%uD,RESOLUTION=%uDx%uD,FRAME-RATE=%uD.%03uD,CODECS=\"%V";
 static const char m3u8_stream_inf_audio[] = "#EXT-X-STREAM-INF:PROGRAM-ID=1,BANDWIDTH=%uD,CODECS=\"%V";
+static const char m3u8_iframe_stream_inf[] = "#EXT-X-I-FRAME-STREAM-INF:BANDWIDTH=%uD,RESOLUTION=%uDx%uD,CODECS=\"%V\",URI=\"";
 static const u_char m3u8_discontinuity[] = "#EXT-X-DISCONTINUITY\n";
 static const char byte_range_tag_format[] = "#EXT-X-BYTERANGE:%uD@%uD\n";
 static const u_char m3u8_url_suffix[] = ".m3u8";
@@ -572,7 +573,7 @@ m3u8_builder_build_index_playlist(
 static u_char*
 m3u8_builder_append_index_url(
 	u_char* p,
-	m3u8_config_t* conf,
+	vod_str_t* prefix,
 	media_set_t* media_set,
 	media_track_t** tracks,
 	vod_str_t* base_url)
@@ -611,7 +612,7 @@ m3u8_builder_append_index_url(
 		*p++ = '/';
 	}
 
-	p = vod_copy(p, conf->index_file_name_prefix.data, conf->index_file_name_prefix.len);
+	p = vod_copy(p, prefix->data, prefix->len);
 	p = manifest_utils_append_tracks_spec(p, tracks, MEDIA_TYPE_COUNT, write_sequence_index);
 	p = vod_copy(p, m3u8_url_suffix, sizeof(m3u8_url_suffix) - 1);
 
@@ -719,7 +720,7 @@ m3u8_builder_ext_x_media_tags_write(
 
 		p = m3u8_builder_append_index_url(
 			p,
-			conf,
+			&conf->index_file_name_prefix,
 			media_set,
 			tracks,
 			base_url);
@@ -737,6 +738,7 @@ vod_status_t
 m3u8_builder_build_master_playlist(
 	request_context_t* request_context,
 	m3u8_config_t* conf,
+	vod_uint_t encryption_method,
 	vod_str_t* base_url,
 	media_set_t* media_set,
 	vod_str_t* result)
@@ -750,10 +752,16 @@ m3u8_builder_build_master_playlist(
 	vod_status_t rc;
 	uint32_t muxed_tracks;
 	uint32_t bitrate;
+	bool_t iframe_playlist;
 	size_t max_video_stream_inf;
 	size_t base_url_len;
 	size_t result_size;
 	u_char* p;
+
+	iframe_playlist = media_set->type == MEDIA_SET_VOD && 
+		media_set->timing.total_count <= 1 &&
+		encryption_method == HLS_ENC_NONE && 
+		!media_set->audio_filtering_needed;
 
 	// get the adaptations sets
 	rc = manifest_utils_get_adaptation_sets(
@@ -822,6 +830,13 @@ m3u8_builder_build_master_playlist(
 
 			result_size += vod_max(cur_track->file_info.uri.len, media_set->uri.len);
 		}
+	}
+
+	if (iframe_playlist)
+	{
+		result_size +=
+			(sizeof(m3u8_iframe_stream_inf) - 1 + 3 * VOD_INT32_LEN + MAX_CODEC_NAME_SIZE + sizeof("\"\n\n") - 1 +
+				base_url_len) * adaptation_sets.first->count;
 	}
 
 	result_size +=
@@ -934,12 +949,37 @@ m3u8_builder_build_master_playlist(
 		// output the url
 		p = m3u8_builder_append_index_url(
 			p,
-			conf,
+			&conf->index_file_name_prefix,
 			media_set,
 			tracks,
 			base_url);
 
 		*p++ = '\n';
+
+		// iframes
+		if (iframe_playlist && 
+			tracks[MEDIA_TYPE_VIDEO] != NULL &&
+			video->u.video.key_frame_bitrate != 0)
+		{
+			p = vod_sprintf(p, m3u8_iframe_stream_inf,
+				video->u.video.key_frame_bitrate,
+				(uint32_t)video->u.video.width,
+				(uint32_t)video->u.video.height,
+				&video->codec_name);
+
+			// Note: while it is possible to use only the video track here, sending the audio
+			//		makes the iframe list reference the same segments as the media playlist
+			p = m3u8_builder_append_index_url(
+				p,
+				&conf->iframes_file_name_prefix,
+				media_set,
+				tracks,
+				base_url);
+
+			*p++ = '\"';
+			*p++ = '\n';
+			*p++ = '\n';
+		}
 	}
 
 	result->len = p - result->data;
