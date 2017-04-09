@@ -836,7 +836,7 @@ m3u8_builder_build_master_playlist(
 	{
 		result_size +=
 			(sizeof(m3u8_iframe_stream_inf) - 1 + 3 * VOD_INT32_LEN + MAX_CODEC_NAME_SIZE + sizeof("\"\n\n") - 1 +
-				base_url_len) * adaptation_sets.first->count;
+				base_url_len - conf->index_file_name_prefix.len + conf->iframes_file_name_prefix.len) * adaptation_sets.first->count;
 	}
 
 	result_size +=
