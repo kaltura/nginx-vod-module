@@ -267,6 +267,7 @@ static ngx_http_vod_reader_t reader_http = {
 	NULL,
 };
 
+static const u_char wvm_file_magic[] = { 0x00, 0x00, 0x01, 0xba, 0x44, 0x00, 0x04, 0x00, 0x04, 0x01 };
 
 ////// Variables
 
@@ -1550,8 +1551,17 @@ ngx_http_vod_identify_format(ngx_http_vod_ctx_t* ctx)
 		cur_format = *cur_format_ptr;
 		if (cur_format == NULL)
 		{
-			ngx_log_error(NGX_LOG_ERR, ctx->submodule_context.request_context.log, 0,
-				"ngx_http_vod_identify_format: failed to identify the file format");
+			if (buffer.len > sizeof(wvm_file_magic) &&
+				ngx_memcmp(buffer.data, wvm_file_magic, sizeof(wvm_file_magic)) == 0)
+			{
+				ngx_log_error(NGX_LOG_ERR, ctx->submodule_context.request_context.log, 0,
+					"ngx_http_vod_identify_format: wvm format is not supported");
+			}
+			else
+			{
+				ngx_log_error(NGX_LOG_ERR, ctx->submodule_context.request_context.log, 0,
+					"ngx_http_vod_identify_format: failed to identify the file format");
+			}
 			return ngx_http_vod_status_to_ngx_error(ctx->submodule_context.r, VOD_BAD_DATA);
 		}
 
