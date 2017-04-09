@@ -959,7 +959,8 @@ m3u8_builder_build_master_playlist(
 		// iframes
 		if (iframe_playlist && 
 			tracks[MEDIA_TYPE_VIDEO] != NULL &&
-			video->u.video.key_frame_bitrate != 0)
+			video->u.video.key_frame_bitrate != 0 &&
+			mp4_to_annexb_simulation_supported(video))
 		{
 			p = vod_sprintf(p, m3u8_iframe_stream_inf,
 				video->u.video.key_frame_bitrate,
