@@ -92,11 +92,6 @@ static const u_char pmt_entry_template_ac3[] = {
 	0x81, 0xe0, 0x00, 0xf0, 0x00,
 };
 
-static const u_char pmt_entry_template_eac3[] = {
-	0x06, 0xe0, 0x00, 0xf0, 0x03,
-	0x7a, 0x01, 0x00,
-};
-
 static const u_char pmt_entry_template_sample_aes_avc[] = {
 	0xdb, 0xe0, 0x00, 0xf0, 0x06,
 	0x0f, 0x04, 0x7a, 0x61, 0x76, 0x63		// private_data_indicator_descriptor('zavc')
@@ -110,6 +105,11 @@ static const u_char pmt_entry_template_sample_aes_aac[] = {
 static const u_char pmt_entry_template_sample_aes_ac3[] = {
 	0xc1, 0xe1, 0x00, 0xf0, 0x00,
 	0x0f, 0x04, 0x61, 0x63, 0x33, 0x64		// private_data_indicator_descriptor('ac3d')
+};
+
+static const u_char pmt_entry_template_sample_aes_eac3[] = {
+	0xc2, 0xe1, 0x00, 0xf0, 0x00,
+	0x0f, 0x04, 0x65, 0x63, 0x33, 0x64		// private_data_indicator_descriptor('ec3d')
 };
 
 static const u_char pmt_entry_template_id3[] = {
@@ -445,6 +445,14 @@ mpegts_encoder_write_sample_aes_audio_pmt_entry(
 			sizeof(pmt_entry_template_sample_aes_ac3));
 		break;
 
+	case VOD_CODEC_ID_EAC3:
+		extra_data = media_info->extra_data;
+		p = vod_copy(
+			start,
+			pmt_entry_template_sample_aes_eac3,
+			sizeof(pmt_entry_template_sample_aes_eac3));
+		break;
+
 	default:
 		extra_data = media_info->extra_data;
 		p = vod_copy(
@@ -463,14 +471,18 @@ mpegts_encoder_write_sample_aes_audio_pmt_entry(
 		extra_data.len;
 	*p++ = 'a';		*p++ = 'p';		*p++ = 'a';		*p++ = 'd';			// apad
 
+	// audio_setup_information
 	switch (media_info->codec_id)
 	{
 	case VOD_CODEC_ID_AC3:
 		*p++ = 'z';		*p++ = 'a';		*p++ = 'c';		*p++ = '3';			// zac3
 		break;
 
+	case VOD_CODEC_ID_EAC3:
+		*p++ = 'z';		*p++ = 'e';		*p++ = 'c';		*p++ = '3';			// zec3
+		break;
+
 	default:
-		// audio_setup_information
 		switch (media_info->u.audio.codec_config.object_type - 1)
 		{
 		case FF_PROFILE_AAC_HE:
@@ -550,6 +562,14 @@ mpegts_encoder_add_stream(
 					SAMPLE_AES_AC3_EXTRA_DATA_SIZE;
 				break;
 
+			case VOD_CODEC_ID_EAC3:
+				pmt_entry = pmt_entry_template_sample_aes_eac3;
+				pmt_entry_size = sizeof(pmt_entry_template_sample_aes_eac3) +
+					sizeof(registration_descriptor_t) +
+					sizeof(audio_setup_information_t) +
+					track->media_info.extra_data.len;
+				break;
+
 			default:
 				pmt_entry = pmt_entry_template_sample_aes_aac;
 				pmt_entry_size = sizeof(pmt_entry_template_sample_aes_aac) +
@@ -569,13 +589,9 @@ mpegts_encoder_add_stream(
 				break;
 
 			case VOD_CODEC_ID_AC3:
+			case VOD_CODEC_ID_EAC3:
 				pmt_entry = pmt_entry_template_ac3;
 				pmt_entry_size = sizeof(pmt_entry_template_ac3);
-				break;
-
-			case VOD_CODEC_ID_EAC3:
-				pmt_entry = pmt_entry_template_eac3;
-				pmt_entry_size = sizeof(pmt_entry_template_eac3);
 				break;
 
 			default:
