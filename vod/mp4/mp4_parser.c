@@ -29,6 +29,7 @@
 #define MAX_FRAMERATE_TEST_SAMPLES (20)
 #define MAX_TOTAL_SIZE_TEST_SAMPLES (100000)
 #define MAX_PTS_DELAY_TEST_SAMPLES (100)
+#define MAX_KEY_FRAME_BITRATE_TEST_SAMPLES (1000)
 
 // typedefs
 typedef struct {
@@ -1468,6 +1469,131 @@ mp4_parser_parse_stsc_atom(atom_info_t* atom_info, frames_parse_context_t* conte
 }
 
 static vod_status_t
+mp4_parser_parse_stsz_atom_key_frame_bitrate(
+	frames_parse_context_t* context, 
+	atom_info_t* stsz, 
+	atom_info_t* stss)
+{
+	const uint8_t* stsz_data;
+	uint32_t* cur_pos;
+	uint32_t* end_pos;
+	uint32_t stss_entries;
+	uint32_t stsz_entries;
+	uint32_t sample_count;
+	uint32_t uniform_size;
+	uint32_t frame_index;
+	uint32_t field_size;
+	uint64_t total_size;
+	vod_status_t rc;
+
+	// validate stss
+	if (stss->size == 0) 			// optional atom
+	{
+		return VOD_OK;
+	}
+
+	rc = mp4_parser_validate_stss_atom(context->request_context, stss, &stss_entries);
+	if (rc != VOD_OK)
+	{
+		return rc;
+	}
+
+	if (stss_entries == 0)
+	{
+		return VOD_OK;
+	}
+
+	// validate stsz
+	rc = mp4_parser_validate_stsz_atom(
+		context->request_context, 
+		stsz, 
+		0, 
+		&uniform_size, 
+		&field_size, 
+		&stsz_entries);
+	if (rc != VOD_OK)
+	{
+		return rc;
+	}
+
+	if (uniform_size != 0)
+	{
+		context->media_info->u.video.key_frame_bitrate =
+			((uint64_t)uniform_size * stss_entries * context->media_info->timescale * 8) /
+			(context->media_info->full_duration);
+		return VOD_OK;
+	}
+
+	// calculate the total size of sample key frames
+	sample_count = (stss_entries > MAX_KEY_FRAME_BITRATE_TEST_SAMPLES) ? 
+		MAX_KEY_FRAME_BITRATE_TEST_SAMPLES : stss_entries;
+
+	cur_pos = (uint32_t*)(stss->ptr + sizeof(stss_atom_t));
+	end_pos = cur_pos + sample_count;
+	stsz_data = stsz->ptr + sizeof(stsz_atom_t);
+	total_size = 0;
+
+	switch (field_size)
+	{
+	case 32:
+		for (; cur_pos < end_pos; cur_pos++)
+		{
+			frame_index = parse_be32(cur_pos) - 1;
+			if (frame_index >= stsz_entries)
+			{
+				vod_log_error(VOD_LOG_ERR, context->request_context->log, 0,
+					"mp4_parser_parse_stsz_atom_key_frame_bitrate: invalid frame index %uD (1)", frame_index);
+				return VOD_BAD_DATA;
+			}
+
+			total_size += parse_be32((const uint32_t*)stsz_data + frame_index);
+		}
+		break;
+
+	case 16:
+		for (; cur_pos < end_pos; cur_pos++)
+		{
+			frame_index = parse_be32(cur_pos) - 1;
+			if (frame_index >= stsz_entries)
+			{
+				vod_log_error(VOD_LOG_ERR, context->request_context->log, 0,
+					"mp4_parser_parse_stsz_atom_key_frame_bitrate: invalid frame index %uD (2)", frame_index);
+				return VOD_BAD_DATA;
+			}
+
+			total_size += parse_be16((const uint16_t*)stsz_data + frame_index);
+		}
+		break;
+
+	case 8:
+		for (; cur_pos < end_pos; cur_pos++)
+		{
+			frame_index = parse_be32(cur_pos) - 1;
+			if (frame_index >= stsz_entries)
+			{
+				vod_log_error(VOD_LOG_ERR, context->request_context->log, 0,
+					"mp4_parser_parse_stsz_atom_key_frame_bitrate: invalid frame index %uD (3)", frame_index);
+				return VOD_BAD_DATA;
+			}
+
+			total_size += stsz_data[frame_index];
+		}
+		break;
+
+	default:
+		vod_log_error(VOD_LOG_ERR, context->request_context->log, 0,
+			"mp4_parser_parse_stsz_atom_key_frame_bitrate: unsupported field size %uD", field_size);
+		return VOD_BAD_DATA;
+	}
+
+	// estimate the bitrate
+	context->media_info->u.video.key_frame_bitrate = 
+		(total_size * stss_entries * context->media_info->timescale * 8) / 
+		(sample_count * context->media_info->full_duration);
+	return VOD_OK;
+}
+
+static vod_status_t
 mp4_parser_parse_stsz_atom_total_size_estimate_only(atom_info_t* atom_info, frames_parse_context_t* context)
 {
 	uint32_t uniform_size;
@@ -2865,9 +2991,25 @@ mp4_parser_parse_frames(
 		}
 
 		// estimate the bitrate from frame size if no bitrate was read from the file
-		if (cur_track->media_info.bitrate == 0 && cur_track->media_info.full_duration > 0)
+		if (cur_track->media_info.full_duration > 0)
 		{
-			cur_track->media_info.bitrate = (uint32_t)((context.total_frames_size * cur_track->media_info.timescale * 8) / cur_track->media_info.full_duration);
+			if (cur_track->media_info.bitrate == 0)
+			{
+				cur_track->media_info.bitrate = (uint32_t)((context.total_frames_size * cur_track->media_info.timescale * 8) / cur_track->media_info.full_duration);
+			}
+
+			if ((parse_params->parse_type & PARSE_FLAG_KEY_FRAME_BITRATE) != 0 &&
+				media_type == MEDIA_TYPE_VIDEO)
+			{
+				rc = mp4_parser_parse_stsz_atom_key_frame_bitrate(
+					&context,
+					&cur_track->trak_atom_infos.stsz,
+					&cur_track->trak_atom_infos.stss);
+				if (rc != VOD_OK)
+				{
+					return rc;
+				}
+			}
 		}
 
 		result_track = vod_array_push(&tracks);

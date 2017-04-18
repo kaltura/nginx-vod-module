@@ -249,7 +249,8 @@ filter_validate_consistent_codecs(
 vod_status_t
 filter_init_filtered_clips(
 	request_context_t* request_context,
-	media_set_t* media_set)
+	media_set_t* media_set,
+	bool_t parsed_frames)
 {
 	filters_init_state_t init_state;
 	media_clip_filtered_t* output_clip;
@@ -425,7 +426,7 @@ filter_init_filtered_clips(
 						init_state.audio_reference_track_speed_denom);
 				}
 
-				if (init_state.has_audio_frames)
+				if (!parsed_frames || init_state.has_audio_frames)
 				{
 					new_track->source_clip = input_clip;
 					media_set->audio_filtering_needed = TRUE;

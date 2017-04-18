@@ -43,6 +43,7 @@
 #define PARSE_FLAG_TOTAL_SIZE_ESTIMATE	(0x00400000)
 #define PARSE_FLAG_RELATIVE_TIMESTAMPS	(0x00800000)		// relative to segment
 #define PARSE_FLAG_INITIAL_PTS_DELAY	(0x01000000)
+#define PARSE_FLAG_KEY_FRAME_BITRATE	(0x02000000)
 
 // flag groups
 #define PARSE_FLAG_FRAMES_ALL (PARSE_FLAG_FRAMES_DURATION | PARSE_FLAG_FRAMES_PTS_DELAY | PARSE_FLAG_FRAMES_SIZE | PARSE_FLAG_FRAMES_OFFSET | PARSE_FLAG_FRAMES_IS_KEY)
@@ -137,6 +138,7 @@ typedef struct {
 	uint16_t height;
 	uint32_t nal_packet_size_length;
 	uint32_t initial_pts_delay;
+	uint32_t key_frame_bitrate;
 } video_media_info_t;
 
 typedef struct {

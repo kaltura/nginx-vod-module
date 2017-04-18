@@ -2999,7 +2999,8 @@ ngx_http_vod_run_state_machine(ngx_http_vod_ctx_t *ctx)
 		{
 			rc = filter_init_filtered_clips(
 				&ctx->submodule_context.request_context,
-				&ctx->submodule_context.media_set);
+				&ctx->submodule_context.media_set, 
+				(ctx->request->parse_type & PARSE_FLAG_FRAMES_DURATION) != 0);
 			if (rc != VOD_OK)
 			{
 				ngx_log_debug1(NGX_LOG_DEBUG_HTTP, ctx->submodule_context.request_context.log, 0,

@@ -17,6 +17,7 @@ typedef struct {
 	u_char iframes_m3u8_header[MAX_IFRAMES_M3U8_HEADER_SIZE];
 	size_t iframes_m3u8_header_len;
 	vod_str_t index_file_name_prefix;
+	vod_str_t iframes_file_name_prefix;
 	vod_str_t segment_file_name_prefix;
 	vod_str_t encryption_key_file_name;
 	vod_str_t encryption_key_format;
@@ -27,6 +28,7 @@ typedef struct {
 vod_status_t m3u8_builder_build_master_playlist(
 	request_context_t* request_context,
 	m3u8_config_t* conf,
+	vod_uint_t encryption_method,
 	vod_str_t* base_url,
 	media_set_t* media_set,
 	vod_str_t* result);
