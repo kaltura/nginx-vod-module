@@ -32,7 +32,7 @@
 
 // macros
 #define DEFINE_VAR(name) \
-	{ ngx_string("vod_" #name), ngx_http_vod_set_##name##_var }
+	{ ngx_string("vod_" #name), ngx_http_vod_set_##name##_var, 0 }
 
 // constants
 #define OPEN_FILE_FALLBACK_ENABLED (0x80000000)
@@ -192,12 +192,14 @@ struct ngx_http_vod_ctx_s {
 	ngx_chain_t out;
 	ngx_http_vod_write_segment_context_t write_segment_buffer_context;
 	media_notification_t* notification;
+	uint32_t frames_bytes_read;
 };
 
 // typedefs
 typedef struct {
 	ngx_str_t name;
 	ngx_http_get_variable_pt handler;
+	uintptr_t data;
 } ngx_http_vod_variable_t;
 
 // forward declarations
@@ -570,6 +572,39 @@ ngx_http_vod_set_notification_id_var(ngx_http_request_t *r, ngx_http_variable_va
 	return NGX_OK;
 }
 
+static ngx_int_t
+ngx_http_vod_set_uint32_var(ngx_http_request_t *r, ngx_http_variable_value_t *v, uintptr_t data)
+{
+	ngx_http_vod_ctx_t *ctx;
+	uint32_t int_value;
+	u_char* p;
+
+	ctx = ngx_http_get_module_ctx(r, ngx_http_vod_module);
+	if (ctx == NULL)
+	{
+		v->not_found = 1;
+		return NGX_OK;
+	}
+
+	p = ngx_pnalloc(r->pool, NGX_INT32_LEN);
+	if (p == NULL)
+	{
+		ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+			"ngx_http_vod_set_uint32_var: ngx_pnalloc failed");
+		return NGX_ERROR;
+	}
+
+	int_value = *(uint32_t*)(((u_char*)ctx) + data);
+
+	v->data = p;
+	v->len = ngx_sprintf(p, "%uD", int_value) - p;
+	v->valid = 1;
+	v->no_cacheable = 1;
+	v->not_found = 0;
+
+	return NGX_OK;
+}
+
 static ngx_http_vod_variable_t ngx_http_vod_variables[] = {
 	DEFINE_VAR(status),
 	DEFINE_VAR(filepath),
@@ -580,6 +615,8 @@ static ngx_http_vod_variable_t ngx_http_vod_variables[] = {
 	DEFINE_VAR(dynamic_mapping),
 	DEFINE_VAR(request_params),
 	DEFINE_VAR(notification_id),
+	{ ngx_string("vod_frames_bytes_read"), ngx_http_vod_set_uint32_var, offsetof(ngx_http_vod_ctx_t, frames_bytes_read) },
+	{ ngx_string("vod_segment_duration"), ngx_http_vod_set_uint32_var, offsetof(ngx_http_vod_ctx_t, submodule_context.media_set.segment_duration) },
 };
 
 ngx_int_t
@@ -599,6 +636,7 @@ ngx_http_vod_preconfiguration(ngx_conf_t *cf)
 		}
 
 		var->get_handler = vars_cur->handler;
+		var->data = vars_cur->data;
 	}
 
 	rc = ngx_http_get_variable_index(cf, &ngx_http_vod_variables[0].name);
@@ -3241,6 +3279,7 @@ ngx_http_vod_handle_read_completed(void* context, ngx_int_t rc, ngx_buf_t* buf, 
 		{
 			buf = &ctx->read_buffer;
 		}
+		ctx->frames_bytes_read += (buf->last - buf->pos);
 		read_cache_read_completed(&ctx->read_cache_state, buf);
 		break;
 

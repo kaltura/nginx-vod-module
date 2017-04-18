@@ -65,7 +65,7 @@ eac3_encrypt_write(media_filter_context_t* context, const u_char* buffer, uint32
 			if (state->header[0] != 0x0b || state->header[1] != 0x77)
 			{
 				vod_log_error(VOD_LOG_ERR, context->request_context->log, 0,
-					"eac3_encrypt_start_frame: invalid sync frame magic 0x%02uxD 0x%02uxD", 
+					"eac3_encrypt_write: invalid sync frame magic 0x%02uxD 0x%02uxD", 
 					(uint32_t)state->header[0], (uint32_t)state->header[1]);
 				return VOD_BAD_DATA;
 			}
@@ -77,7 +77,7 @@ eac3_encrypt_write(media_filter_context_t* context, const u_char* buffer, uint32
 				sync_frame_size > state->frame_size_left)
 			{
 				vod_log_error(VOD_LOG_ERR, context->request_context->log, 0,
-					"eac3_encrypt_start_frame: invalid sync frame size %uD", sync_frame_size);
+					"eac3_encrypt_write: invalid sync frame size %uD", sync_frame_size);
 				return VOD_BAD_DATA;
 			}
 
@@ -86,7 +86,7 @@ eac3_encrypt_write(media_filter_context_t* context, const u_char* buffer, uint32
 				state->frame_size_left < sizeof(state->header))
 			{
 				vod_log_error(VOD_LOG_ERR, context->request_context->log, 0,
-					"eac3_encrypt_start_frame: invalid frame size left %uD", state->frame_size_left);
+					"eac3_encrypt_write: invalid frame size left %uD", state->frame_size_left);
 				return VOD_BAD_DATA;
 			}
 
