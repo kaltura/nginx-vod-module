@@ -7,7 +7,7 @@
 static void
 mp4_aes_ctr_cleanup(mp4_aes_ctr_state_t* state)
 {
-	EVP_CIPHER_CTX_cleanup(&state->cipher);
+	EVP_CIPHER_CTX_free(state->cipher);
 }
 
 vod_status_t
@@ -27,13 +27,19 @@ mp4_aes_ctr_init(
 			"mp4_aes_ctr_init: vod_pool_cleanup_add failed");
 		return VOD_ALLOC_FAILED;
 	}
+	
+	state->cipher = EVP_CIPHER_CTX_new();
+	if (state->cipher == NULL)
+	{
+		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+			"mp4_aes_ctr_init: EVP_CIPHER_CTX_new failed");
+		return VOD_ALLOC_FAILED;
+	}
 
 	cln->handler = (vod_pool_cleanup_pt)mp4_aes_ctr_cleanup;
 	cln->data = state;
 
-	EVP_CIPHER_CTX_init(&state->cipher);
-
-	if (1 != EVP_EncryptInit_ex(&state->cipher, EVP_aes_128_ecb(), NULL, key, NULL))
+	if (1 != EVP_EncryptInit_ex(state->cipher, EVP_aes_128_ecb(), NULL, key, NULL))
 	{
 		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
 			"mp4_aes_ctr_init: EVP_EncryptInit_ex failed");
@@ -103,7 +109,7 @@ mp4_aes_ctr_process(mp4_aes_ctr_state_t* state, u_char* dest, const u_char* src,
 
 			// encrypt the clear counters
 			if (1 != EVP_EncryptUpdate(
-				&state->cipher,
+				state->cipher,
 				state->encrypted_counter,
 				&out_size,
 				state->counter,
