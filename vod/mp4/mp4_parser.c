@@ -1884,6 +1884,11 @@ mp4_parser_parse_audio_atoms(void* ctx, atom_info_t* atom_info)
 			ac3_low_freq = (atom_info->ptr[3]) & 0x1;
 			context->media_info.u.audio.channels =
 				mp4_parser_get_ac3_channel_count(ac3_mode, ac3_low_freq);
+
+			// set the extra data to the contents of this atom, since it's used 
+			// as the setup info in hls/sample-aes
+			context->media_info.extra_data.len = atom_info->size;
+			context->media_info.extra_data.data = (u_char*)atom_info->ptr;
 		}
 		return VOD_OK;
 
