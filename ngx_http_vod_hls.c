@@ -56,9 +56,10 @@ ngx_http_vod_hls_init_encryption_params(
 	ngx_http_vod_submodule_context_t* submodule_context,
 	u_char* iv)
 {
+	ngx_http_vod_loc_conf_t* conf = submodule_context->conf;
 	drm_info_t* drm_info;
 
-	encryption_params->type = submodule_context->conf->hls.encryption_method;
+	encryption_params->type = conf->hls.encryption_method;
 	if (encryption_params->type == HLS_ENC_NONE)
 	{
 		return;
@@ -66,7 +67,7 @@ ngx_http_vod_hls_init_encryption_params(
 
 	encryption_params->iv = iv;
 
-	if (submodule_context->conf->drm_enabled)
+	if (conf->drm_enabled)
 	{
 		drm_info = submodule_context->media_set.sequences[0].drm_info;
 		encryption_params->key = drm_info->key;
@@ -93,12 +94,13 @@ ngx_http_vod_hls_handle_master_playlist(
 	ngx_str_t* response,
 	ngx_str_t* content_type)
 {
+	ngx_http_vod_loc_conf_t* conf = submodule_context->conf;
 	ngx_str_t base_url = ngx_null_string;
 	vod_status_t rc;
 
-	if (submodule_context->conf->hls.absolute_master_urls)
+	if (conf->hls.absolute_master_urls)
 	{
-		rc = ngx_http_vod_get_base_url(submodule_context->r, submodule_context->conf->base_url, &empty_string, &base_url);
+		rc = ngx_http_vod_get_base_url(submodule_context->r, conf->base_url, &empty_string, &base_url);
 		if (rc != NGX_OK)
 		{
 			return rc;
@@ -107,8 +109,8 @@ ngx_http_vod_hls_handle_master_playlist(
 
 	rc = m3u8_builder_build_master_playlist(
 		&submodule_context->request_context,
-		&submodule_context->conf->hls.m3u8_config,
-		submodule_context->conf->hls.encryption_method,
+		&conf->hls.m3u8_config,
+    conf->hls.encryption_method,
 		&base_url,
 		&submodule_context->media_set,
 		response);
