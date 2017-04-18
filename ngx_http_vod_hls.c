@@ -110,7 +110,7 @@ ngx_http_vod_hls_handle_master_playlist(
 	rc = m3u8_builder_build_master_playlist(
 		&submodule_context->request_context,
 		&conf->hls.m3u8_config,
-    conf->hls.encryption_method,
+		conf->hls.encryption_method,
 		&base_url,
 		&submodule_context->media_set,
 		response);
