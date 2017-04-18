@@ -20,14 +20,15 @@
   
 * Video codecs: H264, H265 (DASH/HLS), VP9 (DASH)
 
-* Audio codecs: AAC, MP3
+* Audio codecs: AAC, MP3 (HLS/HDS/MSS), AC-3 (DASH/HLS), E-AC-3 (DASH/HLS)
 
 * Captions support - 
   
   Input:
   1. WebVTT
   2. SRT
-  3. CAP (Cheetah)
+  3. DFXP/TTML
+  4. CAP (Cheetah)
   
   Output:
   1. DASH - served as a single WebVTT
@@ -841,6 +842,15 @@ Configures the policy for calculating the segment count, for segment_duration = 
 * last_long - a file of 33 sec is partitioned as - 10, 10, 13
 * last_rounded - a file of 33 sec is partitioned as - 10, 10, 13, a file of 38 sec is partitioned as 10, 10, 10, 8
 
+#### vod_manifest_duration_policy
+* **syntax**: `vod_manifest_duration_policy min/max`
+* **default**: `max`
+* **context**: `http`, `server`, `location`
+
+Configures the policy for calculating the duration of a manifest containing multiple streams:
+* max - uses the maximum stream duration (default)
+* min - uses the minimum non-zero stream duration
+
 #### vod_manifest_segment_durations_mode
 * **syntax**: `vod_manifest_segment_durations_mode estimate/accurate`
 * **default**: `estimate`
@@ -1583,7 +1593,9 @@ The module adds the following nginx variables:
 	`EXPIRED` - the current server time is larger than `expirationTime`
 	`ALLOC_FAILED` - the module failed to allocate memory
 	`UNEXPECTED` - a scenario that is not supposed to happen, most likely a bug in the module
-  
+* `$vod_segment_duration` - for segment requests, contains the duration of the segment in milliseconds
+* `$vod_frames_bytes_read` - for segment requests, total number of bytes read while processing media frames
+
 Note: Configuration directives that can accept variables are explicitly marked as such.
 
 ### Sample configurations

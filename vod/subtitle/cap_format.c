@@ -100,7 +100,7 @@ cap_get_duration(vod_str_t* source)
 			continue;
 		}
 
-		if (len > end - p)
+		if (len > (uint32_t)(end - p))
 		{
 			break;
 		}
@@ -146,6 +146,7 @@ cap_parse(
 		request_context,
 		parse_params,
 		source,
+		NULL,
 		cap_get_duration(source),
 		metadata_part_count,
 		result);
@@ -166,7 +167,7 @@ cap_get_next_block(u_char* p, u_char* end)
 			continue;
 		}
 
-		if (len > end - p)
+		if (len > (uint32_t)(end - p))
 		{
 			break;
 		}

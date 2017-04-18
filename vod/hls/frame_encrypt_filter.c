@@ -13,6 +13,7 @@
 #define CLEAR_LEAD_SIZE (16)
 #define ENCRYPTED_BUFFER_SIZE (256)
 
+// typedefs
 typedef struct
 {
 	// fixed input data
@@ -47,6 +48,15 @@ frame_encrypt_start_frame(media_filter_context_t* context, output_frame_t* frame
 	}
 
 	return state->start_frame(context, frame);
+}
+
+void
+frame_encrypt_start_sub_frame(media_filter_context_t* context, uint32_t size)
+{
+	frame_encrypt_filter_state_t* state = get_context(context);
+
+	state->cur_offset = 0;
+	state->max_encrypt_offset = size - size % AES_BLOCK_SIZE;
 }
 
 static vod_status_t
@@ -187,6 +197,11 @@ frame_encrypt_filter_init(
 	hls_encryption_params_t* encryption_params)
 {
 	return VOD_UNEXPECTED;
+}
+
+void
+frame_encrypt_start_sub_frame(media_filter_context_t* context, uint32_t size)
+{
 }
 
 #endif //(VOD_HAVE_OPENSSL_EVP)

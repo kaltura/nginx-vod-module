@@ -1,6 +1,7 @@
 #include "../input/frames_source_memory.h"
 #include "../input/frames_source_cache.h"
 #include "frame_encrypt_filter.h"
+#include "eac3_encrypt_filter.h"
 #include "frame_joiner_filter.h"
 #include "id3_encoder_filter.h"
 #include "hls_muxer.h"
@@ -347,9 +348,22 @@ hls_muxer_init_base(
 		switch (track->media_info.media_type)
 		{
 		case MEDIA_TYPE_VIDEO:
-			if (track->media_info.duration_millis > state->video_duration)
+			switch (media_set->segmenter_conf->manifest_duration_policy)
 			{
-				state->video_duration = track->media_info.duration_millis;
+			case MDP_MAX:
+				if (track->media_info.duration_millis > state->video_duration)
+				{
+					state->video_duration = track->media_info.duration_millis;
+				}
+				break;
+
+			case MDP_MIN:
+				if (track->media_info.duration_millis > 0 &&
+					(state->video_duration == 0 || track->media_info.duration_millis < state->video_duration))
+				{
+					state->video_duration = track->media_info.duration_millis;
+				}
+				break;
 			}
 
 			rc = mp4_to_annexb_init(
@@ -401,11 +415,16 @@ hls_muxer_init_base(
 
 			if (encryption_params->type == HLS_ENC_SAMPLE_AES)
 			{
-				if (track->media_info.codec_id != VOD_CODEC_ID_AAC &&
-					track->media_info.codec_id != VOD_CODEC_ID_AC3)
+				switch (track->media_info.codec_id)
 				{
+				case VOD_CODEC_ID_AAC:
+				case VOD_CODEC_ID_AC3:
+				case VOD_CODEC_ID_EAC3:
+					break;
+
+				default:
 					vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-						"hls_muxer_init_base: sample aes encryption is supported only for aac/ac3");
+						"hls_muxer_init_base: sample aes encryption is supported only for aac/ac3/eac3");
 					return VOD_BAD_REQUEST;
 				}
 
@@ -416,6 +435,17 @@ hls_muxer_init_base(
 				if (rc != VOD_OK)
 				{
 					return rc;
+				}
+
+				if (track->media_info.codec_id == VOD_CODEC_ID_EAC3)
+				{
+					rc = eac3_encrypt_filter_init(
+						&cur_stream->filter,
+						&cur_stream->filter_context);
+					if (rc != VOD_OK)
+					{
+						return rc;
+					}
 				}
 			}
 			break;

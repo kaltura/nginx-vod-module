@@ -787,7 +787,8 @@ mss_packager_build_fragment_header(
 	p = mp4_builder_write_trun_atom(
 		p,
 		sequence,
-		moof_atom_size + ATOM_HEADER_SIZE);
+		moof_atom_size + ATOM_HEADER_SIZE, 
+		0);
 
 	// moof.traf.tfxd
 	mss_get_segment_timing_info(sequence, &timing_info);

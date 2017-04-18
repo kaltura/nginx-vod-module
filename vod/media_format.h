@@ -16,7 +16,7 @@
 #define MAX_FRAME_SIZE (10 * 1024 * 1024)
 #define MAX_TRACK_COUNT (1024)
 #define MAX_DURATION_SEC (1000000)
-#define MAX_CLIP_DURATION (86400000)		// 1 day
+#define MAX_CLIP_DURATION (90000000)		// 25h
 #define MAX_SEQUENCE_DURATION (864000000)		// 10 days
 
 // read flags
@@ -43,6 +43,7 @@
 #define PARSE_FLAG_TOTAL_SIZE_ESTIMATE	(0x00400000)
 #define PARSE_FLAG_RELATIVE_TIMESTAMPS	(0x00800000)		// relative to segment
 #define PARSE_FLAG_INITIAL_PTS_DELAY	(0x01000000)
+#define PARSE_FLAG_KEY_FRAME_BITRATE	(0x02000000)
 
 // flag groups
 #define PARSE_FLAG_FRAMES_ALL (PARSE_FLAG_FRAMES_DURATION | PARSE_FLAG_FRAMES_PTS_DELAY | PARSE_FLAG_FRAMES_SIZE | PARSE_FLAG_FRAMES_OFFSET | PARSE_FLAG_FRAMES_IS_KEY)
@@ -93,6 +94,7 @@ enum {
 	FORMAT_ID_MKV,
 	FORMAT_ID_WEBVTT,
 	FORMAT_ID_CAP,
+	FORMAT_ID_DFXP,
 };
 
 enum {			// mp4 only
@@ -136,6 +138,7 @@ typedef struct {
 	uint16_t height;
 	uint32_t nal_packet_size_length;
 	uint32_t initial_pts_delay;
+	uint32_t key_frame_bitrate;
 } video_media_info_t;
 
 typedef struct {

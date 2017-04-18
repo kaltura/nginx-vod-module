@@ -17,6 +17,7 @@
 #include "vod/mp4/mp4_format.h"
 #include "vod/mkv/mkv_format.h"
 #include "vod/subtitle/webvtt_format.h"
+#include "vod/subtitle/dfxp_format.h"
 #include "vod/subtitle/cap_format.h"
 #include "vod/input/read_cache.h"
 #include "vod/filters/audio_filter.h"
@@ -31,7 +32,7 @@
 
 // macros
 #define DEFINE_VAR(name) \
-	{ ngx_string("vod_" #name), ngx_http_vod_set_##name##_var }
+	{ ngx_string("vod_" #name), ngx_http_vod_set_##name##_var, 0 }
 
 // constants
 #define OPEN_FILE_FALLBACK_ENABLED (0x80000000)
@@ -191,12 +192,14 @@ struct ngx_http_vod_ctx_s {
 	ngx_chain_t out;
 	ngx_http_vod_write_segment_context_t write_segment_buffer_context;
 	media_notification_t* notification;
+	uint32_t frames_bytes_read;
 };
 
 // typedefs
 typedef struct {
 	ngx_str_t name;
 	ngx_http_get_variable_pt handler;
+	uintptr_t data;
 } ngx_http_vod_variable_t;
 
 // forward declarations
@@ -223,8 +226,8 @@ ngx_module_t  ngx_http_vod_module = {
     ngx_http_vod_process_init,        /* init process */
     NULL,                             /* init thread */
     NULL,                             /* exit thread */
-    NULL,                             /* exit process */
-    NULL,                             /* exit master */
+    dfxp_exit_process,                /* exit process */
+    dfxp_exit_process,                /* exit master */
     NGX_MODULE_V1_PADDING
 };
 
@@ -235,6 +238,9 @@ static media_format_t* media_formats[] = {
 	&mp4_format,
 	// XXXXX add &mkv_format,
 	&webvtt_format,
+#if (VOD_HAVE_LIBXML2)
+	&dfxp_format,
+#endif
 	&cap_format,
 	NULL
 };
@@ -263,6 +269,7 @@ static ngx_http_vod_reader_t reader_http = {
 	NULL,
 };
 
+static const u_char wvm_file_magic[] = { 0x00, 0x00, 0x01, 0xba, 0x44, 0x00, 0x04, 0x00, 0x04, 0x01 };
 
 ////// Variables
 
@@ -565,6 +572,39 @@ ngx_http_vod_set_notification_id_var(ngx_http_request_t *r, ngx_http_variable_va
 	return NGX_OK;
 }
 
+static ngx_int_t
+ngx_http_vod_set_uint32_var(ngx_http_request_t *r, ngx_http_variable_value_t *v, uintptr_t data)
+{
+	ngx_http_vod_ctx_t *ctx;
+	uint32_t int_value;
+	u_char* p;
+
+	ctx = ngx_http_get_module_ctx(r, ngx_http_vod_module);
+	if (ctx == NULL)
+	{
+		v->not_found = 1;
+		return NGX_OK;
+	}
+
+	p = ngx_pnalloc(r->pool, NGX_INT32_LEN);
+	if (p == NULL)
+	{
+		ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+			"ngx_http_vod_set_uint32_var: ngx_pnalloc failed");
+		return NGX_ERROR;
+	}
+
+	int_value = *(uint32_t*)(((u_char*)ctx) + data);
+
+	v->data = p;
+	v->len = ngx_sprintf(p, "%uD", int_value) - p;
+	v->valid = 1;
+	v->no_cacheable = 1;
+	v->not_found = 0;
+
+	return NGX_OK;
+}
+
 static ngx_http_vod_variable_t ngx_http_vod_variables[] = {
 	DEFINE_VAR(status),
 	DEFINE_VAR(filepath),
@@ -575,10 +615,12 @@ static ngx_http_vod_variable_t ngx_http_vod_variables[] = {
 	DEFINE_VAR(dynamic_mapping),
 	DEFINE_VAR(request_params),
 	DEFINE_VAR(notification_id),
+	{ ngx_string("vod_frames_bytes_read"), ngx_http_vod_set_uint32_var, offsetof(ngx_http_vod_ctx_t, frames_bytes_read) },
+	{ ngx_string("vod_segment_duration"), ngx_http_vod_set_uint32_var, offsetof(ngx_http_vod_ctx_t, submodule_context.media_set.segment_duration) },
 };
 
 ngx_int_t
-ngx_http_vod_add_variables(ngx_conf_t *cf)
+ngx_http_vod_preconfiguration(ngx_conf_t *cf)
 {
 	ngx_http_vod_variable_t* vars_cur = ngx_http_vod_variables;
 	ngx_http_vod_variable_t* vars_end = vars_cur + vod_array_entries(ngx_http_vod_variables);
@@ -594,6 +636,7 @@ ngx_http_vod_add_variables(ngx_conf_t *cf)
 		}
 
 		var->get_handler = vars_cur->handler;
+		var->data = vars_cur->data;
 	}
 
 	rc = ngx_http_get_variable_index(cf, &ngx_http_vod_variables[0].name);
@@ -603,6 +646,8 @@ ngx_http_vod_add_variables(ngx_conf_t *cf)
 	}
 
 	ngx_http_vod_set_status_index(rc);
+
+	dfxp_init_process();
 
 	return NGX_OK;
 }
@@ -1544,8 +1589,17 @@ ngx_http_vod_identify_format(ngx_http_vod_ctx_t* ctx)
 		cur_format = *cur_format_ptr;
 		if (cur_format == NULL)
 		{
-			ngx_log_error(NGX_LOG_ERR, ctx->submodule_context.request_context.log, 0,
-				"ngx_http_vod_identify_format: failed to identify the file format");
+			if (buffer.len > sizeof(wvm_file_magic) &&
+				ngx_memcmp(buffer.data, wvm_file_magic, sizeof(wvm_file_magic)) == 0)
+			{
+				ngx_log_error(NGX_LOG_ERR, ctx->submodule_context.request_context.log, 0,
+					"ngx_http_vod_identify_format: wvm format is not supported");
+			}
+			else
+			{
+				ngx_log_error(NGX_LOG_ERR, ctx->submodule_context.request_context.log, 0,
+					"ngx_http_vod_identify_format: failed to identify the file format");
+			}
 			return ngx_http_vod_status_to_ngx_error(ctx->submodule_context.r, VOD_BAD_DATA);
 		}
 
@@ -2983,7 +3037,8 @@ ngx_http_vod_run_state_machine(ngx_http_vod_ctx_t *ctx)
 		{
 			rc = filter_init_filtered_clips(
 				&ctx->submodule_context.request_context,
-				&ctx->submodule_context.media_set);
+				&ctx->submodule_context.media_set, 
+				(ctx->request->parse_type & PARSE_FLAG_FRAMES_DURATION) != 0);
 			if (rc != VOD_OK)
 			{
 				ngx_log_debug1(NGX_LOG_DEBUG_HTTP, ctx->submodule_context.request_context.log, 0,
@@ -3224,6 +3279,7 @@ ngx_http_vod_handle_read_completed(void* context, ngx_int_t rc, ngx_buf_t* buf, 
 		{
 			buf = &ctx->read_buffer;
 		}
+		ctx->frames_bytes_read += (buf->last - buf->pos);
 		read_cache_read_completed(&ctx->read_cache_state, buf);
 		break;
 

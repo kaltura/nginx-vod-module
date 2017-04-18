@@ -8,7 +8,8 @@
 // functions
 vod_status_t filter_init_filtered_clips(
 	request_context_t* request_context,
-	media_set_t* media_set);
+	media_set_t* media_set,
+	bool_t parsed_frames);
 
 vod_status_t filter_init_state(
 	request_context_t* request_context,

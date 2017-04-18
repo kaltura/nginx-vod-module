@@ -76,7 +76,7 @@
 	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1,
 	ngx_conf_set_str_slot,
 	NGX_HTTP_LOC_CONF_OFFSET,
-	BASE_OFFSET + offsetof(ngx_http_vod_hls_loc_conf_t, iframes_file_name_prefix),
+	BASE_OFFSET + offsetof(ngx_http_vod_hls_loc_conf_t, m3u8_config.iframes_file_name_prefix),
 	NULL },
 
 	{ ngx_string("vod_hls_segment_file_name_prefix"),

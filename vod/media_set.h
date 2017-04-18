@@ -41,7 +41,7 @@ typedef struct {
 typedef struct {
 	media_track_t* first_track;
 	media_track_t* last_track;
-	media_track_t* longest_track[MEDIA_TYPE_COUNT];
+	media_track_t* ref_track[MEDIA_TYPE_COUNT];		// either longest or shortest, depending on segmenter conf
 } media_clip_filtered_t;
 
 struct media_sequence_s {
