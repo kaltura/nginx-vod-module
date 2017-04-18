@@ -1593,7 +1593,9 @@ The module adds the following nginx variables:
 	`EXPIRED` - the current server time is larger than `expirationTime`
 	`ALLOC_FAILED` - the module failed to allocate memory
 	`UNEXPECTED` - a scenario that is not supposed to happen, most likely a bug in the module
-  
+* `$vod_segment_duration` - for segment requests, contains the duration of the segment in milliseconds
+* `$vod_frames_bytes_read` - for segment requests, total number of bytes read while processing media frames
+
 Note: Configuration directives that can accept variables are explicitly marked as such.
 
 ### Sample configurations
