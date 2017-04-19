@@ -1,9 +1,5 @@
 #include "manifest_utils.h"
 
-// macros
-#define no_flag_set(mask, f) (((mask) & (f)) == 0)
-#define all_flags_set(mask, f) (((mask) & (f)) == (f))
-
 // internal flags
 #define ADAPTATION_SETS_FLAG_MULTI_AUDIO		(0x1000)
 #define ADAPTATION_SETS_FLAG_IGNORE_SUBTITLES	(0x2000)
@@ -555,7 +551,7 @@ track_group_add_track(
 		return;
 
 	case MEDIA_TYPE_AUDIO:
-		if (all_flags_set(flags, ADAPTATION_SETS_FLAG_MULTI_AUDIO | ADAPTATION_SETS_FLAG_SINGLE_LANG_TRACK))
+		if (vod_all_flags_set(flags, ADAPTATION_SETS_FLAG_MULTI_AUDIO | ADAPTATION_SETS_FLAG_SINGLE_LANG_TRACK))
 		{
 			return;
 		}
@@ -954,7 +950,7 @@ manifest_utils_get_adaptation_sets(
 	}
 
 	if ((flags & ADAPTATION_SETS_FLAG_MULTI_AUDIO) != 0 ||
-		no_flag_set(flags, ADAPTATION_SETS_FLAG_MUXED | ADAPTATION_SETS_FLAG_FORCE_MUXED))
+		vod_no_flag_set(flags, ADAPTATION_SETS_FLAG_MUXED | ADAPTATION_SETS_FLAG_FORCE_MUXED))
 	{
 		// if multi audio or not muxed, output unmuxed
 		rc = track_groups_from_media_set(
@@ -968,7 +964,7 @@ manifest_utils_get_adaptation_sets(
 			return rc;
 		}
 
-		if (all_flags_set(flags, ADAPTATION_SETS_FLAG_MULTI_AUDIO | ADAPTATION_SETS_FLAG_DEFAULT_LANG_LAST))
+		if (vod_all_flags_set(flags, ADAPTATION_SETS_FLAG_MULTI_AUDIO | ADAPTATION_SETS_FLAG_DEFAULT_LANG_LAST))
 		{
 			vod_queue_t* first = vod_queue_head(&groups[MEDIA_TYPE_AUDIO].list);
 			vod_queue_remove(first);

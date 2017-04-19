@@ -3166,7 +3166,8 @@ mp4_parser_parse_frames(
 		result_track->source_clip = NULL;
 
 		// update the last offset of the source clip
-		if (context.frame_count > 0)
+		if (context.frame_count > 0 && 
+			vod_all_flags_set(parse_params->parse_type, PARSE_FLAG_FRAMES_SIZE | PARSE_FLAG_FRAMES_OFFSET))
 		{
 			last_frame = result_track->frames.last_frame - 1;
 			last_offset = last_frame->offset + last_frame->size;

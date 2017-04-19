@@ -19,6 +19,9 @@
 #define vod_is_bit_set(mask, index) (((mask)[(index) >> 3] >> ((index) & 7)) & 1)
 #define vod_set_bit(mask, index) (mask)[(index) >> 3] |= 1 << ((index) & 7)
 
+#define vod_no_flag_set(mask, f) (((mask) & (f)) == 0)
+#define vod_all_flags_set(mask, f) (((mask) & (f)) == (f))
+
 // Note: comparing the pointers since in the case of labels if both were derived by the language, 
 //		they will have the same pointer and we can skip the memcmp
 #define vod_str_equals(l1, l2) \
