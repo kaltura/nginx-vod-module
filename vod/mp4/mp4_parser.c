@@ -25,11 +25,27 @@
 	(target).size = (source).size + (source).header_size;	\
 	}
 
+#define write_swap16(p, s)		\
+	{							\
+	*(p)++ = (s)[1];			\
+	*(p)++ = (s)[0];			\
+	}
+
+#define write_swap32(p, s)		\
+	{							\
+	*(p)++ = (s)[3];			\
+	*(p)++ = (s)[2];			\
+	*(p)++ = (s)[1];			\
+	*(p)++ = (s)[0];			\
+	}
+
 // constants
 #define MAX_FRAMERATE_TEST_SAMPLES (20)
 #define MAX_TOTAL_SIZE_TEST_SAMPLES (100000)
 #define MAX_PTS_DELAY_TEST_SAMPLES (100)
 #define MAX_KEY_FRAME_BITRATE_TEST_SAMPLES (1000)
+
+#define OPUS_EXTRA_DATA_MAGIC "OpusHead"
 
 // typedefs
 typedef struct {
@@ -115,6 +131,25 @@ typedef struct {
 	int offset;
 	uint32_t flag;
 } trak_atom_parser_t;
+
+typedef struct {
+	u_char magic[8];
+	u_char version[1];
+	u_char channels[1];
+	u_char initial_padding[2];
+	u_char sample_rate[4];
+	u_char gain[2];
+	u_char mapping_family[1];
+} opus_extra_data_t;
+
+typedef struct {
+	u_char version[1];
+	u_char channels[1];
+	u_char initial_padding[2];
+	u_char sample_rate[4];
+	u_char gain[2];
+	u_char mapping_family[1];
+} dops_atom_t;
 
 static const relevant_atom_t relevant_atoms_stbl[] = {
 	{ ATOM_NAME_STCO, offsetof(trak_atom_infos_t, stco), NULL },
@@ -1975,6 +2010,51 @@ mp4_parser_get_ac3_channel_count(uint8_t mode, uint8_t low_freq)
 	return ac3_mode_channels[mode] + low_freq;
 }
 
+static vod_status_t
+mp4_parser_parse_dops_atom(metadata_parse_context_t* context, atom_info_t* atom_info)
+{
+	const dops_atom_t* atom = (const dops_atom_t*)atom_info->ptr;
+	u_char* p;
+
+	if (atom_info->size < sizeof(*atom))
+	{
+		vod_log_error(VOD_LOG_ERR, context->request_context->log, 0,
+			"mp4_parser_parse_dops_atom: atom size %uL too small", atom_info->size);
+		return VOD_BAD_DATA;
+	}
+
+	p = vod_alloc(context->request_context->pool, sizeof(opus_extra_data_t));
+	if (p == NULL)
+	{
+		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, context->request_context->log, 0,
+			"mp4_parser_parse_dops_atom: vod_alloc failed");
+		return VOD_ALLOC_FAILED;
+	}
+	context->media_info.extra_data.data = p;
+
+	p = vod_copy(p, OPUS_EXTRA_DATA_MAGIC, sizeof(OPUS_EXTRA_DATA_MAGIC) - 1);
+	*p++ = 1;				// version
+	*p++ = atom->channels[0];
+	write_swap16(p, atom->initial_padding);
+	write_swap32(p, atom->sample_rate);
+	write_swap16(p, atom->gain);
+	*p++ = 0;
+
+	context->media_info.extra_data.len = p - context->media_info.extra_data.data;
+
+	if (context->media_info.extra_data.len != sizeof(opus_extra_data_t))
+	{
+		vod_log_error(VOD_LOG_ERR, context->request_context->log, 0,
+			"mp4_parser_parse_dops_atom: invalid result length %uz",
+			context->media_info.extra_data.len);
+		return VOD_UNEXPECTED;
+	}
+
+	context->media_info.codec_delay = (uint64_t)parse_be16(atom->initial_padding) * 1000000000 / 48000;
+
+	return VOD_OK;
+}
+
 static vod_status_t 
 mp4_parser_parse_audio_atoms(void* ctx, atom_info_t* atom_info)
 {
@@ -1989,6 +2069,9 @@ mp4_parser_parse_audio_atoms(void* ctx, atom_info_t* atom_info)
 	{
 	case ATOM_NAME_SINF:
 		return mp4_parser_parse_sinf_atom(atom_info, context);
+
+	case ATOM_NAME_DOPS:
+		return mp4_parser_parse_dops_atom(context, atom_info);
 
 	case ATOM_NAME_ESDS:
 		break;			// handled outside the switch
@@ -2532,6 +2615,11 @@ mp4_parser_process_moov_atom_callback(void* ctx, atom_info_t* atom_info)
 		case FORMAT_EAC3:
 			metadata_parse_context.media_info.codec_id = VOD_CODEC_ID_EAC3;
 			extra_data_required = FALSE;
+			break;
+
+		case FORMAT_OPUS:
+			metadata_parse_context.media_info.codec_id = VOD_CODEC_ID_OPUS;
+			extra_data_required = TRUE;
 			break;
 		}
 		break;

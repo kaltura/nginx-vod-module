@@ -20,7 +20,7 @@
   
 * Video codecs: H264, H265 (DASH/HLS), VP9 (DASH)
 
-* Audio codecs: AAC, MP3 (HLS/HDS/MSS), AC-3 (DASH/HLS), E-AC-3 (DASH/HLS)
+* Audio codecs: AAC, MP3 (HLS/HDS/MSS), AC-3 (DASH/HLS), E-AC-3 (DASH/HLS), OPUS (DASH)
 
 * Captions support - 
   

@@ -95,6 +95,7 @@ typedef struct {
 	bool_t frame_started;
 	uint64_t relative_dts;
 	uint32_t timescale;
+	bool_t key_frame;
 	u_char* frame_headers;
 } mkv_fragment_writer_state_t;
 
@@ -520,6 +521,7 @@ mkv_builder_init_track(mkv_fragment_writer_state_t* state, media_track_t* track)
 	state->cur_frame_part = track->frames;
 	state->cur_frame = track->frames.first_frame;
 	state->timescale = track->media_info.timescale;
+	state->key_frame = (track->media_info.media_type == MEDIA_TYPE_AUDIO);
 
 	if (!state->reuse_buffers)
 	{
@@ -744,7 +746,11 @@ mkv_builder_write_frame_header(mkv_fragment_writer_state_t* state)
 			return rc;
 		}
 
-		p = mkv_builder_write_clear_frame_header(p, data_size, timecode, cur_frame->key_frame);
+		p = mkv_builder_write_clear_frame_header(
+			p, 
+			data_size, 
+			timecode, 
+			cur_frame->key_frame || state->key_frame);
 
 		*p++ = 0x01;	// encrypted
 		p = vod_copy(p, state->iv, MP4_AES_CTR_IV_SIZE);
@@ -758,7 +764,11 @@ mkv_builder_write_frame_header(mkv_fragment_writer_state_t* state)
 		// write to frame_headers
 		p = state->frame_headers;
 
-		p = mkv_builder_write_clear_frame_header(p, data_size, timecode, cur_frame->key_frame);
+		p = mkv_builder_write_clear_frame_header(
+			p, 
+			data_size, 
+			timecode, 
+			cur_frame->key_frame || state->key_frame);
 
 		if (state->encryption_type == MKV_CLEAR_LEAD)
 		{
