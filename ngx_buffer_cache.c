@@ -448,7 +448,7 @@ ngx_buffer_cache_store_gather(
 	}
 
 	// allocate a buffer to hold the data
-	target_buffer = ngx_buffer_cache_get_free_buffer(sh, buffer_size);
+	target_buffer = ngx_buffer_cache_get_free_buffer(sh, buffer_size + 1);
 	if (target_buffer == NULL)
 	{
 		goto error;
@@ -487,6 +487,7 @@ ngx_buffer_cache_store_gather(
 	{
 		target_buffer = ngx_copy(target_buffer, cur_buffer->data, cur_buffer->len);
 	}
+	*target_buffer = '\0';
 
 	// Note: no need to obtain the lock since state is ngx_atomic_t
 	entry->state = CES_READY;
