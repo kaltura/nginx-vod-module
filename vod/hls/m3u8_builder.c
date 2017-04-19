@@ -1014,7 +1014,8 @@ m3u8_builder_build_master_playlist(
 				&conf->iframes_file_name_prefix,
 				media_set,
 				tracks,
-				base_url);
+				base_url,
+				args);
 
 			*p++ = '\"';
 			*p++ = '\n';
