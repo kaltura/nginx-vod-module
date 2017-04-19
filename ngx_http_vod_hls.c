@@ -112,6 +112,7 @@ ngx_http_vod_hls_handle_master_playlist(
 		&conf->hls.m3u8_config,
 		conf->hls.encryption_method,
 		&base_url,
+		&submodule_context->r->args,
 		&submodule_context->media_set,
 		response);
 	if (rc != VOD_OK)
@@ -192,6 +193,7 @@ ngx_http_vod_hls_handle_index_playlist(
 		&submodule_context->request_context,
 		&conf->hls.m3u8_config,
 		&base_url,
+		&submodule_context->r->args,
 		&segments_base_url,
 		&submodule_context->request_params,
 		&encryption_params,

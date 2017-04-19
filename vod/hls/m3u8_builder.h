@@ -30,6 +30,7 @@ vod_status_t m3u8_builder_build_master_playlist(
 	m3u8_config_t* conf,
 	vod_uint_t encryption_method,
 	vod_str_t* base_url,
+	vod_str_t* args,
 	media_set_t* media_set,
 	vod_str_t* result);
 
@@ -37,6 +38,7 @@ vod_status_t m3u8_builder_build_index_playlist(
 	request_context_t* request_context,
 	m3u8_config_t* conf,
 	vod_str_t* base_url,
+	vod_str_t* args,
 	vod_str_t* segments_base_url,
 	request_params_t* request_params,
 	hls_encryption_params_t* encryption_params,
