@@ -47,6 +47,7 @@
 #define ATOM_NAME_CMOV (0x766f6d63)		// compressed movie
 #define ATOM_NAME_DCOM (0x6d6f6364)		// data compression
 #define ATOM_NAME_CMVD (0x64766d63)		// compressed movie data
+#define ATOM_NAME_DOPS (0x73704f64)
 
 #define ATOM_NAME_NULL (0x00000000)
 
@@ -73,6 +74,7 @@
 #define FORMAT_MP4A    (0x6134706d)
 #define FORMAT_AC3     (0x332d6361)
 #define FORMAT_EAC3    (0x332d6365)
+#define FORMAT_OPUS    (0x7375704f)
 
 // MP4 constants from ffmpeg
 #define MP4ODescrTag				0x01
