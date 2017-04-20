@@ -659,15 +659,14 @@ ngx_buffer_cache_fetch_perf(
 	ngx_perf_counters_t* perf_counters,
 	ngx_buffer_cache_t* cache,
 	u_char* key,
-	u_char** buffer,
-	size_t* buffer_size)
+	ngx_str_t* buffer)
 {
 	ngx_perf_counter_context(pcctx);
 	ngx_flag_t result;
 	
 	ngx_perf_counter_start(pcctx);
 
-	result = ngx_buffer_cache_fetch(cache, key, buffer, buffer_size);
+	result = ngx_buffer_cache_fetch(cache, key, buffer);
 
 	ngx_perf_counter_end(perf_counters, pcctx, PC_FETCH_CACHE);
 
@@ -675,21 +674,16 @@ ngx_buffer_cache_fetch_perf(
 }
 
 static int
-ngx_buffer_cache_fetch_copy_perf(
-	ngx_http_request_t* r,
+ngx_buffer_cache_fetch_multi_perf(
 	ngx_perf_counters_t* perf_counters,
 	ngx_buffer_cache_t** caches,
 	uint32_t cache_count,
 	u_char* key,
-	u_char** buffer,
-	size_t* buffer_size)
+	ngx_str_t* buffer)
 {
 	ngx_perf_counter_context(pcctx);
 	ngx_buffer_cache_t* cache;
 	ngx_flag_t result;
-	u_char* original_buffer;
-	u_char* buffer_copy;
-	size_t original_size;
 	uint32_t cache_index;
 
 	ngx_perf_counter_start(pcctx);
@@ -702,7 +696,7 @@ ngx_buffer_cache_fetch_copy_perf(
 			continue;
 		}
 
-		result = ngx_buffer_cache_fetch(cache, key, &original_buffer, &original_size);
+		result = ngx_buffer_cache_fetch(cache, key, buffer);
 		if (!result)
 		{
 			continue;
@@ -710,26 +704,53 @@ ngx_buffer_cache_fetch_copy_perf(
 
 		ngx_perf_counter_end(perf_counters, pcctx, PC_FETCH_CACHE);
 
-		buffer_copy = ngx_palloc(r->pool, original_size + 1);
-		if (buffer_copy == NULL)
-		{
-			ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
-				"ngx_buffer_cache_fetch_copy_perf: ngx_palloc failed");
-			return -1;
-		}
-
-		ngx_memcpy(buffer_copy, original_buffer, original_size);
-		buffer_copy[original_size] = '\0';
-
-		*buffer = buffer_copy;
-		*buffer_size = original_size;
-
 		return cache_index;
 	}
 
 	ngx_perf_counter_end(perf_counters, pcctx, PC_FETCH_CACHE);
 
 	return -1;
+}
+
+static int
+ngx_buffer_cache_fetch_copy_perf(
+	ngx_http_request_t* r,
+	ngx_perf_counters_t* perf_counters,
+	ngx_buffer_cache_t** caches,
+	uint32_t cache_count,
+	u_char* key,
+	ngx_str_t* buffer)
+{
+	ngx_str_t original_buffer;
+	u_char* buffer_copy;
+	int result;
+
+	result = ngx_buffer_cache_fetch_multi_perf(
+		perf_counters,
+		caches,
+		cache_count,
+		key,
+		&original_buffer);
+	if (result < 0)
+	{
+		return result;
+	}
+
+	buffer_copy = ngx_palloc(r->pool, original_buffer.len + 1);
+	if (buffer_copy == NULL)
+	{
+		ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+			"ngx_buffer_cache_fetch_copy_perf: ngx_palloc failed");
+		return -1;
+	}
+
+	ngx_memcpy(buffer_copy, original_buffer.data, original_buffer.len);
+	buffer_copy[original_buffer.len] = '\0';
+
+	buffer->data = buffer_copy;
+	buffer->len = original_buffer.len;
+
+	return result;
 }
 
 static ngx_flag_t
@@ -833,31 +854,31 @@ ngx_buffer_cache_fetch_multipart_perf(
 {
 	vod_str_t* cur_part;
 	vod_str_t* parts;
+	ngx_str_t cache_buffer;
 	uint32_t part_count;
 	size_t* part_sizes;
 	size_t cur_size;
 	u_char* end;
 	u_char* p;
-	size_t size;
 
 	if (!ngx_buffer_cache_fetch_perf(
 		ctx->perf_counters,
 		cache,
 		key,
-		&p,
-		&size))
+		&cache_buffer))
 	{
 		return 0;
 	}
 
-	if (size < sizeof(*header))
+	if (cache_buffer.len < sizeof(*header))
 	{
 		ngx_log_error(NGX_LOG_ERR, ctx->submodule_context.request_context.log, 0,
-			"ngx_buffer_cache_fetch_multipart_perf: size %uz smaller than header size", size);
+			"ngx_buffer_cache_fetch_multipart_perf: size %uz smaller than header size", cache_buffer.len);
 		return 0;
 	}
 
-	end = p + size;
+	p = cache_buffer.data;
+	end = p + cache_buffer.len;
 
 	*header = *(multipart_cache_header_t*)p;
 	p += sizeof(*header);
@@ -866,7 +887,8 @@ ngx_buffer_cache_fetch_multipart_perf(
 	if ((size_t)(end - p) < part_count * sizeof(part_sizes[0]))
 	{
 		ngx_log_error(NGX_LOG_ERR, ctx->submodule_context.request_context.log, 0,
-			"ngx_buffer_cache_fetch_multipart_perf: size %uz too small to hold %uD parts", size, part_count);
+			"ngx_buffer_cache_fetch_multipart_perf: size %uz too small to hold %uD parts", 
+			cache_buffer.len, part_count);
 		return 0;
 	}
 	part_sizes = (void*)p;
@@ -1191,14 +1213,11 @@ ngx_http_vod_state_machine_get_drm_info(ngx_http_vod_ctx_t *ctx)
 			ngx_md5_final(ctx->child_request_key, &md5);
 
 			// try to read the drm info from cache
-			if (ngx_buffer_cache_fetch_copy_perf(
-				r, 
+			if (ngx_buffer_cache_fetch_perf(
 				ctx->perf_counters, 
-				&conf->drm_info_cache, 
-				1, 
+				conf->drm_info_cache, 
 				ctx->child_request_key,
-				&drm_info.data, 
-				&drm_info.len) >= 0)
+				&drm_info))
 			{
 				ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
 					"ngx_http_vod_state_machine_get_drm_info: drm info cache hit, size is %uz", drm_info.len);
@@ -3907,17 +3926,13 @@ ngx_http_vod_map_run_step(ngx_http_vod_ctx_t *ctx)
 		ngx_md5_final(ctx->mapping.cache_key, &md5);
 
 		// try getting the mapping from cache
-		if (ngx_buffer_cache_fetch_copy_perf(
-			ctx->submodule_context.r,
+		if (ngx_buffer_cache_fetch_multi_perf(
 			ctx->perf_counters,
 			ctx->mapping.caches,
 			ctx->mapping.cache_count,
 			ctx->mapping.cache_key,
-			&mapping.data,
-			&mapping.len) >= 0)
+			&mapping) >= 0)
 		{
-			mapping.len--;		// remove the null
-
 			ngx_log_debug1(NGX_LOG_DEBUG_HTTP, ctx->submodule_context.request_context.log, 0,
 				"ngx_http_vod_map_run_step: mapping cache hit %V", &mapping);
 
@@ -4043,7 +4058,7 @@ ngx_http_vod_map_run_step(ngx_http_vod_ctx_t *ctx)
 				cache,
 				ctx->mapping.cache_key,
 				response->pos,
-				response->last + 1 - response->pos))		// store with the null
+				response->last - response->pos))
 			{
 				ngx_log_debug0(NGX_LOG_DEBUG_HTTP, ctx->submodule_context.request_context.log, 0,
 					"ngx_http_vod_map_run_step: stored in mapping cache");
@@ -4859,9 +4874,8 @@ ngx_http_vod_handler(ngx_http_request_t *r)
 	ngx_http_core_loc_conf_t *clcf;
 	ngx_http_vod_loc_conf_t *conf;
 	u_char request_key[BUFFER_CACHE_KEY_SIZE];
-	u_char* cache_buffer;
-	size_t cache_buffer_size;
 	ngx_md5_t md5;
+	ngx_str_t cache_buffer;
 	ngx_str_t content_type;
 	ngx_str_t response;
 	ngx_str_t base_url;
@@ -4989,27 +5003,26 @@ ngx_http_vod_handler(ngx_http_request_t *r)
 			conf->response_cache,
 			CACHE_TYPE_COUNT,
 			request_key,
-			&cache_buffer,
-			&cache_buffer_size);
+			&cache_buffer);
 		if (cache_type >= 0 &&
-			cache_buffer_size > sizeof(cache_header))
+			cache_buffer.len > sizeof(cache_header))
 		{
 			ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
-				"ngx_http_vod_handler: response cache hit, size is %uz", cache_buffer_size);
+				"ngx_http_vod_handler: response cache hit, size is %uz", cache_buffer.len);
 
 			// extract the content type
-			ngx_memcpy(&cache_header, cache_buffer, sizeof(cache_header));
-			cache_buffer += sizeof(cache_header);
-			cache_buffer_size -= sizeof(cache_header);
+			ngx_memcpy(&cache_header, cache_buffer.data, sizeof(cache_header));
+			cache_buffer.data += sizeof(cache_header);
+			cache_buffer.len -= sizeof(cache_header);
 
-			content_type.data = cache_buffer;
+			content_type.data = cache_buffer.data;
 			content_type.len = cache_header.content_type_len;
 
-			if (cache_buffer_size >= content_type.len)
+			if (cache_buffer.len >= content_type.len)
 			{
 				// extract the response buffer
-				response.data = cache_buffer + content_type.len;
-				response.len = cache_buffer_size - content_type.len;
+				response.data = cache_buffer.data + content_type.len;
+				response.len = cache_buffer.len - content_type.len;
 
 				// update request flags
 				r->root_tested = !r->error_page;

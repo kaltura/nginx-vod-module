@@ -323,8 +323,7 @@ ngx_flag_t
 ngx_buffer_cache_fetch(
 	ngx_buffer_cache_t* cache,
 	u_char* key,
-	u_char** buffer,
-	size_t* buffer_size)
+	ngx_str_t* buffer)
 {
 	ngx_buffer_cache_entry_t* entry;
 	ngx_buffer_cache_sh_t *sh = cache->sh;
@@ -348,8 +347,8 @@ ngx_buffer_cache_fetch(
 			sh->stats.fetch_bytes += entry->buffer_size;
 
 			// copy buffer pointer and size
-			*buffer = entry->start_offset;
-			*buffer_size = entry->buffer_size;
+			buffer->data = entry->start_offset;
+			buffer->len = entry->buffer_size;
 
 			// Note: setting the access time of the entry and cache to prevent it 
 			//		from being freed while the caller uses the buffer
