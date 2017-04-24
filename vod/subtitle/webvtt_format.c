@@ -4,130 +4,157 @@
 #include "subtitle_format.h"
 #include <ctype.h>
 
+// macros
+#define webvtt_is_utf16le_bom(p) (p[0] == 0xff && p[1] == 0xfe)
+
 // constants
 #define WEBVTT_HEADER ("WEBVTT")
 #define WEBVTT_DURATION_ESTIMATE_CUES (10)
 #define WEBVTT_CUE_MARKER ("-->")
 
-static int64_t 
-webvtt_read_timestamp(u_char* cur_pos, u_char** end_pos)
+// utf8 functions
+#define CHAR_TYPE u_char
+#define METHOD(x) x
+#include "webvtt_format_template.h"
+#undef CHAR_TYPE
+#undef METHOD
+
+#if (VOD_HAVE_ICONV)
+
+#include <iconv.h>
+
+// utf16 functions
+#define CHAR_TYPE u_short
+#define METHOD(x) x ## _utf16
+#include "webvtt_format_template.h"
+#undef CHAR_TYPE
+#undef METHOD
+
+#define ICONV_INVALID_DESC ((iconv_t)-1)
+#define ICONV_INITIAL_ALLOC_SIZE (100)
+#define ICONV_SIZE_INCREMENT (20)
+
+static iconv_t iconv_utf16le_to_utf8 = ICONV_INVALID_DESC;
+
+void
+webvtt_init_process(vod_log_t* log)
 {
-	int64_t hours;
-	int64_t minutes;
-	int64_t seconds;
-	int64_t millis;
-
-	// hour digits
-	if (!isdigit(*cur_pos))
+	iconv_utf16le_to_utf8 = iconv_open("UTF8", "UTF16LE");
+	if (iconv_utf16le_to_utf8 == ICONV_INVALID_DESC)
 	{
-		return -1;
+		vod_log_error(VOD_LOG_WARN, log, vod_errno,
+			"webvtt_init_process: iconv_open failed, utf16 srt is not supported");
 	}
-
-	hours = 0;
-	for (; isdigit(*cur_pos); cur_pos++)
-	{
-		hours = hours * 10 + (*cur_pos - '0');
-	}
-
-	// colon
-	if (*cur_pos != ':')
-	{
-		return -1;
-	}
-	cur_pos++;
-
-	// 2 minute digits
-	if (!isdigit(cur_pos[0]) || !isdigit(cur_pos[1]))
-	{
-		return -1;
-	}
-	minutes = (cur_pos[0] - '0') * 10 + (cur_pos[1] - '0');
-	cur_pos += 2;
-
-	// colon
-	if (*cur_pos == ':')
-	{
-		cur_pos++;
-
-		// 2 second digits
-		if (!isdigit(cur_pos[0]) || !isdigit(cur_pos[1]))
-		{
-			return -1;
-		}
-		seconds = (cur_pos[0] - '0') * 10 + (cur_pos[1] - '0');
-		cur_pos += 2;
-	}
-	else
-	{
-		// no hours
-		seconds = minutes;
-		minutes = hours;
-		hours = 0;
-	}
-
-	// dot
-	if (*cur_pos != '.' && *cur_pos != ',')
-	{
-		return -1;
-	}
-	cur_pos++;
-
-	// 3 digit millis
-	if (!isdigit(cur_pos[0]) || !isdigit(cur_pos[1]) || !isdigit(cur_pos[2]))
-	{
-		return -1;
-	}
-	millis = (cur_pos[0] - '0') * 100 + (cur_pos[1] - '0') * 10 + (cur_pos[2] - '0');
-
-	if (end_pos != NULL)
-	{
-		*end_pos = cur_pos + 3;
-	}
-
-	return millis + 1000 * (seconds + 60 * (minutes + 60 * hours));
 }
 
-static bool_t
-webvtt_identify_srt(u_char* p)
+void
+webvtt_exit_process()
 {
-	// n digits
-	if (!isdigit(*p))
+	if (iconv_utf16le_to_utf8 == ICONV_INVALID_DESC)
 	{
-		return FALSE;
+		return;
 	}
 
-	for (; isdigit(*p); p++);
-
-	// new line
-	switch (*p)
-	{
-	case '\r':
-		p++;
-		if (*p == '\n')
-		{
-			p++;
-		}
-		break;
-
-	case '\n':
-		p++;
-		break;
-
-	default:
-		return FALSE;
-	}
-
-	// timestamp
-	if (webvtt_read_timestamp(p, &p) < 0)
-	{
-		return FALSE;
-	}
-
-	for (; *p == ' ' || *p == '\t'; p++);
-
-	// cue marker
-	return vod_strncmp(p, WEBVTT_CUE_MARKER, sizeof(WEBVTT_CUE_MARKER) - 1) == 0;
+	iconv_close(iconv_utf16le_to_utf8);
+	iconv_utf16le_to_utf8 = ICONV_INVALID_DESC;
 }
+
+static vod_status_t
+webvtt_utf16le_to_utf8(
+	request_context_t* request_context,
+	vod_str_t* input,
+	vod_str_t* output)
+{
+	vod_array_t output_arr;
+	vod_err_t err;
+	u_char* end;
+	size_t input_left;
+	size_t output_left;
+	char* input_pos;
+	char* output_pos;
+
+	// initialize the output array
+	if (vod_array_init(
+		&output_arr, 
+		request_context->pool, 
+		input->len / 2 + ICONV_INITIAL_ALLOC_SIZE, 
+		1) != VOD_OK)
+	{
+		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
+			"webvtt_utf16le_to_utf8: vod_array_init failed");
+		return VOD_ALLOC_FAILED;
+	}
+
+	input_pos = (char*)input->data;
+	input_left = input->len;
+
+	for (;;)
+	{
+		// process as much as possible
+		output_pos = (char*)output_arr.elts + output_arr.nelts;
+		output_left = output_arr.nalloc - output_arr.nelts;
+
+		if (iconv(
+			iconv_utf16le_to_utf8,
+			&input_pos, &input_left,
+			&output_pos, &output_left) != (size_t)-1)
+		{
+			break;
+		}
+
+		err = vod_errno;
+		if (err != E2BIG)
+		{
+			vod_log_error(VOD_LOG_WARN, request_context->log, err,
+				"webvtt_utf16le_to_utf8: iconv failed");
+			return VOD_UNEXPECTED;
+		}
+
+		// grow the array
+		output_arr.nelts = output_arr.nalloc - output_left;
+
+		if (vod_array_push_n(&output_arr, ICONV_SIZE_INCREMENT) == NULL)
+		{
+			vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
+				"webvtt_utf16le_to_utf8: vod_array_push_n failed");
+			return VOD_ALLOC_FAILED;
+		}
+
+		output_arr.nelts -= ICONV_SIZE_INCREMENT;
+	}
+
+	// null terminate
+	output_arr.nelts = output_arr.nalloc - output_left;
+
+	end = vod_array_push(&output_arr);
+	if (end == NULL)
+	{
+		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
+			"webvtt_utf16le_to_utf8: vod_array_push failed");
+		return VOD_ALLOC_FAILED;
+	}
+
+	output_arr.nelts--;
+	*end = '\0';
+
+	// return the result
+	output->data = output_arr.elts;
+	output->len = output_arr.nelts;
+	return VOD_OK;
+}
+
+#else
+// empty stubs
+void
+webvtt_init_process(vod_log_t* log)
+{
+}
+
+void
+webvtt_exit_process()
+{
+}
+#endif
 
 static vod_status_t
 webvtt_reader_init(
@@ -139,16 +166,46 @@ webvtt_reader_init(
 {
 	u_char* p = buffer->data;
 
-	if (vod_strncmp(p, UTF8_BOM, sizeof(UTF8_BOM) - 1) == 0)
+#if (VOD_HAVE_ICONV)
+	if (webvtt_is_utf16le_bom(p) && buffer->len > 4)
 	{
-		p += sizeof(UTF8_BOM) - 1;
-	}
+		u_short* end;
+		u_short last_char;
+		bool_t result;
 
-	if (buffer->len > 0 &&
-		vod_strncmp(p, WEBVTT_HEADER, sizeof(WEBVTT_HEADER) - 1) != 0 && 
-		!webvtt_identify_srt(p))
+		if (iconv_utf16le_to_utf8 == ICONV_INVALID_DESC ||
+			(buffer->len & 1) != 0)
+		{
+			return VOD_NOT_FOUND;
+		}
+
+		// make the buffer utf-16 null terminated
+		// Note: it's ok to change the buffer since this function is never called on cache buffers
+		end = (u_short*)(p + buffer->len) - 1;
+		last_char = *end;
+		*end = 0;
+		result = webvtt_identify_srt_utf16((u_short*)p + 1);
+		*end = last_char;
+
+		if (!result)
+		{
+			return VOD_NOT_FOUND;
+		}
+	}
+	else
+#endif
 	{
-		return VOD_NOT_FOUND;
+		if (vod_strncmp(p, UTF8_BOM, sizeof(UTF8_BOM) - 1) == 0)
+		{
+			p += sizeof(UTF8_BOM) - 1;
+		}
+
+		if (buffer->len > 0 &&
+			vod_strncmp(p, WEBVTT_HEADER, sizeof(WEBVTT_HEADER) - 1) != 0 &&
+			!webvtt_identify_srt(p))
+		{
+			return VOD_NOT_FOUND;
+		}
 	}
 
 	return subtitle_reader_init(
@@ -333,6 +390,25 @@ webvtt_parse(
 	size_t metadata_part_count,
 	media_base_metadata_t** result)
 {
+#if (VOD_HAVE_ICONV)
+	u_char* p = source->data;
+	vod_status_t rc;
+
+	if (webvtt_is_utf16le_bom(p))
+	{
+		// skip the bom
+		source->data += 2;
+		source->len -= 2;
+
+		// Note: the decoded buffer will be saved to cache, since source is changed to point to it
+		rc = webvtt_utf16le_to_utf8(request_context, source, source);
+		if (rc != VOD_OK)
+		{
+			return rc;
+		}
+	}
+#endif
+
 	return subtitle_parse(
 		request_context,
 		parse_params,

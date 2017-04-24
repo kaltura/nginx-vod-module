@@ -7,6 +7,17 @@ VOD_VERSION=`git --git-dir=$ngx_addon_dir/.git describe 2>/dev/null`
 VOD_VERSION=${VOD_VERSION:-$VOD_DEFAULT_VERSION}
 echo "#define NGINX_VOD_VERSION \""$VOD_VERSION"\"" > $NGX_OBJS/ngx_vod_version.h
 
+# iconv
+#
+ngx_feature="iconv"
+ngx_feature_name="NGX_HAVE_ICONV"
+ngx_feature_run=no
+ngx_feature_incs="#include <iconv.h>"
+ngx_feature_path=
+ngx_feature_libs=
+ngx_feature_test="iconv_open(NULL, NULL);"
+. auto/feature
+
 # openssl evp
 #
 LIB_CRYPTO=${LIB_CRYPTO:--lcrypto}
@@ -199,6 +210,7 @@ VOD_DEPS="$ngx_addon_dir/ngx_async_open_file_cache.h          \
           $ngx_addon_dir/vod/subtitle/ttml_builder.h          \
           $ngx_addon_dir/vod/subtitle/webvtt_builder.h        \
           $ngx_addon_dir/vod/subtitle/webvtt_format.h         \
+          $ngx_addon_dir/vod/subtitle/webvtt_format_template.h \
           $ngx_addon_dir/vod/parse_utils.h                    \
           $ngx_addon_dir/vod/read_stream.h                    \
           $ngx_addon_dir/vod/segmenter.h                      \
