@@ -156,7 +156,7 @@ int run_test_cycle(time_t seed, size_t cache_size, int iterations, int size_fact
 {
 	ngx_buffer_cache_stats_t stats;
 	u_char key[BUFFER_CACHE_KEY_SIZE];
-	u_char* fetch_buffer;
+	ngx_str_t fetch_buffer;
 	u_char* store_buffer;
 	size_t* sizes_buffer;
 	size_t size;
@@ -230,15 +230,15 @@ int run_test_cycle(time_t seed, size_t cache_size, int iterations, int size_fact
 		for (j = min_existing_index; j <= i; j++)
 		{
 			((uint32_t*)&key)[0] = j;
-			if (ngx_buffer_cache_fetch(cache, key, &fetch_buffer, &size))
+			if (ngx_buffer_cache_fetch(cache, key, &fetch_buffer))
 			{
-				if (sizes_buffer[j] != size)
+				if (sizes_buffer[j] != fetch_buffer.len)
 				{
 					printf("Error: invalid buffer size\n");
 					return 0;
 				}
 				
-				if (!validate_random_buffer(j, fetch_buffer, size))
+				if (!validate_random_buffer(j, fetch_buffer.data, fetch_buffer.len))
 				{
 					printf("Error: invalid buffer content\n");
 					return 0;
