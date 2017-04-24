@@ -96,10 +96,11 @@ void vod_log_error(vod_uint_t level, vod_log_t *log, int err,
 #define VOD_MAX_SIZE_T_VALUE NGX_MAX_SIZE_T_VALUE
 #define VOD_MAX_OFF_T_VALUE NGX_MAX_OFF_T_VALUE
 
-#define VOD_HAVE_LIB_AV_CODEC NGX_HAVE_LIB_AV_CODEC 
+#define VOD_HAVE_LIB_AV_CODEC NGX_HAVE_LIB_AV_CODEC
 #define VOD_HAVE_LIB_AV_FILTER NGX_HAVE_LIB_AV_FILTER
 #define VOD_HAVE_OPENSSL_EVP NGX_HAVE_OPENSSL_EVP
 #define VOD_HAVE_LIBXML2 NGX_HAVE_LIBXML2
+#define VOD_HAVE_ICONV NGX_HAVE_ICONV
 
 #if (VOD_HAVE_LIB_AV_CODEC)
 #include <libavcodec/avcodec.h>
@@ -251,6 +252,8 @@ void vod_log_error(vod_uint_t level, vod_log_t *log, int err,
 #define vod_log_debug4(level, log, err, fmt, arg1, arg2, arg3, arg4) \
 		ngx_log_debug4(level, log, err, fmt, arg1, arg2, arg3, arg4)
 
+#define vod_errno ngx_errno
+
 #if (NGX_DEBUG)
 #define VOD_DEBUG (1)
 #else
@@ -261,6 +264,7 @@ typedef intptr_t bool_t;
 typedef ngx_int_t vod_status_t;
 typedef ngx_int_t vod_int_t;
 typedef ngx_uint_t vod_uint_t;
+typedef ngx_err_t vod_err_t;
 
 #endif	// VOD_STAND_ALONE
 

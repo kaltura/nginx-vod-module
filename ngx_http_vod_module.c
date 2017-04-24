@@ -204,8 +204,9 @@ typedef struct {
 
 // forward declarations
 static ngx_int_t ngx_http_vod_run_state_machine(ngx_http_vod_ctx_t *ctx);
-static ngx_int_t ngx_http_vod_process_init(ngx_cycle_t *cycle);
 static ngx_int_t ngx_http_vod_send_notification(ngx_http_vod_ctx_t *ctx);
+static ngx_int_t ngx_http_vod_init_process(ngx_cycle_t *cycle);
+static void ngx_http_vod_exit_process();
 
 static ngx_int_t ngx_http_vod_init_file_reader_with_fallback(ngx_http_request_t *r, ngx_str_t* path, uint32_t flags, void** context);
 static ngx_int_t ngx_http_vod_init_file_reader(ngx_http_request_t *r, ngx_str_t* path, uint32_t flags, void** context);
@@ -223,11 +224,11 @@ ngx_module_t  ngx_http_vod_module = {
     NGX_HTTP_MODULE,                  /* module type */
     NULL,                             /* init master */
     NULL,                             /* init module */
-    ngx_http_vod_process_init,        /* init process */
+    ngx_http_vod_init_process,        /* init process */
     NULL,                             /* init thread */
     NULL,                             /* exit thread */
-    dfxp_exit_process,                /* exit process */
-    dfxp_exit_process,                /* exit master */
+    ngx_http_vod_exit_process,        /* exit process */
+    ngx_http_vod_exit_process,        /* exit master */
     NGX_MODULE_V1_PADDING
 };
 
@@ -648,6 +649,8 @@ ngx_http_vod_preconfiguration(ngx_conf_t *cf)
 	ngx_http_vod_set_status_index(rc);
 
 	dfxp_init_process();
+
+	webvtt_init_process(cf->log);
 
 	return NGX_OK;
 }
@@ -2882,7 +2885,7 @@ ngx_http_vod_finalize_segment_response(ngx_http_vod_ctx_t *ctx)
 ////// Audio filtering
 
 static ngx_int_t
-ngx_http_vod_process_init(ngx_cycle_t *cycle)
+ngx_http_vod_init_process(ngx_cycle_t *cycle)
 {
 	vod_status_t rc;
 
@@ -2899,6 +2902,14 @@ ngx_http_vod_process_init(ngx_cycle_t *cycle)
 	}
 
 	return NGX_OK;
+}
+
+static void 
+ngx_http_vod_exit_process()
+{
+	webvtt_exit_process();
+
+	dfxp_exit_process();
 }
 
 ////// Clipping
