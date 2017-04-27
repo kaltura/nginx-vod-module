@@ -942,6 +942,11 @@ manifest_utils_get_adaptation_sets(
 	if (manifest_utils_is_multi_audio(media_set))
 	{
 		flags |= ADAPTATION_SETS_FLAG_MULTI_AUDIO;
+		output->multi_audio = TRUE;
+	}
+	else
+	{
+		output->multi_audio = FALSE;
 	}
 
 	if (media_set->track_count[MEDIA_TYPE_VIDEO] <= 0)

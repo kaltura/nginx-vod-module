@@ -37,6 +37,7 @@ typedef struct {
 	adaptation_set_t* first_by_type[ADAPTATION_TYPE_COUNT];
 	uint32_t count[ADAPTATION_TYPE_COUNT];
 	uint32_t total_count;
+	bool_t multi_audio;
 } adaptation_sets_t;
 
 // functions
