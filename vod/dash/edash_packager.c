@@ -8,6 +8,10 @@
 #include "../udrm.h"
 #include "../common.h"
 
+// macros
+#define edash_pssh_v1(info) \
+	(vod_memcmp((info)->system_id, edash_clear_key_system_id, sizeof(edash_clear_key_system_id)) == 0)
+
 // manifest constants
 #define VOD_EDASH_MANIFEST_CONTENT_PROTECTION_CENC									\
 	"        <ContentProtection schemeIdUri=\"urn:mpeg:dash:mp4protection:2011\" value=\"cenc\"/>\n"
@@ -100,17 +104,37 @@ static u_char edash_playready_system_id[] = {
 	0xab, 0x92, 0xe6, 0x5b, 0xe0, 0x88, 0x5f, 0x95
 };
 
+static u_char edash_clear_key_system_id[] = {
+	0x10, 0x77, 0xef, 0xec, 0xc0, 0xb2, 0x4d, 0x02, 
+	0xac, 0xe3, 0x3c, 0x1e, 0x52, 0xe2, 0xfb, 0x4b
+};
+
 static u_char*
 edash_packager_write_pssh(u_char* p, drm_system_info_t* cur_info)
 {
+	bool_t pssh_v1 = edash_pssh_v1(cur_info);
 	size_t pssh_atom_size;
 
 	pssh_atom_size = ATOM_HEADER_SIZE + sizeof(pssh_atom_t) + cur_info->data.len;
+	if (pssh_v1)
+	{
+		pssh_atom_size -= sizeof(uint32_t);
+	}
 
 	write_atom_header(p, pssh_atom_size, 'p', 's', 's', 'h');
-	write_be32(p, 0);						// version + flags
+	if (pssh_v1)
+	{
+		write_be32(p, 0x01000000);						// version + flags
+	}
+	else
+	{
+		write_be32(p, 0);						// version + flags
+	}
 	p = vod_copy(p, cur_info->system_id, DRM_SYSTEM_ID_SIZE);	// system id
-	write_be32(p, cur_info->data.len);		// data size
+	if (!pssh_v1)
+	{
+		write_be32(p, cur_info->data.len);		// data size
+	}
 	p = vod_copy(p, cur_info->data.data, cur_info->data.len);
 	return p;
 }
@@ -439,6 +463,10 @@ edash_packager_build_init_mp4(
 	for (cur_info = drm_info->pssh_array.first; cur_info < drm_info->pssh_array.last; cur_info++)
 	{
 		pssh_atom_writer.atom_size += ATOM_HEADER_SIZE + sizeof(pssh_atom_t) + cur_info->data.len;
+		if (edash_pssh_v1(cur_info))
+		{
+			pssh_atom_writer.atom_size -= sizeof(uint32_t);
+		}
 	}
 	pssh_atom_writer.write = edash_packager_write_psshs;
 	pssh_atom_writer.context = &drm_info->pssh_array;
