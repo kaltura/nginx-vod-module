@@ -696,7 +696,7 @@ hds_packager_build_manifest(
 			else
 			{
 				bitrate = tracks[MEDIA_TYPE_AUDIO]->media_info.bitrate;
-				if (adaptation_sets.total_count > 1 && adaptation_set > adaptation_sets.first)
+				if (adaptation_sets.multi_audio && adaptation_set > adaptation_sets.first)
 				{
 					p = vod_sprintf(p, HDS_MEDIA_HEADER_PREFIX_AUDIO_LANG,
 						bitrate / 1000, 

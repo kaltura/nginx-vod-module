@@ -498,7 +498,7 @@ mss_packager_build_manifest(
 		switch (media_type)
 		{
 		case MEDIA_TYPE_AUDIO:
-			if (adaptation_sets.count[ADAPTATION_TYPE_AUDIO] > 1)
+			if (adaptation_sets.multi_audio)
 			{
 				cur_track = *adaptation_set->first;
 				p = vod_sprintf(p,
