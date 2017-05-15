@@ -301,9 +301,36 @@ manifest_utils_append_tracks_spec(
 	media_track_t** last_track_ptr = tracks + track_count;
 	media_track_t** cur_track_ptr;
 	media_track_t* cur_track;
-	uint32_t last_sequence_index = INVALID_SEQUENCE_INDEX;
+	uint32_t last_sequence_index;
+	bool_t use_sequence_ids = TRUE;
 	u_char media_type_letter[] = { 'v', 'a' };		// must match MEDIA_TYPE_xxx in order
 
+	if (write_sequence_index)
+	{
+		// Note: if there are several different sequences must use sequences indexes instead of ids
+		last_sequence_index = INVALID_SEQUENCE_INDEX;
+		for (cur_track_ptr = tracks; cur_track_ptr < last_track_ptr; cur_track_ptr++)
+		{
+			cur_track = *cur_track_ptr;
+			if (cur_track == NULL)
+			{
+				continue;
+			}
+
+			cur_sequence = cur_track->file_info.source->sequence;
+			if (last_sequence_index == INVALID_SEQUENCE_INDEX)
+			{
+				last_sequence_index = cur_sequence->index;
+			}
+			else if (cur_sequence->index != last_sequence_index)
+			{
+				use_sequence_ids = FALSE;
+				break;
+			}
+		}
+	}
+
+	last_sequence_index = INVALID_SEQUENCE_INDEX;
 	for (cur_track_ptr = tracks; cur_track_ptr < last_track_ptr; cur_track_ptr++)
 	{
 		cur_track = *cur_track_ptr;
@@ -319,7 +346,7 @@ manifest_utils_append_tracks_spec(
 			if (cur_sequence->index != last_sequence_index)
 			{
 				last_sequence_index = cur_sequence->index;
-				if (cur_sequence->id.len != 0 && cur_sequence->id.len < VOD_INT32_LEN)
+				if (cur_sequence->id.len != 0 && cur_sequence->id.len < VOD_INT32_LEN && use_sequence_ids)
 				{
 					p = vod_sprintf(p, "-s%V", &cur_sequence->id);
 				}
