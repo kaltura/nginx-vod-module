@@ -221,6 +221,8 @@ ngx_http_vod_parse_uri_file_name(
 	uint32_t flags,
 	request_params_t* result)
 {
+	ngx_str_t* cur_sequence_id;
+	ngx_str_t* last_sequence_id;
 	uint32_t default_tracks_mask;
 	uint32_t* tracks_mask;
 	uint32_t* end_mask;
@@ -305,18 +307,28 @@ ngx_http_vod_parse_uri_file_name(
 	// sequence id
 	if (*start_pos == 's')
 	{
-		start_pos++;		// skip the s
-
-		result->sequence_id.data = start_pos;
-
-		while (start_pos < end_pos && *start_pos != '-')
+		cur_sequence_id = result->sequence_ids;
+		last_sequence_id = cur_sequence_id + MAX_SEQUENCE_IDS;
+		for (; cur_sequence_id < last_sequence_id; cur_sequence_id++)
 		{
-			start_pos++;
+			start_pos++;		// skip the s
+
+			cur_sequence_id->data = start_pos;
+
+			while (start_pos < end_pos && *start_pos != '-')
+			{
+				start_pos++;
+			}
+
+			cur_sequence_id->len = start_pos - cur_sequence_id->data;
+
+			skip_dash(start_pos, end_pos);
+
+			if (*start_pos != 's')
+			{
+				break;
+			}
 		}
-
-		result->sequence_id.len = start_pos - result->sequence_id.data;
-
-		skip_dash(start_pos, end_pos);
 	}
 
 	// sequence (file) index
