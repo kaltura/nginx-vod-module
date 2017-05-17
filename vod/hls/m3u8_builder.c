@@ -707,6 +707,7 @@ m3u8_builder_ext_x_media_tags_write(
 	adaptation_set_t* last_adaptation_set;
 	adaptation_set_t* adaptation_set;
 	media_track_t* tracks[MEDIA_TYPE_COUNT];
+	uint32_t group_index;
 	char* group_id;
 	char* type;
 
@@ -738,10 +739,19 @@ m3u8_builder_ext_x_media_tags_write(
 		tracks[media_type] = adaptation_set->first[0];
 
 		// output EXT-X-MEDIA
+		if (media_type == MEDIA_TYPE_AUDIO)
+		{
+			group_index = tracks[media_type]->media_info.codec_id - VOD_CODEC_ID_AUDIO;
+		}
+		else
+		{
+			group_index = 0;
+		}
+
 		p = vod_sprintf(p, M3U8_EXT_MEDIA_PART1,
 			type,
 			group_id,
-			media_type != MEDIA_TYPE_SUBTITLE ? tracks[media_type]->media_info.codec_id : 0,
+			group_index,
 			lang_get_iso639_1_name(tracks[media_type]->media_info.language),
 			&tracks[media_type]->media_info.label);
 		if (adaptation_set == first_adaptation_set)
@@ -861,7 +871,7 @@ m3u8_builder_write_variants(
 		*p++ = '\"';
 		if (adaptation_sets->count[ADAPTATION_TYPE_AUDIO] > 1)
 		{
-			p = vod_sprintf(p, M3U8_STREAM_TAG_AUDIO, audio_track->media_info.codec_id);
+			p = vod_sprintf(p, M3U8_STREAM_TAG_AUDIO, audio_track->media_info.codec_id - VOD_CODEC_ID_AUDIO);
 		}
 		if (adaptation_sets->count[ADAPTATION_TYPE_SUBTITLE] > 0)
 		{
