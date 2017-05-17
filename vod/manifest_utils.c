@@ -461,6 +461,7 @@ track_group_key_match_track(
 {
 	track_group_key_t track_key;
 
+	track_key.label.data = NULL;		// silence gcc warning
 	if (!track_group_key_init(
 		track,
 		flags,
