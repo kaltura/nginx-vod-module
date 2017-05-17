@@ -981,7 +981,7 @@ manifest_utils_get_adaptation_sets(
 	if (adaptation_sets == NULL)
 	{
 		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
-			"manifest_utils_get_unmuxed_adaptation_sets: vod_alloc failed");
+			"manifest_utils_get_adaptation_sets: vod_alloc failed");
 		return VOD_ALLOC_FAILED;
 	}
 

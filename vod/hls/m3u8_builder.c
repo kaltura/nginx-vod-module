@@ -794,7 +794,7 @@ m3u8_builder_write_variants(
 	m3u8_config_t* conf,
 	vod_str_t* base_url,
 	media_set_t* media_set,
-	media_track_t* audio_track)
+	media_track_t* group_audio_track)
 {
 	adaptation_set_t* adaptation_set = adaptation_sets->first;
 	media_track_t** cur_track_ptr;
@@ -827,9 +827,9 @@ m3u8_builder_write_variants(
 		{
 			video = &tracks[MEDIA_TYPE_VIDEO]->media_info;
 			bitrate = video->bitrate;
-			if (audio_track != NULL)
+			if (group_audio_track != NULL)
 			{
-				audio = &audio_track->media_info;
+				audio = &group_audio_track->media_info;
 				bitrate += audio->bitrate;
 			}
 			else if (tracks[MEDIA_TYPE_AUDIO] != NULL)
@@ -857,9 +857,9 @@ m3u8_builder_write_variants(
 		}
 		else
 		{
-			if (audio_track != NULL)
+			if (group_audio_track != NULL)
 			{
-				audio = &audio_track->media_info;
+				audio = &group_audio_track->media_info;
 			}
 			else
 			{
@@ -871,7 +871,7 @@ m3u8_builder_write_variants(
 		*p++ = '\"';
 		if (adaptation_sets->count[ADAPTATION_TYPE_AUDIO] > 1)
 		{
-			p = vod_sprintf(p, M3U8_STREAM_TAG_AUDIO, audio_track->media_info.codec_id - VOD_CODEC_ID_AUDIO);
+			p = vod_sprintf(p, M3U8_STREAM_TAG_AUDIO, group_audio_track->media_info.codec_id - VOD_CODEC_ID_AUDIO);
 		}
 		if (adaptation_sets->count[ADAPTATION_TYPE_SUBTITLE] > 0)
 		{
