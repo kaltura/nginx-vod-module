@@ -581,25 +581,27 @@ m3u8_builder_get_audio_codec_count(
 	adaptation_set_t* last_adaptation_set;
 	adaptation_set_t* cur_adaptation_set;
 	media_track_t* cur_track;
-	uint32_t result = 0;
-	uint32_t index;
+	uint32_t seen_codecs = 0;
+	uint32_t codec_flag;
+	uint32_t count = 0;
 
 	cur_adaptation_set = adaptation_sets->first_by_type[MEDIA_TYPE_AUDIO];
 	last_adaptation_set = cur_adaptation_set + adaptation_sets->count[MEDIA_TYPE_AUDIO];
 	for (; cur_adaptation_set < last_adaptation_set; cur_adaptation_set++)
 	{
 		cur_track = cur_adaptation_set->first[0];
-		index = cur_track->media_info.codec_id - VOD_CODEC_ID_AUDIO;
-		if (audio_codec_tracks[index] != NULL)
+		codec_flag = 1 << (cur_track->media_info.codec_id - VOD_CODEC_ID_AUDIO);
+		if ((seen_codecs & codec_flag) != 0)
 		{
 			continue;
 		}
 
-		audio_codec_tracks[index] = cur_track;
-		result++;
+		seen_codecs |= codec_flag;
+		*audio_codec_tracks++ = cur_track;
+		count++;
 	}
 
-	return result;
+	return count;
 }
 
 static u_char*
@@ -1120,16 +1122,11 @@ m3u8_builder_build_master_playlist(
 	// output variants
 	if (variant_set_count > 1)
 	{
-		last_audio_codec_track = audio_codec_tracks + vod_array_entries(audio_codec_tracks);
+		last_audio_codec_track = audio_codec_tracks + variant_set_count;
 		for (cur_track_ptr = audio_codec_tracks;
 			cur_track_ptr < last_audio_codec_track;
 			cur_track_ptr++)
 		{
-			if (*cur_track_ptr == NULL)
-			{
-				continue;
-			}
-
 			p = m3u8_builder_write_variants(
 				p,
 				&adaptation_sets,
