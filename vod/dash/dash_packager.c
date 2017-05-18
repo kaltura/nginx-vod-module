@@ -410,11 +410,11 @@ static dash_codec_info_t dash_codecs[VOD_CODEC_ID_COUNT] = {
 	{ vod_string("video/webm"),	vod_string("webm"), vod_string("webm")	},		// vp9
 
 	{ vod_string("audio/mp4"),	vod_string("mp4"),	vod_string("m4s")	},		// aac
+	{ vod_string("audio/mp4"),	vod_string("mp4"),	vod_string("m4s")	},		// ac3
+	{ vod_string("audio/mp4"),	vod_string("mp4"),	vod_string("m4s")	},		// eac3
 	{ vod_string("audio/mp4"),	vod_string("mp4"),	vod_string("m4s")	},		// mp3
 	{ vod_string("audio/webm"),	vod_string("webm"), vod_string("webm")	},		// vorbis
 	{ vod_string("audio/webm"),	vod_string("webm"), vod_string("webm")	},		// opus
-	{ vod_string("audio/mp4"),	vod_string("mp4"),	vod_string("m4s")	},		// ac3
-	{ vod_string("audio/mp4"),	vod_string("mp4"),	vod_string("m4s")	},		// eac3
 };
 
 // mpd writing code

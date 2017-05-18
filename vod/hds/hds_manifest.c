@@ -389,7 +389,8 @@ hds_packager_build_manifest(
 	rc = manifest_utils_get_adaptation_sets(
 		request_context, 
 		media_set, 
-		ADAPTATION_SETS_FLAG_FORCE_MUXED | 
+		ADAPTATION_SETS_FLAG_MUXED | 
+		ADAPTATION_SETS_FLAG_EXCLUDE_MUXED_AUDIO |
 		ADAPTATION_SETS_FLAG_SINGLE_LANG_TRACK | 
 		ADAPTATION_SETS_FLAG_AVOID_AUDIO_ONLY,
 		&adaptation_sets);
