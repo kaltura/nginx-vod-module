@@ -57,7 +57,12 @@ METHOD(webvtt_read_timestamp)(CHAR_TYPE* cur_pos, CHAR_TYPE** end_pos)
 	// dot
 	if (*cur_pos != '.' && *cur_pos != ',')
 	{
-		return -1;
+		if (end_pos != NULL)
+		{
+			*end_pos = cur_pos;
+		}
+
+		return 1000 * (seconds + 60 * (minutes + 60 * hours));
 	}
 	cur_pos++;
 
