@@ -74,7 +74,21 @@ without the overhead of short segments for the whole duration of the video
 
 * Tested on Linux only
 
-### Installation
+### Compilation
+
+#### Dependencies
+
+In general, if you have the dependencies that are required to build nginx, you should be able to build nginx-vod-module.
+However, some optional features of this module depend on additional packages. The module detects these packages 
+during `configure` - if a package is missing, the respective feature will be disabled.
+
+The optional features are:
+1. Thumbnail capture - depends on ffmpeg (3.0 or newer)
+2. Audio filtering (for changing playback rate / gain) - depends on ffmpeg (3.0 or newer) and also on libfdk_aac.
+	Due to licensing issues, libfdk_aac is not built into kaltura ffmpeg packages
+3. Encryption / decryption (DRM / HLS AES) - depends on openssl
+4. DFXP captions - depends on libxml2
+5. UTF-16 encoded SRT files - depends on iconv
 
 #### Build
 
@@ -111,11 +125,7 @@ To disable compiler optimizations (for debugging with gdb) add `--with-cc-opt="-
 
     ./configure --add-module=/path/to/nginx-vod-module --with-cc-opt="-O0"
 
-If you wish to make use of the following features:
-- Thumbnail capture
-- Playback rate change - 0.5x up to 2x
-
-Please also make sure you have the ffmpeg (>= 3.1) libs and headers in your the build ENV.
+### Installation
 
 #### RHEL/CentOS RPM
 If you are using RHEL or CentOS 6, you can install by setting up the repo:
