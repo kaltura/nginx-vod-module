@@ -526,6 +526,7 @@ ngx_http_vod_set_request_params_var(ngx_http_request_t *r, ngx_http_variable_val
 		request_params->segment_index,
 		request_params->sequences_mask,
 		request_params->sequence_tracks_mask,
+		request_params->sequence_tracks_mask_end,
 		request_params->tracks_mask,
 		&value);
 	if (rc != VOD_OK)
@@ -1314,6 +1315,43 @@ ngx_http_vod_update_source_tracks(
 	}
 }
 
+static void
+ngx_http_vod_get_sequence_tracks_mask(
+	request_params_t* request_params,
+	media_sequence_t* sequence,
+	uint32_t** result)
+{
+	sequence_tracks_mask_t* sequence_tracks_mask;
+	ngx_str_t* cur_sequence_id;
+	int32_t index;
+
+	for (sequence_tracks_mask = request_params->sequence_tracks_mask; 
+		sequence_tracks_mask < request_params->sequence_tracks_mask_end;
+		sequence_tracks_mask++)
+	{
+		index = sequence_tracks_mask->index;
+		if (index >= 0)
+		{
+			if (sequence->index != (uint32_t)index)
+			{
+				continue;
+			}
+		}
+		else
+		{
+			cur_sequence_id = request_params->sequence_ids + (-index - 1);
+			if (sequence->id.len != cur_sequence_id->len ||
+				vod_memcmp(sequence->id.data, cur_sequence_id->data, cur_sequence_id->len) != 0)
+			{
+				continue;
+			}
+		}
+
+		*result = sequence_tracks_mask->tracks_mask;
+		break;
+	}
+}
+
 static ngx_int_t 
 ngx_http_vod_parse_metadata(
 	ngx_http_vod_ctx_t *ctx, 
@@ -1404,14 +1442,13 @@ ngx_http_vod_parse_metadata(
 	}
 	parse_params.codecs_mask = request->codecs_mask;
 
+	request_tracks_mask = ctx->submodule_context.request_params.tracks_mask;
 	if (ctx->submodule_context.request_params.sequence_tracks_mask != NULL)
 	{
-		request_tracks_mask = ctx->submodule_context.request_params.sequence_tracks_mask + 
-			cur_source->sequence->index * MEDIA_TYPE_COUNT;
-	}
-	else
-	{
-		request_tracks_mask = ctx->submodule_context.request_params.tracks_mask;
+		ngx_http_vod_get_sequence_tracks_mask(
+			&ctx->submodule_context.request_params,
+			cur_source->sequence,
+			&request_tracks_mask);
 	}
 
 	for (media_type = 0; media_type < MEDIA_TYPE_COUNT; media_type++)
@@ -4626,6 +4663,8 @@ ngx_http_vod_map_media_set_apply(ngx_http_vod_ctx_t *ctx, ngx_str_t* mapping, in
 			mapped_source->tracks_mask[MEDIA_TYPE_AUDIO] == 0xffffffff &&
 			mapped_source->tracks_mask[MEDIA_TYPE_VIDEO] == 0xffffffff)
 		{
+			// TODO: drop the sequence when request params filter by id and the id does not match
+
 			// mapping result is a simple file path, set the uri of the current source
 			ctx->submodule_context.media_set.id = mapped_media_set.id;
 			sequence = cur_source->sequence;

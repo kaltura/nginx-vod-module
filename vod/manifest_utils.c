@@ -48,18 +48,42 @@ manifest_utils_write_bitmask(u_char* p, uint32_t bitmask, u_char letter)
 	return p;
 }
 
+static uint32_t*
+manifest_utils_get_tracks_mask(
+	uint32_t index,
+	sequence_tracks_mask_t* sequence_tracks_mask,
+	sequence_tracks_mask_t* sequence_tracks_mask_end,
+	uint32_t* default_tracks_mask)
+{
+	sequence_tracks_mask_t* sequence_tracks_mask_cur;
+
+	for (sequence_tracks_mask_cur = sequence_tracks_mask;
+		sequence_tracks_mask_cur < sequence_tracks_mask_end;
+		sequence_tracks_mask_cur++)
+	{
+		if (sequence_tracks_mask_cur->index == (int32_t)index)
+		{
+			return sequence_tracks_mask_cur->tracks_mask;
+		}
+	}
+
+	return default_tracks_mask;
+}
+
 static vod_status_t
 manifest_utils_build_request_params_string_per_sequence_tracks(
 	request_context_t* request_context, 
 	uint32_t segment_index,
 	uint32_t sequences_mask,
-	uint32_t* sequence_tracks_mask,
+	sequence_tracks_mask_t* sequence_tracks_mask,
+	sequence_tracks_mask_t* sequence_tracks_mask_end,
+	uint32_t* default_tracks_mask,
 	vod_str_t* result)
 {
-	u_char* p;
-	size_t result_size;
 	uint32_t* tracks_mask;
 	uint32_t i;
+	size_t result_size;
+	u_char* p;
 
 	result_size = 0;
 
@@ -69,14 +93,19 @@ manifest_utils_build_request_params_string_per_sequence_tracks(
 		result_size += 1 + vod_get_int_print_len(segment_index + 1);
 	}
 
-	for (i = 0, tracks_mask = sequence_tracks_mask;
-		i < MAX_SEQUENCES;
-		i++, tracks_mask += MEDIA_TYPE_COUNT)
+	for (i = 0; i < MAX_SEQUENCES; i++)
 	{
 		if ((sequences_mask & (1 << i)) == 0)
 		{
 			continue;
 		}
+
+		// get tracks mask
+		tracks_mask = manifest_utils_get_tracks_mask(
+			i,
+			sequence_tracks_mask,
+			sequence_tracks_mask_end,
+			default_tracks_mask);
 
 		// sequence
 		result_size += sizeof("-f32") - 1;
@@ -117,14 +146,19 @@ manifest_utils_build_request_params_string_per_sequence_tracks(
 		p = vod_sprintf(p, "-%uD", segment_index + 1);
 	}
 
-	for (i = 0, tracks_mask = sequence_tracks_mask; 
-		i < MAX_SEQUENCES;
-		i++, tracks_mask += MEDIA_TYPE_COUNT)
+	for (i = 0; i < MAX_SEQUENCES; i++)
 	{
 		if ((sequences_mask & (1 << i)) == 0)
 		{
 			continue;
 		}
+
+		// get tracks mask
+		tracks_mask = manifest_utils_get_tracks_mask(
+			i,
+			sequence_tracks_mask,
+			sequence_tracks_mask_end,
+			default_tracks_mask);
 
 		// sequence
 		p = vod_sprintf(p, "-f%uD", i + 1);
@@ -179,7 +213,8 @@ manifest_utils_build_request_params_string(
 	uint32_t* has_tracks,
 	uint32_t segment_index,
 	uint32_t sequences_mask,
-	uint32_t* sequence_tracks_mask,
+	sequence_tracks_mask_t* sequence_tracks_mask,
+	sequence_tracks_mask_t* sequence_tracks_mask_end,
 	uint32_t* tracks_mask,
 	vod_str_t* result)
 {
@@ -193,6 +228,8 @@ manifest_utils_build_request_params_string(
 			segment_index,
 			sequences_mask,
 			sequence_tracks_mask,
+			sequence_tracks_mask_end,
+			tracks_mask,
 			result);
 	}
 
@@ -302,33 +339,7 @@ manifest_utils_append_tracks_spec(
 	media_track_t** cur_track_ptr;
 	media_track_t* cur_track;
 	uint32_t last_sequence_index;
-	bool_t use_sequence_ids = TRUE;
 	u_char media_type_letter[] = { 'v', 'a' };		// must match MEDIA_TYPE_xxx in order
-
-	if (write_sequence_index)
-	{
-		// Note: if there are several different sequences must use sequences indexes instead of ids
-		last_sequence_index = INVALID_SEQUENCE_INDEX;
-		for (cur_track_ptr = tracks; cur_track_ptr < last_track_ptr; cur_track_ptr++)
-		{
-			cur_track = *cur_track_ptr;
-			if (cur_track == NULL)
-			{
-				continue;
-			}
-
-			cur_sequence = cur_track->file_info.source->sequence;
-			if (last_sequence_index == INVALID_SEQUENCE_INDEX)
-			{
-				last_sequence_index = cur_sequence->index;
-			}
-			else if (cur_sequence->index != last_sequence_index)
-			{
-				use_sequence_ids = FALSE;
-				break;
-			}
-		}
-	}
 
 	last_sequence_index = INVALID_SEQUENCE_INDEX;
 	for (cur_track_ptr = tracks; cur_track_ptr < last_track_ptr; cur_track_ptr++)
@@ -346,7 +357,7 @@ manifest_utils_append_tracks_spec(
 			if (cur_sequence->index != last_sequence_index)
 			{
 				last_sequence_index = cur_sequence->index;
-				if (cur_sequence->id.len != 0 && cur_sequence->id.len < VOD_INT32_LEN && use_sequence_ids)
+				if (cur_sequence->id.len != 0 && cur_sequence->id.len < VOD_INT32_LEN)
 				{
 					p = vod_sprintf(p, "-s%V", &cur_sequence->id);
 				}
