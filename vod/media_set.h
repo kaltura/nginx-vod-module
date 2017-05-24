@@ -20,6 +20,7 @@
 #define MAX_CLIPS_PER_REQUEST (16)
 #define MAX_SEQUENCES (32)
 #define MAX_SEQUENCE_IDS (2)
+#define MAX_SEQUENCE_TRACKS_MASKS (2)
 #define MAX_SOURCES (32)
 
 // enums
@@ -145,6 +146,11 @@ typedef struct {
 } media_set_t;
 
 typedef struct {
+	int32_t index;			// positive = sequence index (-f1), negative = index into sequence_ids (-s1)
+	uint32_t tracks_mask[MEDIA_TYPE_COUNT];
+} sequence_tracks_mask_t;
+
+typedef struct {
 	int64_t segment_time;		// used in mss
 	uint32_t segment_index;
 	uint32_t clip_index;
@@ -152,7 +158,8 @@ typedef struct {
 	uint32_t sequences_mask;
 	vod_str_t sequence_ids[MAX_SEQUENCE_IDS];
 	uint32_t tracks_mask[MEDIA_TYPE_COUNT];
-	uint32_t* sequence_tracks_mask;	// [MAX_SEQUENCES][MEDIA_TYPE_COUNT]
+	sequence_tracks_mask_t* sequence_tracks_mask;
+	sequence_tracks_mask_t* sequence_tracks_mask_end;
 	uint8_t* langs_mask;			// [LANG_MASK_SIZE]
 	uint32_t version;
 } request_params_t;

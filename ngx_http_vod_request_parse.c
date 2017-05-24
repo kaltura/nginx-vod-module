@@ -221,19 +221,19 @@ ngx_http_vod_parse_uri_file_name(
 	uint32_t flags,
 	request_params_t* result)
 {
+	sequence_tracks_mask_t* sequence_tracks_mask_end;
+	sequence_tracks_mask_t* sequence_tracks_mask;
 	ngx_str_t* cur_sequence_id;
 	ngx_str_t* last_sequence_id;
 	uint32_t default_tracks_mask;
 	uint32_t* tracks_mask;
-	uint32_t* end_mask;
-	uint32_t* cur_mask;
 	uint32_t segment_index_shift;
-	uint32_t masks_per_sequence;
 	uint32_t sequence_index;
 	uint32_t clip_index;
 	uint32_t media_type;
 	uint32_t pts_delay;
 	uint32_t version;
+	bool_t tracks_mask_updated;
 	language_id_t lang_id;
 
 	default_tracks_mask = (flags & PARSE_FILE_NAME_MULTI_STREAMS_PER_TYPE) ? 0xffffffff : 1;
@@ -304,124 +304,147 @@ ngx_http_vod_parse_uri_file_name(
 		skip_dash(start_pos, end_pos);
 	}
 
-	// sequence id
-	if (*start_pos == 's')
+	// sequence (file) index
+	if (*start_pos == 'f' || *start_pos == 's')
 	{
+		result->sequences_mask = 0;
 		cur_sequence_id = result->sequence_ids;
 		last_sequence_id = cur_sequence_id + MAX_SEQUENCE_IDS;
-		for (; cur_sequence_id < last_sequence_id; cur_sequence_id++)
-		{
-			start_pos++;		// skip the s
-
-			cur_sequence_id->data = start_pos;
-
-			while (start_pos < end_pos && *start_pos != '-')
-			{
-				start_pos++;
-			}
-
-			cur_sequence_id->len = start_pos - cur_sequence_id->data;
-
-			skip_dash(start_pos, end_pos);
-
-			if (*start_pos != 's')
-			{
-				break;
-			}
-		}
-	}
-
-	// sequence (file) index
-	if (*start_pos == 'f')
-	{
-		tracks_mask = result->tracks_mask;
-		masks_per_sequence = 0;
-		result->sequences_mask = 0;
+		sequence_tracks_mask = NULL;
+		sequence_tracks_mask_end = NULL;
+		tracks_mask_updated = FALSE;
 
 		for (;;)
 		{
-			start_pos++;		// skip the f
-
-			if (start_pos >= end_pos || *start_pos < '1' || *start_pos > '9')
+			if (*start_pos == 'f')
 			{
-				ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
-					"ngx_http_vod_parse_uri_file_name: missing index following sequence selector");
-				return ngx_http_vod_status_to_ngx_error(r, VOD_BAD_REQUEST);
-			}
+				// sequence index
+				start_pos++;		// skip the f
 
-			sequence_index = *start_pos - '0';
-			start_pos++;		// skip the digit
-
-			if (start_pos < end_pos && *start_pos >= '0' && *start_pos <= '9')
-			{
-				sequence_index = sequence_index * 10 + *start_pos - '0';
-				if (sequence_index > MAX_SEQUENCES)
+				if (start_pos >= end_pos || *start_pos < '1' || *start_pos > '9')
 				{
 					ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
-						"ngx_http_vod_parse_uri_file_name: sequence index too big");
+						"ngx_http_vod_parse_uri_file_name: missing index following sequence selector");
 					return ngx_http_vod_status_to_ngx_error(r, VOD_BAD_REQUEST);
 				}
-				start_pos++;		// skip the digit
-			}
 
-			sequence_index--;		// Note: sequence_index cannot be 0 here
-			result->sequences_mask |= (1 << sequence_index);
+				sequence_index = *start_pos - '0';
+				start_pos++;		// skip the digit
+
+				if (start_pos < end_pos && *start_pos >= '0' && *start_pos <= '9')
+				{
+					sequence_index = sequence_index * 10 + *start_pos - '0';
+					if (sequence_index > MAX_SEQUENCES)
+					{
+						ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
+							"ngx_http_vod_parse_uri_file_name: sequence index too big");
+						return ngx_http_vod_status_to_ngx_error(r, VOD_BAD_REQUEST);
+					}
+					start_pos++;		// skip the digit
+				}
+
+				sequence_index--;		// Note: sequence_index cannot be 0 here
+				result->sequences_mask |= (1 << sequence_index);
+			}
+			else
+			{
+				// sequence id
+				start_pos++;		// skip the s
+
+				if (cur_sequence_id >= last_sequence_id)
+				{
+					ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
+						"ngx_http_vod_parse_uri_file_name: the number of sequence ids exceeds the limit");
+					return ngx_http_vod_status_to_ngx_error(r, VOD_BAD_REQUEST);
+				}
+
+				cur_sequence_id->data = start_pos;
+
+				while (start_pos < end_pos && *start_pos != '-')
+				{
+					start_pos++;
+				}
+
+				cur_sequence_id->len = start_pos - cur_sequence_id->data;
+
+				cur_sequence_id++;
+				sequence_index = -(cur_sequence_id - result->sequence_ids);
+			}
 
 			skip_dash(start_pos, end_pos);
 
+			// tracks spec
 			if (*start_pos == 'v' || *start_pos == 'a')
 			{
+				if (sequence_tracks_mask != NULL)
+				{
+					if (sequence_tracks_mask >= sequence_tracks_mask_end)
+					{
+						ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
+							"ngx_http_vod_parse_uri_file_name: the number of track specs exceeds the limit");
+						return ngx_http_vod_status_to_ngx_error(r, VOD_BAD_REQUEST);
+					}
+
+					sequence_tracks_mask->index = sequence_index;
+					tracks_mask = sequence_tracks_mask->tracks_mask;
+					sequence_tracks_mask++;
+					result->sequence_tracks_mask_end = sequence_tracks_mask;
+				}
+				else
+				{
+					tracks_mask_updated = TRUE;
+					tracks_mask = result->tracks_mask;
+				}
+
 				start_pos = ngx_http_vod_extract_track_tokens(
 					start_pos, 
 					end_pos, 
-					tracks_mask + masks_per_sequence * sequence_index);
+					tracks_mask);
 				if (start_pos == NULL)
 				{
 					return NGX_OK;
 				}
 			}
 
-			if (*start_pos != 'f')
+			if (*start_pos != 'f' && *start_pos != 's')
 			{
 				break;
 			}
 
-			if (result->sequence_tracks_mask != NULL)
+			if (sequence_tracks_mask != NULL)
 			{
 				continue;
 			}
 
 			// more than one sequence, allocate the per sequence tracks mask
-			result->sequence_tracks_mask = ngx_palloc(r->pool, 
-				sizeof(result->sequence_tracks_mask[0]) * MEDIA_TYPE_COUNT * MAX_SEQUENCES);
-			if (result->sequence_tracks_mask == NULL)
+			sequence_tracks_mask = ngx_palloc(r->pool, 
+				sizeof(sequence_tracks_mask[0]) * MAX_SEQUENCE_TRACKS_MASKS);
+			if (sequence_tracks_mask == NULL)
 			{
 				ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
 					"ngx_http_vod_parse_uri_file_name: ngx_palloc failed");
 				return ngx_http_vod_status_to_ngx_error(r, VOD_ALLOC_FAILED);
 			}
 
-			// initialize the mask with the default
-			cur_mask = result->sequence_tracks_mask;
-			end_mask = cur_mask + MEDIA_TYPE_COUNT * MAX_SEQUENCES;
-			for (; cur_mask < end_mask; cur_mask++)
+			sequence_tracks_mask_end = sequence_tracks_mask + MAX_SEQUENCE_TRACKS_MASKS;
+
+			result->sequence_tracks_mask = sequence_tracks_mask;
+			result->sequence_tracks_mask_end = sequence_tracks_mask;
+
+			if (tracks_mask_updated)
 			{
-				*cur_mask = default_tracks_mask;
+				// add the currently parsed mask to the array
+				sequence_tracks_mask->index = sequence_index;
+				ngx_memcpy(sequence_tracks_mask->tracks_mask, result->tracks_mask, sizeof(sequence_tracks_mask->tracks_mask));
+				sequence_tracks_mask++;
+				result->sequence_tracks_mask_end = sequence_tracks_mask;
+
+				// restore the global mask to the default
+				for (media_type = 0; media_type < MEDIA_TYPE_COUNT; media_type++)
+				{
+					result->tracks_mask[media_type] = default_tracks_mask;
+				}
 			}
-
-			// copy the currently parsed mask to its place
-			tracks_mask = result->sequence_tracks_mask + sequence_index * MEDIA_TYPE_COUNT;
-			ngx_memcpy(tracks_mask, result->tracks_mask, sizeof(tracks_mask[0]) * MEDIA_TYPE_COUNT);
-
-			// restore the global mask to the default
-			for (media_type = 0; media_type < MEDIA_TYPE_COUNT; media_type++)
-			{
-				result->tracks_mask[media_type] = default_tracks_mask;
-			}
-
-			// from now on, parse directly to the sequence tracks mask
-			tracks_mask = result->sequence_tracks_mask;
-			masks_per_sequence = MEDIA_TYPE_COUNT;
 		}
 	}
 	else if (*start_pos == 'v' || *start_pos == 'a')
@@ -948,7 +971,8 @@ ngx_http_vod_parse_uri_path(
 		return rc;
 	}
 
-	if (multi_uri.parts_count > 1)
+	if (multi_uri.parts_count > 1 && 
+		request_params->sequence_ids[0].len == 0)
 	{
 		sequences_mask = request_params->sequences_mask;
 		request_params->sequences_mask = 0xffffffff;	// reset the sequences mask so that it won't be applied again on the mapping request

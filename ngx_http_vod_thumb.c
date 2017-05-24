@@ -47,6 +47,7 @@ ngx_http_vod_thumb_get_url(
 		INVALID_SEGMENT_INDEX,
 		sequences_mask,
 		NULL,
+		NULL,
 		request_params->tracks_mask,
 		&request_params_str);
 	if (rc != VOD_OK)
