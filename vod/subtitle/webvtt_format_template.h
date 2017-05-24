@@ -66,16 +66,27 @@ METHOD(webvtt_read_timestamp)(CHAR_TYPE* cur_pos, CHAR_TYPE** end_pos)
 	}
 	cur_pos++;
 
-	// 3 digit millis
-	if (!isdigit(cur_pos[0]) || !isdigit(cur_pos[1]) || !isdigit(cur_pos[2]))
+	// 1-3 digit millis
+	if (!isdigit(cur_pos[0]))
 	{
 		return -1;
 	}
-	millis = (cur_pos[0] - '0') * 100 + (cur_pos[1] - '0') * 10 + (cur_pos[2] - '0');
+
+	millis = (*cur_pos++ - '0') * 100;
+
+	if (isdigit(*cur_pos))
+	{
+		millis += (*cur_pos++ - '0') * 10;
+
+		if (isdigit(*cur_pos))
+		{
+			millis += (*cur_pos++ - '0');
+		}
+	}
 
 	if (end_pos != NULL)
 	{
-		*end_pos = cur_pos + 3;
+		*end_pos = cur_pos;
 	}
 
 	return millis + 1000 * (seconds + 60 * (minutes + 60 * hours));
