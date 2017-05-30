@@ -11,8 +11,8 @@
 #define VOD_DASH_MAX_FRAME_RATE_LEN (1 + 2 * VOD_INT32_LEN)
 
 #define VOD_DASH_MANIFEST_HEADER_VOD											\
-    "<?xml version=\"1.0\"?>\n"													\
-    "<MPD\n"																	\
+	"<?xml version=\"1.0\"?>\n"													\
+	"<MPD\n"																	\
 	"    xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\"\n"				\
 	"    xmlns=\"urn:mpeg:dash:schema:mpd:2011\"\n"								\
 	"    xsi:schemaLocation=\"urn:mpeg:dash:schema:mpd:2011 http://standards.iso.org/ittf/PubliclyAvailableStandards/MPEG-DASH_schema_files/DASH-MPD.xsd\"\n"	\
@@ -58,53 +58,54 @@
 	"  <Period id=\"%uD\" start=\"PT%uD.%03uDS\" duration=\"PT%uD.%03uDS\">\n"
 
 #define VOD_DASH_MANIFEST_ADAPTATION_HEADER_VIDEO								\
-    "    <AdaptationSet\n"														\
-    "        id=\"%uD\"\n"														\
-    "        segmentAlignment=\"true\"\n"										\
-    "        maxWidth=\"%uD\"\n"												\
-    "        maxHeight=\"%uD\"\n"												\
-    "        maxFrameRate=\"%V\">\n"
+	"    <AdaptationSet\n"														\
+	"        id=\"%uD\"\n"														\
+	"        segmentAlignment=\"true\"\n"										\
+	"        maxWidth=\"%uD\"\n"												\
+	"        maxHeight=\"%uD\"\n"												\
+	"        maxFrameRate=\"%V\">\n"
 
 #define VOD_DASH_MANIFEST_REPRESENTATION_HEADER_VIDEO							\
 	"      <Representation\n"													\
-    "          id=\"%V\"\n"														\
-    "          mimeType=\"%V\"\n"												\
-    "          codecs=\"%V\"\n"													\
-    "          width=\"%uD\"\n"													\
-    "          height=\"%uD\"\n"												\
-    "          frameRate=\"%V\"\n"												\
-    "          sar=\"1:1\"\n"													\
-    "          startWithSAP=\"1\"\n"											\
+	"          id=\"%V\"\n"														\
+	"          mimeType=\"%V\"\n"												\
+	"          codecs=\"%V\"\n"													\
+	"          width=\"%uD\"\n"													\
+	"          height=\"%uD\"\n"												\
+	"          frameRate=\"%V\"\n"												\
+	"          sar=\"1:1\"\n"													\
+	"          startWithSAP=\"1\"\n"											\
 	"          bandwidth=\"%uD\">\n"
 
 // TODO: value should be the number of channels ?
 #define VOD_DASH_MANIFEST_ADAPTATION_HEADER_AUDIO								\
-    "    <AdaptationSet\n"														\
-    "        id=\"%uD\"\n"														\
-    "        segmentAlignment=\"true\">\n"										\
-    "      <AudioChannelConfiguration\n"										\
-    "          schemeIdUri=\"urn:mpeg:dash:"									\
-                                "23003:3:audio_channel_configuration:2011\"\n"	\
-    "          value=\"1\"/>\n"
+	"    <AdaptationSet\n"														\
+	"        id=\"%uD\"\n"														\
+	"        segmentAlignment=\"true\">\n"										\
+	"      <AudioChannelConfiguration\n"										\
+	"          schemeIdUri=\"urn:mpeg:dash:"									\
+								"23003:3:audio_channel_configuration:2011\"\n"	\
+	"          value=\"1\"/>\n"
 
 #define VOD_DASH_MANIFEST_ADAPTATION_HEADER_AUDIO_LANG							\
-    "    <AdaptationSet\n"														\
+	"    <AdaptationSet\n"														\
 	"        id=\"%uD\"\n"														\
 	"        lang=\"%s\"\n"														\
+	"        label=\"%V\"\n"													\
 	"        segmentAlignment=\"true\">\n"										\
-    "      <AudioChannelConfiguration\n"										\
-    "          schemeIdUri=\"urn:mpeg:dash:"									\
-                                "23003:3:audio_channel_configuration:2011\"\n"	\
-    "          value=\"1\"/>\n"
+	"      <AudioChannelConfiguration\n"										\
+	"          schemeIdUri=\"urn:mpeg:dash:"									\
+								"23003:3:audio_channel_configuration:2011\"\n"	\
+	"          value=\"1\"/>\n"
 
 #define VOD_DASH_MANIFEST_REPRESENTATION_HEADER_AUDIO							\
 	"      <Representation\n"													\
 	"          id=\"%V\"\n"														\
-    "          mimeType=\"%V\"\n"												\
-    "          codecs=\"%V\"\n"													\
-    "          audioSamplingRate=\"%uD\"\n"										\
-    "          startWithSAP=\"1\"\n"											\
-    "          bandwidth=\"%uD\">\n"
+	"          mimeType=\"%V\"\n"												\
+	"          codecs=\"%V\"\n"													\
+	"          audioSamplingRate=\"%uD\"\n"										\
+	"          startWithSAP=\"1\"\n"											\
+	"          bandwidth=\"%uD\">\n"
 
 #define VOD_DASH_MANIFEST_REPRESENTATION_FOOTER									\
 	"      </Representation>\n"
@@ -116,6 +117,7 @@
 	"    <AdaptationSet\n"														\
 	"        contentType=\"text\"\n"											\
 	"        lang=\"%s\"\n"														\
+	"        label=\"%V\"\n"													\
 	"        mimeType=\"text/vtt\">\n"											\
 	"      <Representation\n"													\
 	"          id=\"textstream_%s_%uD\"\n"										\
@@ -142,16 +144,16 @@
 	"            startNumber=\"%uD\">\n"										\
 	"            <SegmentTimeline>\n"
 
-#define VOD_DASH_MANIFEST_SEGMENT_REPEAT                                        \
+#define VOD_DASH_MANIFEST_SEGMENT_REPEAT										\
 	"                <S d=\"%uD\" r=\"%uD\"/>\n"
 
-#define VOD_DASH_MANIFEST_SEGMENT                                               \
+#define VOD_DASH_MANIFEST_SEGMENT												\
 	"                <S d=\"%uD\"/>\n"
 
-#define VOD_DASH_MANIFEST_SEGMENT_REPEAT_TIME                                   \
+#define VOD_DASH_MANIFEST_SEGMENT_REPEAT_TIME									\
 	"                <S t=\"%uL\" d=\"%uD\" r=\"%uD\"/>\n"
 
-#define VOD_DASH_MANIFEST_SEGMENT_TIME                                          \
+#define VOD_DASH_MANIFEST_SEGMENT_TIME											\
 	"                <S t=\"%uL\" d=\"%uD\"/>\n"
 
 #define VOD_DASH_MANIFEST_SEGMENT_TEMPLATE_FOOTER								\
@@ -173,7 +175,7 @@
 	"  </Period>\n"
 
 #define VOD_DASH_MANIFEST_FOOTER												\
-    "</MPD>\n"
+	"</MPD>\n"
 
 #define MAX_TRACK_SPEC_LENGTH (sizeof("f-v-p") + 3 * VOD_INT32_LEN)
 #define MAX_CLIP_SPEC_LENGTH (sizeof("c-") + VOD_INT32_LEN)
@@ -938,7 +940,9 @@ dash_packager_write_mpd_period(
 			if (context->adaptation_sets.multi_audio)
 			{
 				p = vod_sprintf(p, VOD_DASH_MANIFEST_ADAPTATION_HEADER_AUDIO_LANG, 
-					adapt_id++, lang_get_iso639_1_name(reference_track->media_info.language));
+					adapt_id++, 
+					lang_get_iso639_1_name(reference_track->media_info.language),
+					&reference_track->media_info.label);
 			}
 			else
 			{
@@ -976,6 +980,7 @@ dash_packager_write_mpd_period(
 			lang_code = lang_get_iso639_1_name(cur_track->media_info.language);
 			p = vod_sprintf(p, VOD_DASH_MANIFEST_ADAPTATION_SUBTITLE, 
 				lang_code,
+				&cur_track->media_info.label,
 				lang_code,
 				subtitle_adapt_id++, 
 				&cur_base_url,
@@ -1320,6 +1325,7 @@ dash_packager_build_mpd(
 	write_period_context_t context;
 	adaptation_set_t* adaptation_set;
 	segmenter_conf_t* segmenter_conf = media_set->segmenter_conf;
+	media_track_t* cur_track;
 	vod_tm_t publish_time_gmt;
 	vod_tm_t avail_time_gmt;
 	vod_tm_t cur_time_gmt;
@@ -1328,11 +1334,13 @@ dash_packager_build_mpd(
 	size_t base_period_size;
 	size_t result_size = 0;
 	size_t urls_length;
+	uint32_t filtered_clip_offset;
 	uint32_t presentation_delay;
 	uint32_t min_update_period;
 	uint32_t window_size;
 	uint32_t period_count = media_set->use_discontinuity ? media_set->timing.total_count : 1;
 	uint32_t media_type;
+	uint32_t clip_index;
 	vod_status_t rc;
 	u_char* p = NULL;
 
@@ -1432,6 +1440,25 @@ dash_packager_build_mpd(
 	}
 
 	result_size += base_period_size * period_count + sizeof(VOD_DASH_MANIFEST_FOOTER);
+
+	for (clip_index = 0; clip_index < period_count; clip_index++)
+	{
+		filtered_clip_offset = clip_index < media_set->clip_count ?
+			clip_index * media_set->total_track_count : 0;
+		for (adaptation_set = context.adaptation_sets.first;
+			adaptation_set < context.adaptation_sets.last;
+			adaptation_set++)
+		{
+			switch (adaptation_set->type)
+			{
+			case MEDIA_TYPE_AUDIO:
+			case MEDIA_TYPE_SUBTITLE:
+				cur_track = (*adaptation_set->first) + filtered_clip_offset;
+				result_size += cur_track->media_info.label.len;
+				break;
+			}
+		}
+	}
 
 	switch (conf->manifest_format)
 	{
