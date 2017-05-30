@@ -103,6 +103,8 @@ METHOD(webvtt_identify_srt)(CHAR_TYPE* p)
 
 	for (; isdigit(*p); p++);
 
+	for (; *p == ' ' || *p == '\t'; p++);
+
 	// new line
 	switch (*p)
 	{
