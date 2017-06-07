@@ -60,6 +60,8 @@ ngx_int_t ngx_file_reader_dump_file_part(void* context, off_t start, off_t end);
 
 size_t ngx_file_reader_get_size(void* context);
 
+void ngx_file_reader_get_path(void* context, ngx_str_t* path);
+
 ngx_int_t ngx_async_file_read(ngx_file_reader_state_t* state, ngx_buf_t *buf, size_t size, off_t offset);
 
 ngx_int_t ngx_file_reader_enable_directio(ngx_file_reader_state_t* state);
