@@ -330,6 +330,14 @@ ngx_file_reader_get_size(void* context)
 	return state->file_size;
 }
 
+void
+ngx_file_reader_get_path(void* context, ngx_str_t* path)
+{
+	ngx_file_reader_state_t* ctx = context;
+
+	*path = ctx->file.name;
+}
+
 #if (NGX_HAVE_FILE_AIO)
 
 static void

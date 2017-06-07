@@ -73,6 +73,7 @@ typedef ngx_int_t(*ngx_http_vod_open_file_t)(ngx_http_request_t* r, ngx_str_t* p
 typedef ngx_int_t(*ngx_http_vod_async_read_func_t)(void* context, ngx_buf_t *buf, size_t size, off_t offset);
 typedef ngx_int_t(*ngx_http_vod_dump_part_t)(void* context, off_t start, off_t end);
 typedef size_t(*ngx_http_vod_get_size_t)(void* context);
+typedef void(*ngx_http_vod_get_path_t)(void* context, ngx_str_t* path);
 typedef ngx_int_t(*ngx_http_vod_enable_directio_t)(void* context);
 
 typedef ngx_int_t(*ngx_http_vod_dump_request_t)(ngx_http_vod_ctx_t* context);
@@ -124,6 +125,7 @@ typedef struct {
 	ngx_http_vod_dump_part_t dump_part;
 	ngx_http_vod_dump_request_t dump_request;
 	ngx_http_vod_get_size_t get_size;
+	ngx_http_vod_get_path_t get_path;
 	ngx_http_vod_enable_directio_t enable_directio;
 } ngx_http_vod_reader_t;
 
@@ -215,6 +217,7 @@ static ngx_int_t ngx_http_vod_dump_file(ngx_http_vod_ctx_t* ctx);
 static ngx_int_t ngx_http_vod_http_reader_open_file(ngx_http_request_t* r, ngx_str_t* path, uint32_t flags, void** context);
 static ngx_int_t ngx_http_vod_dump_http_part(void* context, off_t start, off_t end);
 static ngx_int_t ngx_http_vod_dump_http_request(ngx_http_vod_ctx_t *ctx);
+static void	ngx_http_vod_http_reader_get_path(void* context, ngx_str_t* path);
 
 // globals
 ngx_module_t  ngx_http_vod_module = {
@@ -251,6 +254,7 @@ static ngx_http_vod_reader_t reader_file_with_fallback = {
 	ngx_file_reader_dump_file_part,
 	ngx_http_vod_dump_file,
 	ngx_file_reader_get_size,
+	ngx_file_reader_get_path,
 	(ngx_http_vod_enable_directio_t)ngx_file_reader_enable_directio,
 };
 
@@ -259,6 +263,7 @@ static ngx_http_vod_reader_t reader_file = {
 	ngx_file_reader_dump_file_part,
 	ngx_http_vod_dump_file,
 	ngx_file_reader_get_size,
+	ngx_file_reader_get_path,
 	(ngx_http_vod_enable_directio_t)ngx_file_reader_enable_directio,
 };
 
@@ -267,6 +272,7 @@ static ngx_http_vod_reader_t reader_http = {
 	ngx_http_vod_dump_http_part,
 	ngx_http_vod_dump_http_request,
 	NULL,
+	ngx_http_vod_http_reader_get_path,
 	NULL,
 };
 
@@ -1638,6 +1644,7 @@ ngx_http_vod_identify_format(ngx_http_vod_ctx_t* ctx)
 	media_format_t** cur_format_ptr;
 	media_format_t* cur_format;
 	vod_status_t rc;
+	ngx_str_t path;
 	vod_str_t buffer;
 
 	buffer.data = ctx->read_buffer.pos;
@@ -1656,8 +1663,9 @@ ngx_http_vod_identify_format(ngx_http_vod_ctx_t* ctx)
 			}
 			else
 			{
+				ctx->reader->get_path(ctx->cur_source->reader_context, &path);
 				ngx_log_error(NGX_LOG_ERR, ctx->submodule_context.request_context.log, 0,
-					"ngx_http_vod_identify_format: failed to identify the file format");
+					"ngx_http_vod_identify_format: failed to identify the file format %V", &path);
 			}
 			return ngx_http_vod_status_to_ngx_error(ctx->submodule_context.r, VOD_BAD_DATA);
 		}
@@ -3901,6 +3909,14 @@ ngx_http_vod_http_reader_open_file(ngx_http_request_t* r, ngx_str_t* path, uint3
 	*context = state;
 
 	return NGX_OK;
+}
+
+static void	
+ngx_http_vod_http_reader_get_path(void* context, ngx_str_t* path)
+{
+	ngx_http_vod_http_reader_state_t* ctx = context;
+
+	*path = ctx->cur_remote_suburi;
 }
 
 ////// Local mode only
