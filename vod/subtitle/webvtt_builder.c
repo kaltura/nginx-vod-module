@@ -56,7 +56,11 @@ webvtt_builder_build(
 
 	for (cur_track = first_track; cur_track < media_set->filtered_tracks_end; cur_track++)
 	{
-		start_time = cur_track->clip_start_time + cur_track->first_frame_time_offset;
+		start_time = cur_track->first_frame_time_offset;
+		if (!media_set->use_discontinuity)
+		{
+			start_time += cur_track->clip_start_time;
+		}
 		part = &cur_track->frames;
 		last_frame = part->last_frame;
 		for (cur_frame = part->first_frame;; cur_frame++)
