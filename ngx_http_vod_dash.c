@@ -574,7 +574,7 @@ ngx_http_vod_dash_parse_uri_file_name(
 		start_pos += conf->dash.mpd_config.subtitle_file_name_prefix.len;
 		end_pos -= (sizeof(vtt_file_ext) - 1);
 		*request = &dash_webvtt_file_request;
-		flags = 0;
+		flags = PARSE_FILE_NAME_ALLOW_CLIP_INDEX;
 	}
 	else
 	{
