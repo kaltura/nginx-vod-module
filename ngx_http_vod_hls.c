@@ -346,6 +346,7 @@ ngx_http_vod_hls_handle_vtt_segment(
 	rc = webvtt_builder_build(
 		&submodule_context->request_context,
 		&submodule_context->media_set,
+		FALSE,
 		response);
 	if (rc != VOD_OK)
 	{
