@@ -390,6 +390,7 @@ ngx_http_vod_dash_handle_vtt_file(
 	rc = webvtt_builder_build(
 		&submodule_context->request_context,
 		&submodule_context->media_set,
+		submodule_context->media_set.use_discontinuity,
 		response);
 	if (rc != VOD_OK)
 	{
@@ -465,7 +466,7 @@ static const ngx_http_vod_request_t dash_webm_fragment_request = {
 };
 
 static const ngx_http_vod_request_t dash_webvtt_file_request = {
-	REQUEST_FLAG_SINGLE_TRACK,
+	REQUEST_FLAG_SINGLE_TRACK | REQUEST_FLAG_PARSE_ALL_CLIPS,
 	PARSE_FLAG_FRAMES_ALL | PARSE_FLAG_EXTRA_DATA,
 	REQUEST_CLASS_OTHER,
 	VOD_CODEC_FLAG(WEBVTT),
