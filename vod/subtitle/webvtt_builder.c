@@ -20,6 +20,7 @@ vod_status_t
 webvtt_builder_build(
 	request_context_t* request_context,
 	media_set_t* media_set,
+	bool_t clip_relative_timestamps,
 	vod_str_t* result)
 {
 	frame_list_part_t* part;
@@ -57,7 +58,7 @@ webvtt_builder_build(
 	for (cur_track = first_track; cur_track < media_set->filtered_tracks_end; cur_track++)
 	{
 		start_time = cur_track->first_frame_time_offset;
-		if (!media_set->use_discontinuity)
+		if (!clip_relative_timestamps)
 		{
 			start_time += cur_track->clip_start_time;
 		}

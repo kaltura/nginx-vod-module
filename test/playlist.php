@@ -36,10 +36,23 @@ $playlistType = isset($params['type']) ? $params['type'] : "live";
 
 // input params
 $filePaths = array(
-	"/path/to/video1.mp4",
-	"/path/to/video2.mp4",
-	"/path/to/video3.mp4",
-	);
+	// clip 1
+	array(
+		"/path/to/video1.mp4",
+		"/path/to/subtitles1.srt",
+	),
+	// clip 2
+	array(
+		"/path/to/video2.mp4",
+		"/path/to/subtitles2.srt",
+	),
+);
+
+$languages = array(
+	null,
+	'eng',
+);
+
 if (!$discontinuity)
 {
 	$filePaths = array($filePaths[0], $filePaths[0]);
@@ -94,7 +107,11 @@ function getDurationMillis($filePath)
 	return $duration;
 }
 
-$durations = array_map('getDurationMillis', $filePaths);
+$durations = array();
+foreach ($filePaths as $curClip)
+{
+	$durations[] = getDurationMillis(reset($curClip));
+}
 
 $result = array();
 
@@ -152,16 +169,32 @@ if ($playlistType == "live")
 	$durations = array_merge($durations, $durations);
 }
 
+$sequences = array();
+foreach ($languages as $seqIndex => $language)
+{
+	$clips = array();
+	foreach ($filePaths as $curClip)
+	{
+		$clips[] = getSourceClip($curClip[$seqIndex]);
+	}
+
+	$sequence = array(
+		"clips" => $clips
+	);
+	if ($language)
+	{
+		$sequence['language'] = $language;
+	}
+	
+	$sequences[] = $sequence;
+}
+
 // generate the result object
 $result = array_merge($result, array(
 	"discontinuity" => $discontinuity,
 	"playlistType" => $playlistType,
 	"durations" => $durations,
-	"sequences" => array(
-		array(
-			"clips" => array_map('getSourceClip', $filePaths)
-		)
-	)
+	"sequences" => $sequences,
 ));
 
 echo json_encode($result);
