@@ -236,6 +236,7 @@ ngx_module_t  ngx_http_vod_module = {
 };
 
 static ngx_str_t options_content_type = ngx_string("text/plain");
+static ngx_str_t empty_file_string = ngx_string("empty");
 static ngx_str_t empty_string = ngx_null_string;
 
 static media_format_t* media_formats[] = {
@@ -1971,6 +1972,7 @@ ngx_http_vod_state_machine_parse_metadata(ngx_http_vod_ctx_t *ctx)
 	media_clip_source_t* cur_source;
 	ngx_http_request_t* r = ctx->submodule_context.r;
 	ngx_int_t rc;
+	bool_t metadata_loaded;
 
 	if (ctx->cur_source == NULL)
 	{
@@ -1982,11 +1984,28 @@ ngx_http_vod_state_machine_parse_metadata(ngx_http_vod_ctx_t *ctx)
 		switch (ctx->state)
 		{
 		case STATE_READ_METADATA_INITIAL:
+			metadata_loaded = FALSE;
 			cur_source = ctx->cur_source;
-
-			if (conf->metadata_cache != NULL)
+			if (cur_source->mapped_uri.len == empty_file_string.len &&
+				ngx_strncasecmp(cur_source->mapped_uri.data, empty_file_string.data, empty_file_string.len) == 0)
 			{
-				// try to read the metadata from cache
+				// the string "empty" identifies an empty srt file
+				ctx->metadata_parts = ngx_palloc(ctx->submodule_context.request_context.pool,
+					sizeof(ctx->metadata_parts));
+				if (ctx->metadata_parts == NULL)
+				{
+					ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+						"ngx_http_vod_state_machine_parse_metadata: ngx_palloc failed");
+					return ngx_http_vod_status_to_ngx_error(r, VOD_ALLOC_FAILED);
+				}
+
+				ctx->metadata_parts[0].len = 0;
+				multipart_header.type = FORMAT_ID_WEBVTT;
+				metadata_loaded = TRUE;
+			}
+			else if (conf->metadata_cache != NULL)
+			{
+				// try to fetch from cache
 				if (ngx_buffer_cache_fetch_multipart_perf(
 					ctx,
 					conf->metadata_cache,
@@ -1996,39 +2015,43 @@ ngx_http_vod_state_machine_parse_metadata(ngx_http_vod_ctx_t *ctx)
 				{
 					ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
 						"ngx_http_vod_state_machine_parse_metadata: metadata cache hit");
-
-					rc = ngx_http_vod_init_format(ctx, multipart_header.type);
-					if (rc != NGX_OK)
-					{
-						return rc;
-					}
-
-					rc = ngx_http_vod_parse_metadata(ctx, 1);
-					if (rc == NGX_OK)
-					{
-						ctx->cur_source = cur_source->next;
-						if (ctx->cur_source == NULL)
-						{
-							return NGX_OK;
-						}
-						break;
-					}
-
-					if (rc != NGX_AGAIN)
-					{
-						ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
-							"ngx_http_vod_state_machine_parse_metadata: ngx_http_vod_parse_metadata failed %i", rc);
-						return rc;
-					}
-
-					ctx->state = STATE_READ_FRAMES_OPEN_FILE;
+					metadata_loaded = TRUE;
 				}
 				else
 				{
 					ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
 						"ngx_http_vod_state_machine_parse_metadata: metadata cache miss");
-					ctx->state = STATE_READ_METADATA_OPEN_FILE;
 				}
+			}
+
+			if (metadata_loaded)
+			{
+				// parse the metadata
+				rc = ngx_http_vod_init_format(ctx, multipart_header.type);
+				if (rc != NGX_OK)
+				{
+					return rc;
+				}
+
+				rc = ngx_http_vod_parse_metadata(ctx, 1);
+				if (rc == NGX_OK)
+				{
+					ctx->cur_source = cur_source->next;
+					if (ctx->cur_source == NULL)
+					{
+						return NGX_OK;
+					}
+					break;
+				}
+
+				if (rc != NGX_AGAIN)
+				{
+					ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+						"ngx_http_vod_state_machine_parse_metadata: ngx_http_vod_parse_metadata failed %i", rc);
+					return rc;
+				}
+
+				ctx->state = STATE_READ_FRAMES_OPEN_FILE;
 			}
 			else
 			{
