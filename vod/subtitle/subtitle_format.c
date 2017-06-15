@@ -85,8 +85,7 @@ subtitle_parse(
 
 	*result = &metadata->base;
 
-	if (!vod_codec_in_mask(VOD_CODEC_ID_WEBVTT, parse_params->codecs_mask) || 
-		full_duration <= parse_params->clip_from)
+	if (!vod_codec_in_mask(VOD_CODEC_ID_WEBVTT, parse_params->codecs_mask))
 	{
 		metadata->base.tracks.nelts = 0;
 		return VOD_OK;
@@ -121,7 +120,19 @@ subtitle_parse(
 		return VOD_ALLOC_FAILED;
 	}
 
-	duration = vod_min(full_duration, parse_params->clip_to) - parse_params->clip_from;
+	if (full_duration > parse_params->clip_from)
+	{
+		duration = vod_min(full_duration, parse_params->clip_to) - parse_params->clip_from;
+	}
+	else
+	{
+		duration = 0;
+
+		if (full_duration <= 0)
+		{
+			full_duration = 1;			// full duration must not be empty
+		}
+	}
 
 	track = vod_array_push(&metadata->base.tracks);		// can't fail
 	vod_memzero(track, sizeof(*track));
