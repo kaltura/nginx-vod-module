@@ -22,6 +22,7 @@ typedef struct {
 	vod_str_t encryption_key_file_name;
 	vod_str_t encryption_key_format;
 	vod_str_t encryption_key_format_versions;
+	ngx_flag_t query_args;
 } m3u8_config_t;
 
 // functions
