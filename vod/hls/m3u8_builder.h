@@ -22,6 +22,7 @@ typedef struct {
 	vod_str_t encryption_key_file_name;
 	vod_str_t encryption_key_format;
 	vod_str_t encryption_key_format_versions;
+	ngx_flag_t query_args;
 } m3u8_config_t;
 
 // functions
@@ -31,7 +32,8 @@ vod_status_t m3u8_builder_build_master_playlist(
 	vod_uint_t encryption_method,
 	vod_str_t* base_url,
 	media_set_t* media_set,
-	vod_str_t* result);
+	vod_str_t* result,
+	vod_str_t* query_args);
 
 vod_status_t m3u8_builder_build_index_playlist(
 	request_context_t* request_context,
@@ -41,7 +43,8 @@ vod_status_t m3u8_builder_build_index_playlist(
 	request_params_t* request_params,
 	hls_encryption_params_t* encryption_params,
 	media_set_t* media_set,
-	vod_str_t* result);
+	vod_str_t* result,
+	vod_str_t* query_args);
 
 vod_status_t m3u8_builder_build_iframe_playlist(
 	request_context_t* request_context,
