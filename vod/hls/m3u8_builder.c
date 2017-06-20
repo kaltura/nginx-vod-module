@@ -317,7 +317,8 @@ m3u8_builder_build_index_playlist(
 	request_params_t* request_params,
 	hls_encryption_params_t* encryption_params,
 	media_set_t* media_set,
-	vod_str_t* result)
+	vod_str_t* result,
+	vod_str_t* query_args)
 {
 	segment_durations_t segment_durations;
 	segment_duration_item_t* cur_item;
@@ -380,6 +381,7 @@ m3u8_builder_build_index_playlist(
 	segment_length = sizeof("#EXTINF:.000,\n") - 1 + vod_get_int_print_len(vod_div_ceil(duration_millis, 1000)) +
 		segments_base_url->len + conf->segment_file_name_prefix.len + 1 + vod_get_int_print_len(last_segment_index) + name_suffix.len;
 
+
 	result_size =
 		sizeof(M3U8_HEADER_PART1) + VOD_INT64_LEN +
 		sizeof(M3U8_HEADER_VOD) +
@@ -387,6 +389,11 @@ m3u8_builder_build_index_playlist(
 		segment_length * segment_durations.segment_count +
 		segment_durations.discontinuities * (sizeof(m3u8_discontinuity) - 1) +
 		sizeof(m3u8_footer);
+
+	if (conf->query_args)
+	{
+	    result_size += query_args->len * segment_durations.segment_count;
+	}
 
 	if (encryption_type != HLS_ENC_NONE)
 	{
@@ -546,11 +553,26 @@ m3u8_builder_build_index_playlist(
 		p = m3u8_builder_append_segment_name(p, segments_base_url, &conf->segment_file_name_prefix, segment_index, &name_suffix);
 		segment_index++;
 
+		if (conf->query_args && query_args->len != 0)
+        {
+            p--;
+            *p++ = '?';
+            p = vod_copy(p, query_args->data, query_args->len);
+            *p++ = '\n';
+        }
+
 		// write any additional segments
 		for (; segment_index < last_segment_index; segment_index++)
 		{
 			p = vod_copy(p, extinf.data, extinf.len);
 			p = m3u8_builder_append_segment_name(p, segments_base_url, &conf->segment_file_name_prefix, segment_index, &name_suffix);
+			if (conf->query_args && query_args->len != 0)
+            {
+                p--;
+                *p++ = '?';
+                p = vod_copy(p, query_args->data, query_args->len);
+                *p++ = '\n';
+            }
 		}
 	}
 
@@ -610,7 +632,9 @@ m3u8_builder_append_index_url(
 	vod_str_t* prefix,
 	media_set_t* media_set,
 	media_track_t** tracks,
-	vod_str_t* base_url)
+	vod_str_t* base_url,
+	vod_str_t* query_args,
+	ngx_flag_t conf_query_args)
 {
 	media_track_t* main_track;
 	media_track_t* sub_track;
@@ -650,6 +674,12 @@ m3u8_builder_append_index_url(
 	p = manifest_utils_append_tracks_spec(p, tracks, MEDIA_TYPE_COUNT, write_sequence_index);
 	p = vod_copy(p, m3u8_url_suffix, sizeof(m3u8_url_suffix) - 1);
 
+    if (conf_query_args && query_args->len != 0)
+    {
+        *p++ = '?';
+        p = vod_copy(p, query_args->data, query_args->len);
+    }
+
 	return p;
 }
 
@@ -659,7 +689,9 @@ m3u8_builder_ext_x_media_tags_get_size(
 	vod_str_t* base_url,
 	size_t base_url_len,
 	media_set_t* media_set,
-	uint32_t media_type)
+	uint32_t media_type,
+	vod_str_t* query_args,
+	ngx_flag_t conf_query_args)
 {
 	adaptation_set_t* first_adaptation_set;
 	adaptation_set_t* last_adaptation_set;
@@ -691,6 +723,10 @@ m3u8_builder_ext_x_media_tags_get_size(
 		{
 			result += vod_max(cur_track->file_info.uri.len, media_set->uri.len);
 		}
+		if (conf_query_args)
+        {
+		    result += query_args->len;
+		}
 	}
 
 	return result;
@@ -703,7 +739,8 @@ m3u8_builder_ext_x_media_tags_write(
 	m3u8_config_t* conf,
 	vod_str_t* base_url,
 	media_set_t* media_set,
-	uint32_t media_type)
+	uint32_t media_type,
+	vod_str_t* query_args)
 {
 	adaptation_set_t* first_adaptation_set;
 	adaptation_set_t* last_adaptation_set;
@@ -778,7 +815,9 @@ m3u8_builder_ext_x_media_tags_write(
 			&conf->index_file_name_prefix,
 			media_set,
 			tracks,
-			base_url);
+			base_url,
+			query_args,
+			conf->query_args);
 
 		*p++ = '"';
 		*p++ = '\n';
@@ -796,7 +835,8 @@ m3u8_builder_write_variants(
 	m3u8_config_t* conf,
 	vod_str_t* base_url,
 	media_set_t* media_set,
-	media_track_t* group_audio_track)
+	media_track_t* group_audio_track,
+	vod_str_t* query_args)
 {
 	adaptation_set_t* adaptation_set = adaptation_sets->first;
 	media_track_t** cur_track_ptr;
@@ -887,7 +927,9 @@ m3u8_builder_write_variants(
 			&conf->index_file_name_prefix,
 			media_set,
 			tracks,
-			base_url);
+			base_url,
+			query_args,
+			conf->query_args);
 
 		*p++ = '\n';
 	}
@@ -903,7 +945,8 @@ m3u8_builder_write_iframe_variants(
 	adaptation_set_t* adaptation_set,
 	m3u8_config_t* conf,
 	vod_str_t* base_url,
-	media_set_t* media_set)
+	media_set_t* media_set,
+	vod_str_t* query_args)
 {
 	media_track_t** cur_track_ptr;
 	media_track_t* tracks[MEDIA_TYPE_COUNT];
@@ -953,7 +996,9 @@ m3u8_builder_write_iframe_variants(
 			&conf->iframes_file_name_prefix,
 			media_set,
 			tracks,
-			base_url);
+			base_url,
+			query_args,
+			conf->query_args);
 		*p++ = '\"';
 		*p++ = '\n';
 	}
@@ -968,7 +1013,8 @@ m3u8_builder_build_master_playlist(
 	vod_uint_t encryption_method,
 	vod_str_t* base_url,
 	media_set_t* media_set,
-	vod_str_t* result)
+	vod_str_t* result,
+	vod_str_t* query_args)
 {
 	adaptation_sets_t adaptation_sets;
 	media_track_t** last_audio_codec_track;
@@ -1023,7 +1069,9 @@ m3u8_builder_build_master_playlist(
 			base_url,
 			base_url_len,
 			media_set,
-			MEDIA_TYPE_AUDIO);
+			MEDIA_TYPE_AUDIO,
+			query_args,
+			conf->query_args);
 
 		max_video_stream_inf += sizeof(M3U8_STREAM_TAG_AUDIO) - 1 + VOD_INT32_LEN;
 
@@ -1046,7 +1094,9 @@ m3u8_builder_build_master_playlist(
 			base_url,
 			base_url_len,
 			media_set,
-			MEDIA_TYPE_SUBTITLE);
+			MEDIA_TYPE_SUBTITLE,
+			query_args,
+			conf->query_args);
 
 		max_video_stream_inf += sizeof(M3U8_STREAM_TAG_SUBTITLES) - 1 + VOD_INT32_LEN;
 	}
@@ -1070,6 +1120,12 @@ m3u8_builder_build_master_playlist(
 			}
 
 			variant_set_size += vod_max(cur_track->file_info.uri.len, media_set->uri.len);
+
+			if (conf->query_args)
+            {
+                variant_set_size += query_args->len;
+            }
+
 		}
 	}
 
@@ -1104,7 +1160,8 @@ m3u8_builder_build_master_playlist(
 			conf,
 			base_url,
 			media_set,
-			MEDIA_TYPE_AUDIO);
+			MEDIA_TYPE_AUDIO,
+			query_args);
 	}
 
 	if (adaptation_sets.count[ADAPTATION_TYPE_SUBTITLE] > 0)
@@ -1116,7 +1173,8 @@ m3u8_builder_build_master_playlist(
 			conf,
 			base_url,
 			media_set,
-			MEDIA_TYPE_SUBTITLE);
+			MEDIA_TYPE_SUBTITLE,
+			query_args);
 	}
 
 	// output variants
@@ -1133,7 +1191,8 @@ m3u8_builder_build_master_playlist(
 				conf,
 				base_url,
 				media_set,
-				*cur_track_ptr);
+				*cur_track_ptr,
+				query_args);
 		}
 	}
 	else
@@ -1144,7 +1203,8 @@ m3u8_builder_build_master_playlist(
 			conf,
 			base_url,
 			media_set,
-			adaptation_sets.count[ADAPTATION_TYPE_AUDIO] > 1 ? adaptation_sets.first_by_type[ADAPTATION_TYPE_AUDIO]->first[0] : NULL);
+			adaptation_sets.count[ADAPTATION_TYPE_AUDIO] > 1 ? adaptation_sets.first_by_type[ADAPTATION_TYPE_AUDIO]->first[0] : NULL,
+			query_args);
 	}
 
 	// iframes
@@ -1155,7 +1215,8 @@ m3u8_builder_build_master_playlist(
 			adaptation_sets.first,
 			conf,
 			base_url,
-			media_set);
+			media_set,
+			query_args);
 	}
 
 	result->len = p - result->data;

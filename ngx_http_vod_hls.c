@@ -113,7 +113,8 @@ ngx_http_vod_hls_handle_master_playlist(
 		conf->hls.encryption_method,
 		&base_url,
 		&submodule_context->media_set,
-		response);
+		response,
+		&submodule_context->r->args);
 	if (rc != VOD_OK)
 	{
 		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, submodule_context->request_context.log, 0,
@@ -196,7 +197,8 @@ ngx_http_vod_hls_handle_index_playlist(
 		&submodule_context->request_params,
 		&encryption_params,
 		&submodule_context->media_set,
-		response);
+		response,
+        &submodule_context->r->args);
 	if (rc != VOD_OK)
 	{
 		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, submodule_context->request_context.log, 0,
@@ -452,7 +454,7 @@ ngx_http_vod_hls_merge_loc_conf(
 	ngx_conf_merge_str_value(conf->m3u8_config.iframes_file_name_prefix, prev->m3u8_config.iframes_file_name_prefix, "iframes");
 	ngx_conf_merge_str_value(conf->m3u8_config.segment_file_name_prefix, prev->m3u8_config.segment_file_name_prefix, "seg");
 
-	ngx_conf_merge_value(conf->m3u8_config.query_args, prev->m3u8_config.query_args, 0);
+    ngx_conf_merge_value(conf->m3u8_config.query_args, prev->m3u8_config.query_args, 0);
 
 	ngx_conf_merge_str_value(conf->m3u8_config.encryption_key_file_name, prev->m3u8_config.encryption_key_file_name, "encryption");
 	ngx_conf_merge_str_value(conf->m3u8_config.encryption_key_format, prev->m3u8_config.encryption_key_format, "");
