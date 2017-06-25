@@ -1991,7 +1991,7 @@ ngx_http_vod_state_machine_parse_metadata(ngx_http_vod_ctx_t *ctx)
 			{
 				// the string "empty" identifies an empty srt file
 				ctx->metadata_parts = ngx_palloc(ctx->submodule_context.request_context.pool,
-					sizeof(ctx->metadata_parts));
+					sizeof(ctx->metadata_parts) + 1);
 				if (ctx->metadata_parts == NULL)
 				{
 					ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
@@ -2000,6 +2000,8 @@ ngx_http_vod_state_machine_parse_metadata(ngx_http_vod_ctx_t *ctx)
 				}
 
 				ctx->metadata_parts[0].len = 0;
+				ctx->metadata_parts[0].data = (void*)(ctx->metadata_parts + 1);
+				ctx->metadata_parts[0].data[0] = '\0';
 				multipart_header.type = FORMAT_ID_WEBVTT;
 				metadata_loaded = TRUE;
 			}
