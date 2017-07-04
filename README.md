@@ -132,13 +132,23 @@ baseurl = http://installrepo.kaltura.org/releases/latest/RPMS/$basearch/
 ```
 
 #### Debian/Ubuntu deb package
+Debian Wheezy [7], Debian Jessie [8], Ubuntu 12 and Ubuntu 14:
 ```
 # wget -O - http://installrepo.kaltura.org/repo/apt/debian/kaltura-deb.gpg.key|apt-key add -
 # echo "deb [arch=amd64] http://installrepo.kaltura.org/repo/apt/debian lynx main" > /etc/apt/sources.list.d/kaltura.list
 # apt-get update
 # apt-get install kaltura-nginx
 ```
+
+Ubuntu 16 [should also work for Debian 9, testing and sid]:
+```
+# wget -O - http://installrepo.kaltura.org/repo/apt/debian/kaltura-deb.gpg.key|apt-key add -
+# echo "deb [arch=amd64] http://installrepo.kaltura.org/repo/apt/xenial lynx main" > /etc/apt/sources.list.d/kaltura.list
+# apt-get update
+# apt-get install kaltura-nginx
+```
 *Ubuntu NOTE: You must also make sure the multiverse repo is enabled in /etc/apt/sources.list*
+
 
 If you wish to make use of the following features:
 - Thumbnail capture
