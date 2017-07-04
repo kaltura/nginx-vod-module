@@ -21,14 +21,19 @@ ngx_feature_test="iconv_open(NULL, NULL);"
 # openssl evp
 #
 LIB_CRYPTO=${LIB_CRYPTO:--lcrypto}
+LIB_PTHREAD=${LIB_PTHREAD:--lpthread}
 
 ngx_feature="OpenSSL EVP library"
 ngx_feature_name="NGX_HAVE_OPENSSL_EVP"
 ngx_feature_run=no
 ngx_feature_incs="#include <openssl/evp.h>"
 ngx_feature_path=
-ngx_feature_libs="$LIB_CRYPTO $NGX_LIBDL"
+ngx_feature_libs="$LIB_CRYPTO $NGX_LIBDL $LIB_PTHREAD"
 ngx_feature_test="EVP_CIPHER_CTX_new();"
+
+[ -d "$OPENSSL/.openssl/include" ] && ngx_feature_path="$OPENSSL/.openssl/include"
+[ -d "$OPENSSL/.openssl/lib"     ] && ngx_feature_libs="-L $OPENSSL/.openssl/lib $ngx_feature_libs"
+
 . auto/feature
 
 if [ $ngx_found = yes ]; then
