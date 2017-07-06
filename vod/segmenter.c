@@ -513,6 +513,7 @@ segmenter_get_start_end_ranges_no_discontinuity(
 	uint32_t* clip_durations = params->timing.durations;
 	uint32_t* end_duration = clip_durations + params->timing.total_count;
 	uint32_t* cur_duration;
+	uint32_t clip_initial_segment_index;
 	uint32_t segment_count;
 	uint32_t index;
 
@@ -668,6 +669,11 @@ segmenter_get_start_end_ranges_no_discontinuity(
 	}
 
 	result->clip_time += segment_base_time;
+
+	clip_initial_segment_index = segmenter_get_segment_index_no_discontinuity(
+		params->conf,
+		cur_clip_range->original_clip_time - segment_base_time);
+	result->clip_relative_segment_index = params->segment_index - clip_initial_segment_index;
 	
 	return VOD_OK;
 }
@@ -688,6 +694,7 @@ segmenter_get_start_end_ranges_discontinuity(
 	uint64_t clip_time;
 	uint64_t start;
 	uint64_t end;
+	uint32_t clip_initial_segment_index;
 	uint32_t last_segment_limit;
 	uint32_t cur_segment_limit;
 	uint32_t segment_index = params->segment_index;
@@ -752,6 +759,7 @@ segmenter_get_start_end_ranges_discontinuity(
 
 		clip_index = cur_duration - params->timing.durations;
 		clip_time = params->timing.times[clip_index];
+		clip_initial_segment_index = last_segment_limit;
 	}
 	else
 	{
@@ -786,6 +794,10 @@ segmenter_get_start_end_ranges_discontinuity(
 
 		clip_index = cur_duration - params->timing.durations;
 		clip_start_offset = clip_time;
+
+		clip_initial_segment_index = segmenter_get_segment_index_no_discontinuity(
+			conf,
+			params->timing.original_times[clip_index] - params->timing.segment_base_time);
 
 		cur_segment_limit = conf->get_segment_count(conf, clip_time + clip_duration - params->timing.segment_base_time);
 		if (cur_segment_limit == INVALID_SEGMENT_COUNT)
@@ -872,6 +884,7 @@ segmenter_get_start_end_ranges_discontinuity(
 	result->min_clip_index = result->max_clip_index = clip_index;
 	result->clip_count = 1;
 	result->clip_ranges = cur_clip_range;
+	result->clip_relative_segment_index = segment_index - clip_initial_segment_index;
 
 	return VOD_OK;
 }

@@ -192,7 +192,8 @@ ngx_http_vod_dash_mp4_init_frame_processor(
 			&submodule_context->request_context,
 			&submodule_context->media_set,
 			submodule_context->request_params.segment_index,
-			conf->min_single_nalu_per_frame_segment > 0 && submodule_context->request_params.segment_index >= conf->min_single_nalu_per_frame_segment - 1,
+			conf->min_single_nalu_per_frame_segment > 0 && 
+				submodule_context->media_set.initial_segment_clip_relative_index >= conf->min_single_nalu_per_frame_segment - 1,
 			segment_writer,
 			submodule_context->media_set.sequences[0].encryption_key,		// iv
 			size_only,

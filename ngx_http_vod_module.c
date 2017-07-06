@@ -1562,6 +1562,8 @@ ngx_http_vod_parse_metadata(
 				rc = segmenter_get_start_end_ranges_no_discontinuity(
 					&get_ranges_params,
 					&clip_ranges);
+
+				ctx->submodule_context.media_set.initial_segment_clip_relative_index = clip_ranges.clip_relative_segment_index;
 			}
 			else
 			{
