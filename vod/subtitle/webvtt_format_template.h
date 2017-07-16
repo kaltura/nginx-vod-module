@@ -81,6 +81,11 @@ METHOD(webvtt_read_timestamp)(CHAR_TYPE* cur_pos, CHAR_TYPE** end_pos)
 		if (isdigit(*cur_pos))
 		{
 			millis += (*cur_pos++ - '0');
+
+			while (isdigit(*cur_pos))
+			{
+				cur_pos++;
+			}
 		}
 	}
 
