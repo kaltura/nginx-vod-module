@@ -5,7 +5,7 @@
 #include <ctype.h>
 
 // macros
-#define cap_is_style(ch) ((ch) <= 0x14 || (ch) >= 0xc0)
+#define cap_is_style(ch) ((ch) < 0x20 || (ch) >= 0xc0)
 
 // constants
 #define CAP_DATA_START_OFFSET (0x80)
@@ -72,10 +72,10 @@ cap_reader_init(
 }
 
 static uint64_t
-cap_parse_timestamp(u_char* p)
+cap_parse_timestamp(u_char* p, u_char hours_base)
 {
 	uint32_t millis = (1000 * p[3]) / CAP_FRAME_RATE;
-	return ((uint64_t)p[0] - 1) * 3600000 + 	// hour
+	return ((uint64_t)p[0] - hours_base) * 3600000 + 	// hour
 		((uint64_t)p[1]) * 60000 + 				// min
 		((uint64_t)p[2]) * 1000 + 				// sec
 		vod_min(millis, 999);
@@ -86,10 +86,12 @@ cap_get_duration(vod_str_t* source)
 {
 	u_char* p = source->data + CAP_DATA_START_OFFSET;
 	u_char* end = source->data + source->len;
+	u_char hours_base = 0;
 	uint64_t timestamp;
 	uint64_t result = 0;
 	uint32_t offset;
 	uint32_t len;
+	bool_t first_time = TRUE;
 
 	while (p + 2 < end)
 	{
@@ -122,7 +124,13 @@ cap_get_duration(vod_str_t* source)
 			continue;
 		}
 
-		timestamp += cap_parse_timestamp(p + offset);
+		if (first_time)
+		{
+			first_time = FALSE;
+			hours_base = p[CAP_START_TIME_OFFSET];
+		}
+
+		timestamp += cap_parse_timestamp(p + offset, hours_base);
 		if (timestamp > result)
 		{
 			result = timestamp;
@@ -283,6 +291,8 @@ cap_parse_frames(
 	u_char* text_start;
 	u_char* text_end;
 	u_char* p;
+	u_char hours_base = 0;
+	bool_t first_time = TRUE;
 	size_t frame_size;
 	
 	vod_memzero(result, sizeof(*result));
@@ -337,16 +347,22 @@ cap_parse_frames(
 		next = cap_get_next_block(cur_pos + cur_pos[0], end_pos);
 
 		// get start / end
-		start_time = cap_parse_timestamp(cur_pos + CAP_START_TIME_OFFSET);
+		if (first_time)
+		{
+			first_time = FALSE;
+			hours_base = cur_pos[CAP_START_TIME_OFFSET];
+		}
+
+		start_time = cap_parse_timestamp(cur_pos + CAP_START_TIME_OFFSET, hours_base);
 		if ((cur_pos[1] & CAP_FLAG_HAS_END_TIME) != 0)
 		{
-			end_time = cap_parse_timestamp(cur_pos + CAP_END_TIME_OFFSET);
+			end_time = cap_parse_timestamp(cur_pos + CAP_END_TIME_OFFSET, hours_base);
 		}
 		else
 		{
 			if (next != NULL)
 			{
-				end_time = cap_parse_timestamp(next + CAP_START_TIME_OFFSET);
+				end_time = cap_parse_timestamp(next + CAP_START_TIME_OFFSET, hours_base);
 			}
 			else
 			{
