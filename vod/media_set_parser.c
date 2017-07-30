@@ -341,14 +341,14 @@ media_set_parse_language(
 	request_context_t* request_context = *(request_context_t**)ctx;
 	language_id_t result;
 
-	if (value->v.str.len < LANG_ISO639_2_LEN)
+	if (value->v.str.len < LANG_ISO639_3_LEN)
 	{
 		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
 			"media_set_parse_language: invalid language string length \"%V\"", &value->v.str);
 		return VOD_BAD_MAPPING;
 	}
 
-	result = lang_parse_iso639_2_code(iso639_2_str_to_int(value->v.str.data));
+	result = lang_parse_iso639_3_code(iso639_3_str_to_int(value->v.str.data));
 	if (result == 0)
 	{
 		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
