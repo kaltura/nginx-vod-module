@@ -5,25 +5,25 @@
 
 // globals
 static const char* iso639_1_codes[] = {
-#define LANG(id, iso639_1, iso639_2t, iso639_2b, name, native_name) iso639_1, 
+#define LANG(id, iso639_1, iso639_2b, iso639_2t, name, native_name) iso639_1, 
 #include "languages_x.h"
 #undef LANG
 };
 
 static const char* iso639_2t_codes[] = {
-#define LANG(id, iso639_1, iso639_2t, iso639_2b, name, native_name) iso639_2t, 
+#define LANG(id, iso639_1, iso639_2b, iso639_2t, name, native_name) iso639_2t, 
 #include "languages_x.h"
 #undef LANG
 };
 
 static const char* iso639_2b_codes[] = {
-#define LANG(id, iso639_1, iso639_2t, iso639_2b, name, native_name) iso639_2b, 
+#define LANG(id, iso639_1, iso639_2b, iso639_2t, name, native_name) iso639_2b, 
 #include "languages_x.h"
 #undef LANG
 };
 
 static vod_str_t native_names[] = {
-#define LANG(id, iso639_1, iso639_2t, iso639_2b, name, native_name) vod_string(native_name),
+#define LANG(id, iso639_1, iso639_2b, iso639_2t, name, native_name) vod_string(native_name),
 #include "languages_x.h"
 #undef LANG
 };
