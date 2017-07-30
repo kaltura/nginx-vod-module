@@ -1,7 +1,7 @@
 #include "language_code.h"
 
 #define get_iso639_3_hash_index(code) \
-	(((code) >> 10) & 0x1f)
+	((((code) >> 10) & 0x1f) - 1)
 
 // globals
 static const char* iso639_1_codes[] = {
@@ -66,8 +66,8 @@ language_code_process_init(vod_pool_t* pool, vod_log_t* log)
 		if (iso639_3_hash[index] != 0)
 		{
 			vod_log_error(VOD_LOG_ERR, log, 0,
-				"language_code_process_init: hash table collision in index %uD",
-				(uint32_t)index);
+				"language_code_process_init: hash table collision in index %uD lang %s",
+				(uint32_t)index, iso639_3_codes[i]);
 			return VOD_UNEXPECTED;
 		}
 	
@@ -91,8 +91,8 @@ language_code_process_init(vod_pool_t* pool, vod_log_t* log)
 		if (iso639_3_hash[index] != 0)
 		{
 			vod_log_error(VOD_LOG_ERR, log, 0,
-				"language_code_process_init: hash table collision in index %uD",
-				(uint32_t)index);
+				"language_code_process_init: hash table collision in index %uD lang %s",
+				(uint32_t)index, iso639_2b_codes[i]);
 			return VOD_UNEXPECTED;
 		}
 

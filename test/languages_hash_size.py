@@ -14,7 +14,7 @@ for curLine in file(os.path.join(os.path.split(__file__)[0], '../vod/languages_x
 sizes = []
 for letter in xrange(26):
 	curCodes = filter(lambda x: x.startswith(chr(ord('a') + letter)), codes)
-	langIntCodes = map(lambda x: ((ord(x[0]) - 96) << 10) | ((ord(x[1]) - 96) << 5) | (ord(x[2]) - 96), curCodes)
+	langIntCodes = map(lambda x: (((ord(x[0]) - 96) & 0x1f) << 10) | (((ord(x[1]) - 96) & 0x1f) << 5) | ((ord(x[2]) - 96) & 0x1f), curCodes)
 
 	hashSize = len(langIntCodes)
 	while True:
