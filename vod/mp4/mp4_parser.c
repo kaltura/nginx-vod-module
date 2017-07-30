@@ -472,7 +472,7 @@ mp4_parser_parse_mdhd_atom(atom_info_t* atom_info, metadata_parse_context_t* con
 	context->media_info.frames_timescale = timescale;
 	context->media_info.full_duration = duration;
 	context->media_info.duration_millis = rescale_time(duration, timescale, 1000);
-	context->media_info.language = lang_parse_iso639_2_code(language);
+	context->media_info.language = lang_parse_iso639_3_code(language);
 	lang_get_native_name(context->media_info.language, &context->media_info.label);
 
 	return VOD_OK;

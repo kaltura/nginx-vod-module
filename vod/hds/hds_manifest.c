@@ -413,7 +413,7 @@ hds_packager_build_manifest(
 	result_size = 
 		sizeof(HDS_MANIFEST_HEADER) - 1 + manifest_id->len + 
 		sizeof(HDS_MANIFEST_HEADER_BASE_URL) - 1 + base_url->len +
-		sizeof(HDS_MANIFEST_HEADER_LANG) - 1 + LANG_ISO639_2_LEN +
+		sizeof(HDS_MANIFEST_HEADER_LANG) - 1 + LANG_ISO639_3_LEN +
 		sizeof(HDS_MANIFEST_FOOTER);
 
 	switch (media_set->type)
@@ -444,7 +444,7 @@ hds_packager_build_manifest(
 
 	result_size +=
 		(vod_max(sizeof(HDS_MEDIA_HEADER_PREFIX_VIDEO) - 1 + 3 * VOD_INT32_LEN, 
-			sizeof(HDS_MEDIA_HEADER_PREFIX_AUDIO_LANG) - 1 + VOD_INT32_LEN + LANG_ISO639_2_LEN) +
+			sizeof(HDS_MEDIA_HEADER_PREFIX_AUDIO_LANG) - 1 + VOD_INT32_LEN + LANG_ISO639_3_LEN) +
 		conf->fragment_file_name_prefix.len +
 		MANIFEST_UTILS_TRACKS_SPEC_MAX_SIZE + 1 +		// 1 = -
 		sizeof(HDS_MEDIA_HEADER_SUFFIX_DRM) - 1 + 2 * VOD_INT32_LEN +
@@ -571,7 +571,7 @@ hds_packager_build_manifest(
 
 		p = vod_sprintf(p, HDS_MANIFEST_HEADER_LANG, 
 			&track->media_info.label,
-			lang_get_iso639_2t_name(track->media_info.language));
+			lang_get_iso639_3_name(track->media_info.language));
 	}
 
 	// bootstrap tags
@@ -702,7 +702,7 @@ hds_packager_build_manifest(
 					p = vod_sprintf(p, HDS_MEDIA_HEADER_PREFIX_AUDIO_LANG,
 						bitrate / 1000, 
 						&tracks[MEDIA_TYPE_AUDIO]->media_info.label, 
-						lang_get_iso639_2t_name(tracks[MEDIA_TYPE_AUDIO]->media_info.language));
+						lang_get_iso639_3_name(tracks[MEDIA_TYPE_AUDIO]->media_info.language));
 				}
 				else
 				{

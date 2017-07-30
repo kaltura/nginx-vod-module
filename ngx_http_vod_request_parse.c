@@ -491,14 +491,14 @@ ngx_http_vod_parse_uri_file_name(
 		for (;;)
 		{
 			start_pos++;		// skip the l
-			if (start_pos + LANG_ISO639_2_LEN > end_pos)
+			if (start_pos + LANG_ISO639_3_LEN > end_pos)
 			{
 				ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
 					"ngx_http_vod_parse_uri_file_name: language specifier length must be 3 characters");
 				return ngx_http_vod_status_to_ngx_error(r, VOD_BAD_REQUEST);
 			}
 
-			lang_id = lang_parse_iso639_2_code(iso639_2_str_to_int(start_pos));
+			lang_id = lang_parse_iso639_3_code(iso639_3_str_to_int(start_pos));
 			if (lang_id == 0)
 			{
 				ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
@@ -508,7 +508,7 @@ ngx_http_vod_parse_uri_file_name(
 
 			vod_set_bit(result->langs_mask, lang_id);
 
-			start_pos += LANG_ISO639_2_LEN;
+			start_pos += LANG_ISO639_3_LEN;
 
 			skip_dash(start_pos, end_pos);
 
@@ -669,12 +669,12 @@ ngx_http_vod_parse_lang_param(ngx_str_t* value, void* output, int offset)
 	media_sequence_t* sequence = clip->sequence;
 	language_id_t result;
 
-	if (value->len < LANG_ISO639_2_LEN)
+	if (value->len < LANG_ISO639_3_LEN)
 	{
 		return NGX_HTTP_BAD_REQUEST;
 	}
 
-	result = lang_parse_iso639_2_code(iso639_2_str_to_int(value->data));
+	result = lang_parse_iso639_3_code(iso639_3_str_to_int(value->data));
 	if (result == 0)
 	{
 		return NGX_HTTP_BAD_REQUEST;

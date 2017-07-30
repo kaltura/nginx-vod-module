@@ -941,7 +941,7 @@ dash_packager_write_mpd_period(
 			{
 				p = vod_sprintf(p, VOD_DASH_MANIFEST_ADAPTATION_HEADER_AUDIO_LANG, 
 					adapt_id++, 
-					lang_get_iso639_1_name(reference_track->media_info.language),
+					lang_get_rfc_5646_name(reference_track->media_info.language),
 					&reference_track->media_info.label);
 			}
 			else
@@ -977,7 +977,7 @@ dash_packager_write_mpd_period(
 				representation_id.len--;
 			}
 
-			lang_code = lang_get_iso639_1_name(cur_track->media_info.language);
+			lang_code = lang_get_rfc_5646_name(cur_track->media_info.language);
 			p = vod_sprintf(p, VOD_DASH_MANIFEST_ADAPTATION_SUBTITLE, 
 				lang_code,
 				&cur_track->media_info.label,
@@ -1415,13 +1415,13 @@ dash_packager_build_mpd(
 			(sizeof(VOD_DASH_MANIFEST_REPRESENTATION_HEADER_VIDEO) - 1 + MAX_TRACK_SPEC_LENGTH + MAX_MIME_TYPE_SIZE + MAX_CODEC_NAME_SIZE + 3 * VOD_INT32_LEN + VOD_DASH_MAX_FRAME_RATE_LEN +
 			sizeof(VOD_DASH_MANIFEST_REPRESENTATION_FOOTER) - 1) * media_set->track_count[MEDIA_TYPE_VIDEO] +
 			// audio adaptations
-			(sizeof(VOD_DASH_MANIFEST_ADAPTATION_HEADER_AUDIO_LANG) - 1 + VOD_INT32_LEN + LANG_ISO639_1_LEN +
+			(sizeof(VOD_DASH_MANIFEST_ADAPTATION_HEADER_AUDIO_LANG) - 1 + VOD_INT32_LEN + LANG_ISO639_3_LEN +
 			sizeof(VOD_DASH_MANIFEST_ADAPTATION_FOOTER) - 1) * context.adaptation_sets.count[ADAPTATION_TYPE_AUDIO] +
 			// audio representations
 			(sizeof(VOD_DASH_MANIFEST_REPRESENTATION_HEADER_AUDIO) - 1 + MAX_TRACK_SPEC_LENGTH + MAX_MIME_TYPE_SIZE + MAX_CODEC_NAME_SIZE + 2 * VOD_INT32_LEN +
 			sizeof(VOD_DASH_MANIFEST_REPRESENTATION_FOOTER) - 1) * media_set->track_count[MEDIA_TYPE_AUDIO] +
 			// subtitle adaptations
-			(sizeof(VOD_DASH_MANIFEST_ADAPTATION_SUBTITLE) - 1 + 2 * LANG_ISO639_1_LEN + VOD_INT32_LEN +
+			(sizeof(VOD_DASH_MANIFEST_ADAPTATION_SUBTITLE) - 1 + 2 * LANG_ISO639_3_LEN + VOD_INT32_LEN +
 			context.base_url.len + conf->subtitle_file_name_prefix.len + MAX_CLIP_SPEC_LENGTH + MAX_TRACK_SPEC_LENGTH) *
 			context.adaptation_sets.count[ADAPTATION_TYPE_SUBTITLE] +
 		sizeof(VOD_DASH_MANIFEST_PERIOD_FOOTER) - 1 +

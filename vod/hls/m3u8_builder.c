@@ -672,7 +672,7 @@ m3u8_builder_ext_x_media_tags_get_size(
 		(sizeof(M3U8_EXT_MEDIA_PART1) - 1 + VOD_INT32_LEN +
 		sizeof(M3U8_EXT_MEDIA_TYPE_SUBTITLES) - 1 +
 		sizeof(M3U8_EXT_MEDIA_GROUP_ID_AUDIO) - 1 +
-		LANG_ISO639_1_LEN +
+		LANG_ISO639_3_LEN +
 		sizeof(M3U8_EXT_MEDIA_PART2_DEFAULT) - 1 +
 		sizeof(M3U8_EXT_MEDIA_CHANNELS) - 1 + VOD_INT32_LEN +
 		sizeof(M3U8_EXT_MEDIA_PART3) - 1 +
@@ -754,7 +754,7 @@ m3u8_builder_ext_x_media_tags_write(
 			type,
 			group_id,
 			group_index,
-			lang_get_iso639_1_name(tracks[media_type]->media_info.language),
+			lang_get_rfc_5646_name(tracks[media_type]->media_info.language),
 			&tracks[media_type]->media_info.label);
 		if (adaptation_set == first_adaptation_set)
 		{
