@@ -763,9 +763,9 @@ mkv_metadata_parse(
 		}
 
 		// get the language id
-		if (track.language.len >= LANG_ISO639_2_LEN)
+		if (track.language.len >= LANG_ISO639_3_LEN)
 		{
-			lang_id = lang_parse_iso639_2_code(iso639_2_str_to_int(track.language.data));
+			lang_id = lang_parse_iso639_3_code(iso639_3_str_to_int(track.language.data));
 		}
 		else
 		{
