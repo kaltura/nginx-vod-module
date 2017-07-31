@@ -23,7 +23,7 @@ enum {
 	VOD_LANG_COUNT
 };
 
-typedef uint8_t language_id_t;
+typedef uint16_t language_id_t;
 
 // functions
 vod_status_t language_code_process_init(vod_pool_t* pool, vod_log_t* log);
