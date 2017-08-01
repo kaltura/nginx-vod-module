@@ -1014,7 +1014,9 @@ m3u8_builder_build_master_playlist(
 		MAX_CODEC_NAME_SIZE + 1 +		// 1 = ,
 		sizeof("\"\n\n") - 1;
 
-	if (adaptation_sets.count[ADAPTATION_TYPE_AUDIO] > 0 && adaptation_sets.total_count > 1)
+	bool_t alternative_audio = adaptation_sets.count[ADAPTATION_TYPE_AUDIO] > 0 && adaptation_sets.total_count > 1;
+
+	if (alternative_audio)
 	{
 		// alternative audio
 		// Note: in case of audio only, the first track is printed twice - once as #EXT-X-STREAM-INF
@@ -1096,7 +1098,7 @@ m3u8_builder_build_master_playlist(
 	// write the header
 	p = vod_copy(result->data, m3u8_header, sizeof(m3u8_header) - 1);
 
-	if (adaptation_sets.count[ADAPTATION_TYPE_AUDIO] > 0 && adaptation_sets.total_count > 1)
+	if (alternative_audio)
 	{
 		// output alternative audio 
 		p = m3u8_builder_ext_x_media_tags_write(
