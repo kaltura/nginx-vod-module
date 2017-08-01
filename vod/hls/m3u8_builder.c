@@ -989,7 +989,8 @@ m3u8_builder_build_master_playlist(
 	rc = manifest_utils_get_adaptation_sets(
 		request_context, 
 		media_set, 
-		ADAPTATION_SETS_FLAG_MUXED | ADAPTATION_SETS_FLAG_SINGLE_LANG_TRACK | ADAPTATION_SETS_FLAG_MULTI_CODEC,
+		(conf->force_master_separate_audio_video ? 0 : ADAPTATION_SETS_FLAG_MUXED) |
+		ADAPTATION_SETS_FLAG_SINGLE_LANG_TRACK | ADAPTATION_SETS_FLAG_MULTI_CODEC,
 		&adaptation_sets);
 	if (rc != VOD_OK)
 	{
@@ -1013,7 +1014,7 @@ m3u8_builder_build_master_playlist(
 		MAX_CODEC_NAME_SIZE + 1 +		// 1 = ,
 		sizeof("\"\n\n") - 1;
 
-	if (adaptation_sets.count[ADAPTATION_TYPE_AUDIO] > 1)
+	if (adaptation_sets.count[ADAPTATION_TYPE_AUDIO] > 0 && adaptation_sets.total_count > 1)
 	{
 		// alternative audio
 		// Note: in case of audio only, the first track is printed twice - once as #EXT-X-STREAM-INF
@@ -1095,7 +1096,7 @@ m3u8_builder_build_master_playlist(
 	// write the header
 	p = vod_copy(result->data, m3u8_header, sizeof(m3u8_header) - 1);
 
-	if (adaptation_sets.count[ADAPTATION_TYPE_AUDIO] > 1)
+	if (adaptation_sets.count[ADAPTATION_TYPE_AUDIO] > 0 && adaptation_sets.total_count > 1)
 	{
 		// output alternative audio 
 		p = m3u8_builder_ext_x_media_tags_write(
