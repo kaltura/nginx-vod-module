@@ -984,12 +984,13 @@ m3u8_builder_build_master_playlist(
 	size_t base_url_len;
 	size_t result_size;
 	u_char* p;
+	bool_t alternative_audio;
 
 	// get the adaptations sets
 	rc = manifest_utils_get_adaptation_sets(
 		request_context, 
 		media_set, 
-		(conf->force_master_separate_audio_video ? 0 : ADAPTATION_SETS_FLAG_MUXED) |
+		(conf->force_unmuxed_segments ? 0 : ADAPTATION_SETS_FLAG_MUXED) |
 		ADAPTATION_SETS_FLAG_SINGLE_LANG_TRACK | ADAPTATION_SETS_FLAG_MULTI_CODEC,
 		&adaptation_sets);
 	if (rc != VOD_OK)
@@ -1014,7 +1015,7 @@ m3u8_builder_build_master_playlist(
 		MAX_CODEC_NAME_SIZE + 1 +		// 1 = ,
 		sizeof("\"\n\n") - 1;
 
-	bool_t alternative_audio = adaptation_sets.count[ADAPTATION_TYPE_AUDIO] > 0 && adaptation_sets.total_count > 1;
+	alternative_audio = adaptation_sets.count[ADAPTATION_TYPE_AUDIO] > 0 && adaptation_sets.total_count > 1;
 
 	if (alternative_audio)
 	{

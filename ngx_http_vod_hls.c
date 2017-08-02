@@ -433,7 +433,7 @@ ngx_http_vod_hls_create_loc_conf(
 	conf->muxer_config.align_frames = NGX_CONF_UNSET;
 	conf->muxer_config.output_id3_timestamps = NGX_CONF_UNSET;
 	conf->encryption_method = NGX_CONF_UNSET_UINT;
-	conf->m3u8_config.force_master_separate_audio_video = NGX_CONF_UNSET;
+	conf->m3u8_config.force_unmuxed_segments = NGX_CONF_UNSET;
 }
 
 static char *
@@ -459,7 +459,7 @@ ngx_http_vod_hls_merge_loc_conf(
 	{
 		conf->encryption_key_uri = prev->encryption_key_uri;
 	}
-	ngx_conf_merge_value(conf->m3u8_config.force_master_separate_audio_video, prev->m3u8_config.force_master_separate_audio_video, 0);
+	ngx_conf_merge_value(conf->m3u8_config.force_unmuxed_segments, prev->m3u8_config.force_unmuxed_segments, 0);
 
 	ngx_conf_merge_value(conf->muxer_config.interleave_frames, prev->muxer_config.interleave_frames, 0);
 	ngx_conf_merge_value(conf->muxer_config.align_frames, prev->muxer_config.align_frames, 1);
