@@ -871,7 +871,7 @@ m3u8_builder_write_variants(
 		}
 
 		*p++ = '\"';
-		if (adaptation_sets->count[ADAPTATION_TYPE_AUDIO] > 1)
+		if (adaptation_sets->count[ADAPTATION_TYPE_AUDIO] > 0 && adaptation_sets->total_count > 1)
 		{
 			p = vod_sprintf(p, M3U8_STREAM_TAG_AUDIO, group_audio_track->media_info.codec_id - VOD_CODEC_ID_AUDIO);
 		}
@@ -1147,7 +1147,7 @@ m3u8_builder_build_master_playlist(
 			conf,
 			base_url,
 			media_set,
-			adaptation_sets.count[ADAPTATION_TYPE_AUDIO] > 1 ? adaptation_sets.first_by_type[ADAPTATION_TYPE_AUDIO]->first[0] : NULL);
+			alternative_audio ? adaptation_sets.first_by_type[ADAPTATION_TYPE_AUDIO]->first[0] : NULL);
 	}
 
 	// iframes
