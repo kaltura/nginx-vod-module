@@ -871,7 +871,7 @@ m3u8_builder_write_variants(
 		}
 
 		*p++ = '\"';
-		if (adaptation_sets->count[ADAPTATION_TYPE_AUDIO] > 1)
+		if (adaptation_sets->count[ADAPTATION_TYPE_AUDIO] > 0 && adaptation_sets->total_count > 1)
 		{
 			p = vod_sprintf(p, M3U8_STREAM_TAG_AUDIO, group_audio_track->media_info.codec_id - VOD_CODEC_ID_AUDIO);
 		}
@@ -984,12 +984,14 @@ m3u8_builder_build_master_playlist(
 	size_t base_url_len;
 	size_t result_size;
 	u_char* p;
+	bool_t alternative_audio;
 
 	// get the adaptations sets
 	rc = manifest_utils_get_adaptation_sets(
 		request_context, 
 		media_set, 
-		ADAPTATION_SETS_FLAG_MUXED | ADAPTATION_SETS_FLAG_SINGLE_LANG_TRACK | ADAPTATION_SETS_FLAG_MULTI_CODEC,
+		(conf->force_unmuxed_segments ? 0 : ADAPTATION_SETS_FLAG_MUXED) |
+		ADAPTATION_SETS_FLAG_SINGLE_LANG_TRACK | ADAPTATION_SETS_FLAG_MULTI_CODEC,
 		&adaptation_sets);
 	if (rc != VOD_OK)
 	{
@@ -1013,7 +1015,9 @@ m3u8_builder_build_master_playlist(
 		MAX_CODEC_NAME_SIZE + 1 +		// 1 = ,
 		sizeof("\"\n\n") - 1;
 
-	if (adaptation_sets.count[ADAPTATION_TYPE_AUDIO] > 1)
+	alternative_audio = adaptation_sets.count[ADAPTATION_TYPE_AUDIO] > 0 && adaptation_sets.total_count > 1;
+
+	if (alternative_audio)
 	{
 		// alternative audio
 		// Note: in case of audio only, the first track is printed twice - once as #EXT-X-STREAM-INF
@@ -1095,7 +1099,7 @@ m3u8_builder_build_master_playlist(
 	// write the header
 	p = vod_copy(result->data, m3u8_header, sizeof(m3u8_header) - 1);
 
-	if (adaptation_sets.count[ADAPTATION_TYPE_AUDIO] > 1)
+	if (alternative_audio)
 	{
 		// output alternative audio 
 		p = m3u8_builder_ext_x_media_tags_write(
@@ -1144,7 +1148,7 @@ m3u8_builder_build_master_playlist(
 			conf,
 			base_url,
 			media_set,
-			adaptation_sets.count[ADAPTATION_TYPE_AUDIO] > 1 ? adaptation_sets.first_by_type[ADAPTATION_TYPE_AUDIO]->first[0] : NULL);
+			alternative_audio ? adaptation_sets.first_by_type[ADAPTATION_TYPE_AUDIO]->first[0] : NULL);
 	}
 
 	// iframes
