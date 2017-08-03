@@ -11,7 +11,7 @@ IGNORE_LIST = set([
 	])
 
 if len(sys.argv) < 2:
-	print 'Usage:\n\t%s <source root> [<object root> [<object use only last folder>]]' % os.path.basename(__file__)
+	print 'Usage:\n\tpython %s <source root> [<object root> [<object use only last folder>]]' % os.path.basename(__file__)
 	sys.exit(1)
 
 sourceRoot = sys.argv[1]

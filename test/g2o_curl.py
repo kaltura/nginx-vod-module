@@ -4,7 +4,7 @@ import sys
 import os
 
 if len(sys.argv) < 2:
-	print 'Usage:\n\t%s [curl options] <url>' % os.path.basename(__file__)
+	print 'Usage:\n\tpython %s [curl options] <url>' % os.path.basename(__file__)
 	sys.exit(1)
 
 switches = sys.argv[1:-1]

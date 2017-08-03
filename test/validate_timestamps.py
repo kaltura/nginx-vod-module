@@ -65,7 +65,8 @@ def getDashFragmentInfo(url):
 def getDashFragmentsInfo(urls):
 	result = []
 	for url in urls:
-		if not url.endswith('.m4s'):
+		urlPath = url.split('?')[0]
+		if not urlPath.endswith('.m4s'):
 			continue
 		print '.',
 		result += getDashFragmentInfo(url)
@@ -95,7 +96,8 @@ def getFragmentInfoFromDtssPtss(url, segIndex, fileIndex, dtss, ptss, audioPacke
 	return result
 
 def getHdsFragmentInfo(url):
-	d = urllib2.urlopen(url).read()
+	req = urllib2.Request(url, headers=headers)
+	d = urllib2.urlopen(req).read()
 	atoms = mp4_utils.parseAtoms(d, 0, len(d))
 	mdatAtom = mp4_utils.getAtomData(d, atoms, 'mdat')
 	curPos = 0
@@ -152,7 +154,8 @@ def countAdtsPackets(d):
 	return result
 		
 def getHlsFragmentInfo(url, fileIndex):
-	d = urllib2.urlopen(url).read()
+	req = urllib2.Request(url, headers=headers)
+	d = urllib2.urlopen(req).read()
 	dtss = {}
 	ptss = {}
 	adtsCounts = []
@@ -214,7 +217,7 @@ def getHlsFragmentInfo(url, fileIndex):
 		ptss[streamId].append(curPts)
 	if audioPacket != None:
 		adtsCounts.append(countAdtsPackets(audioPacket))
-	urlFilename = url.rsplit('/', 1)[-1]
+	urlFilename = url.split('?')[0].rsplit('/', 1)[-1]
 	urlFilename = urlFilename.replace('-v1', '').replace('-a1', '').replace('-Seg1-Frag', '-').replace('.ts', '')
 	if fileIndex > 0:
 		segIndex = urlFilename.split('-')[1]
@@ -226,10 +229,11 @@ def getHlsFragmentsInfo(urls):
 	result = []
 	baseUrls = []
 	for url in urls:
+		urlPath = url.split('?')[0]
 		baseUrl = url.rsplit('/', 1)[0]
-		if url.endswith('.m3u8') and not baseUrl.endswith('.urlset/'):
+		if urlPath.endswith('.m3u8') and not baseUrl.endswith('.urlset/'):
 			baseUrls.append(baseUrl)
-		if not url.endswith('.ts'):
+		if not urlPath.endswith('.ts'):
 			continue
 		print '.',
 		if baseUrl in baseUrls:
@@ -279,10 +283,18 @@ res = urllib2.urlopen(URL)
 mimeType = res.info().getheader('Content-Type')
 d = res.read()
 
+# apply Set-Cookie headers
+headers = {}
+for header in res.info().headers:
+	splittedHeader = header.split(':', 1)
+	if splittedHeader[0] == 'Set-Cookie':
+		headers['Cookie'] = splittedHeader[1].strip()
+		
 PARSER_BY_MIME_TYPE = {
 	'application/dash+xml': getDashFragmentsInfo,
 	'video/f4m': getHdsFragmentsInfo,
 	'application/vnd.apple.mpegurl': getHlsFragmentsInfo,
+	'application/x-mpegurl': getHlsFragmentsInfo,
 	'text/xml': getMssFragmentsInfo,
 }
 
@@ -290,11 +302,12 @@ TIMESCALE = {
 	'application/dash+xml': 90000,
 	'video/f4m': 1000,
 	'application/vnd.apple.mpegurl': 90000,
+	'application/x-mpegurl': 90000,
 	'text/xml': 10000000,
 }
 
 baseUrl = URL.rsplit('/', 1)[0] + '/'
-urls = manifest_utils.getManifestUrls(baseUrl, d, mimeType, {})
+urls = manifest_utils.getManifestUrls(baseUrl, d, mimeType, headers)
 
 print 'processing %s urls' % len(urls)
 fragmentInfos = PARSER_BY_MIME_TYPE[mimeType](urls)

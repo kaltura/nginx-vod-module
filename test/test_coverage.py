@@ -31,7 +31,7 @@ def validateLogParams(fileName, fileData):
         logBlock = None
 
 if len(sys.argv) < 2:
-    print 'Usage:\n\t%s <nginx-vod code root> [<error log file>]' % os.path.basename(__file__)
+    print 'Usage:\n\tpython %s <nginx-vod code root> [<error log file>]' % os.path.basename(__file__)
     sys.exit(1)
 
 nginxVodRoot = sys.argv[1]

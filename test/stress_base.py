@@ -98,7 +98,7 @@ def main(testThread, stopFile):
 	
 	# parse the command line
 	if len(sys.argv) < 4:
-		writeOutput('Usage:\n\t%s <input file> <thread count> <output file> [<server1> <server2> .. ]' % os.path.basename(__file__))
+		writeOutput('Usage:\n\tpython %s <input file> <thread count> <output file> [<server1> <server2> .. ]' % os.path.basename(__file__))
 		sys.exit(1)
 	
 	(_, inputFile, threadCount, outputFile) = sys.argv[:4]
