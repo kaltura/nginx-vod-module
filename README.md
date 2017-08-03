@@ -1422,6 +1422,13 @@ Turning this parameter off reduces the packaging overhead, however the default i
 
 Sets the encryption method of HLS segments, allowed values are: none (default), aes-128, sample-aes.
 
+#### vod_hls_force_unmuxed_segments
+* **syntax**: `vod_hls_force_unmuxed_segments on/off`
+* **default**: `off`
+* **context**: `http`, `server`, `location`
+
+When enabled the server returns the audio stream in separate segments than the ones used by the video stream (using EXT-X-MEDIA)
+
 #### vod_hls_absolute_master_urls
 * **syntax**: `vod_hls_absolute_master_urls on/off`
 * **default**: `on`
