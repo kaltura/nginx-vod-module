@@ -1,7 +1,7 @@
 from Crypto.Cipher import AES
 
-def decryptTsSegment(self, fileData, aesKey, segmentIndex):
-	cipher = AES.new(aesKey, AES.MODE_CBC, '\0' * 12 + struct.pack('>L', segmentIndex))
+def decryptTsSegment(fileData, aesKey, aesIv):
+	cipher = AES.new(aesKey, AES.MODE_CBC, aesIv)
 	try:
 		decryptedTS = cipher.decrypt(fileData)
 	except ValueError:

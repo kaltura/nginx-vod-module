@@ -222,14 +222,16 @@ Where:
   * hls media playlist - index.m3u8
   * mss - manifest
   * thumb - `thumb-<offset>.jpg` (offset is the thumbnail video offset in milliseconds)
-* seqparams - can be used to select specific seqeuences by id, e.g. master-sseq1.m3u8.
-* fileparams - can be used to select specific files (URLs) when using multi URLs.
+* seqparams - can be used to select specific seqeuences by id (provided in the mapping JSON), e.g. master-sseq1.m3u8.
+* fileparams - can be used to select specific sequences by index when using multi URLs.
 	For example, manifest-f1.mpd will return an MPD only from the first URL.
 * trackparams - can be used to select specific audio/video tracks.
-	For example, manifest-a1.f4m will return an F4M containing only the first audio stream.
+	For example, manifest-a1.f4m will return an F4M containing only the first audio stream of each sequence.
 	The default is to include the first audio and first video tracks of each file.
 	The tracks selected on the file name are AND-ed with the tracks selected with the /tracks/ path parameter.
-* langparams - can be used to filter audio tracks according to their language.
+	v0/a0 select all video/audio tracks respectively.
+	The a/v parameters can be combined with f/s, e.g. f1-v1-f2-a1 = video1 of file1 + audio1 of file2, f1-f2-v1 = video1 of file1 + video1 of file2.
+* langparams - can be used to filter audio tracks/subtitles according to their language (ISO639-3 code).
 	For example, master-leng.m3u8 will return only english audio tracks.
 
 ### Mapping response format
@@ -535,7 +537,8 @@ Optional fields:
 
 Mandatory fields:
 * `type` - a string with the value `source`
-* `path` - a string containing the path of the MP4 file
+* `path` - a string containing the path of the MP4 file. The string `"empty"` can be used to represent
+	an empty captions file (useful in case only some videos in a playlist have captions)
 
 Optional fields:
 * `tracks` - a string that specifies the tracks that should be used, the default is "v1-a1",
