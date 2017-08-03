@@ -85,7 +85,7 @@ typedef struct {
 	u_char flags[3];
 	u_char track_id[4];
 	u_char default_sample_flags[4];
-} tfhd_atom_t;
+} mss_tfhd_atom_t;
 
 typedef struct {
 	uint64_t timestamp;
@@ -629,7 +629,7 @@ mss_packager_build_manifest(
 static u_char*
 mss_write_tfhd_atom(u_char* p, uint32_t track_id, uint32_t flags)
 {
-	size_t atom_size = ATOM_HEADER_SIZE + sizeof(tfhd_atom_t);
+	size_t atom_size = ATOM_HEADER_SIZE + sizeof(mss_tfhd_atom_t);
 
 	write_atom_header(p, atom_size, 't', 'f', 'h', 'd');
 	write_be32(p, 0x20);		// default sample flags
@@ -725,7 +725,7 @@ mss_packager_build_fragment_header(
 
 	traf_atom_size =
 		ATOM_HEADER_SIZE +
-		ATOM_HEADER_SIZE + sizeof(tfhd_atom_t) +
+		ATOM_HEADER_SIZE + sizeof(mss_tfhd_atom_t) +
 		trun_atom_size +
 		ATOM_HEADER_SIZE + sizeof(uuid_tfxd_atom_t) + 
 		extra_traf_atoms_size;

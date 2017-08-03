@@ -65,7 +65,7 @@ typedef struct {
 	u_char track_id[4];
 	u_char base_data_offset[8];
 	u_char sample_desc_index[4];
-} tfhd_atom_t;
+} hds_tfhd_atom_t;
 
 // frame tags
 typedef struct {
@@ -484,7 +484,7 @@ hds_write_afra_atom_entry(u_char* p, uint64_t time, uint64_t offset)
 static u_char*
 hds_write_tfhd_atom(u_char* p, uint32_t track_id, uint64_t base_data_offset)
 {
-	size_t atom_size = ATOM_HEADER_SIZE + sizeof(tfhd_atom_t);
+	size_t atom_size = ATOM_HEADER_SIZE + sizeof(hds_tfhd_atom_t);
 
 	write_atom_header(p, atom_size, 't', 'f', 'h', 'd');
 	write_be32(p, 3);							// flags - base data offset | sample description
@@ -556,7 +556,7 @@ hds_get_traf_atom_size(hds_muxer_stream_state_t* cur_stream)
 {
 	size_t result;
 	
-	result = ATOM_HEADER_SIZE + ATOM_HEADER_SIZE + sizeof(tfhd_atom_t);
+	result = ATOM_HEADER_SIZE + ATOM_HEADER_SIZE + sizeof(hds_tfhd_atom_t);
 	switch (cur_stream->media_type)
 	{
 	case MEDIA_TYPE_VIDEO:
@@ -713,7 +713,7 @@ hds_calculate_output_offsets_and_write_afra_entries(
 	hds_muxer_state_t* state, 
 	uint32_t initial_value, 
 	uint32_t afra_entries_base, 
-	size_t* mdat_atom_size,
+	size_t* frames_size,
 	u_char** p)
 {
 	hds_muxer_stream_state_t* selected_stream;
@@ -805,7 +805,7 @@ hds_calculate_output_offsets_and_write_afra_entries(
 		}
 	}
 
-	*mdat_atom_size = cur_offset;
+	*frames_size = cur_offset - initial_value;
 
 	return VOD_OK;
 }
@@ -1057,6 +1057,8 @@ hds_muxer_init_fragment(
 			return rc;
 		}
 
+		mdat_atom_size += mdat_header_size;
+
 		*total_fragment_size =
 			afra_atom_size +
 			moof_atom_size +
@@ -1090,11 +1092,18 @@ hds_muxer_init_fragment(
 		// afra
 		p = hds_write_afra_atom_header(p, afra_atom_size, video_key_frame_count);
 
-		rc = hds_calculate_output_offsets_and_write_afra_entries(state, mdat_header_size, afra_atom_size + moof_atom_size, &mdat_atom_size, &p);
+		rc = hds_calculate_output_offsets_and_write_afra_entries(
+			state, 
+			moof_atom_size + mdat_header_size, 
+			afra_atom_size, 
+			&mdat_atom_size, 
+			&p);
 		if (rc != VOD_OK)
 		{
 			return rc;
 		}
+
+		mdat_atom_size += mdat_header_size;
 
 		// calculate the total size now that we have the mdat size
 		*total_fragment_size =
