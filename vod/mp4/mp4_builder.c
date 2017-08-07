@@ -240,7 +240,7 @@ mp4_builder_frame_writer_process(fragment_writer_state_t* state)
 			return VOD_OK;
 		}
 
-		rc = state->cur_frame_part.frames_source->start_frame(state->cur_frame_part.frames_source_context, state->cur_frame, ULLONG_MAX);
+		rc = state->cur_frame_part.frames_source->start_frame(state->cur_frame_part.frames_source_context, state->cur_frame, NULL);
 		if (rc != VOD_OK)
 		{
 			return rc;
@@ -346,7 +346,7 @@ mp4_builder_frame_writer_process(fragment_writer_state_t* state)
 			}
 		}
 
-		rc = state->cur_frame_part.frames_source->start_frame(state->cur_frame_part.frames_source_context, state->cur_frame, ULLONG_MAX);
+		rc = state->cur_frame_part.frames_source->start_frame(state->cur_frame_part.frames_source_context, state->cur_frame, NULL);
 		if (rc != VOD_OK)
 		{
 			return rc;

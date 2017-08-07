@@ -1242,9 +1242,9 @@ hds_muxer_start_frame(hds_muxer_state_t* state)
 {
 	hds_muxer_stream_state_t* selected_stream;
 	hds_muxer_stream_state_t* cur_stream;
+	read_cache_hint_t cache_hint;
 	input_frame_t* cur_frame;
 	uint64_t cur_frame_dts;
-	uint64_t min_offset;
 	uint32_t frame_size;
 	size_t alloc_size;
 	u_char* p;
@@ -1349,7 +1349,7 @@ hds_muxer_start_frame(hds_muxer_state_t* state)
 	}
 
 	// find the min offset
-	min_offset = ULLONG_MAX;
+	cache_hint.min_offset = ULLONG_MAX;
 
 	for (cur_stream = state->first_stream; cur_stream < state->last_stream; cur_stream++)
 	{
@@ -1360,14 +1360,15 @@ hds_muxer_start_frame(hds_muxer_state_t* state)
 
 		cur_frame = cur_stream->cur_frame;
 		if (cur_frame < cur_stream->cur_frame_part.last_frame &&
-			cur_frame->offset < min_offset &&
+			cur_frame->offset < cache_hint.min_offset &&
 			cur_stream->source == selected_stream->source)
 		{
-			min_offset = cur_frame->offset;
+			cache_hint.min_offset = cur_frame->offset;
+			cache_hint.min_offset_slot_id = cur_stream->media_type;
 		}
 	}
 
-	rc = state->frames_source->start_frame(state->frames_source_context, state->cur_frame, min_offset);
+	rc = state->frames_source->start_frame(state->frames_source_context, state->cur_frame, &cache_hint);
 	if (rc != VOD_OK)
 	{
 		return rc;
