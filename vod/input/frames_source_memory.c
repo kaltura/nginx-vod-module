@@ -33,7 +33,7 @@ frames_source_memory_set_cache_slot_id(void* ctx, int cache_slot_id)
 }
 
 static vod_status_t
-frames_source_memory_start_frame(void* ctx, input_frame_t* frame, uint64_t min_offset)
+frames_source_memory_start_frame(void* ctx, input_frame_t* frame, read_cache_hint_t* cache_hint)
 {
 	frames_source_memory_state_t* state = ctx;
 

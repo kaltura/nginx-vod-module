@@ -658,12 +658,12 @@ hls_muxer_start_frame(hls_muxer_state_t* state)
 {
 	hls_muxer_stream_state_t* cur_stream;
 	hls_muxer_stream_state_t* selected_stream;
+	read_cache_hint_t cache_hint;
 	output_frame_t output_frame;
 	input_frame_t* cur_frame;
 	uint64_t cur_frame_time_offset;
 	uint64_t cur_frame_dts;
 	uint64_t buffer_dts;
-	uint64_t min_offset;
 	vod_status_t rc;
 
 	rc = hls_muxer_choose_stream(state, &selected_stream);
@@ -685,7 +685,7 @@ hls_muxer_start_frame(hls_muxer_state_t* state)
 	state->last_stream_frame = selected_stream->cur_frame >= selected_stream->cur_frame_part.last_frame && 
 		selected_stream->cur_frame_part.next == NULL;
 
-	min_offset = ULLONG_MAX;
+	cache_hint.min_offset = ULLONG_MAX;
 
 	for (cur_stream = state->first_stream; cur_stream < state->last_stream; cur_stream++)
 	{
@@ -711,10 +711,11 @@ hls_muxer_start_frame(hls_muxer_state_t* state)
 		// find the min offset
 		cur_frame = cur_stream->cur_frame;
 		if (cur_frame < cur_stream->cur_frame_part.last_frame &&
-			cur_frame->offset < min_offset && 
+			cur_frame->offset < cache_hint.min_offset &&
 			cur_stream->source == selected_stream->source)
 		{
-			min_offset = cur_frame->offset;
+			cache_hint.min_offset = cur_frame->offset;
+			cache_hint.min_offset_slot_id = cur_stream->mpegts_encoder_state.stream_info.pid;
 		}
 	}
 
@@ -732,7 +733,7 @@ hls_muxer_start_frame(hls_muxer_state_t* state)
 	state->cache_slot_id = selected_stream->mpegts_encoder_state.stream_info.pid;
 
 	// start the frame
-	rc = state->frames_source->start_frame(state->frames_source_context, state->cur_frame, min_offset);
+	rc = state->frames_source->start_frame(state->frames_source_context, state->cur_frame, &cache_hint);
 	if (rc != VOD_OK)
 	{
 		return rc;
