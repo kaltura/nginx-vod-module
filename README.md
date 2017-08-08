@@ -140,12 +140,12 @@ Install the GPG key:
 ```
 For Debian Wheezy [7], Debian Jessie [8], Ubuntu 14.04 and 14.10, add this repo:
 ```
-# echo "deb [arch=amd64] http://installrepo.kaltura.org/repo/apt/debian lynx main" > /etc/apt/sources.list.d/kaltura.list
+# echo "deb [arch=amd64] http://installrepo.kaltura.org/repo/apt/debian mercury main" > /etc/apt/sources.list.d/kaltura.list
 ```
 
-For Ubuntu 16.04, 16.10 [should also work for Debian Stretch [9], testing and sid], add this repo:
+For Ubuntu 16.04, 16.10 add this repo:
 ```
-# echo "deb [arch=amd64] http://installrepo.kaltura.org/repo/apt/xenial lynx main" > /etc/apt/sources.list.d/kaltura.list
+# echo "deb [arch=amd64] http://installrepo.kaltura.org/repo/apt/xenial mercury main" > /etc/apt/sources.list.d/kaltura.list
 ```
 
 Then install the kaltura-nginx package:
