@@ -3,6 +3,7 @@
 #include "hds_amf0_encoder.h"
 #include "../write_buffer.h"
 #include "../mp4/mp4_defs.h"
+#include "../mp4/mp4_fragment.h"
 #include "../aes_defs.h"
 
 // adobe mux packet definitions
@@ -1115,7 +1116,7 @@ hds_muxer_init_fragment(
 		write_atom_header(p, moof_atom_size, 'm', 'o', 'o', 'f');
 
 		// moof.mfhd
-		p = mp4_builder_write_mfhd_atom(p, segment_index);
+		p = mp4_fragment_write_mfhd_atom(p, segment_index);
 
 		for (cur_stream = state->first_stream; cur_stream < state->last_stream; cur_stream++)
 		{

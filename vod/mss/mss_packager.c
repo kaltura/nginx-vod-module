@@ -1,5 +1,6 @@
 #include "mss_packager.h"
 #include "../mp4/mp4_defs.h"
+#include "../mp4/mp4_fragment.h"
 #include "../manifest_utils.h"
 
 // constants
@@ -721,7 +722,7 @@ mss_packager_build_fragment_header(
 
 	// calculate sizes
 	mdat_atom_size = ATOM_HEADER_SIZE + sequence->total_frame_size;
-	trun_atom_size = mp4_builder_get_trun_atom_size(media_type, sequence->total_frame_count);
+	trun_atom_size = mp4_fragment_get_trun_atom_size(media_type, sequence->total_frame_count);
 
 	traf_atom_size =
 		ATOM_HEADER_SIZE +
@@ -766,7 +767,7 @@ mss_packager_build_fragment_header(
 	write_atom_header(p, moof_atom_size, 'm', 'o', 'o', 'f');
 
 	// moof.mfhd
-	p = mp4_builder_write_mfhd_atom(p, segment_index);
+	p = mp4_fragment_write_mfhd_atom(p, segment_index);
 
 	// moof.traf
 	write_atom_header(p, traf_atom_size, 't', 'r', 'a', 'f');
@@ -784,7 +785,7 @@ mss_packager_build_fragment_header(
 	}
 
 	// moof.traf.trun
-	p = mp4_builder_write_trun_atom(
+	p = mp4_fragment_write_trun_atom(
 		p,
 		sequence,
 		moof_atom_size + ATOM_HEADER_SIZE, 

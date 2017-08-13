@@ -1,6 +1,7 @@
 #include "mp4_muxer.h"
 #include "../input/frames_source_cache.h"
 #include "../mp4/mp4_defs.h"
+#include "../mp4/mp4_fragment.h"
 #include "../aes_defs.h"
 
 // constants
@@ -663,7 +664,7 @@ mp4_muxer_init_fragment(
 	write_atom_header(p, moof_atom_size, 'm', 'o', 'o', 'f');
 
 	// moof.mfhd
-	p = mp4_builder_write_mfhd_atom(p, segment_index);
+	p = mp4_fragment_write_mfhd_atom(p, segment_index);
 
 	for (cur_stream = state->first_stream; cur_stream < state->last_stream; cur_stream++)
 	{
@@ -672,13 +673,13 @@ mp4_muxer_init_fragment(
 		p += ATOM_HEADER_SIZE;
 
 		// moof.traf.tfhd
-		p = mp4_builder_write_tfhd_atom(p, cur_stream->index + 1, 0);
+		p = mp4_fragment_write_tfhd_atom(p, cur_stream->index + 1, 0);
 
 		// moof.traf.tfdt
 		earliest_pres_time = mp4_muxer_get_earliest_pres_time(
 			media_set, 
 			cur_stream->index);
-		p = mp4_builder_write_tfdt64_atom(p, earliest_pres_time);
+		p = mp4_fragment_write_tfdt64_atom(p, earliest_pres_time);
 
 		// moof.traf.trun
 		switch (cur_stream->media_type)

@@ -1,5 +1,5 @@
 #include "ttml_builder.h"
-#include "../mp4/mp4_builder.h"
+#include "../mp4/mp4_fragment.h"
 #include "../mp4/mp4_defs.h"
 
 // constants
@@ -238,7 +238,7 @@ ttml_build_mp4(
 	write_atom_header(p, moof_atom_size, 'm', 'o', 'o', 'f');
 
 	// moof.mfhd
-	p = mp4_builder_write_mfhd_atom(p, segment_index + 1);
+	p = mp4_fragment_write_mfhd_atom(p, segment_index + 1);
 
 	// moof.traf
 	write_atom_header(p, traf_atom_size, 't', 'r', 'a', 'f');

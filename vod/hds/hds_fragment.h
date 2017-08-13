@@ -2,8 +2,8 @@
 #define __HDS_FRAGMENT_H__
 
 // includes
-#include "../mp4/mp4_builder.h"
 #include "../media_format.h"
+#include "../media_set.h"
 #include "../common.h"
 #include "hds_encryption.h"
 

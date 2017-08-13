@@ -1,4 +1,4 @@
-#include "mp4_builder.h"
+#include "mp4_fragment.h"
 #include "mp4_defs.h"
 
 // content types
@@ -6,7 +6,7 @@ static u_char mp4_video_content_type[] = "video/mp4";
 static u_char mp4_audio_content_type[] = "audio/mp4";
 
 u_char*
-mp4_builder_write_mfhd_atom(u_char* p, uint32_t segment_index)
+mp4_fragment_write_mfhd_atom(u_char* p, uint32_t segment_index)
 {
 	size_t atom_size = ATOM_HEADER_SIZE + sizeof(mfhd_atom_t);
 
@@ -17,7 +17,7 @@ mp4_builder_write_mfhd_atom(u_char* p, uint32_t segment_index)
 }
 
 u_char*
-mp4_builder_write_tfhd_atom(u_char* p, uint32_t track_id, uint32_t sample_description_index)
+mp4_fragment_write_tfhd_atom(u_char* p, uint32_t track_id, uint32_t sample_description_index)
 {
 	size_t atom_size;
 	uint32_t flags;
@@ -41,7 +41,7 @@ mp4_builder_write_tfhd_atom(u_char* p, uint32_t track_id, uint32_t sample_descri
 }
 
 u_char*
-mp4_builder_write_tfdt_atom(u_char* p, uint32_t earliest_pres_time)
+mp4_fragment_write_tfdt_atom(u_char* p, uint32_t earliest_pres_time)
 {
 	size_t atom_size = ATOM_HEADER_SIZE + sizeof(tfdt_atom_t);
 
@@ -52,7 +52,7 @@ mp4_builder_write_tfdt_atom(u_char* p, uint32_t earliest_pres_time)
 }
 
 u_char*
-mp4_builder_write_tfdt64_atom(u_char* p, uint64_t earliest_pres_time)
+mp4_fragment_write_tfdt64_atom(u_char* p, uint64_t earliest_pres_time)
 {
 	size_t atom_size = ATOM_HEADER_SIZE + sizeof(tfdt64_atom_t);
 
@@ -63,7 +63,7 @@ mp4_builder_write_tfdt64_atom(u_char* p, uint64_t earliest_pres_time)
 }
 
 size_t
-mp4_builder_get_trun_atom_size(uint32_t media_type, uint32_t frame_count)
+mp4_fragment_get_trun_atom_size(uint32_t media_type, uint32_t frame_count)
 {
 	switch (media_type)
 	{
@@ -77,7 +77,7 @@ mp4_builder_get_trun_atom_size(uint32_t media_type, uint32_t frame_count)
 }
 
 static u_char* 
-mp4_builder_write_video_trun_atom(
+mp4_fragment_write_video_trun_atom(
 	u_char* p, 
 	media_sequence_t* sequence, 
 	uint32_t first_frame_offset,
@@ -140,7 +140,7 @@ mp4_builder_write_video_trun_atom(
 }
 
 static u_char* 
-mp4_builder_write_audio_trun_atom(u_char* p, media_sequence_t* sequence, uint32_t first_frame_offset)
+mp4_fragment_write_audio_trun_atom(u_char* p, media_sequence_t* sequence, uint32_t first_frame_offset)
 {
 	media_clip_filtered_t* cur_clip;
 	frame_list_part_t* part;
@@ -180,7 +180,7 @@ mp4_builder_write_audio_trun_atom(u_char* p, media_sequence_t* sequence, uint32_
 }
 
 u_char*
-mp4_builder_write_trun_atom(
+mp4_fragment_write_trun_atom(
 	u_char* p, 
 	media_sequence_t* sequence,
 	uint32_t first_frame_offset,
@@ -189,18 +189,18 @@ mp4_builder_write_trun_atom(
 	switch (sequence->media_type)
 	{
 	case MEDIA_TYPE_VIDEO:
-		p = mp4_builder_write_video_trun_atom(p, sequence, first_frame_offset, version);
+		p = mp4_fragment_write_video_trun_atom(p, sequence, first_frame_offset, version);
 		break;
 
 	case MEDIA_TYPE_AUDIO:
-		p = mp4_builder_write_audio_trun_atom(p, sequence, first_frame_offset);
+		p = mp4_fragment_write_audio_trun_atom(p, sequence, first_frame_offset);
 		break;
 	}
 	return p;
 }
 
 static void
-mp4_builder_init_track(fragment_writer_state_t* state, media_track_t* track)
+mp4_fragment_init_track(fragment_writer_state_t* state, media_track_t* track)
 {
 	state->first_time = TRUE;
 	state->first_frame_part = &track->frames;
@@ -215,7 +215,7 @@ mp4_builder_init_track(fragment_writer_state_t* state, media_track_t* track)
 }
 
 vod_status_t 
-mp4_builder_frame_writer_init(
+mp4_fragment_frame_writer_init(
 	request_context_t* request_context,
 	media_sequence_t* sequence,
 	write_callback_t write_callback,
@@ -229,7 +229,7 @@ mp4_builder_frame_writer_init(
 	if (state == NULL)
 	{
 		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
-			"mp4_builder_frame_writer_init: vod_alloc failed");
+			"mp4_fragment_frame_writer_init: vod_alloc failed");
 		return VOD_ALLOC_FAILED;
 	}
 
@@ -241,14 +241,14 @@ mp4_builder_frame_writer_init(
 	state->sequence = sequence;
 	state->cur_clip = sequence->filtered_clips;
 
-	mp4_builder_init_track(state, state->cur_clip->first_track);
+	mp4_fragment_init_track(state, state->cur_clip->first_track);
 
 	*result = state;
 	return VOD_OK;
 }
 
 static bool_t
-mp4_builder_move_to_next_frame(fragment_writer_state_t* state)
+mp4_fragment_move_to_next_frame(fragment_writer_state_t* state)
 {
 	while (state->cur_frame >= state->cur_frame_part.last_frame)
 	{
@@ -266,14 +266,14 @@ mp4_builder_move_to_next_frame(fragment_writer_state_t* state)
 			return FALSE;
 		}
 
-		mp4_builder_init_track(state, state->cur_clip->first_track);
+		mp4_fragment_init_track(state, state->cur_clip->first_track);
 	}
 
 	return TRUE;
 }
 
 vod_status_t
-mp4_builder_frame_writer_process(fragment_writer_state_t* state)
+mp4_fragment_frame_writer_process(fragment_writer_state_t* state)
 {
 	u_char* read_buffer;
 	uint32_t read_size;
@@ -285,7 +285,7 @@ mp4_builder_frame_writer_process(fragment_writer_state_t* state)
 
 	if (!state->frame_started)
 	{
-		if (!mp4_builder_move_to_next_frame(state))
+		if (!mp4_fragment_move_to_next_frame(state))
 		{
 			return VOD_OK;
 		}
@@ -322,7 +322,7 @@ mp4_builder_frame_writer_process(fragment_writer_state_t* state)
 			else if (!processed_data && !state->first_time)
 			{
 				vod_log_error(VOD_LOG_ERR, state->request_context->log, 0,
-					"mp4_builder_frame_writer_process: no data was handled, probably a truncated file");
+					"mp4_fragment_frame_writer_process: no data was handled, probably a truncated file");
 				return VOD_BAD_DATA;
 			}
 
@@ -390,7 +390,7 @@ mp4_builder_frame_writer_process(fragment_writer_state_t* state)
 				write_buffer = NULL;
 			}
 
-			if (!mp4_builder_move_to_next_frame(state))
+			if (!mp4_fragment_move_to_next_frame(state))
 			{
 				return VOD_OK;
 			}
@@ -405,7 +405,7 @@ mp4_builder_frame_writer_process(fragment_writer_state_t* state)
 }
 
 void
-mp4_builder_get_content_type(
+mp4_fragment_get_content_type(
 	bool_t video,
 	vod_str_t* content_type)
 {

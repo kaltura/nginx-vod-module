@@ -1,6 +1,7 @@
 #include "dash_packager.h"
 #include "../manifest_utils.h"
 #include "../mp4/mp4_defs.h"
+#include "../mp4/mp4_fragment.h"
 
 // macros
 #define vod_copy_atom(p, raw_atom) vod_copy(p, (raw_atom).ptr, (raw_atom).size)
@@ -2435,7 +2436,7 @@ dash_packager_build_fragment_header(
 	dash_packager_init_sidx_params(media_set, sequence, &sidx_params);
 
 	mdat_atom_size = ATOM_HEADER_SIZE + sequence->total_frame_size;
-	trun_atom_size = mp4_builder_get_trun_atom_size(first_track->media_info.media_type, sequence->total_frame_count);
+	trun_atom_size = mp4_fragment_get_trun_atom_size(first_track->media_info.media_type, sequence->total_frame_count);
 
 	tfhd_atom_size = ATOM_HEADER_SIZE + sizeof(tfhd_atom_t);
 	if (sample_description_index > 0)
@@ -2504,28 +2505,28 @@ dash_packager_build_fragment_header(
 	write_atom_header(p, moof_atom_size, 'm', 'o', 'o', 'f');
 
 	// moof.mfhd
-	p = mp4_builder_write_mfhd_atom(p, segment_index);
+	p = mp4_fragment_write_mfhd_atom(p, segment_index);
 
 	// moof.traf
 	write_atom_header(p, traf_atom_size, 't', 'r', 'a', 'f');
 
 	// moof.traf.tfhd
-	p = mp4_builder_write_tfhd_atom(p, 1, sample_description_index);
+	p = mp4_fragment_write_tfhd_atom(p, 1, sample_description_index);
 
 	// moof.traf.tfdt
 	if (sidx_params.earliest_pres_time > UINT_MAX)
 	{
-		p = mp4_builder_write_tfdt64_atom(p, sidx_params.earliest_pres_time);
+		p = mp4_fragment_write_tfdt64_atom(p, sidx_params.earliest_pres_time);
 	}
 	else
 	{
-		p = mp4_builder_write_tfdt_atom(p, (uint32_t)sidx_params.earliest_pres_time);
+		p = mp4_fragment_write_tfdt_atom(p, (uint32_t)sidx_params.earliest_pres_time);
 	}
 
 	// moof.traf.trun
 	first_frame_offset = moof_atom_size + ATOM_HEADER_SIZE;
 
-	p = mp4_builder_write_trun_atom(
+	p = mp4_fragment_write_trun_atom(
 		p, 
 		sequence, 
 		first_frame_offset,

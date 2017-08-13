@@ -4,7 +4,7 @@
 
 #include "mp4_decrypt.h"
 #include "mp4_encrypt.h"
-#include "mp4_builder.h"
+#include "mp4_write_stream.h"
 #include "../udrm.h"
 
 bool_t

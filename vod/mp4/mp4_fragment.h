@@ -1,31 +1,14 @@
-#ifndef __MP4_BUILDER_H__
-#define __MP4_BUILDER_H__
+#ifndef __MP4_FRAGMENT_H__
+#define __MP4_FRAGMENT_H__
 
 // includes
-#include "../write_stream.h"
-#include "../media_set.h"
+#include "mp4_write_stream.h"
 #include "mp4_defs.h"
+#include "../media_set.h"
 
 // constants
 #define TRUN_VIDEO_FLAGS (0xF01)		// = data offset, duration, size, key, delay
 #define TRUN_AUDIO_FLAGS (0x301)		// = data offset, duration, size
-
-// macros
-#define write_atom_name(p, c1, c2, c3, c4) \
-	{ *(p)++ = (c1); *(p)++ = (c2); *(p)++ = (c3); *(p)++ = (c4); }
-
-#define write_atom_header(p, size, c1, c2, c3, c4) \
-	{										\
-	write_be32(p, size);					\
-	write_atom_name(p, c1, c2, c3, c4);		\
-	}
-
-#define write_atom_header64(p, size, c1, c2, c3, c4) \
-	{										\
-	write_be32(p, 1);						\
-	write_atom_name(p, c1, c2, c3, c4);		\
-	write_be64(p, size);					\
-	}
 
 // typedefs
 typedef struct {
@@ -69,23 +52,23 @@ typedef struct {
 } fragment_writer_state_t;
 
 // functions
-u_char* mp4_builder_write_mfhd_atom(u_char* p, uint32_t segment_index);
+u_char* mp4_fragment_write_mfhd_atom(u_char* p, uint32_t segment_index);
 
-u_char* mp4_builder_write_tfhd_atom(u_char* p, uint32_t track_id, uint32_t sample_description_index);
+u_char* mp4_fragment_write_tfhd_atom(u_char* p, uint32_t track_id, uint32_t sample_description_index);
 
-u_char* mp4_builder_write_tfdt_atom(u_char* p, uint32_t earliest_pres_time);
+u_char* mp4_fragment_write_tfdt_atom(u_char* p, uint32_t earliest_pres_time);
 
-u_char* mp4_builder_write_tfdt64_atom(u_char* p, uint64_t earliest_pres_time);
+u_char* mp4_fragment_write_tfdt64_atom(u_char* p, uint64_t earliest_pres_time);
 
-size_t mp4_builder_get_trun_atom_size(uint32_t media_type, uint32_t frame_count);
+size_t mp4_fragment_get_trun_atom_size(uint32_t media_type, uint32_t frame_count);
 
-u_char* mp4_builder_write_trun_atom(
+u_char* mp4_fragment_write_trun_atom(
 	u_char* p, 
 	media_sequence_t* sequence, 
 	uint32_t first_frame_offset,
 	uint32_t version);
 
-vod_status_t mp4_builder_frame_writer_init(
+vod_status_t mp4_fragment_frame_writer_init(
 	request_context_t* request_context,
 	media_sequence_t* sequence,
 	write_callback_t write_callback,
@@ -93,10 +76,10 @@ vod_status_t mp4_builder_frame_writer_init(
 	bool_t reuse_buffers,
 	fragment_writer_state_t** result);
 
-vod_status_t mp4_builder_frame_writer_process(fragment_writer_state_t* state);
+vod_status_t mp4_fragment_frame_writer_process(fragment_writer_state_t* state);
 
-void mp4_builder_get_content_type(
+void mp4_fragment_get_content_type(
 	bool_t video,
 	vod_str_t* content_type);
 
-#endif // __MP4_BUILDER_H__
+#endif // __MP4_FRAGMENT_H__

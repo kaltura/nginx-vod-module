@@ -5,6 +5,7 @@
 #include "vod/dash/dash_packager.h"
 #include "vod/dash/edash_packager.h"
 #include "vod/mkv/mkv_builder.h"
+#include "vod/mp4/mp4_fragment.h"
 #include "vod/subtitle/webvtt_builder.h"
 #include "vod/udrm.h"
 
@@ -148,7 +149,7 @@ ngx_http_vod_dash_mp4_handle_init_segment(
 		return ngx_http_vod_status_to_ngx_error(submodule_context->r, rc);
 	}
 
-	mp4_builder_get_content_type(
+	mp4_fragment_get_content_type(
 		submodule_context->media_set.track_count[MEDIA_TYPE_VIDEO],
 		content_type);
 	return NGX_OK;
@@ -226,7 +227,7 @@ ngx_http_vod_dash_mp4_init_frame_processor(
 	// initialize the frame processor
 	if (!size_only || *response_size == 0)
 	{
-		rc = mp4_builder_frame_writer_init(
+		rc = mp4_fragment_frame_writer_init(
 			&submodule_context->request_context,
 			submodule_context->media_set.sequences,
 			segment_writer->write_tail,
@@ -236,16 +237,16 @@ ngx_http_vod_dash_mp4_init_frame_processor(
 		if (rc != VOD_OK)
 		{
 			ngx_log_debug1(NGX_LOG_DEBUG_HTTP, submodule_context->request_context.log, 0,
-				"ngx_http_vod_dash_mp4_init_frame_processor: mp4_builder_frame_writer_init failed %i", rc);
+				"ngx_http_vod_dash_mp4_init_frame_processor: mp4_fragment_frame_writer_init failed %i", rc);
 			return ngx_http_vod_status_to_ngx_error(submodule_context->r, rc);
 		}
 
-		*frame_processor = (ngx_http_vod_frame_processor_t)mp4_builder_frame_writer_process;
+		*frame_processor = (ngx_http_vod_frame_processor_t)mp4_fragment_frame_writer_process;
 		*frame_processor_state = state;
 	}
 
 	// set the 'Content-type' header
-	mp4_builder_get_content_type(
+	mp4_fragment_get_content_type(
 		submodule_context->media_set.track_count[MEDIA_TYPE_VIDEO],
 		content_type);
 	return NGX_OK;
