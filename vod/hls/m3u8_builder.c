@@ -48,6 +48,8 @@ static vod_str_t m3u8_ts_suffix = vod_string(".ts\n");
 static vod_str_t m3u8_m4s_suffix = vod_string(".m4s\n");
 static vod_str_t m3u8_vtt_suffix = vod_string(".vtt\n");
 
+static vod_str_t default_label = vod_string("default");
+
 // typedefs
 typedef struct {
 	u_char* p;
@@ -748,6 +750,7 @@ m3u8_builder_ext_x_media_tags_get_size(
 	adaptation_set_t* last_adaptation_set;
 	adaptation_set_t* adaptation_set;
 	media_track_t* cur_track;
+	size_t label_len;
 	size_t result;
 
 	result =
@@ -768,7 +771,15 @@ m3u8_builder_ext_x_media_tags_get_size(
 	{
 		cur_track = adaptation_set->first[0];
 
-		result += cur_track->media_info.label.len;
+		label_len = cur_track->media_info.label.len;
+		if (label_len == 0)
+		{
+			result += default_label.len;
+		}
+		else
+		{
+			result += label_len;
+		}
 
 		if (base_url->len != 0)
 		{
@@ -792,6 +803,7 @@ m3u8_builder_ext_x_media_tags_write(
 	adaptation_set_t* last_adaptation_set;
 	adaptation_set_t* adaptation_set;
 	media_track_t* tracks[MEDIA_TYPE_COUNT];
+	vod_str_t* label;
 	uint32_t group_index;
 	char* group_id;
 	char* type;
@@ -833,12 +845,18 @@ m3u8_builder_ext_x_media_tags_write(
 			group_index = 0;
 		}
 
+		label = &tracks[media_type]->media_info.label;
+		if (label->len == 0)
+		{
+			label = &default_label;
+		}
+
 		p = vod_sprintf(p, M3U8_EXT_MEDIA_PART1,
 			type,
 			group_id,
 			group_index,
 			lang_get_rfc_5646_name(tracks[media_type]->media_info.language),
-			&tracks[media_type]->media_info.label);
+			label);
 		if (adaptation_set == first_adaptation_set)
 		{
 			p = vod_copy(p, M3U8_EXT_MEDIA_PART2_DEFAULT, sizeof(M3U8_EXT_MEDIA_PART2_DEFAULT) - 1);
