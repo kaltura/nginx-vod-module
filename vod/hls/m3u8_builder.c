@@ -216,7 +216,7 @@ vod_status_t
 m3u8_builder_build_iframe_playlist(
 	request_context_t* request_context,
 	m3u8_config_t* conf,
-	hls_muxer_conf_t* muxer_conf,
+	hls_mpegts_muxer_conf_t* muxer_conf,
 	vod_str_t* base_url,
 	request_params_t* request_params,
 	media_set_t* media_set,
@@ -364,7 +364,7 @@ m3u8_builder_build_index_playlist(
 	uint64_t duration_millis;
 	uint32_t segment_index;
 	uint32_t last_segment_index;
-	uint32_t clip_index;
+	uint32_t clip_index = 0;
 	uint32_t scale;
 	size_t segment_length;
 	size_t result_size;
@@ -396,6 +396,7 @@ m3u8_builder_build_index_playlist(
 	else
 	{
 		encryption_type = HLS_ENC_NONE;
+		container_format = HLS_CONTAINER_MPEGTS;		// do not output any fmp4-specific tags
 		suffix = &m3u8_vtt_suffix;
 	}
 

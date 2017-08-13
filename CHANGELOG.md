@@ -1,7 +1,15 @@
 # Change log
 
-Note: the list of changes below may not include all changes, it will include mostly "breaking" changes.
+Note: the list of changes below does not include all changes, it includes mostly "breaking" changes.
 	Usually, these are changes that require some update to nginx.conf in order to retain the existing behavior.
+
+	
+## 2017/08/13 - hls/fmp4 support
+
+The following configuration settings were renamed:
+* vod_hls_interleave_frames -> vod_hls_mpegts_interleave_frames
+* vod_hls_align_frames -> vod_hls_mpegts_align_frames
+* vod_hls_output_id3_timestamps -> vod_hls_mpegts_output_id3_timestamps
 
 ## 2016/06/09 - live timing enhancements
 

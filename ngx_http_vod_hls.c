@@ -256,7 +256,7 @@ ngx_http_vod_hls_handle_iframe_playlist(
 	rc = m3u8_builder_build_iframe_playlist(
 		&submodule_context->request_context,
 		&conf->hls.m3u8_config,
-		&conf->hls.muxer_config,
+		&conf->hls.mpegts_muxer_config,
 		&base_url,
 		&submodule_context->request_params,
 		&submodule_context->media_set,
@@ -320,7 +320,7 @@ ngx_http_vod_hls_init_ts_frame_processor(
 
 	rc = hls_muxer_init_segment(
 		&submodule_context->request_context,
-		&submodule_context->conf->hls.muxer_config,
+		&submodule_context->conf->hls.mpegts_muxer_config,
 		&encryption_params,
 		submodule_context->request_params.segment_index,
 		&submodule_context->media_set,
@@ -585,9 +585,9 @@ ngx_http_vod_hls_create_loc_conf(
 	conf->absolute_master_urls = NGX_CONF_UNSET;
 	conf->absolute_index_urls = NGX_CONF_UNSET;
 	conf->absolute_iframe_urls = NGX_CONF_UNSET;
-	conf->muxer_config.interleave_frames = NGX_CONF_UNSET;
-	conf->muxer_config.align_frames = NGX_CONF_UNSET;
-	conf->muxer_config.output_id3_timestamps = NGX_CONF_UNSET;
+	conf->mpegts_muxer_config.interleave_frames = NGX_CONF_UNSET;
+	conf->mpegts_muxer_config.align_frames = NGX_CONF_UNSET;
+	conf->mpegts_muxer_config.output_id3_timestamps = NGX_CONF_UNSET;
 	conf->encryption_method = NGX_CONF_UNSET_UINT;
 	conf->m3u8_config.force_unmuxed_segments = NGX_CONF_UNSET;
 	conf->m3u8_config.container_format = NGX_CONF_UNSET_UINT;
@@ -620,9 +620,9 @@ ngx_http_vod_hls_merge_loc_conf(
 	ngx_conf_merge_value(conf->m3u8_config.force_unmuxed_segments, prev->m3u8_config.force_unmuxed_segments, 0);
 	ngx_conf_merge_uint_value(conf->m3u8_config.container_format, prev->m3u8_config.container_format, HLS_CONTAINER_AUTO);
 
-	ngx_conf_merge_value(conf->muxer_config.interleave_frames, prev->muxer_config.interleave_frames, 0);
-	ngx_conf_merge_value(conf->muxer_config.align_frames, prev->muxer_config.align_frames, 1);
-	ngx_conf_merge_value(conf->muxer_config.output_id3_timestamps, prev->muxer_config.output_id3_timestamps, 0);
+	ngx_conf_merge_value(conf->mpegts_muxer_config.interleave_frames, prev->mpegts_muxer_config.interleave_frames, 0);
+	ngx_conf_merge_value(conf->mpegts_muxer_config.align_frames, prev->mpegts_muxer_config.align_frames, 1);
+	ngx_conf_merge_value(conf->mpegts_muxer_config.output_id3_timestamps, prev->mpegts_muxer_config.output_id3_timestamps, 0);
 	
 	ngx_conf_merge_uint_value(conf->encryption_method, prev->encryption_method, HLS_ENC_NONE);
 
