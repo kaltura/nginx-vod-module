@@ -240,7 +240,6 @@ m3u8_builder_build_iframe_playlist(
 		return VOD_BAD_REQUEST;
 	}
 
-
 	// iframes list is not supported with encryption, since:
 	// 1. AES-128 - the IV of each key frame is not known in advance
 	// 2. SAMPLE-AES - the layout of the TS files is not known in advance due to emulation prevention
