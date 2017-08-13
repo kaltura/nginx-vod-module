@@ -3,6 +3,7 @@
 #include "hds_amf0_encoder.h"
 #include "../manifest_utils.h"
 #include "../mp4/mp4_defs.h"
+#include "../mp4/mp4_write_stream.h"
 #include "../udrm.h"
 
 // manifest constants

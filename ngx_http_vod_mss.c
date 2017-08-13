@@ -1,6 +1,7 @@
 #include <ngx_http.h>
 #include "ngx_http_vod_submodule.h"
 #include "ngx_http_vod_utils.h"
+#include "vod/mp4/mp4_fragment.h"
 #include "vod/mss/mss_packager.h"
 #include "vod/mss/mss_playready.h"
 #include "vod/subtitle/ttml_builder.h"
@@ -28,8 +29,6 @@ static const ngx_http_vod_match_definition_t fragment_match_definition[] = {
 };
 
 // content types
-static u_char mp4_audio_content_type[] = "audio/mp4";
-static u_char mp4_video_content_type[] = "video/mp4";
 static u_char manifest_content_type[] = "text/xml";		// TODO: consider moving to application/vnd.ms-sstr+xml
 
 // extensions
@@ -141,7 +140,7 @@ ngx_http_vod_mss_init_frame_processor(
 
 	if (!size_only || *response_size == 0)
 	{
-		rc = mp4_builder_frame_writer_init(
+		rc = mp4_fragment_frame_writer_init(
 			&submodule_context->request_context,
 			submodule_context->media_set.sequences,
 			segment_writer->write_tail,
@@ -151,26 +150,18 @@ ngx_http_vod_mss_init_frame_processor(
 		if (rc != VOD_OK)
 		{
 			ngx_log_debug1(NGX_LOG_DEBUG_HTTP, submodule_context->request_context.log, 0,
-				"ngx_http_vod_mss_init_frame_processor: mp4_builder_frame_writer_init failed %i", rc);
+				"ngx_http_vod_mss_init_frame_processor: mp4_fragment_frame_writer_init failed %i", rc);
 			return ngx_http_vod_status_to_ngx_error(submodule_context->r, rc);
 		}
 
-		*frame_processor = (ngx_http_vod_frame_processor_t)mp4_builder_frame_writer_process;
+		*frame_processor = (ngx_http_vod_frame_processor_t)mp4_fragment_frame_writer_process;
 		*frame_processor_state = state;
 	}
 
 	// set the 'Content-type' header
-	if (submodule_context->media_set.track_count[MEDIA_TYPE_VIDEO])
-	{
-		content_type->len = sizeof(mp4_video_content_type) - 1;
-		content_type->data = mp4_video_content_type;
-	}
-	else
-	{
-		content_type->len = sizeof(mp4_audio_content_type) - 1;
-		content_type->data = mp4_audio_content_type;
-	}
-
+	mp4_fragment_get_content_type(
+		submodule_context->media_set.track_count[MEDIA_TYPE_VIDEO],
+		content_type);
 	return NGX_OK;
 }
 
@@ -195,9 +186,7 @@ ngx_http_vod_mss_handle_ttml_fragment(
 		return ngx_http_vod_status_to_ngx_error(submodule_context->r, rc);
 	}
 
-	content_type->len = sizeof(mp4_video_content_type) - 1;
-	content_type->data = (u_char *)mp4_video_content_type;
-
+	mp4_fragment_get_content_type(TRUE, content_type);
 	return NGX_OK;
 }
 

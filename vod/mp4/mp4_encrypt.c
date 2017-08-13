@@ -3,7 +3,7 @@
 #if (VOD_HAVE_OPENSSL_EVP)
 
 #include "mp4_decrypt.h"
-#include "mp4_builder.h"
+#include "mp4_write_stream.h"
 #include "../read_stream.h"
 #include "../udrm.h"
 

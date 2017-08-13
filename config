@@ -201,15 +201,18 @@ VOD_DEPS="$ngx_addon_dir/ngx_async_open_file_cache.h          \
           $ngx_addon_dir/vod/mkv/mkv_defs.h                   \
           $ngx_addon_dir/vod/mkv/mkv_format.h                 \
           $ngx_addon_dir/vod/mp4/mp4_aes_ctr.h                \
-          $ngx_addon_dir/vod/mp4/mp4_builder.h                \
           $ngx_addon_dir/vod/mp4/mp4_clipper.h                \
           $ngx_addon_dir/vod/mp4/mp4_decrypt.h                \
           $ngx_addon_dir/vod/mp4/mp4_defs.h                   \
           $ngx_addon_dir/vod/mp4/mp4_encrypt.h                \
           $ngx_addon_dir/vod/mp4/mp4_encrypt_passthrough.h    \
           $ngx_addon_dir/vod/mp4/mp4_format.h                 \
+          $ngx_addon_dir/vod/mp4/mp4_fragment.h               \
+          $ngx_addon_dir/vod/mp4/mp4_init_segment.h           \
+          $ngx_addon_dir/vod/mp4/mp4_muxer.h                  \
           $ngx_addon_dir/vod/mp4/mp4_parser.h                 \
           $ngx_addon_dir/vod/mp4/mp4_parser_base.h            \
+          $ngx_addon_dir/vod/mp4/mp4_write_stream.h           \
           $ngx_addon_dir/vod/mss/mss_packager.h               \
           $ngx_addon_dir/vod/mss/mss_playready.h              \
           $ngx_addon_dir/vod/thumb/thumb_grabber.h            \
@@ -286,12 +289,14 @@ VOD_SRCS="$ngx_addon_dir/ngx_async_open_file_cache.c          \
           $ngx_addon_dir/vod/mkv/mkv_defs.c                   \
           $ngx_addon_dir/vod/mkv/mkv_format.c                 \
           $ngx_addon_dir/vod/mp4/mp4_aes_ctr.c                \
-          $ngx_addon_dir/vod/mp4/mp4_builder.c                \
           $ngx_addon_dir/vod/mp4/mp4_clipper.c                \
           $ngx_addon_dir/vod/mp4/mp4_decrypt.c                \
           $ngx_addon_dir/vod/mp4/mp4_encrypt.c                \
           $ngx_addon_dir/vod/mp4/mp4_encrypt_passthrough.c    \
           $ngx_addon_dir/vod/mp4/mp4_format.c                 \
+          $ngx_addon_dir/vod/mp4/mp4_fragment.c               \
+          $ngx_addon_dir/vod/mp4/mp4_init_segment.c           \
+          $ngx_addon_dir/vod/mp4/mp4_muxer.c                  \
           $ngx_addon_dir/vod/mp4/mp4_parser.c                 \
           $ngx_addon_dir/vod/mp4/mp4_parser_base.c            \
           $ngx_addon_dir/vod/mss/mss_packager.c               \

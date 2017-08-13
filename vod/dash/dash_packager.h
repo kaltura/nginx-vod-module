@@ -2,7 +2,6 @@
 #define __DASH_PACKAGER_H__
 
 // includes
-#include "../mp4/mp4_builder.h"
 #include "../mp4/mp4_encrypt.h"
 #include "../media_format.h"
 #include "../segmenter.h"
@@ -21,14 +20,6 @@ enum {
 typedef u_char* (*dash_write_extra_traf_atoms_callback_t)(void* context, u_char* p, size_t mdat_atom_start);
 
 typedef u_char* (*write_tags_callback_t)(void* context, u_char* p, media_track_t* track);
-
-typedef u_char* (*atom_writer_func_t)(void* context, u_char* p);
-
-typedef struct {
-	size_t atom_size;
-	atom_writer_func_t write;
-	void* context;
-} atom_writer_t;
 
 typedef struct {
 	size_t size;
@@ -65,18 +56,6 @@ vod_status_t dash_packager_build_mpd(
 	vod_str_t* base_url,
 	media_set_t* media_set,
 	dash_manifest_extensions_t* extensions,
-	vod_str_t* result);
-
-vod_status_t dash_packager_build_stsd_atom(
-	request_context_t* request_context,
-	media_track_t* track);
-
-vod_status_t dash_packager_build_init_mp4(
-	request_context_t* request_context,
-	media_set_t* media_set,
-	bool_t size_only,
-	atom_writer_t* extra_moov_atoms_writer,
-	atom_writer_t* stsd_atom_writer,
 	vod_str_t* result);
 
 vod_status_t dash_packager_build_fragment_header(

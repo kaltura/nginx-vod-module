@@ -112,7 +112,7 @@ hls_muxer_simulation_supported(
 static vod_status_t
 hls_muxer_init_stream(
 	hls_muxer_state_t* state,
-	hls_muxer_conf_t* conf,
+	hls_mpegts_muxer_conf_t* conf,
 	hls_muxer_stream_state_t* stream,
 	media_track_t* track,
 	mpegts_encoder_init_streams_state_t* init_streams_state)
@@ -143,7 +143,7 @@ hls_muxer_init_stream(
 static vod_status_t
 hls_muxer_init_id3_stream(
 	hls_muxer_state_t* state,
-	hls_muxer_conf_t* conf,
+	hls_mpegts_muxer_conf_t* conf,
 	media_set_t* media_set,
 	mpegts_encoder_init_streams_state_t* init_streams_state)
 {
@@ -254,7 +254,7 @@ static vod_status_t
 hls_muxer_init_base(
 	hls_muxer_state_t* state,
 	request_context_t* request_context,
-	hls_muxer_conf_t* conf,
+	hls_mpegts_muxer_conf_t* conf,
 	hls_encryption_params_t* encryption_params,
 	uint32_t segment_index,
 	media_set_t* media_set,
@@ -480,7 +480,7 @@ hls_muxer_init_base(
 vod_status_t
 hls_muxer_init_segment(
 	request_context_t* request_context,
-	hls_muxer_conf_t* conf,
+	hls_mpegts_muxer_conf_t* conf,
 	hls_encryption_params_t* encryption_params,
 	uint32_t segment_index,
 	media_set_t* media_set,
@@ -932,7 +932,7 @@ vod_status_t
 hls_muxer_simulate_get_iframes(
 	request_context_t* request_context,
 	segment_durations_t* segment_durations,
-	hls_muxer_conf_t* muxer_conf,
+	hls_mpegts_muxer_conf_t* muxer_conf,
 	hls_encryption_params_t* encryption_params,
 	media_set_t* media_set,
 	hls_get_iframe_positions_callback_t callback,

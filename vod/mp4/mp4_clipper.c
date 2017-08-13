@@ -1,7 +1,7 @@
 #include "mp4_clipper.h"
 #include "mp4_parser_base.h"
 #include "mp4_format.h"
-#include "mp4_builder.h"
+#include "mp4_write_stream.h"
 #include "mp4_defs.h"
 #include "../read_stream.h"
 

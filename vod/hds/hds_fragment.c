@@ -3,6 +3,7 @@
 #include "hds_amf0_encoder.h"
 #include "../write_buffer.h"
 #include "../mp4/mp4_defs.h"
+#include "../mp4/mp4_fragment.h"
 #include "../aes_defs.h"
 
 // adobe mux packet definitions
@@ -32,8 +33,8 @@
 #define AAC_PACKET_TYPE_SEQUENCE_HEADER (0)
 #define AAC_PACKET_TYPE_RAW 			(1)
 
-#define TRUN_SIZE_SINGLE_VIDEO_FRAME (ATOM_HEADER_SIZE + sizeof(trun_atom_t) + 4 * sizeof(uint32_t))
-#define TRUN_SIZE_SINGLE_AUDIO_FRAME (ATOM_HEADER_SIZE + sizeof(trun_atom_t) + 2 * sizeof(uint32_t))
+#define TRUN_SIZE_SINGLE_VIDEO_FRAME (ATOM_HEADER_SIZE + sizeof(trun_atom_t) + sizeof(trun_video_frame_t))
+#define TRUN_SIZE_SINGLE_AUDIO_FRAME (ATOM_HEADER_SIZE + sizeof(trun_atom_t) + sizeof(trun_audio_frame_t))
 
 #define HDS_AES_KEY_SIZE (16)
 
@@ -510,7 +511,7 @@ hds_write_single_video_frame_trun_atom(u_char* p, hds_encryption_type_t enc_type
 	atom_size = TRUN_SIZE_SINGLE_VIDEO_FRAME;
 
 	write_atom_header(p, atom_size, 't', 'r', 'u', 'n');
-	write_be32(p, 0xF01);				// flags = data offset, duration, size, key, delay
+	write_be32(p, TRUN_VIDEO_FLAGS);	// flags = data offset, duration, size, key, delay
 	write_be32(p, 1);					// frame count
 	write_be32(p, offset);				// offset from mdat start to frame raw data (excluding the tag)
 	write_be32(p, frame->duration);
@@ -543,7 +544,7 @@ hds_write_single_audio_frame_trun_atom(u_char* p, hds_encryption_type_t enc_type
 	atom_size = TRUN_SIZE_SINGLE_AUDIO_FRAME;
 
 	write_atom_header(p, atom_size, 't', 'r', 'u', 'n');
-	write_be32(p, 0x301);				// flags = data offset, duration, size
+	write_be32(p, TRUN_AUDIO_FLAGS);	// flags = data offset, duration, size
 	write_be32(p, 1);					// frame count
 	write_be32(p, offset);				// offset from mdat start to frame raw data (excluding the tag)
 	write_be32(p, frame->duration);
@@ -1115,7 +1116,7 @@ hds_muxer_init_fragment(
 		write_atom_header(p, moof_atom_size, 'm', 'o', 'o', 'f');
 
 		// moof.mfhd
-		p = mp4_builder_write_mfhd_atom(p, segment_index);
+		p = mp4_fragment_write_mfhd_atom(p, segment_index);
 
 		for (cur_stream = state->first_stream; cur_stream < state->last_stream; cur_stream++)
 		{
@@ -1132,11 +1133,12 @@ hds_muxer_init_fragment(
 			case MEDIA_TYPE_VIDEO:
 				clip_index = 0;
 				cur_track = media_set->filtered_tracks + cur_stream->index;
+				output_offset = cur_stream->first_frame_output_offset;
 				for (;;)
 				{
 					part = &cur_track->frames;
 					last_frame = part->last_frame;
-					for (cur_frame = part->first_frame, output_offset = cur_stream->first_frame_output_offset; ;
+					for (cur_frame = part->first_frame; ;
 						cur_frame++, output_offset++)
 					{
 						if (cur_frame >= last_frame)
@@ -1165,11 +1167,12 @@ hds_muxer_init_fragment(
 			case MEDIA_TYPE_AUDIO:
 				clip_index = 0;
 				cur_track = media_set->filtered_tracks + cur_stream->index;
+				output_offset = cur_stream->first_frame_output_offset;
 				for (;;)
 				{
 					part = &cur_track->frames;
 					last_frame = part->last_frame;
-					for (cur_frame = part->first_frame, output_offset = cur_stream->first_frame_output_offset; ;
+					for (cur_frame = part->first_frame; ;
 						cur_frame++, output_offset++)
 					{
 						if (cur_frame >= last_frame)

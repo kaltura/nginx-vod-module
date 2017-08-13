@@ -2,6 +2,7 @@
 #include "../mp4/mp4_encrypt_passthrough.h"
 #include "../mp4/mp4_encrypt.h"
 #include "../mp4/mp4_defs.h"
+#include "../mp4/mp4_write_stream.h"
 #include "../udrm.h"
 
 // manifest constants

@@ -37,6 +37,13 @@
 	NULL },	
 #endif //(NGX_HAVE_OPENSSL_EVP)
 
+	{ ngx_string("vod_hls_container_format"),
+	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1,
+	ngx_conf_set_enum_slot,
+	NGX_HTTP_LOC_CONF_OFFSET,
+	BASE_OFFSET + offsetof(ngx_http_vod_hls_loc_conf_t, m3u8_config.container_format),
+	hls_container_formats },
+
 	{ ngx_string("vod_hls_absolute_master_urls"),
 	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1,
 	ngx_conf_set_flag_slot,
@@ -86,25 +93,32 @@
 	BASE_OFFSET + offsetof(ngx_http_vod_hls_loc_conf_t, m3u8_config.segment_file_name_prefix),
 	NULL },
 
-	{ ngx_string("vod_hls_interleave_frames"),
+	{ ngx_string("vod_hls_init_file_name_prefix"),
 	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1,
-	ngx_conf_set_flag_slot,
+	ngx_conf_set_str_slot,
 	NGX_HTTP_LOC_CONF_OFFSET,
-	BASE_OFFSET + offsetof(ngx_http_vod_hls_loc_conf_t, muxer_config.interleave_frames),
+	BASE_OFFSET + offsetof(ngx_http_vod_hls_loc_conf_t, m3u8_config.init_file_name_prefix),
 	NULL },
 
-	{ ngx_string("vod_hls_align_frames"),
+	{ ngx_string("vod_hls_mpegts_interleave_frames"),
 	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1,
 	ngx_conf_set_flag_slot,
 	NGX_HTTP_LOC_CONF_OFFSET,
-	BASE_OFFSET + offsetof(ngx_http_vod_hls_loc_conf_t, muxer_config.align_frames),
+	BASE_OFFSET + offsetof(ngx_http_vod_hls_loc_conf_t, mpegts_muxer_config.interleave_frames),
 	NULL },
 
-	{ ngx_string("vod_hls_output_id3_timestamps"),
+	{ ngx_string("vod_hls_mpegts_align_frames"),
 	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1,
 	ngx_conf_set_flag_slot,
 	NGX_HTTP_LOC_CONF_OFFSET,
-	BASE_OFFSET + offsetof(ngx_http_vod_hls_loc_conf_t, muxer_config.output_id3_timestamps),
+	BASE_OFFSET + offsetof(ngx_http_vod_hls_loc_conf_t, mpegts_muxer_config.align_frames),
+	NULL },
+
+	{ ngx_string("vod_hls_mpegts_output_id3_timestamps"),
+	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1,
+	ngx_conf_set_flag_slot,
+	NGX_HTTP_LOC_CONF_OFFSET,
+	BASE_OFFSET + offsetof(ngx_http_vod_hls_loc_conf_t, mpegts_muxer_config.output_id3_timestamps),
 	NULL },
 
 	{ ngx_string("vod_hls_force_unmuxed_segments"),

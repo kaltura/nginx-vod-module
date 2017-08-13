@@ -5,6 +5,8 @@
 #include "vod/dash/dash_packager.h"
 #include "vod/dash/edash_packager.h"
 #include "vod/mkv/mkv_builder.h"
+#include "vod/mp4/mp4_fragment.h"
+#include "vod/mp4/mp4_init_segment.h"
 #include "vod/subtitle/webvtt_builder.h"
 #include "vod/udrm.h"
 
@@ -22,8 +24,6 @@ ngx_conf_enum_t  dash_manifest_formats[] = {
 
 // content types
 static u_char mpd_content_type[] = "application/dash+xml";
-static u_char mp4_audio_content_type[] = "audio/mp4";
-static u_char mp4_video_content_type[] = "video/mp4";
 static u_char webm_audio_content_type[] = "audio/webm";
 static u_char webm_video_content_type[] = "video/webm";
 static u_char vtt_content_type[] = "text/vtt";
@@ -98,7 +98,6 @@ ngx_http_vod_dash_handle_manifest(
 
 	content_type->data = mpd_content_type;
 	content_type->len = sizeof(mpd_content_type) - 1;
-
 	return NGX_OK;
 }
 
@@ -135,7 +134,7 @@ ngx_http_vod_dash_mp4_handle_init_segment(
 	}
 	else
 	{
-		rc = dash_packager_build_init_mp4(
+		rc = mp4_init_segment_build(
 			&submodule_context->request_context,
 			&submodule_context->media_set,
 			ngx_http_vod_submodule_size_only(submodule_context),
@@ -151,17 +150,9 @@ ngx_http_vod_dash_mp4_handle_init_segment(
 		return ngx_http_vod_status_to_ngx_error(submodule_context->r, rc);
 	}
 
-	if (submodule_context->media_set.track_count[MEDIA_TYPE_VIDEO] != 0)
-	{
-		content_type->data = mp4_video_content_type;
-		content_type->len = sizeof(mp4_video_content_type) - 1;
-	}
-	else
-	{
-		content_type->data = mp4_audio_content_type;
-		content_type->len = sizeof(mp4_audio_content_type) - 1;
-	}
-
+	mp4_fragment_get_content_type(
+		submodule_context->media_set.track_count[MEDIA_TYPE_VIDEO],
+		content_type);
 	return NGX_OK;
 }
 
@@ -237,7 +228,7 @@ ngx_http_vod_dash_mp4_init_frame_processor(
 	// initialize the frame processor
 	if (!size_only || *response_size == 0)
 	{
-		rc = mp4_builder_frame_writer_init(
+		rc = mp4_fragment_frame_writer_init(
 			&submodule_context->request_context,
 			submodule_context->media_set.sequences,
 			segment_writer->write_tail,
@@ -247,27 +238,36 @@ ngx_http_vod_dash_mp4_init_frame_processor(
 		if (rc != VOD_OK)
 		{
 			ngx_log_debug1(NGX_LOG_DEBUG_HTTP, submodule_context->request_context.log, 0,
-				"ngx_http_vod_dash_mp4_init_frame_processor: mp4_builder_frame_writer_init failed %i", rc);
+				"ngx_http_vod_dash_mp4_init_frame_processor: mp4_fragment_frame_writer_init failed %i", rc);
 			return ngx_http_vod_status_to_ngx_error(submodule_context->r, rc);
 		}
 
-		*frame_processor = (ngx_http_vod_frame_processor_t)mp4_builder_frame_writer_process;
+		*frame_processor = (ngx_http_vod_frame_processor_t)mp4_fragment_frame_writer_process;
 		*frame_processor_state = state;
 	}
 
 	// set the 'Content-type' header
-	if (submodule_context->media_set.track_count[MEDIA_TYPE_VIDEO] != 0)
+	mp4_fragment_get_content_type(
+		submodule_context->media_set.track_count[MEDIA_TYPE_VIDEO],
+		content_type);
+	return NGX_OK;
+}
+
+static void
+ngx_http_vod_dash_get_webm_content_type(
+	bool_t video,
+	ngx_str_t* content_type)
+{
+	if (video)
 	{
-		content_type->len = sizeof(mp4_video_content_type) - 1;
-		content_type->data = (u_char *)mp4_video_content_type;
+		content_type->data = webm_video_content_type;
+		content_type->len = sizeof(webm_video_content_type) - 1;
 	}
 	else
 	{
-		content_type->len = sizeof(mp4_audio_content_type) - 1;
-		content_type->data = (u_char *)mp4_audio_content_type;
+		content_type->data = webm_audio_content_type;
+		content_type->len = sizeof(webm_audio_content_type) - 1;
 	}
-
-	return NGX_OK;
 }
 
 static ngx_int_t
@@ -301,17 +301,9 @@ ngx_http_vod_dash_webm_handle_init_segment(
 		return ngx_http_vod_status_to_ngx_error(submodule_context->r, rc);
 	}
 
-	if (submodule_context->media_set.track_count[MEDIA_TYPE_VIDEO] != 0)
-	{
-		content_type->data = webm_video_content_type;
-		content_type->len = sizeof(webm_video_content_type) - 1;
-	}
-	else
-	{
-		content_type->data = webm_audio_content_type;
-		content_type->len = sizeof(webm_audio_content_type) - 1;
-	}
-
+	ngx_http_vod_dash_get_webm_content_type(
+		submodule_context->media_set.track_count[MEDIA_TYPE_VIDEO],
+		content_type);
 	return NGX_OK;
 }
 
@@ -366,17 +358,9 @@ ngx_http_vod_dash_webm_init_frame_processor(
 	*frame_processor = (ngx_http_vod_frame_processor_t)mkv_builder_frame_writer_process;
 
 	// set the 'Content-type' header
-	if (submodule_context->media_set.track_count[MEDIA_TYPE_VIDEO] != 0)
-	{
-		content_type->len = sizeof(webm_video_content_type) - 1;
-		content_type->data = (u_char *)webm_video_content_type;
-	}
-	else
-	{
-		content_type->len = sizeof(webm_audio_content_type) - 1;
-		content_type->data = (u_char *)webm_audio_content_type;
-	}
-
+	ngx_http_vod_dash_get_webm_content_type(
+		submodule_context->media_set.track_count[MEDIA_TYPE_VIDEO],
+		content_type);
 	return NGX_OK;
 }
 
@@ -402,7 +386,6 @@ ngx_http_vod_dash_handle_vtt_file(
 
 	content_type->len = sizeof(vtt_content_type) - 1;
 	content_type->data = (u_char *)vtt_content_type;
-
 	return NGX_OK;
 }
 

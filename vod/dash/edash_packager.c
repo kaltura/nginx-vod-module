@@ -2,7 +2,8 @@
 #include "dash_packager.h"
 #include "../read_stream.h"
 #include "../mp4/mp4_encrypt_passthrough.h"
-#include "../mp4/mp4_builder.h"
+#include "../mp4/mp4_init_segment.h"
+#include "../mp4/mp4_write_stream.h"
 #include "../mp4/mp4_encrypt.h"
 #include "../mp4/mp4_defs.h"
 #include "../udrm.h"
@@ -437,7 +438,7 @@ edash_packager_build_init_mp4(
 	// create an stsd atom if needed
 	if (first_track->raw_atoms[RTA_STSD].size == 0)
 	{
-		rc = dash_packager_build_stsd_atom(request_context, first_track);
+		rc = mp4_init_segment_build_stsd_atom(request_context, first_track);
 		if (rc != VOD_OK)
 		{
 			return rc;
@@ -476,7 +477,7 @@ edash_packager_build_init_mp4(
 	stsd_atom_writer.write = edash_packager_write_stsd;
 	stsd_atom_writer.context = &stsd_writer_context;
 
-	rc = dash_packager_build_init_mp4(
+	rc = mp4_init_segment_build(
 		request_context,
 		media_set,
 		size_only,
@@ -486,7 +487,7 @@ edash_packager_build_init_mp4(
 	if (rc != VOD_OK)
 	{
 		vod_log_debug1(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
-			"edash_packager_build_init_mp4: dash_packager_build_init_mp4 failed %i", rc);
+			"edash_packager_build_init_mp4: mp4_init_segment_build failed %i", rc);
 		return rc;
 	}
 

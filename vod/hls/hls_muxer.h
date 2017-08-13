@@ -28,7 +28,7 @@ typedef struct {
 	bool_t interleave_frames;
 	bool_t align_frames;
 	bool_t output_id3_timestamps;
-} hls_muxer_conf_t;
+} hls_mpegts_muxer_conf_t;
 
 typedef struct {
 	int media_type;
@@ -90,7 +90,7 @@ typedef struct {
 // functions
 vod_status_t hls_muxer_init_segment(
 	request_context_t* request_context,
-	hls_muxer_conf_t* conf,
+	hls_mpegts_muxer_conf_t* conf,
 	hls_encryption_params_t* encryption_params,
 	uint32_t segment_index,
 	media_set_t* media_set,
@@ -105,7 +105,7 @@ vod_status_t hls_muxer_process(hls_muxer_state_t* state);
 vod_status_t hls_muxer_simulate_get_iframes(
 	request_context_t* request_context,
 	segment_durations_t* segment_durations,
-	hls_muxer_conf_t* muxer_conf,
+	hls_mpegts_muxer_conf_t* muxer_conf,
 	hls_encryption_params_t* encryption_params,
 	media_set_t* media_set,
 	hls_get_iframe_positions_callback_t callback,
