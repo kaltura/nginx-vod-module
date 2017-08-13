@@ -5,6 +5,7 @@
 #include "vod/hls/hls_muxer.h"
 #include "vod/mp4/mp4_muxer.h"
 #include "vod/mp4/mp4_fragment.h"
+#include "vod/mp4/mp4_init_segment.h"
 #include "vod/udrm.h"
 
 // constants
@@ -354,7 +355,7 @@ ngx_http_vod_hls_handle_mp4_init_segment(
 {
 	vod_status_t rc;
 
-	rc = dash_packager_build_init_mp4(
+	rc = mp4_init_segment_build(
 		&submodule_context->request_context,
 		&submodule_context->media_set,
 		ngx_http_vod_submodule_size_only(submodule_context),
@@ -364,7 +365,7 @@ ngx_http_vod_hls_handle_mp4_init_segment(
 	if (rc != VOD_OK)
 	{
 		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, submodule_context->request_context.log, 0,
-			"ngx_http_vod_hls_handle_mp4_init_segment: dash_packager_build_init_mp4 failed %i", rc);
+			"ngx_http_vod_hls_handle_mp4_init_segment: mp4_init_segment_build failed %i", rc);
 		return ngx_http_vod_status_to_ngx_error(submodule_context->r, rc);
 	}
 

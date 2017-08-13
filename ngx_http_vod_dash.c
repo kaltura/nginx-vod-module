@@ -6,6 +6,7 @@
 #include "vod/dash/edash_packager.h"
 #include "vod/mkv/mkv_builder.h"
 #include "vod/mp4/mp4_fragment.h"
+#include "vod/mp4/mp4_init_segment.h"
 #include "vod/subtitle/webvtt_builder.h"
 #include "vod/udrm.h"
 
@@ -133,7 +134,7 @@ ngx_http_vod_dash_mp4_handle_init_segment(
 	}
 	else
 	{
-		rc = dash_packager_build_init_mp4(
+		rc = mp4_init_segment_build(
 			&submodule_context->request_context,
 			&submodule_context->media_set,
 			ngx_http_vod_submodule_size_only(submodule_context),

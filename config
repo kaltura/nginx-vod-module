@@ -208,6 +208,7 @@ VOD_DEPS="$ngx_addon_dir/ngx_async_open_file_cache.h          \
           $ngx_addon_dir/vod/mp4/mp4_encrypt_passthrough.h    \
           $ngx_addon_dir/vod/mp4/mp4_format.h                 \
           $ngx_addon_dir/vod/mp4/mp4_fragment.h               \
+          $ngx_addon_dir/vod/mp4/mp4_init_segment.h           \
           $ngx_addon_dir/vod/mp4/mp4_muxer.h                  \
           $ngx_addon_dir/vod/mp4/mp4_parser.h                 \
           $ngx_addon_dir/vod/mp4/mp4_parser_base.h            \
@@ -294,6 +295,7 @@ VOD_SRCS="$ngx_addon_dir/ngx_async_open_file_cache.c          \
           $ngx_addon_dir/vod/mp4/mp4_encrypt_passthrough.c    \
           $ngx_addon_dir/vod/mp4/mp4_format.c                 \
           $ngx_addon_dir/vod/mp4/mp4_fragment.c               \
+          $ngx_addon_dir/vod/mp4/mp4_init_segment.c           \
           $ngx_addon_dir/vod/mp4/mp4_muxer.c                  \
           $ngx_addon_dir/vod/mp4/mp4_parser.c                 \
           $ngx_addon_dir/vod/mp4/mp4_parser_base.c            \
