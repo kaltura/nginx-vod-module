@@ -117,9 +117,9 @@ mp4_muxer_write_video_trun_atoms(
 	uint32_t initial_pts_delay;
 	uint32_t* output_offset = cur_stream->first_frame_output_offset;
 	uint32_t clip_index;
-	uint32_t start_offset;
+	uint32_t start_offset = 0;
 	uint32_t cur_offset = UINT_MAX;
-	uint32_t frame_count;
+	uint32_t frame_count = 0;
 	u_char* trun_header = NULL;
 
 	clip_index = 0;
@@ -205,9 +205,9 @@ mp4_muxer_write_audio_trun_atoms(
 	input_frame_t* last_frame;
 	uint32_t* output_offset = cur_stream->first_frame_output_offset;
 	uint32_t clip_index;
-	uint32_t start_offset;
+	uint32_t start_offset = 0;
 	uint32_t cur_offset = UINT_MAX;
-	uint32_t frame_count;
+	uint32_t frame_count = 0;
 	u_char* trun_header = NULL;
 
 	clip_index = 0;
