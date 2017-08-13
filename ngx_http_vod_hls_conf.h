@@ -22,5 +22,6 @@ typedef struct
 
 // globals
 extern ngx_conf_enum_t  hls_encryption_methods[];
+extern ngx_conf_enum_t  hls_container_formats[];
 
 #endif // _NGX_HTTP_VOD_HLS_CONF_H_INCLUDED_

@@ -12,14 +12,22 @@
 static const char iframes_m3u8_header_format[] = "#EXTM3U\n#EXT-X-TARGETDURATION:%d\n#EXT-X-VERSION:4\n#EXT-X-MEDIA-SEQUENCE:1\n#EXT-X-PLAYLIST-TYPE:VOD\n#EXT-X-I-FRAMES-ONLY\n";
 
 // typedefs
+enum {
+	HLS_CONTAINER_AUTO,
+	HLS_CONTAINER_MPEGTS,
+	HLS_CONTAINER_FMP4,
+};
+
 typedef struct {
 	int m3u8_version;
+	vod_uint_t container_format;
 	u_char iframes_m3u8_header[MAX_IFRAMES_M3U8_HEADER_SIZE];
 	size_t iframes_m3u8_header_len;
 	bool_t force_unmuxed_segments;
 	vod_str_t index_file_name_prefix;
 	vod_str_t iframes_file_name_prefix;
 	vod_str_t segment_file_name_prefix;
+	vod_str_t init_file_name_prefix;
 	vod_str_t encryption_key_file_name;
 	vod_str_t encryption_key_format;
 	vod_str_t encryption_key_format_versions;

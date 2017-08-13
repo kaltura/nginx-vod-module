@@ -1429,6 +1429,14 @@ Sets the encryption method of HLS segments, allowed values are: none (default), 
 
 When enabled the server returns the audio stream in separate segments than the ones used by the video stream (using EXT-X-MEDIA)
 
+#### vod_hls_container_format
+* **syntax**: `vod_hls_container_format mpegts/fmp4/auto`
+* **default**: `auto`
+* **context**: `http`, `server`, `location`
+
+Sets the container format of the HLS segments. 
+The default behavior is to use fmp4 for HEVC, and mpegts otherwise (Apple does not support HEVC over MPEG TS).
+
 #### vod_hls_absolute_master_urls
 * **syntax**: `vod_hls_absolute_master_urls on/off`
 * **default**: `on`
@@ -1477,6 +1485,13 @@ The name of the HLS I-frames playlist file (an m3u8 extension is implied).
 * **context**: `http`, `server`, `location`
 
 The prefix of segment file names, the actual file name is `seg-<index>-v<video-track-index>-a<audio-track-index>.ts`.
+
+#### vod_hls_init_file_name_prefix
+* **syntax**: `vod_hls_init_file_name_prefix name`
+* **default**: `init`
+* **context**: `http`, `server`, `location`
+
+The name of the init segment file name, only relevant when using fmp4 container.
 
 #### vod_hls_encryption_key_file_name
 * **syntax**: `vod_hls_encryption_key_file_name name`

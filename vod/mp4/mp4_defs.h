@@ -400,4 +400,22 @@ typedef struct {
 	u_char	rate_frac[2];
 } elst64_entry_t;
 
+typedef struct {
+	u_char version[1];
+	u_char flags[3];
+	u_char earliest_pres_time[4];
+} tfdt_atom_t;
+
+typedef struct {
+	u_char version[1];
+	u_char flags[3];
+	u_char earliest_pres_time[8];
+} tfdt64_atom_t;
+
+typedef struct {
+	u_char version[1];
+	u_char flags[3];
+	u_char track_id[4];
+} tfhd_atom_t;
+
 #endif // __MP4_DEFS_H__

@@ -31,6 +31,10 @@ static const char m3u8_iframe_stream_inf[] = "#EXT-X-I-FRAME-STREAM-INF:BANDWIDT
 static const u_char m3u8_discontinuity[] = "#EXT-X-DISCONTINUITY\n";
 static const char byte_range_tag_format[] = "#EXT-X-BYTERANGE:%uD@%uD\n";
 static const u_char m3u8_url_suffix[] = ".m3u8";
+static const u_char m3u8_map_prefix[] = "#EXT-X-MAP:URI=\"";
+static const u_char m3u8_map_suffix[] = ".mp4\"\n";
+static const char m3u8_clip_index[] = "-c%uD";
+
 
 static const char encryption_key_tag_method[] = "#EXT-X-KEY:METHOD=";
 static const char encryption_key_tag_uri[] = ",URI=\"";
@@ -41,6 +45,7 @@ static const char encryption_type_aes_128[] = "AES-128";
 static const char encryption_type_sample_aes[] = "SAMPLE-AES";
 
 static vod_str_t m3u8_ts_suffix = vod_string(".ts\n");
+static vod_str_t m3u8_m4s_suffix = vod_string(".m4s\n");
 static vod_str_t m3u8_vtt_suffix = vod_string(".vtt\n");
 
 // typedefs
@@ -189,6 +194,24 @@ m3u8_builder_build_tracks_spec(
 	return VOD_OK;
 }
 
+static vod_uint_t
+m3u8_builder_get_container_format(
+	m3u8_config_t* conf,
+	media_set_t* media_set)
+{
+	if (conf->container_format != HLS_CONTAINER_AUTO)
+	{
+		return conf->container_format;
+	}
+
+	if (media_set->filtered_tracks[0].media_info.codec_id == VOD_CODEC_ID_HEVC)
+	{
+		return HLS_CONTAINER_FMP4;
+	}
+
+	return HLS_CONTAINER_MPEGTS;
+}
+
 vod_status_t
 m3u8_builder_build_iframe_playlist(
 	request_context_t* request_context,
@@ -207,6 +230,14 @@ m3u8_builder_build_iframe_playlist(
 	size_t result_size;
 	uint64_t duration_millis;
 	vod_status_t rc; 
+
+	if (m3u8_builder_get_container_format(conf, media_set) == HLS_CONTAINER_FMP4)
+	{
+		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+			"m3u8_builder_build_iframe_playlist: iframes playlist not supported with fmp4 container");
+		return VOD_BAD_REQUEST;
+	}
+
 
 	// iframes list is not supported with encryption, since:
 	// 1. AES-128 - the IV of each key frame is not known in advance
@@ -324,14 +355,16 @@ m3u8_builder_build_index_playlist(
 	segment_duration_item_t* last_item;
 	hls_encryption_type_t encryption_type;
 	segmenter_conf_t* segmenter_conf = media_set->segmenter_conf;
-	uint64_t duration_millis;
-	uint64_t max_segment_duration;
-	uint32_t conf_max_segment_duration;
+	vod_uint_t container_format;
 	vod_str_t extinf;
-	uint32_t segment_index;
-	uint32_t last_segment_index;
 	vod_str_t name_suffix;
 	vod_str_t* suffix;
+	uint32_t conf_max_segment_duration;
+	uint64_t max_segment_duration;
+	uint64_t duration_millis;
+	uint32_t segment_index;
+	uint32_t last_segment_index;
+	uint32_t clip_index;
 	uint32_t scale;
 	size_t segment_length;
 	size_t result_size;
@@ -342,7 +375,23 @@ m3u8_builder_build_index_playlist(
 	if (media_set->track_count[MEDIA_TYPE_VIDEO] != 0 || media_set->track_count[MEDIA_TYPE_AUDIO] != 0)
 	{
 		encryption_type = encryption_params->type;
-		suffix = &m3u8_ts_suffix;
+
+		container_format = m3u8_builder_get_container_format(conf, media_set);
+
+		if (container_format == HLS_CONTAINER_MPEGTS)
+		{
+			suffix = &m3u8_ts_suffix;
+		}
+		else
+		{
+			if (encryption_type != HLS_ENC_NONE)
+			{
+				vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+					"m3u8_builder_build_index_playlist: encryption is not supported with fmp4 container");
+				return VOD_BAD_REQUEST;
+			}
+			suffix = &m3u8_m4s_suffix;
+		}
 	}
 	else
 	{
@@ -386,6 +435,13 @@ m3u8_builder_build_index_playlist(
 		sizeof(M3U8_HEADER_PART2) + VOD_INT64_LEN + VOD_INT32_LEN +
 		segment_length * segment_durations.segment_count +
 		segment_durations.discontinuities * (sizeof(m3u8_discontinuity) - 1) +
+		(sizeof(m3u8_map_prefix) - 1 +
+		 base_url->len +
+		 conf->init_file_name_prefix.len +
+		 sizeof(m3u8_clip_index) - 1 + VOD_INT32_LEN +
+		 name_suffix.len +
+		 sizeof(m3u8_map_suffix) - 1) *
+		(segment_durations.discontinuities + 1) +
 		sizeof(m3u8_footer);
 
 	if (encryption_type != HLS_ENC_NONE)
@@ -519,8 +575,23 @@ m3u8_builder_build_index_playlist(
 	p = vod_sprintf(
 		p,
 		M3U8_HEADER_PART2,
-		conf->m3u8_version, 
+		container_format == HLS_CONTAINER_FMP4 ? 6 : conf->m3u8_version, 
 		segment_durations.items[0].segment_index + 1);
+
+	if (container_format == HLS_CONTAINER_FMP4)
+	{
+		p = vod_copy(p, m3u8_map_prefix, sizeof(m3u8_map_prefix) - 1);
+		p = vod_copy(p, base_url->data, base_url->len);
+		p = vod_copy(p, conf->init_file_name_prefix.data, conf->init_file_name_prefix.len);
+		if (media_set->use_discontinuity && 
+			media_set->initial_clip_index != INVALID_CLIP_INDEX)
+		{
+			clip_index = media_set->initial_clip_index + 1;
+			p = vod_sprintf(p, m3u8_clip_index, clip_index++);
+		}
+		p = vod_copy(p, name_suffix.data, name_suffix.len - suffix->len);
+		p = vod_copy(p, m3u8_map_suffix, sizeof(m3u8_map_suffix) - 1);
+	}
 
 	// write the segments
 	for (cur_item = segment_durations.items; cur_item < last_item; cur_item++)
@@ -531,6 +602,17 @@ m3u8_builder_build_index_playlist(
 		if (cur_item->discontinuity)
 		{
 			p = vod_copy(p, m3u8_discontinuity, sizeof(m3u8_discontinuity) - 1);
+			if (container_format == HLS_CONTAINER_FMP4 && 
+				cur_item > segment_durations.items &&
+				media_set->initial_clip_index != INVALID_CLIP_INDEX)
+			{
+				p = vod_copy(p, m3u8_map_prefix, sizeof(m3u8_map_prefix) - 1);
+				p = vod_copy(p, base_url->data, base_url->len);
+				p = vod_copy(p, conf->init_file_name_prefix.data, conf->init_file_name_prefix.len);
+				p = vod_sprintf(p, m3u8_clip_index, clip_index++);
+				p = vod_copy(p, name_suffix.data, name_suffix.len - suffix->len);
+				p = vod_copy(p, m3u8_map_suffix, sizeof(m3u8_map_suffix) - 1);
+			}
 		}
 
 		// ignore zero duration segments (caused by alignment to keyframes)
@@ -934,6 +1016,12 @@ m3u8_builder_write_iframe_variants(
 		}
 
 		video = &tracks[MEDIA_TYPE_VIDEO]->media_info;
+		if (conf->container_format == HLS_CONTAINER_AUTO && 
+			video->codec_id == VOD_CODEC_ID_HEVC)
+		{
+			continue;
+		}
+
 		if (video->u.video.key_frame_bitrate == 0 ||
 			!mp4_to_annexb_simulation_supported(video))
 		{
@@ -1001,6 +1089,7 @@ m3u8_builder_build_master_playlist(
 	iframe_playlist = media_set->type == MEDIA_SET_VOD &&
 		media_set->timing.total_count <= 1 &&
 		encryption_method == HLS_ENC_NONE &&
+		conf->container_format != HLS_CONTAINER_FMP4 &&
 		!media_set->audio_filtering_needed &&
 		(adaptation_sets.first->type == ADAPTATION_TYPE_MUXED || adaptation_sets.first->type == ADAPTATION_TYPE_VIDEO);
 

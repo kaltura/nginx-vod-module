@@ -1,6 +1,10 @@
 #include "mp4_builder.h"
 #include "mp4_defs.h"
 
+// content types
+static u_char mp4_video_content_type[] = "video/mp4";
+static u_char mp4_audio_content_type[] = "audio/mp4";
+
 u_char*
 mp4_builder_write_mfhd_atom(u_char* p, uint32_t segment_index)
 {
@@ -12,16 +16,62 @@ mp4_builder_write_mfhd_atom(u_char* p, uint32_t segment_index)
 	return p;
 }
 
+u_char*
+mp4_builder_write_tfhd_atom(u_char* p, uint32_t track_id, uint32_t sample_description_index)
+{
+	size_t atom_size;
+	uint32_t flags;
+
+	flags = 0x020000;				// default-base-is-moof
+	atom_size = ATOM_HEADER_SIZE + sizeof(tfhd_atom_t);
+	if (sample_description_index > 0)
+	{
+		flags |= 0x02;				// sample-description-index-present
+		atom_size += sizeof(uint32_t);
+	}
+
+	write_atom_header(p, atom_size, 't', 'f', 'h', 'd');
+	write_be32(p, flags);			// flags
+	write_be32(p, track_id);		// track id
+	if (sample_description_index > 0)
+	{
+		write_be32(p, sample_description_index);
+	}
+	return p;
+}
+
+u_char*
+mp4_builder_write_tfdt_atom(u_char* p, uint32_t earliest_pres_time)
+{
+	size_t atom_size = ATOM_HEADER_SIZE + sizeof(tfdt_atom_t);
+
+	write_atom_header(p, atom_size, 't', 'f', 'd', 't');
+	write_be32(p, 0);
+	write_be32(p, earliest_pres_time);
+	return p;
+}
+
+u_char*
+mp4_builder_write_tfdt64_atom(u_char* p, uint64_t earliest_pres_time)
+{
+	size_t atom_size = ATOM_HEADER_SIZE + sizeof(tfdt64_atom_t);
+
+	write_atom_header(p, atom_size, 't', 'f', 'd', 't');
+	write_be32(p, 0x01000000);			// version = 1
+	write_be64(p, earliest_pres_time);
+	return p;
+}
+
 size_t
 mp4_builder_get_trun_atom_size(uint32_t media_type, uint32_t frame_count)
 {
 	switch (media_type)
 	{
 	case MEDIA_TYPE_VIDEO:
-		return ATOM_HEADER_SIZE + sizeof(trun_atom_t) + frame_count * 4 * sizeof(uint32_t);
+		return ATOM_HEADER_SIZE + sizeof(trun_atom_t) + frame_count * sizeof(trun_video_frame_t);
 
 	case MEDIA_TYPE_AUDIO:
-		return ATOM_HEADER_SIZE + sizeof(trun_atom_t) + frame_count * 2 * sizeof(uint32_t);
+		return ATOM_HEADER_SIZE + sizeof(trun_atom_t) + frame_count * sizeof(trun_audio_frame_t);
 	}
 	return 0;
 }
@@ -42,8 +92,8 @@ mp4_builder_write_video_trun_atom(
 	int32_t pts_delay;
 	size_t atom_size;
 
-	atom_size = ATOM_HEADER_SIZE + sizeof(trun_atom_t) + sequence->total_frame_count * 4 * sizeof(uint32_t);
-	flags = (version << 24) | 0xF01;
+	atom_size = ATOM_HEADER_SIZE + sizeof(trun_atom_t) + sequence->total_frame_count * sizeof(trun_video_frame_t);
+	flags = (version << 24) | TRUN_VIDEO_FLAGS;
 
 	write_atom_header(p, atom_size, 't', 'r', 'u', 'n');
 	write_be32(p, flags);								// flags = data offset, duration, size, key, delay
@@ -98,10 +148,10 @@ mp4_builder_write_audio_trun_atom(u_char* p, media_sequence_t* sequence, uint32_
 	input_frame_t* last_frame;
 	size_t atom_size;
 
-	atom_size = ATOM_HEADER_SIZE + sizeof(trun_atom_t) + sequence->total_frame_count * 2 * sizeof(uint32_t);
+	atom_size = ATOM_HEADER_SIZE + sizeof(trun_atom_t) + sequence->total_frame_count * sizeof(trun_audio_frame_t);
 
 	write_atom_header(p, atom_size, 't', 'r', 'u', 'n');
-	write_be32(p, 0x301);								// flags = data offset, duration, size
+	write_be32(p, TRUN_AUDIO_FLAGS);						// flags = data offset, duration, size
 	write_be32(p, sequence->total_frame_count);
 	write_be32(p, first_frame_offset);	// first frame offset relative to moof start offset
 
@@ -351,5 +401,22 @@ mp4_builder_frame_writer_process(fragment_writer_state_t* state)
 		{
 			return rc;
 		}
+	}
+}
+
+void
+mp4_builder_get_content_type(
+	bool_t video,
+	vod_str_t* content_type)
+{
+	if (video)
+	{
+		content_type->data = mp4_video_content_type;
+		content_type->len = sizeof(mp4_video_content_type) - 1;
+	}
+	else
+	{
+		content_type->data = mp4_audio_content_type;
+		content_type->len = sizeof(mp4_audio_content_type) - 1;
 	}
 }

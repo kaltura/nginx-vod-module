@@ -4,6 +4,11 @@
 // includes
 #include "../write_stream.h"
 #include "../media_set.h"
+#include "mp4_defs.h"
+
+// constants
+#define TRUN_VIDEO_FLAGS (0xF01)		// = data offset, duration, size, key, delay
+#define TRUN_AUDIO_FLAGS (0x301)		// = data offset, duration, size
 
 // macros
 #define write_atom_name(p, c1, c2, c3, c4) \
@@ -31,6 +36,18 @@ typedef struct {
 } trun_atom_t;
 
 typedef struct {
+	u_char duration[4];
+	u_char size[4];
+	u_char flags[4];
+	u_char pts_delay[4];
+} trun_video_frame_t;
+
+typedef struct {
+	u_char duration[4];
+	u_char size[4];
+} trun_audio_frame_t;
+
+typedef struct {
 	u_char version[1];
 	u_char flags[3];
 	u_char sequence_number[4];
@@ -54,6 +71,12 @@ typedef struct {
 // functions
 u_char* mp4_builder_write_mfhd_atom(u_char* p, uint32_t segment_index);
 
+u_char* mp4_builder_write_tfhd_atom(u_char* p, uint32_t track_id, uint32_t sample_description_index);
+
+u_char* mp4_builder_write_tfdt_atom(u_char* p, uint32_t earliest_pres_time);
+
+u_char* mp4_builder_write_tfdt64_atom(u_char* p, uint64_t earliest_pres_time);
+
 size_t mp4_builder_get_trun_atom_size(uint32_t media_type, uint32_t frame_count);
 
 u_char* mp4_builder_write_trun_atom(
@@ -71,5 +94,9 @@ vod_status_t mp4_builder_frame_writer_init(
 	fragment_writer_state_t** result);
 
 vod_status_t mp4_builder_frame_writer_process(fragment_writer_state_t* state);
+
+void mp4_builder_get_content_type(
+	bool_t video,
+	vod_str_t* content_type);
 
 #endif // __MP4_BUILDER_H__
