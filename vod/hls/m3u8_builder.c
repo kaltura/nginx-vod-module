@@ -385,10 +385,10 @@ m3u8_builder_build_index_playlist(
 		}
 		else
 		{
-			if (encryption_type != HLS_ENC_NONE)
+			if (encryption_type == HLS_ENC_SAMPLE_AES)
 			{
 				vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-					"m3u8_builder_build_index_playlist: encryption is not supported with fmp4 container");
+					"m3u8_builder_build_index_playlist: sample aes not supported with fmp4 container");
 				return VOD_BAD_REQUEST;
 			}
 			suffix = &m3u8_m4s_suffix;

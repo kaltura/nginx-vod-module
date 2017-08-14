@@ -3,6 +3,7 @@
 
 // includes
 #include "../common.h"
+#include "../aes_defs.h"
 
 // typedefs
 typedef enum {
@@ -16,6 +17,7 @@ typedef struct {
 	u_char* key;
 	u_char* iv;
 	vod_str_t key_uri;
+	u_char iv_buf[AES_BLOCK_SIZE];
 } hls_encryption_params_t;
 
 #endif // __HLS_ENCRYPTION_H__

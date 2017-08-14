@@ -636,12 +636,11 @@ edash_packager_passthrough_write_encryption_atoms(void* ctx, u_char* p, size_t m
 
 vod_status_t
 edash_packager_get_fragment_writer(
-	segment_writer_t* result,
+	segment_writer_t* segment_writer,
 	request_context_t* request_context,
 	media_set_t* media_set,
 	uint32_t segment_index,
 	bool_t single_nalu_per_frame,
-	segment_writer_t* segment_writer,
 	const u_char* iv,
 	bool_t size_only,
 	vod_str_t* fragment_header,
@@ -680,33 +679,29 @@ edash_packager_get_fragment_writer(
 		}
 
 		// use original writer
-		vod_memzero(result, sizeof(*result));
-
-		return VOD_OK;
+		return VOD_DONE;
 	}
 
 	switch (media_type)
 	{
 	case MEDIA_TYPE_VIDEO:
 		return mp4_encrypt_video_get_fragment_writer(
-			result, 
+			segment_writer,
 			request_context, 
 			media_set, 
 			segment_index, 
 			single_nalu_per_frame,
 			edash_packager_video_build_fragment_header,
-			segment_writer, 
 			iv, 
 			fragment_header,
 			total_fragment_size);
 
 	case MEDIA_TYPE_AUDIO:
 		rc = mp4_encrypt_audio_get_fragment_writer(
-			result, 
+			segment_writer,
 			request_context, 
 			media_set,
 			segment_index, 
-			segment_writer, 
 			iv);
 		if (rc != VOD_OK)
 		{
@@ -714,7 +709,7 @@ edash_packager_get_fragment_writer(
 		}
 
 		rc = edash_packager_audio_build_fragment_header(
-			result->context,
+			segment_writer->context,
 			size_only,
 			fragment_header,
 			total_fragment_size);

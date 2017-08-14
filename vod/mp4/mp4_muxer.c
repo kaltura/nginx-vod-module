@@ -815,7 +815,7 @@ mp4_muxer_process_frames(mp4_muxer_state_t* state)
 				return rc;
 			}
 
-			if (write_buffer != NULL)
+			if (write_buffer_size != 0)
 			{
 				// flush the write buffer
 				rc = state->write_callback(state->write_context, write_buffer, write_buffer_size);
@@ -845,7 +845,7 @@ mp4_muxer_process_frames(mp4_muxer_state_t* state)
 				return rc;
 			}
 		}
-		else if (write_buffer != NULL)
+		else if (write_buffer_size != 0)
 		{
 			// if the buffers are contiguous, just increment the size
 			if (write_buffer + write_buffer_size == read_buffer)
@@ -880,7 +880,7 @@ mp4_muxer_process_frames(mp4_muxer_state_t* state)
 
 		if (state->selected_stream->cur_frame >= state->selected_stream->cur_frame_part.last_frame)
 		{
-			if (write_buffer != NULL)
+			if (write_buffer_size != 0)
 			{
 				// flush the write buffer
 				rc = state->write_callback(state->write_context, write_buffer, write_buffer_size);
@@ -889,7 +889,7 @@ mp4_muxer_process_frames(mp4_muxer_state_t* state)
 					return rc;
 				}
 
-				write_buffer = NULL;
+				write_buffer_size = 0;
 			}
 		}
 
