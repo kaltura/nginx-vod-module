@@ -68,7 +68,6 @@ typedef struct {
 
 	// child states
 	write_buffer_queue_t queue;
-	aes_cbc_encrypt_context_t* encrypted_write_context;
 	struct id3_context_s* id3_context;
 	
 	// cur clip state
@@ -96,6 +95,7 @@ vod_status_t hls_muxer_init_segment(
 	media_set_t* media_set,
 	write_callback_t write_callback,
 	void* write_context,
+	bool_t reuse_buffers,
 	size_t* response_size,
 	vod_str_t* response_header,
 	hls_muxer_state_t** processor_state);

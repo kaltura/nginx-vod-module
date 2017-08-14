@@ -108,6 +108,26 @@ aes_cbc_encrypt(
 	return VOD_OK;
 }
 
+static vod_status_t
+aes_cbc_encrypt_flush(aes_cbc_encrypt_context_t* state)
+{
+	int last_block_len;
+
+	if (1 != EVP_EncryptFinal_ex(state->cipher, state->last_block, &last_block_len))
+	{
+		vod_log_error(VOD_LOG_ERR, state->request_context->log, 0,
+			"aes_cbc_encrypt_flush: EVP_EncryptFinal_ex failed");
+		return VOD_UNEXPECTED;
+	}
+
+	if (last_block_len == 0)
+	{
+		return VOD_OK;
+	}
+
+	return state->callback(state->callback_context, state->last_block, last_block_len);
+}
+
 vod_status_t 
 aes_cbc_encrypt_write(
 	aes_cbc_encrypt_context_t* state,
@@ -115,9 +135,18 @@ aes_cbc_encrypt_write(
 	uint32_t size)
 {
 	u_char* encrypted_buffer;
-	size_t required_size = aes_round_up_to_block(size);
-	size_t buffer_size = required_size;
+	size_t required_size;
+	size_t buffer_size;
 	int out_size;
+
+	// zero size means flush
+	if (size <= 0)
+	{
+		return aes_cbc_encrypt_flush(state);
+	}
+
+	required_size = aes_round_up_to_block(size);
+	buffer_size = required_size;
 
 	encrypted_buffer = buffer_pool_alloc(
 		state->request_context,
@@ -154,26 +183,6 @@ aes_cbc_encrypt_write(
 	return state->callback(state->callback_context, encrypted_buffer, out_size);
 }
 
-vod_status_t 
-aes_cbc_encrypt_flush(aes_cbc_encrypt_context_t* state)
-{
-	int last_block_len;
-
-	if (1 != EVP_EncryptFinal_ex(state->cipher, state->last_block, &last_block_len))
-	{
-		vod_log_error(VOD_LOG_ERR, state->request_context->log, 0,
-			"aes_cbc_encrypt_flush: EVP_EncryptFinal_ex failed");
-		return VOD_UNEXPECTED;
-	}
-
-	if (last_block_len == 0)
-	{
-		return VOD_OK;
-	}
-
-	return state->callback(state->callback_context, state->last_block, last_block_len);
-}
-
 #else
 
 // empty stubs
@@ -204,12 +213,6 @@ aes_cbc_encrypt_write(
 	aes_cbc_encrypt_context_t* ctx,
 	u_char* buffer,
 	uint32_t size)
-{
-	return VOD_UNEXPECTED;
-}
-
-vod_status_t 
-aes_cbc_encrypt_flush(aes_cbc_encrypt_context_t* ctx)
 {
 	return VOD_UNEXPECTED;
 }
