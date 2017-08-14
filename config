@@ -1,4 +1,6 @@
 ngx_addon_name=ngx_http_vod_module
+ngx_module_incs=
+ngx_module_libs=
 
 # version
 #
@@ -40,7 +42,7 @@ fi
 . auto/feature
 
 if [ $ngx_found = yes ]; then
-	CORE_LIBS="$CORE_LIBS $ngx_feature_libs"
+	ngx_module_libs="$ngx_module_libs $ngx_feature_libs"
 fi
 
 # clock_gettime
@@ -61,7 +63,7 @@ if [ $ngx_found != yes ]; then
     . auto/feature
 
     if [ $ngx_found = yes ]; then
-        CORE_LIBS="$CORE_LIBS $ngx_feature_libs"
+        ngx_module_libs="$ngx_module_libs $ngx_feature_libs"
     fi
 fi
 
@@ -80,7 +82,7 @@ ngx_feature_test="avcodec_send_packet(NULL, NULL)"
 . auto/feature
 
 if [ $ngx_found = yes ]; then
-    CORE_LIBS="$CORE_LIBS $LIB_AV_CODEC $LIB_AV_UTIL"
+    ngx_module_libs="$ngx_module_libs $LIB_AV_CODEC $LIB_AV_UTIL"
 fi
 
 # libavfilter
@@ -99,7 +101,7 @@ ngx_feature_test="avfilter_register_all()"
 . auto/feature
 
 if [ $ngx_found = yes ]; then
-    CORE_LIBS="$CORE_LIBS $LIB_AV_FILTER $LIB_AV_UTIL"
+    ngx_module_libs="$ngx_module_libs $LIB_AV_FILTER $LIB_AV_UTIL"
 fi
 
 # libxml2
@@ -115,8 +117,8 @@ ngx_feature_test="xmlReadMemory(NULL, 0, NULL, NULL, 0);"
 . auto/feature
 
 if [ $ngx_found = yes ]; then
-    CORE_INCS="$CORE_INCS $ngx_feature_path"
-    CORE_LIBS="$CORE_LIBS $ngx_feature_libs"
+    ngx_module_incs="$ngx_module_incs $ngx_feature_path"
+    ngx_module_libs="$ngx_module_libs $ngx_feature_libs"
 fi
 
 VOD_DEPS="$ngx_addon_dir/ngx_async_open_file_cache.h          \
@@ -326,4 +328,6 @@ else
     HTTP_AUX_FILTER_MODULES="$HTTP_AUX_FILTER_MODULES ngx_http_vod_module"
     NGX_ADDON_DEPS="$NGX_ADDON_DEPS $VOD_DEPS"
     NGX_ADDON_SRCS="$NGX_ADDON_SRCS $VOD_SRCS"
+    CORE_INCS="$CORE_INCS $ngx_module_incs"
+    CORE_LIBS="$CORE_LIBS $ngx_module_libs"
 fi
