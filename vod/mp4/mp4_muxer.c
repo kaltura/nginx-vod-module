@@ -908,5 +908,5 @@ mp4_muxer_process_frames(mp4_muxer_state_t* state)
 		}
 	}
 
-	return state->write_callback(state->write_context, NULL, 0);
+	return VOD_OK;
 }

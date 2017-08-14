@@ -87,37 +87,35 @@ ngx_http_vod_mss_init_frame_processor(
 {
 	ngx_http_vod_loc_conf_t* conf = submodule_context->conf;
 	fragment_writer_state_t* state;
-	segment_writer_t drm_writer;
 	vod_status_t rc;
 	bool_t reuse_buffers = FALSE;
 	bool_t size_only = ngx_http_vod_submodule_size_only(submodule_context);
 
 	if (conf->drm_enabled)
 	{
-		drm_writer.write_tail = NULL;
-
 		rc = mss_playready_get_fragment_writer(
-			&drm_writer,
+			segment_writer,
 			&submodule_context->request_context,
 			&submodule_context->media_set,
 			submodule_context->request_params.segment_index,
 			conf->min_single_nalu_per_frame_segment > 0 && submodule_context->request_params.segment_index >= conf->min_single_nalu_per_frame_segment - 1,
-			segment_writer,
 			submodule_context->media_set.sequences[0].encryption_key,		// iv
 			size_only,
 			output_buffer,
 			response_size);
-		if (rc != VOD_OK)
+		switch (rc)
 		{
+		case VOD_DONE:		// passthrough
+			break;
+
+		case VOD_OK:
+			reuse_buffers = TRUE;		// mp4_encrypt allocates new buffers
+			break;
+
+		default:
 			ngx_log_debug1(NGX_LOG_DEBUG_HTTP, submodule_context->request_context.log, 0,
 				"ngx_http_vod_mss_init_frame_processor: mss_playready_get_fragment_writer failed %i", rc);
 			return ngx_http_vod_status_to_ngx_error(submodule_context->r, rc);
-		}
-
-		if (drm_writer.write_tail != NULL)
-		{
-			segment_writer = &drm_writer;
-			reuse_buffers = TRUE;		// mp4_encrypt allocates new buffers
 		}
 	}
 	else

@@ -287,7 +287,7 @@ mp4_fragment_frame_writer_process(fragment_writer_state_t* state)
 	{
 		if (!mp4_fragment_move_to_next_frame(state))
 		{
-			return state->write_callback(state->write_context, NULL, 0);
+			return VOD_OK;
 		}
 
 		rc = state->cur_frame_part.frames_source->start_frame(state->cur_frame_part.frames_source_context, state->cur_frame, NULL);
@@ -392,7 +392,7 @@ mp4_fragment_frame_writer_process(fragment_writer_state_t* state)
 
 			if (!mp4_fragment_move_to_next_frame(state))
 			{
-				return state->write_callback(state->write_context, NULL, 0);
+				return VOD_OK;
 			}
 		}
 

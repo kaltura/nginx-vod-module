@@ -192,6 +192,7 @@ struct ngx_http_vod_ctx_s {
 	ngx_http_vod_frame_processor_t frame_processor;
 	void* frame_processor_state;
 	ngx_chain_t out;
+	segment_writer_t segment_writer;
 	ngx_http_vod_write_segment_context_t write_segment_buffer_context;
 	media_notification_t* notification;
 	uint32_t frames_bytes_read;
@@ -2655,7 +2656,7 @@ ngx_http_vod_write_segment_header_buffer(void* ctx, u_char* buffer, uint32_t siz
 static vod_status_t 
 ngx_http_vod_write_segment_buffer(void* ctx, u_char* buffer, uint32_t size)
 {
-	ngx_http_vod_write_segment_context_t* context = (ngx_http_vod_write_segment_context_t*)ctx;
+	ngx_http_vod_write_segment_context_t* context;
 	ngx_buf_t *b;
 	ngx_chain_t *chain;
 	ngx_chain_t out;
@@ -2666,6 +2667,8 @@ ngx_http_vod_write_segment_buffer(void* ctx, u_char* buffer, uint32_t size)
 		return VOD_OK;
 	}
 
+	context = (ngx_http_vod_write_segment_context_t*)ctx;
+	
 	// create a wrapping ngx_buf_t
 	b = ngx_calloc_buf(context->r->pool);
 	if (b == NULL) 
@@ -2723,7 +2726,6 @@ static ngx_int_t
 ngx_http_vod_init_frame_processing(ngx_http_vod_ctx_t *ctx)
 {
 	ngx_http_request_t* r = ctx->submodule_context.r;
-	segment_writer_t segment_writer;
 	ngx_str_t output_buffer = ngx_null_string;
 	ngx_str_t content_type;
 	ngx_int_t rc;
@@ -2744,16 +2746,16 @@ ngx_http_vod_init_frame_processing(ngx_http_vod_ctx_t *ctx)
 	ctx->write_segment_buffer_context.chain_end = &ctx->out;
 	ctx->write_segment_buffer_context.total_size = 0;
 
-	segment_writer.write_tail = ngx_http_vod_write_segment_buffer;
-	segment_writer.write_head = ngx_http_vod_write_segment_header_buffer;
-	segment_writer.context = &ctx->write_segment_buffer_context;
+	ctx->segment_writer.write_tail = ngx_http_vod_write_segment_buffer;
+	ctx->segment_writer.write_head = ngx_http_vod_write_segment_header_buffer;
+	ctx->segment_writer.context = &ctx->write_segment_buffer_context;
 
 	// initialize the protocol specific frame processor
 	ngx_perf_counter_start(ctx->perf_counter_context);
 
 	rc = ctx->request->init_frame_processor(
 		&ctx->submodule_context,
-		&segment_writer,
+		&ctx->segment_writer,
 		&ctx->frame_processor,
 		&ctx->frame_processor_state,
 		&output_buffer,
@@ -2791,7 +2793,10 @@ ngx_http_vod_init_frame_processing(ngx_http_vod_ctx_t *ctx)
 	// write the initial buffer if provided
 	if (output_buffer.len != 0)
 	{
-		rc = segment_writer.write_tail(segment_writer.context, output_buffer.data, output_buffer.len);
+		rc = ctx->segment_writer.write_tail(
+			ctx->segment_writer.context, 
+			output_buffer.data, 
+			output_buffer.len);
 		if (rc != VOD_OK)
 		{
 			ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
@@ -2904,6 +2909,14 @@ ngx_http_vod_finalize_segment_response(ngx_http_vod_ctx_t *ctx)
 {
 	ngx_http_request_t *r = ctx->submodule_context.r;
 	ngx_int_t rc;
+
+	rc = ctx->segment_writer.write_tail(ctx->segment_writer.context, NULL, 0);
+	if (rc != VOD_OK)
+	{
+		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, ctx->submodule_context.request_context.log, 0,
+			"ngx_http_vod_finalize_segment_response: write_tail failed %i", rc);
+		return ngx_http_vod_status_to_ngx_error(r, rc);
+	}
 
 	// if we already sent the headers and all the buffers, just signal completion and return
 	if (r->header_sent)

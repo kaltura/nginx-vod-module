@@ -170,6 +170,6 @@ write_buffer_queue_flush(write_buffer_queue_t* queue)
 		// no reason to reuse the buffer here
 	}
 
-	// flush
-	return queue->write_callback(queue->write_context, NULL, 0);
+	// done
+	return VOD_OK;
 }

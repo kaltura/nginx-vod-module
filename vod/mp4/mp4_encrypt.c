@@ -684,13 +684,12 @@ mp4_encrypt_video_write_buffer(void* context, u_char* buffer, uint32_t size)
 
 vod_status_t
 mp4_encrypt_video_get_fragment_writer(
-	segment_writer_t* result,
+	segment_writer_t* segment_writer,
 	request_context_t* request_context,
 	media_set_t* media_set,
 	uint32_t segment_index,
 	bool_t single_nalu_per_frame,
 	mp4_encrypt_video_build_fragment_header_t build_fragment_header,
-	segment_writer_t* segment_writer,
 	const u_char* iv, 
 	vod_str_t* fragment_header, 
 	size_t* total_fragment_size)
@@ -759,7 +758,7 @@ mp4_encrypt_video_get_fragment_writer(
 			return rc;
 		}
 
-		result->write_tail = mp4_encrypt_video_snpf_write_buffer;
+		segment_writer->write_tail = mp4_encrypt_video_snpf_write_buffer;
 	}
 	else
 	{
@@ -786,7 +785,7 @@ mp4_encrypt_video_get_fragment_writer(
 		}
 		state->auxiliary_sample_sizes_pos = state->auxiliary_sample_sizes;
 
-		result->write_tail = mp4_encrypt_video_write_buffer;
+		segment_writer->write_tail = mp4_encrypt_video_write_buffer;
 	}
 
 	// init writing for the first track
@@ -796,8 +795,8 @@ mp4_encrypt_video_get_fragment_writer(
 		return rc;
 	}
 
-	result->write_head = NULL;
-	result->context = state;
+	segment_writer->write_head = NULL;
+	segment_writer->context = state;
 
 	return VOD_OK;
 }
@@ -903,11 +902,10 @@ mp4_encrypt_audio_write_buffer(void* context, u_char* buffer, uint32_t size)
 
 vod_status_t
 mp4_encrypt_audio_get_fragment_writer(
-	segment_writer_t* result,
+	segment_writer_t* segment_writer,
 	request_context_t* request_context,
 	media_set_t* media_set,
 	uint32_t segment_index,
-	segment_writer_t* segment_writer,
 	const u_char* iv)
 {
 	mp4_encrypt_state_t* state;
@@ -930,9 +928,9 @@ mp4_encrypt_audio_get_fragment_writer(
 		return rc;
 	}
 
-	result->write_tail = mp4_encrypt_audio_write_buffer;
-	result->write_head = NULL;
-	result->context = state;
+	segment_writer->write_tail = mp4_encrypt_audio_write_buffer;
+	segment_writer->write_head = NULL;
+	segment_writer->context = state;
 
 	return VOD_OK;
 }
@@ -948,13 +946,12 @@ mp4_encrypt_write_guid(u_char* p, u_char* guid)
 
 vod_status_t
 mp4_encrypt_video_get_fragment_writer(
-	segment_writer_t* result,
+	segment_writer_t* segment_writer,
 	request_context_t* request_context,
 	media_set_t* media_set,
 	uint32_t segment_index,
 	bool_t single_nalu_per_frame,
 	mp4_encrypt_video_build_fragment_header_t build_fragment_header,
-	segment_writer_t* segment_writer,
 	const u_char* iv, 
 	vod_str_t* fragment_header, 
 	size_t* total_fragment_size)
@@ -964,11 +961,10 @@ mp4_encrypt_video_get_fragment_writer(
 
 vod_status_t 
 mp4_encrypt_audio_get_fragment_writer(
-	segment_writer_t* result,
+	segment_writer_t* segment_writer,
 	request_context_t* request_context,
 	media_set_t* media_set,
 	uint32_t segment_index,
-	segment_writer_t* segment_writer,
 	const u_char* iv)
 {
 	return VOD_UNEXPECTED;
