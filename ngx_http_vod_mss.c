@@ -87,14 +87,17 @@ ngx_http_vod_mss_init_frame_processor(
 {
 	ngx_http_vod_loc_conf_t* conf = submodule_context->conf;
 	fragment_writer_state_t* state;
+	segment_writer_t drm_writer;
 	vod_status_t rc;
 	bool_t reuse_buffers = FALSE;
 	bool_t size_only = ngx_http_vod_submodule_size_only(submodule_context);
 
 	if (conf->drm_enabled)
 	{
+		drm_writer = *segment_writer;		// must not change segment_writer, otherwise the header will be encrypted
+
 		rc = mss_playready_get_fragment_writer(
-			segment_writer,
+			&drm_writer,
 			&submodule_context->request_context,
 			&submodule_context->media_set,
 			submodule_context->request_params.segment_index,
@@ -109,6 +112,7 @@ ngx_http_vod_mss_init_frame_processor(
 			break;
 
 		case VOD_OK:
+			segment_writer = &drm_writer;
 			reuse_buffers = TRUE;		// mp4_encrypt allocates new buffers
 			break;
 

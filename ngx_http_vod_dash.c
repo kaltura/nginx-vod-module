@@ -169,6 +169,7 @@ ngx_http_vod_dash_mp4_init_frame_processor(
 	dash_fragment_header_extensions_t header_extensions;
 	ngx_http_vod_loc_conf_t* conf = submodule_context->conf;
 	fragment_writer_state_t* state;
+	segment_writer_t drm_writer;
 	vod_status_t rc;
 	bool_t reuse_buffers = FALSE;
 	bool_t size_only = ngx_http_vod_submodule_size_only(submodule_context);
@@ -176,9 +177,11 @@ ngx_http_vod_dash_mp4_init_frame_processor(
 	if (conf->drm_enabled && 
 		submodule_context->request_params.segment_index >= conf->drm_clear_lead_segment_count)
 	{
+		drm_writer = *segment_writer;		// must not change segment_writer, otherwise the header will be encrypted
+
 		// encyrpted fragment
 		rc = edash_packager_get_fragment_writer(
-			segment_writer,
+			&drm_writer,
 			&submodule_context->request_context,
 			&submodule_context->media_set,
 			submodule_context->request_params.segment_index,
@@ -194,6 +197,7 @@ ngx_http_vod_dash_mp4_init_frame_processor(
 			break;
 
 		case VOD_OK:
+			segment_writer = &drm_writer;
 			reuse_buffers = TRUE;		// mp4_encrypt allocates new buffers
 			break;
 
