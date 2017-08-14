@@ -287,7 +287,7 @@ mp4_fragment_frame_writer_process(fragment_writer_state_t* state)
 	{
 		if (!mp4_fragment_move_to_next_frame(state))
 		{
-			return VOD_OK;
+			return state->write_callback(state->write_context, NULL, 0);
 		}
 
 		rc = state->cur_frame_part.frames_source->start_frame(state->cur_frame_part.frames_source_context, state->cur_frame, NULL);
@@ -310,7 +310,7 @@ mp4_fragment_frame_writer_process(fragment_writer_state_t* state)
 				return rc;
 			}
 
-			if (write_buffer != NULL)
+			if (write_buffer_size != 0)
 			{
 				// flush the write buffer
 				rc = state->write_callback(state->write_context, write_buffer, write_buffer_size);
@@ -340,7 +340,7 @@ mp4_fragment_frame_writer_process(fragment_writer_state_t* state)
 				return rc;
 			}
 		}
-		else if (write_buffer != NULL)
+		else if (write_buffer_size != 0)
 		{
 			// if the buffers are contiguous, just increment the size
 			if (write_buffer + write_buffer_size == read_buffer)
@@ -378,7 +378,7 @@ mp4_fragment_frame_writer_process(fragment_writer_state_t* state)
 
 		if (state->cur_frame >= state->cur_frame_part.last_frame)
 		{
-			if (write_buffer != NULL)
+			if (write_buffer_size != 0)
 			{
 				// flush the write buffer
 				rc = state->write_callback(state->write_context, write_buffer, write_buffer_size);
@@ -387,12 +387,12 @@ mp4_fragment_frame_writer_process(fragment_writer_state_t* state)
 					return rc;
 				}
 
-				write_buffer = NULL;
+				write_buffer_size = 0;
 			}
 
 			if (!mp4_fragment_move_to_next_frame(state))
 			{
-				return VOD_OK;
+				return state->write_callback(state->write_context, NULL, 0);
 			}
 		}
 

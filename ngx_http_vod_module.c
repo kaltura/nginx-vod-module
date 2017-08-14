@@ -2661,6 +2661,11 @@ ngx_http_vod_write_segment_buffer(void* ctx, u_char* buffer, uint32_t size)
 	ngx_chain_t out;
 	ngx_int_t rc;
 
+	if (size <= 0)
+	{
+		return VOD_OK;
+	}
+
 	// create a wrapping ngx_buf_t
 	b = ngx_calloc_buf(context->r->pool);
 	if (b == NULL) 
