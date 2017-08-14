@@ -94,6 +94,8 @@ ngx_http_vod_mss_init_frame_processor(
 
 	if (conf->drm_enabled)
 	{
+		drm_writer.write_tail = NULL;
+
 		rc = mss_playready_get_fragment_writer(
 			&drm_writer,
 			&submodule_context->request_context,

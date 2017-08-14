@@ -680,8 +680,6 @@ edash_packager_get_fragment_writer(
 		}
 
 		// use original writer
-		vod_memzero(result, sizeof(*result));
-
 		return VOD_OK;
 	}
 
