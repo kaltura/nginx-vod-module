@@ -18,7 +18,7 @@
 typedef struct
 {
 	// fixed input data
-	media_filter_write_t write_callback;
+	media_filter_write_t write;
 	u_char iv[AES_BLOCK_SIZE];
 	u_char key[SAMPLE_AES_KEY_SIZE];
 	EVP_CIPHER_CTX* cipher;
@@ -79,7 +79,7 @@ sample_aes_avc_filter_init(
 	cln->handler = (vod_pool_cleanup_pt)sample_aes_avc_cleanup;
 	cln->data = state;
 
-	state->write_callback = filter->write;
+	state->write = filter->write;
 	vod_memcpy(state->iv, iv, sizeof(state->iv));
 	vod_memcpy(state->key, key, sizeof(state->key));
 
@@ -115,7 +115,7 @@ sample_aes_avc_write_emulation_prevention(
 
 		if (cur_pos > last_output_pos)
 		{
-			rc = state->write_callback(context, last_output_pos, cur_pos - last_output_pos);
+			rc = state->write(context, last_output_pos, cur_pos - last_output_pos);
 			if (rc != VOD_OK)
 			{
 				return rc;
@@ -124,14 +124,14 @@ sample_aes_avc_write_emulation_prevention(
 			last_output_pos = cur_pos;
 		}
 
-		rc = state->write_callback(context, emulation_prevention_byte, sizeof(emulation_prevention_byte));
+		rc = state->write(context, emulation_prevention_byte, sizeof(emulation_prevention_byte));
 		if (rc != VOD_OK)
 		{
 			return rc;
 		}
 	}
 
-	return state->write_callback(context, last_output_pos, buffer_end - last_output_pos);
+	return state->write(context, last_output_pos, buffer_end - last_output_pos);
 }
 
 vod_status_t
@@ -180,7 +180,7 @@ sample_aes_avc_filter_write_nal_body(
 
 	if (!state->encrypt)
 	{
-		return state->write_callback(context, buffer, size);
+		return state->write(context, buffer, size);
 	}
 
 	for (end_offset = state->cur_offset + size;
