@@ -577,6 +577,7 @@ LANG(XSL, NULL, NULL , "xsl", "Slavey, South", "\xe1\x91\x8c\xe1\x93\x80\xe1\x92
 LANG(XSV, NULL, NULL , "xsv", "Sudovian", "S\xc5\xab" "daviskai")
 LANG(YI , "yi", "yid", "yid", "Yiddish", "\xd7\x90\xd7\x99\xd7\x93\xd7\x99\xd7\xa9")
 LANG(YO , "yo", "yor", "yor", "Yoruba", "Yor\xc3\xb9" "b\xc3\xa1")
+LANG(YUE, NULL, NULL , "yue", "Yue Chinese(Cantonese)", "\xe7\xb2\xb5\xe8\xaa\x9e")
 LANG(ZA , "za", "zha", "zha", "Zhuang, Chuang", "Sa\xc9\xaf cue\xc5\x8b\xc6\x85, Saw cuengh")
 LANG(ZAI, NULL, NULL , "zai", "Zapotec, Isthmus", "Diidxaz\xc3\xa1'")
 LANG(ZH , "zh", "chi", "zho", "Chinese", "\xe4\xb8\xad\xe6\x96\x87; \xe6\xb1\x89\xe8\xaf\xad; \xe5\x8d\x8e\xe8\xaf\xad")
