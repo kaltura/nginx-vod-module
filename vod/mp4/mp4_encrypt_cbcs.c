@@ -311,7 +311,6 @@ mp4_encrypt_cbcs_video_write_buffer(void* context, u_char* buffer, uint32_t size
 	u_char* output;
 	uint32_t slice_header_buf_size;
 	uint32_t slice_header_size;
-	uint32_t full_packet_size;
 	uint32_t write_size;
 	uint32_t size_left;
 	int32_t cur_shift;
@@ -361,25 +360,25 @@ mp4_encrypt_cbcs_video_write_buffer(void* context, u_char* buffer, uint32_t size
 				return VOD_BAD_DATA;
 			}
 
-			if (stream_state->packet_size_left > UINT_MAX - stream_state->nal_packet_size_length)
+			if (stream_state->packet_size_left > stream_state->base.frame_size_left - stream_state->nal_packet_size_length)
 			{
 				vod_log_error(VOD_LOG_ERR, state->request_context->log, 0,
-					"mp4_encrypt_cbcs_video_write_buffer: packet size %uD too big, nalu size %uD",
-					stream_state->packet_size_left, stream_state->nal_packet_size_length);
+					"mp4_encrypt_cbcs_video_write_buffer: packet size %uD too big, nalu size %uD, frame size %uD",
+					stream_state->packet_size_left, stream_state->nal_packet_size_length, stream_state->base.frame_size_left);
 				return VOD_BAD_DATA;
 			}
 
 			// update the frame size left
-			full_packet_size = stream_state->nal_packet_size_length + stream_state->packet_size_left;
-			if (stream_state->base.frame_size_left < full_packet_size)
+			stream_state->base.frame_size_left -= stream_state->nal_packet_size_length + stream_state->packet_size_left;
+
+			if (stream_state->base.frame_size_left > 0 &&
+				stream_state->base.frame_size_left <= stream_state->nal_packet_size_length)
 			{
 				vod_log_error(VOD_LOG_ERR, state->request_context->log, 0,
-					"mp4_encrypt_cbcs_video_write_buffer: frame size %uD too small, nalu size %uD packet size %uD",
-					stream_state->base.frame_size_left, stream_state->nal_packet_size_length, stream_state->packet_size_left);
+					"mp4_encrypt_cbcs_video_write_buffer: frame size left %uD too small, nalu size %uD",
+					stream_state->base.frame_size_left, stream_state->nal_packet_size_length);
 				return VOD_BAD_DATA;
 			}
-
-			stream_state->base.frame_size_left -= full_packet_size;
 
 			stream_state->cur_state = STATE_NAL_TYPE;
 

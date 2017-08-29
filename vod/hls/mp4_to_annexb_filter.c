@@ -123,6 +123,13 @@ mp4_to_annexb_start_frame(media_filter_context_t* context, output_frame_t* frame
 	mp4_to_annexb_state_t* state = get_context(context);
 	vod_status_t rc;
 
+	if (frame->size > 0 && frame->size <= state->nal_packet_size_length)
+	{
+		vod_log_error(VOD_LOG_ERR, context->request_context->log, 0,
+			"mp4_to_annexb_start_frame: invalid frame size %uD", frame->size);
+		return VOD_BAD_DATA;
+	}
+
 	state->frame_size_left = frame->size;		// not counting the AUD or extra data since they are written here
 
 	frame->size += state->aud_nal_packet_size;
@@ -185,6 +192,14 @@ mp4_to_annexb_write(media_filter_context_t* context, const u_char* buffer, uint3
 			{
 				break;
 			}
+
+			if (state->packet_size_left <= 0)
+			{
+				vod_log_error(VOD_LOG_ERR, context->request_context->log, 0,
+					"mp4_to_annexb_write: zero size packet");
+				return VOD_BAD_DATA;
+			}
+
 			state->cur_state++;
 			// fall through
 			

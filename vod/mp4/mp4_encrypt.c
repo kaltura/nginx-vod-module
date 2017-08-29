@@ -109,7 +109,6 @@ mp4_encrypt_init_state(
 static bool_t
 mp4_encrypt_move_to_next_frame(mp4_encrypt_state_t* state, bool_t* init_track)
 {
-	*init_track = FALSE;
 	while (state->cur_frame >= state->last_frame)
 	{
 		if (state->cur_frame_part->next != NULL)
@@ -128,7 +127,10 @@ mp4_encrypt_move_to_next_frame(mp4_encrypt_state_t* state, bool_t* init_track)
 
 		mp4_encrypt_init_track(state, state->cur_clip->first_track);
 
-		*init_track = TRUE;
+		if (init_track != NULL)
+		{
+			*init_track = TRUE;
+		}
 	}
 
 	return TRUE;
@@ -206,6 +208,7 @@ mp4_encrypt_video_snpf_build_auxiliary_data(mp4_encrypt_video_state_t* state)
 
 	for (;;)
 	{
+		init_track = FALSE;
 		if (!mp4_encrypt_move_to_next_frame(&state->base, &init_track))
 		{
 			break;
@@ -219,13 +222,19 @@ mp4_encrypt_video_snpf_build_auxiliary_data(mp4_encrypt_video_state_t* state)
 		// cenc_sample_auxiliary_data_t
 		p = vod_copy(p, iv, sizeof(iv));
 		mp4_aes_ctr_increment_be64(iv);
-		write_be16(p, 1);		// subsample count
+		if (state->base.cur_frame->size > 0)
+		{
+			write_be16(p, 1);		// subsample count
 
-		// cenc_sample_auxiliary_data_subsample_t
-		bytes_of_encrypted_data = state->base.cur_frame->size - bytes_of_clear_data;
-		write_be16(p, bytes_of_clear_data);
-		write_be32(p, bytes_of_encrypted_data);
-
+			// cenc_sample_auxiliary_data_subsample_t
+			bytes_of_encrypted_data = state->base.cur_frame->size - bytes_of_clear_data;
+			write_be16(p, bytes_of_clear_data);
+			write_be32(p, bytes_of_encrypted_data);
+		}
+		else
+		{
+			write_be16(p, 0);		// subsample count
+		}
 		state->base.cur_frame++;
 	}
 
@@ -264,10 +273,18 @@ mp4_encrypt_video_snpf_write_buffer(void* context, u_char* buffer, uint32_t size
 					return rc;
 				}
 
-				if (state->base.frame_size_left <= 0)
+				if (state->base.frame_size_left <= state->nal_packet_size_length)
 				{
-					state->cur_state = STATE_ENCRYPTED_BYTES;
-					break;
+					if (state->base.frame_size_left <= 0)
+					{
+						state->cur_state = STATE_ENCRYPTED_BYTES;
+						break;
+					}
+
+					vod_log_error(VOD_LOG_ERR, state->base.request_context->log, 0,
+						"mp4_encrypt_video_snpf_write_buffer: frame size %uD too small, nalu size %uD",
+						state->base.frame_size_left, state->nal_packet_size_length);
+					return VOD_BAD_DATA;
 				}
 			}
 
@@ -306,14 +323,6 @@ mp4_encrypt_video_snpf_write_buffer(void* context, u_char* buffer, uint32_t size
 
 			// copy the nalu type
 			*output++ = *cur_pos++;
-
-			if (state->base.frame_size_left < state->nal_packet_size_length + 1)
-			{
-				vod_log_error(VOD_LOG_ERR, state->base.request_context->log, 0,
-					"mp4_encrypt_video_snpf_write_buffer: frame size %uD too small, nalu size %uD",
-					state->base.frame_size_left, state->nal_packet_size_length);
-				return VOD_BAD_DATA;
-			}
 
 			state->base.frame_size_left -= state->nal_packet_size_length;
 
@@ -357,25 +366,19 @@ mp4_encrypt_video_snpf_write_buffer(void* context, u_char* buffer, uint32_t size
 			state->packet_size_left = 0;
 
 			// move to the next frame
-			if (mp4_encrypt_move_to_next_frame(&state->base, &init_track))
+			init_track = FALSE;
+			if (!mp4_encrypt_move_to_next_frame(&state->base, &init_track))
 			{
-				if (init_track)
-				{
-					rc = mp4_encrypt_video_init_track(state, state->base.cur_clip->first_track);
-					if (rc != VOD_OK)
-					{
-						return rc;
-					}
-				}
-
-				break;
+				return write_buffer_flush(&state->base.write_buffer, FALSE);
 			}
 
-			// finished all frames
-			rc = write_buffer_flush(&state->base.write_buffer, FALSE);
-			if (rc != VOD_OK)
+			if (init_track)
 			{
-				return rc;
+				rc = mp4_encrypt_video_init_track(state, state->base.cur_clip->first_track);
+				if (rc != VOD_OK)
+				{
+					return rc;
+				}
 			}
 
 			break;
@@ -535,10 +538,18 @@ mp4_encrypt_video_write_buffer(void* context, u_char* buffer, uint32_t size)
 					return rc;
 				}
 
-				if (state->base.frame_size_left <= 0)
+				if (state->base.frame_size_left <= state->nal_packet_size_length)
 				{
-					state->cur_state = STATE_PACKET_DATA;
-					break;
+					if (state->base.frame_size_left <= 0)
+					{
+						state->cur_state = STATE_PACKET_DATA;
+						break;
+					}
+
+					vod_log_error(VOD_LOG_ERR, state->base.request_context->log, 0,
+						"mp4_encrypt_video_write_buffer: frame size %uD too small, nalu size %uD",
+						state->base.frame_size_left, state->nal_packet_size_length);
+					return VOD_BAD_DATA;
 				}
 			}
 
@@ -552,15 +563,31 @@ mp4_encrypt_video_write_buffer(void* context, u_char* buffer, uint32_t size)
 				break;
 			}
 
-			if (state->base.frame_size_left < state->nal_packet_size_length + state->packet_size_left)
+			if (state->packet_size_left <= 0)
 			{
 				vod_log_error(VOD_LOG_ERR, state->base.request_context->log, 0,
-					"mp4_encrypt_video_write_buffer: frame size %uD too small, nalu size %uD packet size %uD",
-					state->base.frame_size_left, state->nal_packet_size_length, state->packet_size_left);
+					"mp4_encrypt_video_write_buffer: zero size packet");
+				return VOD_BAD_DATA;
+			}
+
+			if (state->packet_size_left > state->base.frame_size_left - state->nal_packet_size_length)
+			{
+				vod_log_error(VOD_LOG_ERR, state->base.request_context->log, 0,
+					"mp4_encrypt_video_write_buffer: packet size %uD too big, nalu size %uD, frame size %uD",
+					state->packet_size_left, state->nal_packet_size_length, state->base.frame_size_left);
 				return VOD_BAD_DATA;
 			}
 
 			state->base.frame_size_left -= state->nal_packet_size_length + state->packet_size_left;
+
+			if (state->base.frame_size_left > 0 &&
+				state->base.frame_size_left <= state->nal_packet_size_length)
+			{
+				vod_log_error(VOD_LOG_ERR, state->base.request_context->log, 0,
+					"mp4_encrypt_video_write_buffer: frame size left %uD too small, nalu size %uD",
+					state->base.frame_size_left, state->nal_packet_size_length);
+				return VOD_BAD_DATA;
+			}
 
 			state->cur_state++;
 			// fall through
@@ -635,6 +662,7 @@ mp4_encrypt_video_write_buffer(void* context, u_char* buffer, uint32_t size)
 			}
 
 			// move to the next frame
+			init_track = FALSE;
 			if (mp4_encrypt_move_to_next_frame(&state->base, &init_track))
 			{
 				if (init_track)
@@ -698,7 +726,6 @@ mp4_encrypt_video_get_fragment_writer(
 	mp4_encrypt_video_state_t* state;
 	vod_status_t rc;
 	uint32_t initial_size;
-	bool_t ignore;
 
 	// allocate the state
 	state = vod_alloc(request_context->pool, sizeof(*state));
@@ -717,7 +744,7 @@ mp4_encrypt_video_get_fragment_writer(
 		return rc;
 	}
 
-	if (!mp4_encrypt_move_to_next_frame(&state->base, &ignore))
+	if (!mp4_encrypt_move_to_next_frame(&state->base, NULL))
 	{
 		// an empty segment - write won't be called so we need to write the header here
 		state->auxiliary_data.start = NULL;
@@ -854,7 +881,6 @@ mp4_encrypt_audio_write_buffer(void* context, u_char* buffer, uint32_t size)
 	u_char* buffer_end = buffer + size;
 	u_char* cur_pos = buffer;
 	uint32_t write_size;
-	bool_t ignore;
 	vod_status_t rc;
 
 	while (cur_pos < buffer_end)
@@ -886,7 +912,7 @@ mp4_encrypt_audio_write_buffer(void* context, u_char* buffer, uint32_t size)
 		}
 
 		// finished a frame
-		if (!mp4_encrypt_move_to_next_frame(state, &ignore))
+		if (!mp4_encrypt_move_to_next_frame(state, NULL))
 		{
 			// finished all frames
 			rc = write_buffer_flush(&state->write_buffer, FALSE);
@@ -926,6 +952,11 @@ mp4_encrypt_audio_get_fragment_writer(
 		vod_log_debug1(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
 			"mp4_encrypt_audio_get_fragment_writer: mp4_encrypt_init_state failed %i", rc);
 		return rc;
+	}
+
+	if (!mp4_encrypt_move_to_next_frame(state, NULL))
+	{
+		return VOD_OK;
 	}
 
 	segment_writer->write_tail = mp4_encrypt_audio_write_buffer;
