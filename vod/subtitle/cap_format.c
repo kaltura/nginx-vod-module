@@ -23,7 +23,7 @@
 #define CAP_MAX_SPECIAL_CHAR (0x95)
 
 // globals
-static const ngx_str_t cap_special_chars[CAP_MAX_SPECIAL_CHAR - CAP_MIN_SPECIAL_CHAR + 1] = {
+static const vod_str_t cap_special_chars[CAP_MAX_SPECIAL_CHAR - CAP_MIN_SPECIAL_CHAR + 1] = {
 	vod_string("\xe2\x99\xaa"),
 	vod_string("\xc3\xa1"),
 	vod_string("\xc3\xa9"),
