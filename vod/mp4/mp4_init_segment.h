@@ -2,7 +2,7 @@
 #define __MP4_INIT_SEGMENT_H__
 
 // includes
-#include "../common.h"
+#include "../media_set.h"
 
 // typedefs
 typedef u_char* (*atom_writer_func_t)(void* context, u_char* p);
@@ -23,7 +23,16 @@ vod_status_t mp4_init_segment_build(
 	media_set_t* media_set,
 	bool_t size_only,
 	atom_writer_t* extra_moov_atoms_writer,
-	atom_writer_t* stsd_atom_writer,
+	atom_writer_t* stsd_atom_writers,
 	vod_str_t* result);
+
+vod_status_t mp4_init_segment_get_encrypted_stsd_writers(
+	request_context_t* request_context,
+	media_set_t* media_set,
+	uint32_t scheme_type,
+	bool_t has_clear_lead,
+	u_char* default_kid,
+	u_char* iv,
+	atom_writer_t** result);
 
 #endif // __MP4_INIT_SEGMENT_H__

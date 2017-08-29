@@ -1,12 +1,32 @@
-#include "../media_set.h"
-#include "mp4_defs.h"
 #include "mp4_init_segment.h"
 #include "mp4_write_stream.h"
+#include "mp4_defs.h"
+#include "../read_stream.h"
+#include "../udrm.h"
 
 // macros
 #define mp4_rescale_millis(millis, timescale) (millis * ((timescale) / 1000))
 #define mp4_esds_atom_size(extra_data_len) (ATOM_HEADER_SIZE + 29 + extra_data_len)
 #define mp4_copy_atom(p, raw_atom) vod_copy(p, (raw_atom).ptr, (raw_atom).size)
+
+// typedefs
+typedef struct {
+	uint32_t media_type;
+	uint32_t scheme_type;
+	bool_t has_clear_lead;
+	u_char* default_kid;
+	u_char* iv;
+	stsd_entry_header_t* original_stsd_entry;
+	uint32_t original_stsd_entry_size;
+	uint32_t original_stsd_entry_format;
+	size_t tenc_atom_size;
+	size_t schi_atom_size;
+	size_t schm_atom_size;
+	size_t frma_atom_size;
+	size_t sinf_atom_size;
+	size_t encrypted_stsd_entry_size;
+	size_t stsd_atom_size;
+} stsd_writer_context_t;
 
 // init mp4 atoms
 typedef struct {
@@ -516,14 +536,13 @@ static void
 mp4_init_segment_calc_size(
 	media_set_t* media_set,
 	atom_writer_t* extra_moov_atoms_writer,
-	atom_writer_t* stsd_atom_writer, 
+	atom_writer_t* stsd_atom_writers, 
 	init_mp4_sizes_t* result)
 {
 	media_track_t* first_track = media_set->filtered_tracks;
-	media_track_t* last_track = first_track + media_set->total_track_count;
-	media_track_t* cur_track;
 	track_sizes_t* track_sizes;
 	uint32_t timescale = first_track->media_info.timescale;
+	uint32_t i;
 
 	result->mvex_atom_size = ATOM_HEADER_SIZE + 
 		(ATOM_HEADER_SIZE + sizeof(trex_atom_t)) * media_set->total_track_count;
@@ -545,11 +564,15 @@ mp4_init_segment_calc_size(
 		result->moov_atom_size += extra_moov_atoms_writer->atom_size;
 	}
 
-	for (cur_track = first_track, track_sizes = result->track_sizes;
-		cur_track < last_track; 
-		cur_track++, track_sizes++)
+	for (i = 0; i < media_set->total_track_count; i++)
 	{
-		mp4_init_segment_get_track_sizes(media_set, cur_track, stsd_atom_writer, track_sizes);
+		track_sizes = &result->track_sizes[i];
+
+		mp4_init_segment_get_track_sizes(
+			media_set, 
+			&first_track[i], 
+			stsd_atom_writers != NULL ? &stsd_atom_writers[i] : NULL, 
+			track_sizes);
 
 		result->moov_atom_size += track_sizes->trak_size;
 	}
@@ -566,7 +589,7 @@ mp4_init_segment_write(
 	media_set_t* media_set,
 	init_mp4_sizes_t* sizes,
 	atom_writer_t* extra_moov_atoms_writer,
-	atom_writer_t* stsd_atom_writer)
+	atom_writer_t* stsd_atom_writers)
 {
 	media_track_t* first_track = media_set->filtered_tracks;
 	media_track_t* cur_track;
@@ -685,9 +708,9 @@ mp4_init_segment_write(
 
 		// moov.trak.mdia.minf.stbl
 		write_atom_header(p, track_sizes->stbl_size, 's', 't', 'b', 'l');
-		if (stsd_atom_writer != NULL)
+		if (stsd_atom_writers != NULL)
 		{
-			p = stsd_atom_writer->write(stsd_atom_writer->context, p);
+			p = stsd_atom_writers[i].write(stsd_atom_writers[i].context, p);
 		}
 		else
 		{
@@ -743,7 +766,7 @@ mp4_init_segment_build(
 	media_set_t* media_set,
 	bool_t size_only,
 	atom_writer_t* extra_moov_atoms_writer,
-	atom_writer_t* stsd_atom_writer,
+	atom_writer_t* stsd_atom_writers,
 	vod_str_t* result)
 {
 	media_track_t* first_track = media_set->filtered_tracks;
@@ -781,7 +804,7 @@ mp4_init_segment_build(
 	mp4_init_segment_calc_size(
 		media_set,
 		extra_moov_atoms_writer,
-		stsd_atom_writer,
+		stsd_atom_writers,
 		sizes);
 
 	// head request optimization
@@ -807,7 +830,7 @@ mp4_init_segment_build(
 		media_set,
 		sizes,
 		extra_moov_atoms_writer,
-		stsd_atom_writer);
+		stsd_atom_writers);
 
 	result->len = p - result->data;
 
@@ -817,6 +840,220 @@ mp4_init_segment_build(
 			"mp4_init_segment_build: result length %uz different than allocated length %uz",
 			result->len, sizes->total_size);
 		return VOD_UNEXPECTED;
+	}
+
+	return VOD_OK;
+}
+
+// encryption
+
+static vod_status_t
+mp4_init_segment_init_encrypted_stsd_writer(
+	request_context_t* request_context,
+	media_track_t* track,
+	stsd_writer_context_t* result)
+{
+	raw_atom_t* original_stsd = &track->raw_atoms[RTA_STSD];
+	vod_status_t rc;
+
+	// create an stsd atom if needed
+	if (original_stsd->size == 0)
+	{
+		rc = mp4_init_segment_build_stsd_atom(request_context, track);
+		if (rc != VOD_OK)
+		{
+			return rc;
+		}
+	}
+
+	if (original_stsd->size < original_stsd->header_size + sizeof(stsd_atom_t) + sizeof(stsd_entry_header_t))
+	{
+		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+			"mp4_init_segment_init_encrypted_stsd_writer: invalid stsd size %uL", original_stsd->size);
+		return VOD_BAD_DATA;
+	}
+
+	result->media_type = track->media_info.media_type;
+	result->original_stsd_entry = (stsd_entry_header_t*)(original_stsd->ptr + original_stsd->header_size + sizeof(stsd_atom_t));
+	result->original_stsd_entry_size = parse_be32(result->original_stsd_entry->size);
+	result->original_stsd_entry_format = parse_be32(result->original_stsd_entry->format);
+
+	if (result->original_stsd_entry_size < sizeof(stsd_entry_header_t) ||
+		result->original_stsd_entry_size > original_stsd->size - original_stsd->header_size - 
+			sizeof(stsd_atom_t))
+	{
+		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+			"mp4_init_segment_init_encrypted_stsd_writer: invalid stsd entry size %uD", result->original_stsd_entry_size);
+		return VOD_BAD_DATA;
+	}
+
+	if (result->iv != NULL)
+	{
+		result->tenc_atom_size = ATOM_HEADER_SIZE + sizeof(tenc_v1_atom_t);
+	}
+	else
+	{
+		result->tenc_atom_size = ATOM_HEADER_SIZE + sizeof(tenc_atom_t);
+	}
+	result->schi_atom_size = ATOM_HEADER_SIZE + result->tenc_atom_size;
+	result->schm_atom_size = ATOM_HEADER_SIZE + sizeof(schm_atom_t);
+	result->frma_atom_size = ATOM_HEADER_SIZE + sizeof(frma_atom_t);
+	result->sinf_atom_size = ATOM_HEADER_SIZE +
+		result->frma_atom_size +
+		result->schm_atom_size +
+		result->schi_atom_size;
+	result->encrypted_stsd_entry_size = result->original_stsd_entry_size + result->sinf_atom_size;
+	result->stsd_atom_size = ATOM_HEADER_SIZE + sizeof(stsd_atom_t) + result->encrypted_stsd_entry_size;
+	if (result->has_clear_lead)
+	{
+		result->stsd_atom_size += result->original_stsd_entry_size;
+	}
+
+	return VOD_OK;
+}
+
+static u_char*
+mp4_init_segment_write_encrypted_stsd(void* ctx, u_char* p)
+{
+	stsd_writer_context_t* context = (stsd_writer_context_t*)ctx;
+	u_char format_by_media_type[MEDIA_TYPE_COUNT] = { 'v', 'a' };
+
+	// stsd
+	write_atom_header(p, context->stsd_atom_size, 's', 't', 's', 'd');
+	write_be32(p, 0);								// version + flags
+	write_be32(p, context->has_clear_lead ? 2 : 1);	// entries
+
+													// stsd encrypted entry
+	write_be32(p, context->encrypted_stsd_entry_size);		// size
+	write_atom_name(p, 'e', 'n', 'c', format_by_media_type[context->media_type]);	// format
+	p = vod_copy(p, context->original_stsd_entry + 1, context->original_stsd_entry_size - sizeof(stsd_entry_header_t));
+
+	// sinf
+	write_atom_header(p, context->sinf_atom_size, 's', 'i', 'n', 'f');
+
+	// sinf.frma
+	write_atom_header(p, context->frma_atom_size, 'f', 'r', 'm', 'a');
+	write_be32(p, context->original_stsd_entry_format);
+
+	// sinf.schm
+	write_atom_header(p, context->schm_atom_size, 's', 'c', 'h', 'm');
+	write_be32(p, 0);							// version + flags
+	write_be32(p, context->scheme_type);		// scheme type
+	write_be32(p, 0x10000);						// scheme version
+
+												// sinf.schi
+	write_atom_header(p, context->schi_atom_size, 's', 'c', 'h', 'i');
+
+	// sinf.schi.tenc
+	write_atom_header(p, context->tenc_atom_size, 't', 'e', 'n', 'c');
+	if (context->iv != NULL)
+	{
+		write_be32(p, 0x01000000);				// version + flags
+	}
+	else
+	{
+		write_be32(p, 0);						// version + flags
+	}
+
+	switch (context->scheme_type)
+	{
+	case SCHEME_TYPE_CENC:
+		write_be32(p, 0x108);					// default is encrypted, iv size = 8
+		break;
+
+	case SCHEME_TYPE_CBCS:
+		switch (context->media_type)
+		{
+		case MEDIA_TYPE_VIDEO:
+			write_be32(p, 0x190100);					// default is encrypted, 1/9 crypt/skip ratio
+			break;
+
+		case MEDIA_TYPE_AUDIO:
+			write_be32(p, 0x000100);					// default is encrypted
+			break;
+		}
+		break;
+	}
+
+	if (context->default_kid != NULL)
+	{
+		p = vod_copy(p, context->default_kid, DRM_KID_SIZE);			// default key id
+	}
+	else
+	{
+		vod_memzero(p, DRM_KID_SIZE);
+		p += DRM_KID_SIZE;
+	}
+
+	if (context->iv != NULL)
+	{
+		*p++ = AES_BLOCK_SIZE;							// default constant iv size
+		p = vod_copy(p, context->iv, AES_BLOCK_SIZE);	// default constant iv
+	}
+
+	// clear entry
+	if (context->has_clear_lead)
+	{
+		p = vod_copy(p, context->original_stsd_entry, context->original_stsd_entry_size);
+	}
+
+	return p;
+}
+
+vod_status_t
+mp4_init_segment_get_encrypted_stsd_writers(
+	request_context_t* request_context,
+	media_set_t* media_set,
+	uint32_t scheme_type,
+	bool_t has_clear_lead,
+	u_char* default_kid,
+	u_char* iv,
+	atom_writer_t** result)
+{
+	media_track_t* first_track = media_set->filtered_tracks;
+	stsd_writer_context_t* stsd_writer_context;
+	atom_writer_t* stsd_atom_writer;
+	vod_status_t rc;
+	uint32_t i;
+
+	// allocate the context
+	stsd_atom_writer = vod_alloc(request_context->pool,
+		(sizeof(*stsd_atom_writer) + sizeof(*stsd_writer_context)) * media_set->total_track_count);
+	if (stsd_atom_writer == NULL)
+	{
+		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
+			"mp4_init_segment_get_encrypted_stsd_writers: vod_alloc failed");
+		return VOD_ALLOC_FAILED;
+	}
+
+	*result = stsd_atom_writer;
+
+	stsd_writer_context = (void*)(stsd_atom_writer + media_set->total_track_count);
+
+	for (i = 0;
+		i < media_set->total_track_count;
+		i++, stsd_writer_context++, stsd_atom_writer++)
+	{
+		// build the stsd writer for the current track
+		stsd_writer_context->scheme_type = scheme_type;
+		stsd_writer_context->has_clear_lead = has_clear_lead;
+		stsd_writer_context->default_kid = default_kid;
+		stsd_writer_context->iv = iv;
+
+		rc = mp4_init_segment_init_encrypted_stsd_writer(
+			request_context,
+			&first_track[i],
+			stsd_writer_context);
+		if (rc != VOD_OK)
+		{
+			vod_log_debug1(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
+				"mp4_init_segment_get_encrypted_stsd_writers: mp4_init_segment_init_encrypted_stsd_writer failed %i", rc);
+			return rc;
+		}
+
+		stsd_atom_writer->atom_size = stsd_writer_context->stsd_atom_size;
+		stsd_atom_writer->write = mp4_init_segment_write_encrypted_stsd;
+		stsd_atom_writer->context = stsd_writer_context;
 	}
 
 	return VOD_OK;

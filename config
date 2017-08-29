@@ -151,6 +151,7 @@ VOD_DEPS="$ngx_addon_dir/ngx_async_open_file_cache.h          \
           $ngx_addon_dir/ngx_perf_counters_x.h                \
           $ngx_addon_dir/vod/aes_defs.h                       \
           $ngx_addon_dir/vod/avc_defs.h                       \
+          $ngx_addon_dir/vod/avc_parser.h                     \
           $ngx_addon_dir/vod/bit_read_stream.h                \
           $ngx_addon_dir/vod/buffer_pool.h                    \
           $ngx_addon_dir/vod/codec_config.h                   \
@@ -207,6 +208,7 @@ VOD_DEPS="$ngx_addon_dir/ngx_async_open_file_cache.h          \
           $ngx_addon_dir/vod/mp4/mp4_decrypt.h                \
           $ngx_addon_dir/vod/mp4/mp4_defs.h                   \
           $ngx_addon_dir/vod/mp4/mp4_encrypt.h                \
+          $ngx_addon_dir/vod/mp4/mp4_encrypt_cbcs.h           \
           $ngx_addon_dir/vod/mp4/mp4_encrypt_passthrough.h    \
           $ngx_addon_dir/vod/mp4/mp4_format.h                 \
           $ngx_addon_dir/vod/mp4/mp4_fragment.h               \
@@ -250,6 +252,7 @@ VOD_SRCS="$ngx_addon_dir/ngx_async_open_file_cache.c          \
           $ngx_addon_dir/ngx_http_vod_thumb.c                 \
           $ngx_addon_dir/ngx_http_vod_utils.c                 \
           $ngx_addon_dir/ngx_perf_counters.c                  \
+          $ngx_addon_dir/vod/avc_parser.c                     \
           $ngx_addon_dir/vod/buffer_pool.c                    \
           $ngx_addon_dir/vod/codec_config.c                   \
           $ngx_addon_dir/vod/common.c                         \
@@ -294,6 +297,7 @@ VOD_SRCS="$ngx_addon_dir/ngx_async_open_file_cache.c          \
           $ngx_addon_dir/vod/mp4/mp4_clipper.c                \
           $ngx_addon_dir/vod/mp4/mp4_decrypt.c                \
           $ngx_addon_dir/vod/mp4/mp4_encrypt.c                \
+          $ngx_addon_dir/vod/mp4/mp4_encrypt_cbcs.c           \
           $ngx_addon_dir/vod/mp4/mp4_encrypt_passthrough.c    \
           $ngx_addon_dir/vod/mp4/mp4_format.c                 \
           $ngx_addon_dir/vod/mp4/mp4_fragment.c               \
