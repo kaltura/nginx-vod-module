@@ -12,6 +12,9 @@
 
 // state
 typedef struct {
+	// fixed
+	write_callback_t write_callback;
+	void* write_context;
 	uint32_t timescale;
 	int media_type;
 	uint32_t frame_count;
@@ -35,10 +38,9 @@ typedef struct {
 struct mp4_muxer_state_s {
 	// fixed
 	request_context_t* request_context;
-	write_callback_t write_callback;
-	void* write_context;
 	bool_t reuse_buffers;
 	media_set_t* media_set;
+	bool_t per_stream_writer;
 
 	mp4_muxer_stream_state_t* first_stream;
 	mp4_muxer_stream_state_t* last_stream;
@@ -457,8 +459,8 @@ static vod_status_t
 mp4_muxer_init_state(
 	request_context_t* request_context,
 	media_set_t* media_set,
-	write_callback_t write_callback,
-	void* write_context,
+	segment_writer_t* track_writers,
+	bool_t per_stream_writer,
 	bool_t reuse_buffers,
 	mp4_muxer_state_t** result)
 {
@@ -489,10 +491,9 @@ mp4_muxer_init_state(
 
 	state->last_stream = state->first_stream + media_set->total_track_count;
 	state->request_context = request_context;
-	state->write_callback = write_callback;
-	state->write_context = write_context;
 	state->reuse_buffers = reuse_buffers;
 	state->media_set = media_set;
+	state->per_stream_writer = per_stream_writer;
 	state->cur_frame = NULL;
 	state->selected_stream = NULL;
 	state->first_time = TRUE;
@@ -502,6 +503,12 @@ mp4_muxer_init_state(
 	for (cur_stream = state->first_stream; cur_stream < state->last_stream; cur_stream++, cur_track++, index++)
 	{
 		cur_stream->index = index;
+		cur_stream->write_callback = track_writers->write_tail;
+		cur_stream->write_context = track_writers->context;
+		if (per_stream_writer)
+		{
+			track_writers++;
+		}
 
 		// get total frame count for this stream
 		cur_stream->frame_count = cur_track->frame_count;
@@ -570,8 +577,8 @@ mp4_muxer_init_fragment(
 	request_context_t* request_context,
 	uint32_t segment_index,
 	media_set_t* media_set,
-	write_callback_t write_callback,
-	void* write_context,
+	segment_writer_t* track_writers,
+	bool_t per_stream_writer,
 	bool_t reuse_buffers,
 	bool_t size_only,
 	vod_str_t* header, 
@@ -594,8 +601,8 @@ mp4_muxer_init_fragment(
 	rc = mp4_muxer_init_state(
 		request_context, 
 		media_set,
-		write_callback, 
-		write_context, 
+		track_writers, 
+		per_stream_writer,
 		reuse_buffers,
 		&state);
 	if (rc != VOD_OK)
@@ -796,6 +803,8 @@ mp4_muxer_start_frame(mp4_muxer_state_t* state)
 vod_status_t
 mp4_muxer_process_frames(mp4_muxer_state_t* state)
 {
+	mp4_muxer_stream_state_t* selected_stream = state->selected_stream;
+	mp4_muxer_stream_state_t* last_stream = NULL;
 	u_char* read_buffer;
 	uint32_t read_size;
 	u_char* write_buffer = NULL;
@@ -818,7 +827,7 @@ mp4_muxer_process_frames(mp4_muxer_state_t* state)
 			if (write_buffer_size != 0)
 			{
 				// flush the write buffer
-				rc = state->write_callback(state->write_context, write_buffer, write_buffer_size);
+				rc = last_stream->write_callback(last_stream->write_context, write_buffer, write_buffer_size);
 				if (rc != VOD_OK)
 				{
 					return rc;
@@ -839,7 +848,7 @@ mp4_muxer_process_frames(mp4_muxer_state_t* state)
 
 		if (state->reuse_buffers)
 		{
-			rc = state->write_callback(state->write_context, read_buffer, read_size);
+			rc = selected_stream->write_callback(selected_stream->write_context, read_buffer, read_size);
 			if (rc != VOD_OK)
 			{
 				return rc;
@@ -848,14 +857,15 @@ mp4_muxer_process_frames(mp4_muxer_state_t* state)
 		else if (write_buffer_size != 0)
 		{
 			// if the buffers are contiguous, just increment the size
-			if (write_buffer + write_buffer_size == read_buffer)
+			if (write_buffer + write_buffer_size == read_buffer &&
+				(last_stream == selected_stream || !state->per_stream_writer))
 			{
 				write_buffer_size += read_size;
 			}
 			else
 			{
 				// buffers not contiguous, flush the write buffer
-				rc = state->write_callback(state->write_context, write_buffer, write_buffer_size);
+				rc = last_stream->write_callback(last_stream->write_context, write_buffer, write_buffer_size);
 				if (rc != VOD_OK)
 				{
 					return rc;
@@ -864,6 +874,7 @@ mp4_muxer_process_frames(mp4_muxer_state_t* state)
 				// reset the write buffer
 				write_buffer = read_buffer;
 				write_buffer_size = read_size;
+				last_stream = selected_stream;
 			}
 		}
 		else
@@ -871,6 +882,7 @@ mp4_muxer_process_frames(mp4_muxer_state_t* state)
 			// reset the write buffer
 			write_buffer = read_buffer;
 			write_buffer_size = read_size;
+			last_stream = selected_stream;
 		}
 
 		if (!frame_done)
@@ -878,12 +890,12 @@ mp4_muxer_process_frames(mp4_muxer_state_t* state)
 			continue;
 		}
 
-		if (state->selected_stream->cur_frame >= state->selected_stream->cur_frame_part.last_frame)
+		if (selected_stream->cur_frame >= selected_stream->cur_frame_part.last_frame)
 		{
 			if (write_buffer_size != 0)
 			{
 				// flush the write buffer
-				rc = state->write_callback(state->write_context, write_buffer, write_buffer_size);
+				rc = last_stream->write_callback(last_stream->write_context, write_buffer, write_buffer_size);
 				if (rc != VOD_OK)
 				{
 					return rc;
@@ -906,6 +918,8 @@ mp4_muxer_process_frames(mp4_muxer_state_t* state)
 				"mp4_muxer_process_frames: mp4_muxer_start_frame failed %i", rc);
 			return rc;
 		}
+
+		selected_stream = state->selected_stream;
 	}
 
 	return VOD_OK;

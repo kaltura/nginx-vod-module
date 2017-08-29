@@ -48,7 +48,8 @@ bit_read_stream_skip(bit_reader_state_t* state, int count)
 	if (state->cur_bit < 0)
 	{
 		skip_bytes = ((-state->cur_bit + 7) >> 3);
-		read_stream_skip(&state->stream, skip_bytes);
+		read_stream_skip(&state->stream, skip_bytes - 1);
+		state->cur_byte = read_stream_get_byte(&state->stream);
 		state->cur_bit += (skip_bytes << 3);
 	}
 	state->cur_bit--;
