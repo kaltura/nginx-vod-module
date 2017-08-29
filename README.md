@@ -205,9 +205,11 @@ The following parameters are supported on the URL path:
 	For example, `.../clipFrom/10000/...` will generate a stream that starts 10 seconds into the video.
 * clipTo - an offset in milliseconds since the beginning of the video, where the generated stream should end.
 	For example, `.../clipTo/60000/...` will generate a stream truncated to 60 seconds.
-* tracks - can be used to select specific audio/video tracks. The structure of parameter is: `v<id1>-v<id2>-a<id1>-a<id2>...`
+* tracks - can be used to select specific audio/video tracks. The structure of the parameter is: `v<id1>-v<id2>-a<id1>-a<id2>...`
 	For example, `.../tracks/v1-a1/...` will select the first video track and first audio track.
 	The default is to include all tracks.
+* shift - can be used to apply a timing shift to one or more streams. The structure of the parameter is: `v<vshift>-a<ashift>-s<sshift>`
+	For example, `.../shift/v100/...` will apply a forward shift of 100ms to the video timestamps.
 
 #### Filename structure
 
@@ -1116,6 +1118,13 @@ The name of the clip from request parameter.
 * **context**: `http`, `server`, `location`
 
 The name of the tracks request parameter.
+
+#### vod_time_shift_param_name
+* **syntax**: `vod_time_shift_param_name name`
+* **default**: `shift`
+* **context**: `http`, `server`, `location`
+
+The name of the shift request parameter.
 
 #### vod_speed_param_name
 * **syntax**: `vod_speed_param_name name`

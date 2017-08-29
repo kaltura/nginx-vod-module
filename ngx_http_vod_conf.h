@@ -83,6 +83,7 @@ struct ngx_http_vod_loc_conf_s {
 	ngx_str_t clip_to_param_name;
 	ngx_str_t clip_from_param_name;
 	ngx_str_t tracks_param_name;
+	ngx_str_t time_shift_param_name;
 	ngx_str_t speed_param_name;
 	ngx_str_t lang_param_name;
 
