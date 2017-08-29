@@ -663,6 +663,60 @@ ngx_http_vod_parse_tracks_param(ngx_str_t* value, void* output, int offset)
 }
 
 static ngx_int_t
+ngx_http_vod_parse_time_shift_param(ngx_str_t* value, void* output, int offset)
+{
+	uint32_t* time_shift = (uint32_t*)((u_char*)output + offset);
+	uint32_t media_type;
+	uint32_t cur_shift;
+	u_char* cur_pos = value->data;
+	u_char* end_pos = cur_pos + value->len;
+	u_char* new_pos;
+
+	while (cur_pos < end_pos)
+	{
+		switch (*cur_pos)
+		{
+		case 'v':
+			media_type = MEDIA_TYPE_VIDEO;
+			break;
+
+		case 'a':
+			media_type = MEDIA_TYPE_AUDIO;
+			break;
+
+		case 's':
+			media_type = MEDIA_TYPE_SUBTITLE;
+			break;
+
+		default:
+			return NGX_HTTP_BAD_REQUEST;
+		}
+		cur_pos++;
+
+		new_pos = parse_utils_extract_uint32_token(cur_pos, end_pos, &cur_shift);
+		if (new_pos <= cur_pos)
+		{
+			return NGX_HTTP_BAD_REQUEST;
+		}
+
+		time_shift[media_type] = cur_shift;
+
+		if (new_pos >= end_pos)
+		{
+			break;
+		}
+
+		cur_pos = new_pos;
+		if (*cur_pos == '-')
+		{
+			cur_pos++;
+		}
+	}
+
+	return NGX_OK;
+}
+
+static ngx_int_t
 ngx_http_vod_parse_lang_param(ngx_str_t* value, void* output, int offset)
 {
 	media_clip_source_t* clip = output;
@@ -690,6 +744,7 @@ static ngx_http_vod_uri_param_def_t uri_param_defs[] = {
 	{ offsetof(ngx_http_vod_loc_conf_t, clip_to_param_name), "clip to", ngx_http_vod_parse_uint64_param, offsetof(media_clip_source_t, clip_to) },
 	{ offsetof(ngx_http_vod_loc_conf_t, clip_from_param_name), "clip from", ngx_http_vod_parse_uint64_param, offsetof(media_clip_source_t, clip_from) },
 	{ offsetof(ngx_http_vod_loc_conf_t, tracks_param_name), "tracks", ngx_http_vod_parse_tracks_param, offsetof(media_clip_source_t, tracks_mask) },
+	{ offsetof(ngx_http_vod_loc_conf_t, time_shift_param_name), "time shift", ngx_http_vod_parse_time_shift_param, offsetof(media_clip_source_t, time_shift) },
 	{ offsetof(ngx_http_vod_loc_conf_t, lang_param_name), "lang", ngx_http_vod_parse_lang_param, 0 },
 	{ offsetof(ngx_http_vod_loc_conf_t, speed_param_name), "speed", NULL, 0 },
 	{ -1, NULL, NULL, 0}

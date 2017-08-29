@@ -40,6 +40,7 @@ struct media_clip_source_s {
 	uint64_t clip_to;
 	uint64_t clip_from;
 	uint32_t tracks_mask[MEDIA_TYPE_COUNT];
+	uint32_t time_shift[MEDIA_TYPE_COUNT];
 	int64_t clip_time;
 	u_char* encryption_key;
 

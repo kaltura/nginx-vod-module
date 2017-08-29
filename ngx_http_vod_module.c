@@ -1299,6 +1299,7 @@ ngx_http_vod_update_source_tracks(
 {
 	media_track_t* cur_track;
 	file_info_t file_info;
+	uint32_t time_shift;
 	int64_t original_clip_time;
 
 	file_info.source = cur_source;
@@ -1312,6 +1313,8 @@ ngx_http_vod_update_source_tracks(
 		cur_track < cur_source->track_array.last_track;
 		cur_track++)
 	{
+		time_shift = cur_source->time_shift[cur_track->media_info.media_type];
+		cur_track->first_frame_time_offset += rescale_time(time_shift, 1000, cur_track->media_info.timescale);
 		cur_track->clip_start_time = cur_source->clip_time;
 		cur_track->original_clip_time = original_clip_time;
 		cur_track->file_info = file_info;
