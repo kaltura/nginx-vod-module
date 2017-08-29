@@ -70,11 +70,15 @@
 // vp9 4cc tags
 #define FORMAT_VP09    (0x39307076)
 
-// aac 4cc tag
+// audio 4cc tags
 #define FORMAT_MP4A    (0x6134706d)
 #define FORMAT_AC3     (0x332d6361)
 #define FORMAT_EAC3    (0x332d6365)
 #define FORMAT_OPUS    (0x7375704f)
+
+// encryption schemes
+#define SCHEME_TYPE_CENC (0x63656e63)
+#define SCHEME_TYPE_CBCS (0x63626373)
 
 // MP4 constants from ffmpeg
 #define MP4ODescrTag				0x01
@@ -417,5 +421,37 @@ typedef struct {
 	u_char flags[3];
 	u_char track_id[4];
 } tfhd_atom_t;
+
+typedef struct {
+	u_char data_format[4];
+} frma_atom_t;
+
+typedef struct {
+	u_char version[1];
+	u_char flags[3];
+	u_char scheme_type[4];
+	u_char scheme_version[4];
+} schm_atom_t;
+
+typedef struct {
+	u_char version[1];
+	u_char flags[3];
+	u_char reserved[2];
+	u_char default_is_protected[1];
+	u_char default_per_sample_iv_size;
+	u_char default_kid[16];
+} tenc_atom_t;
+
+typedef struct {
+	u_char version[1];
+	u_char flags[3];
+	u_char reserved[1];
+	u_char crypt_skip_block[1];
+	u_char default_is_protected[1];
+	u_char default_per_sample_iv_size;
+	u_char default_kid[16];
+	u_char default_constant_iv_size;
+	u_char default_constant_iv[16];
+} tenc_v1_atom_t;
 
 #endif // __MP4_DEFS_H__

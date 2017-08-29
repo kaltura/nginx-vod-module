@@ -57,46 +57,11 @@ typedef struct {
 
 // init segment types
 typedef struct {
-	u_char data_format[4];
-} frma_atom_t;
-
-typedef struct {
-	u_char version[1];
-	u_char flags[3];
-	u_char scheme_type[4];
-	u_char scheme_version[4];
-} schm_atom_t;
-
-typedef struct {
-	u_char version[1];
-	u_char flags[3];
-	u_char default_is_encrypted[3];
-	u_char default_iv_size;
-	u_char default_kid[DRM_KID_SIZE];
-} tenc_atom_t;
-
-typedef struct {
 	u_char version[1];
 	u_char flags[3];
 	u_char system_id[DRM_SYSTEM_ID_SIZE];
 	u_char data_size[4];
 } pssh_atom_t;
-
-typedef struct {
-	uint32_t media_type;
-	bool_t has_clear_lead;
-	u_char* default_kid;
-	stsd_entry_header_t* original_stsd_entry;
-	uint32_t original_stsd_entry_size;
-	uint32_t original_stsd_entry_format;
-	size_t tenc_atom_size;
-	size_t schi_atom_size;
-	size_t schm_atom_size;
-	size_t frma_atom_size;
-	size_t sinf_atom_size;
-	size_t encrypted_stsd_entry_size;
-	size_t stsd_atom_size;
-} stsd_writer_context_t;
 
 ////// mpd functions
 
@@ -309,102 +274,6 @@ edash_packager_build_mpd(
 
 ////// init segment functions
 
-static vod_status_t
-edash_packager_init_stsd_writer_context(
-	request_context_t* request_context,
-	uint32_t media_type, 
-	raw_atom_t* original_stsd, 
-	bool_t has_clear_lead,
-	u_char* default_kid,
-	stsd_writer_context_t* result)
-{
-	result->media_type = media_type;
-	result->has_clear_lead = has_clear_lead;
-	result->default_kid = default_kid;
-
-	if (original_stsd->size < original_stsd->header_size + sizeof(stsd_atom_t) + sizeof(stsd_entry_header_t))
-	{
-		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-			"edash_packager_init_stsd_writer_context: invalid stsd size %uL", original_stsd->size);
-		return VOD_BAD_DATA;
-	}
-
-	result->original_stsd_entry = (stsd_entry_header_t*)(original_stsd->ptr + original_stsd->header_size + sizeof(stsd_atom_t));
-	result->original_stsd_entry_size = parse_be32(result->original_stsd_entry->size);
-	result->original_stsd_entry_format = parse_be32(result->original_stsd_entry->format);
-
-	if (result->original_stsd_entry_size < sizeof(stsd_entry_header_t))
-	{
-		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-			"edash_packager_init_stsd_writer_context: invalid stsd entry size %uD", result->original_stsd_entry_size);
-		return VOD_BAD_DATA;
-	}
-
-	result->tenc_atom_size = ATOM_HEADER_SIZE + sizeof(tenc_atom_t);
-	result->schi_atom_size = ATOM_HEADER_SIZE + result->tenc_atom_size;
-	result->schm_atom_size = ATOM_HEADER_SIZE + sizeof(schm_atom_t);
-	result->frma_atom_size = ATOM_HEADER_SIZE + sizeof(frma_atom_t);
-	result->sinf_atom_size = ATOM_HEADER_SIZE + 
-		result->frma_atom_size + 
-		result->schm_atom_size + 
-		result->schi_atom_size;
-	result->encrypted_stsd_entry_size = result->original_stsd_entry_size + result->sinf_atom_size;
-	result->stsd_atom_size = ATOM_HEADER_SIZE + sizeof(stsd_atom_t) + result->encrypted_stsd_entry_size;
-	if (has_clear_lead)
-	{
-		result->stsd_atom_size += result->original_stsd_entry_size;
-	}
-
-	return VOD_OK;
-}
-
-static u_char*
-edash_packager_write_stsd(void* ctx, u_char* p)
-{
-	stsd_writer_context_t* context = (stsd_writer_context_t*)ctx;
-	u_char format_by_media_type[MEDIA_TYPE_COUNT] = { 'v', 'a' };
-
-	// stsd
-	write_atom_header(p, context->stsd_atom_size, 's', 't', 's', 'd');
-	write_be32(p, 0);								// version + flags
-	write_be32(p, context->has_clear_lead ? 2 : 1);	// entries
-
-	// stsd encrypted entry
-	write_be32(p, context->encrypted_stsd_entry_size);		// size
-	write_atom_name(p, 'e', 'n', 'c', format_by_media_type[context->media_type]);	// format
-	p = vod_copy(p, context->original_stsd_entry + 1, context->original_stsd_entry_size - sizeof(stsd_entry_header_t));
-
-	// sinf
-	write_atom_header(p, context->sinf_atom_size, 's', 'i', 'n', 'f');
-	
-	// sinf.frma
-	write_atom_header(p, context->frma_atom_size, 'f', 'r', 'm', 'a');
-	write_be32(p, context->original_stsd_entry_format);
-
-	// sinf.schm
-	write_atom_header(p, context->schm_atom_size, 's', 'c', 'h', 'm');
-	write_be32(p, 0);							// version + flags
-	write_atom_name(p, 'c', 'e', 'n', 'c');		// scheme type
-	write_be32(p, 0x10000);						// scheme version
-
-	// sinf.schi
-	write_atom_header(p, context->schi_atom_size, 's', 'c', 'h', 'i');
-
-	// sinf.schi.tenc
-	write_atom_header(p, context->tenc_atom_size, 't', 'e', 'n', 'c');
-	write_be32(p, 0);							// version + flags
-	write_be32(p, 0x108);						// default is encrypted (1) + iv size (8)
-	p = vod_copy(p, context->default_kid, DRM_KID_SIZE);			// default key id
-
-	// clear entry
-	if (context->has_clear_lead)
-	{
-		p = vod_copy(p, context->original_stsd_entry, context->original_stsd_entry_size);
-	}
-
-	return p;
-}
-
 static u_char*
 edash_packager_write_psshs(void* context, u_char* p)
 {
@@ -427,35 +296,23 @@ edash_packager_build_init_mp4(
 	bool_t size_only,
 	vod_str_t* result)
 {
-	media_track_t* first_track = media_set->sequences[0].filtered_clips[0].first_track;
 	drm_info_t* drm_info = (drm_info_t*)media_set->sequences[0].drm_info;
-	stsd_writer_context_t stsd_writer_context;
+	atom_writer_t* stsd_atom_writers;
 	atom_writer_t pssh_atom_writer;
-	atom_writer_t stsd_atom_writer;
 	drm_system_info_t* cur_info;
 	vod_status_t rc;
 
-	// create an stsd atom if needed
-	if (first_track->raw_atoms[RTA_STSD].size == 0)
-	{
-		rc = mp4_init_segment_build_stsd_atom(request_context, first_track);
-		if (rc != VOD_OK)
-		{
-			return rc;
-		}
-	}
-
-	rc = edash_packager_init_stsd_writer_context(
+	// get the stsd writers
+	rc = mp4_init_segment_get_encrypted_stsd_writers(
 		request_context,
-		first_track->media_info.media_type,
-		&first_track->raw_atoms[RTA_STSD],
+		media_set,
+		SCHEME_TYPE_CENC,
 		(flags & EDASH_INIT_MP4_HAS_CLEAR_LEAD) != 0,
 		drm_info->key_id,
-		&stsd_writer_context);
+		NULL,
+		&stsd_atom_writers);
 	if (rc != VOD_OK)
 	{
-		vod_log_debug1(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
-			"edash_packager_build_init_mp4: edash_packager_init_stsd_writer_context failed %i", rc);
 		return rc;
 	}
 
@@ -472,17 +329,13 @@ edash_packager_build_init_mp4(
 	pssh_atom_writer.write = edash_packager_write_psshs;
 	pssh_atom_writer.context = &drm_info->pssh_array;
 
-	// build the stsd writer
-	stsd_atom_writer.atom_size = stsd_writer_context.stsd_atom_size;
-	stsd_atom_writer.write = edash_packager_write_stsd;
-	stsd_atom_writer.context = &stsd_writer_context;
-
+	// build the init segment
 	rc = mp4_init_segment_build(
 		request_context,
 		media_set,
 		size_only,
 		(flags & EDASH_INIT_MP4_WRITE_PSSH) != 0 ? &pssh_atom_writer : NULL,
-		&stsd_atom_writer,
+		stsd_atom_writers,
 		result);
 	if (rc != VOD_OK)
 	{
