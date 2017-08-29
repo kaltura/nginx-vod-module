@@ -1,10 +1,10 @@
 #include "edash_packager.h"
 #include "dash_packager.h"
 #include "../read_stream.h"
-#include "../mp4/mp4_encrypt_passthrough.h"
+#include "../mp4/mp4_cenc_passthrough.h"
+#include "../mp4/mp4_cenc_encrypt.h"
 #include "../mp4/mp4_init_segment.h"
 #include "../mp4/mp4_write_stream.h"
-#include "../mp4/mp4_encrypt.h"
 #include "../mp4/mp4_defs.h"
 #include "../udrm.h"
 #include "../common.h"
@@ -122,14 +122,14 @@ edash_packager_write_content_protection(void* ctx, u_char* p, media_track_t* tra
 			if (context->write_playready_kid)
 			{
 				p = vod_copy(p, VOD_EDASH_MANIFEST_CONTENT_PROTECTION_PLAYREADY_V2_PART1, sizeof(VOD_EDASH_MANIFEST_CONTENT_PROTECTION_PLAYREADY_V2_PART1) - 1);
-				p = mp4_encrypt_write_guid(p, cur_info->system_id);
+				p = mp4_cenc_encrypt_write_guid(p, cur_info->system_id);
 				p = vod_copy(p, VOD_EDASH_MANIFEST_CONTENT_PROTECTION_PLAYREADY_V2_PART2, sizeof(VOD_EDASH_MANIFEST_CONTENT_PROTECTION_PLAYREADY_V2_PART2) - 1);
-				p = mp4_encrypt_write_guid(p, drm_info->key_id);
+				p = mp4_cenc_encrypt_write_guid(p, drm_info->key_id);
 			}
 			else
 			{
 				p = vod_copy(p, VOD_EDASH_MANIFEST_CONTENT_PROTECTION_PLAYREADY_PART1, sizeof(VOD_EDASH_MANIFEST_CONTENT_PROTECTION_PLAYREADY_PART1) - 1);
-				p = mp4_encrypt_write_guid(p, cur_info->system_id);
+				p = mp4_cenc_encrypt_write_guid(p, cur_info->system_id);
 			}
 			p = vod_copy(p, VOD_EDASH_MANIFEST_CONTENT_PROTECTION_PLAYREADY_PART3, sizeof(VOD_EDASH_MANIFEST_CONTENT_PROTECTION_PLAYREADY_PART3) - 1);
 
@@ -142,9 +142,9 @@ edash_packager_write_content_protection(void* ctx, u_char* p, media_track_t* tra
 		else
 		{
 			p = vod_copy(p, VOD_EDASH_MANIFEST_CONTENT_PROTECTION_CENC_PART1, sizeof(VOD_EDASH_MANIFEST_CONTENT_PROTECTION_CENC_PART1) - 1);
-			p = mp4_encrypt_write_guid(p, cur_info->system_id);
+			p = mp4_cenc_encrypt_write_guid(p, cur_info->system_id);
 			p = vod_copy(p, VOD_EDASH_MANIFEST_CONTENT_PROTECTION_CENC_PART2, sizeof(VOD_EDASH_MANIFEST_CONTENT_PROTECTION_CENC_PART2) - 1);
-			p = mp4_encrypt_write_guid(p, drm_info->key_id);
+			p = mp4_cenc_encrypt_write_guid(p, drm_info->key_id);
 			p = vod_copy(p, VOD_EDASH_MANIFEST_CONTENT_PROTECTION_CENC_PART3, sizeof(VOD_EDASH_MANIFEST_CONTENT_PROTECTION_CENC_PART3) - 1);
 
 			pssh.data = context->temp_buffer;
@@ -352,12 +352,12 @@ edash_packager_build_init_mp4(
 static u_char*
 edash_packager_video_write_encryption_atoms(void* context, u_char* p, size_t mdat_atom_start)
 {
-	mp4_encrypt_video_state_t* state = (mp4_encrypt_video_state_t*)context;
+	mp4_cenc_encrypt_video_state_t* state = (mp4_cenc_encrypt_video_state_t*)context;
 	size_t senc_data_size = state->auxiliary_data.pos - state->auxiliary_data.start;
 	size_t senc_atom_size = ATOM_HEADER_SIZE + sizeof(senc_atom_t) + senc_data_size;
 
 	// saiz / saio
-	p = mp4_encrypt_video_write_saiz_saio(state, p, mdat_atom_start - senc_data_size);
+	p = mp4_cenc_encrypt_video_write_saiz_saio(state, p, mdat_atom_start - senc_data_size);
 
 	// senc
 	write_atom_header(p, senc_atom_size, 's', 'e', 'n', 'c');
@@ -370,7 +370,7 @@ edash_packager_video_write_encryption_atoms(void* context, u_char* p, size_t mda
 
 static vod_status_t
 edash_packager_video_build_fragment_header(
-	mp4_encrypt_video_state_t* state,
+	mp4_cenc_encrypt_video_state_t* state,
 	vod_str_t* fragment_header, 
 	size_t* total_fragment_size)
 {
@@ -401,25 +401,25 @@ edash_packager_video_build_fragment_header(
 static u_char*
 edash_packager_audio_write_encryption_atoms(void* context, u_char* p, size_t mdat_atom_start)
 {
-	mp4_encrypt_state_t* state = (mp4_encrypt_state_t*)context;
+	mp4_cenc_encrypt_state_t* state = (mp4_cenc_encrypt_state_t*)context;
 	size_t senc_data_size = MP4_AES_CTR_IV_SIZE * state->sequence->total_frame_count;
 	size_t senc_atom_size = ATOM_HEADER_SIZE + sizeof(senc_atom_t) + senc_data_size;
 
 	// saiz / saio
-	p = mp4_encrypt_audio_write_saiz_saio(state, p, mdat_atom_start - senc_data_size);
+	p = mp4_cenc_encrypt_audio_write_saiz_saio(state, p, mdat_atom_start - senc_data_size);
 
 	// senc
 	write_atom_header(p, senc_atom_size, 's', 'e', 'n', 'c');
 	write_be32(p, 0x0);		// flags
 	write_be32(p, state->sequence->total_frame_count);
-	p = mp4_encrypt_audio_write_auxiliary_data(state, p);
+	p = mp4_cenc_encrypt_audio_write_auxiliary_data(state, p);
 
 	return p;
 }
 
 static vod_status_t
 edash_packager_audio_build_fragment_header(
-	mp4_encrypt_state_t* state,
+	mp4_cenc_encrypt_state_t* state,
 	bool_t size_only,
 	vod_str_t* fragment_header,
 	size_t* total_fragment_size)
@@ -460,7 +460,7 @@ edash_packager_audio_build_fragment_header(
 static u_char*
 edash_packager_passthrough_write_encryption_atoms(void* ctx, u_char* p, size_t mdat_atom_start)
 {
-	mp4_encrypt_passthrough_context_t* context = ctx;
+	mp4_cenc_passthrough_context_t* context = ctx;
 	media_clip_filtered_t* cur_clip;
 	media_sequence_t* sequence = context->sequence;
 	media_track_t* cur_track;
@@ -468,7 +468,7 @@ edash_packager_passthrough_write_encryption_atoms(void* ctx, u_char* p, size_t m
 	uint32_t flags;
 
 	// saiz / saio
-	p = mp4_encrypt_passthrough_write_saiz_saio(ctx, p, mdat_atom_start - context->auxiliary_info_size);
+	p = mp4_cenc_passthrough_write_saiz_saio(ctx, p, mdat_atom_start - context->auxiliary_info_size);
 
 	// senc
 	senc_atom_size = ATOM_HEADER_SIZE + sizeof(senc_atom_t) + context->auxiliary_info_size;
@@ -500,11 +500,11 @@ edash_packager_get_fragment_writer(
 	size_t* total_fragment_size)
 {
 	dash_fragment_header_extensions_t header_extensions;
-	mp4_encrypt_passthrough_context_t passthrough_context;
+	mp4_cenc_passthrough_context_t passthrough_context;
 	uint32_t media_type = media_set->sequences[0].media_type;
 	vod_status_t rc;
 
-	if (mp4_encrypt_passthrough_init(&passthrough_context, media_set->sequences))
+	if (mp4_cenc_passthrough_init(&passthrough_context, media_set->sequences))
 	{
 		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
 			"edash_packager_get_fragment_writer: using encryption passthrough");
@@ -538,7 +538,7 @@ edash_packager_get_fragment_writer(
 	switch (media_type)
 	{
 	case MEDIA_TYPE_VIDEO:
-		return mp4_encrypt_video_get_fragment_writer(
+		return mp4_cenc_encrypt_video_get_fragment_writer(
 			segment_writer,
 			request_context, 
 			media_set, 
@@ -550,7 +550,7 @@ edash_packager_get_fragment_writer(
 			total_fragment_size);
 
 	case MEDIA_TYPE_AUDIO:
-		rc = mp4_encrypt_audio_get_fragment_writer(
+		rc = mp4_cenc_encrypt_audio_get_fragment_writer(
 			segment_writer,
 			request_context, 
 			media_set,

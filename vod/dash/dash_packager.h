@@ -2,7 +2,7 @@
 #define __DASH_PACKAGER_H__
 
 // includes
-#include "../mp4/mp4_encrypt.h"
+#include "../mp4/mp4_cenc_encrypt.h"
 #include "../media_format.h"
 #include "../segmenter.h"
 #include "../common.h"

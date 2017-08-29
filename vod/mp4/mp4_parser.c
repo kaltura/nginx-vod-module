@@ -1,5 +1,5 @@
 #include "mp4_parser.h"
-#include "mp4_decrypt.h"
+#include "mp4_cenc_decrypt.h"
 #include "mp4_format.h"
 #include "mp4_defs.h"
 #include "../media_format.h"
@@ -3130,7 +3130,7 @@ mp4_parser_parse_frames(
 				return VOD_BAD_REQUEST;
 			}
 
-			rc = mp4_decrypt_init(
+			rc = mp4_cenc_decrypt_init(
 				request_context,
 				frames_source,
 				frames_source_context,
@@ -3142,7 +3142,7 @@ mp4_parser_parse_frames(
 				return rc;
 			}
 
-			frames_source = &mp4_decrypt_frames_source;
+			frames_source = &mp4_cenc_decrypt_frames_source;
 		}
 
 		result_track->frames.next = NULL;

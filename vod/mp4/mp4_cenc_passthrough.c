@@ -1,14 +1,14 @@
-#include "mp4_encrypt_passthrough.h"
+#include "mp4_cenc_passthrough.h"
 
 #if (VOD_HAVE_OPENSSL_EVP)
 
-#include "mp4_decrypt.h"
-#include "mp4_encrypt.h"
+#include "mp4_cenc_decrypt.h"
+#include "mp4_cenc_encrypt.h"
 #include "mp4_write_stream.h"
 #include "../udrm.h"
 
 bool_t
-mp4_encrypt_passthrough_init(mp4_encrypt_passthrough_context_t* context, media_sequence_t* sequence)
+mp4_cenc_passthrough_init(mp4_cenc_passthrough_context_t* context, media_sequence_t* sequence)
 {
 	media_clip_filtered_t* cur_clip;
 	media_track_t* first_track = sequence->filtered_clips[0].first_track;
@@ -24,9 +24,9 @@ mp4_encrypt_passthrough_init(mp4_encrypt_passthrough_context_t* context, media_s
 		cur_track = cur_clip->first_track;
 
 		// can only passthrough if the content is encrypted with the required key
-		if (cur_track->frames.frames_source != &mp4_decrypt_frames_source ||
+		if (cur_track->frames.frames_source != &mp4_cenc_decrypt_frames_source ||
 			vod_memcmp(
-				mp4_decrypt_get_key(cur_track->frames.frames_source_context), 
+				mp4_cenc_decrypt_get_key(cur_track->frames.frames_source_context), 
 				((drm_info_t*)sequence->drm_info)->key, 
 				DRM_KEY_SIZE) != 0)
 		{
@@ -57,7 +57,7 @@ mp4_encrypt_passthrough_init(mp4_encrypt_passthrough_context_t* context, media_s
 	for (cur_clip = sequence->filtered_clips; cur_clip < sequence->filtered_clips_end; cur_clip++)
 	{
 		cur_track = cur_clip->first_track;
-		mp4_decrypt_get_original_source(
+		mp4_cenc_decrypt_get_original_source(
 			cur_track->frames.frames_source_context,
 			&cur_track->frames.frames_source,
 			&cur_track->frames.frames_source_context);
@@ -67,8 +67,8 @@ mp4_encrypt_passthrough_init(mp4_encrypt_passthrough_context_t* context, media_s
 }
 
 u_char*
-mp4_encrypt_passthrough_write_saiz_saio(
-	mp4_encrypt_passthrough_context_t* context, 
+mp4_cenc_passthrough_write_saiz_saio(
+	mp4_cenc_passthrough_context_t* context, 
 	u_char* p, 
 	size_t auxiliary_data_offset)
 {
@@ -105,16 +105,16 @@ mp4_encrypt_passthrough_write_saiz_saio(
 
 // empty stubs
 bool_t
-mp4_encrypt_passthrough_init(
-	mp4_encrypt_passthrough_context_t* context,
+mp4_cenc_passthrough_init(
+	mp4_cenc_passthrough_context_t* context,
 	media_sequence_t* sequence)
 {
 	return FALSE;
 }
 
 u_char* 
-mp4_encrypt_passthrough_write_saiz_saio(
-	mp4_encrypt_passthrough_context_t* context,
+mp4_cenc_passthrough_write_saiz_saio(
+	mp4_cenc_passthrough_context_t* context,
 	u_char* p,
 	size_t auxiliary_data_offset)
 {

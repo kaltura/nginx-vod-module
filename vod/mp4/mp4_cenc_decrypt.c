@@ -1,4 +1,4 @@
-#include "mp4_decrypt.h"
+#include "mp4_cenc_decrypt.h"
 
 #if (VOD_HAVE_OPENSSL_EVP)
 
@@ -38,10 +38,10 @@ typedef struct {
 	u_char* output_start;
 	u_char* output_end;
 	u_char* output_pos;
-} mp4_decrypt_state_t;
+} mp4_cenc_decrypt_state_t;
 
 vod_status_t
-mp4_decrypt_init(
+mp4_cenc_decrypt_init(
 	request_context_t* request_context,
 	frames_source_t* frames_source,
 	void* frames_source_context,
@@ -49,14 +49,14 @@ mp4_decrypt_init(
 	media_encryption_t* encryption, 
 	void** result)
 {
-	mp4_decrypt_state_t* state;
+	mp4_cenc_decrypt_state_t* state;
 	vod_status_t rc;
 
 	state = vod_alloc(request_context->pool, sizeof(*state));
 	if (state == NULL)
 	{
 		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
-			"mp4_decrypt_init: vod_alloc failed");
+			"mp4_cenc_decrypt_init: vod_alloc failed");
 		return VOD_ALLOC_FAILED;
 	}
 
@@ -84,17 +84,17 @@ mp4_decrypt_init(
 }
 
 static void
-mp4_decrypt_set_cache_slot_id(void* ctx, int cache_slot_id)
+mp4_cenc_decrypt_set_cache_slot_id(void* ctx, int cache_slot_id)
 {
-	mp4_decrypt_state_t* state = ctx;
+	mp4_cenc_decrypt_state_t* state = ctx;
 
 	state->frames_source->set_cache_slot_id(state->frames_source_context, cache_slot_id);
 }
 
 static vod_status_t
-mp4_decrypt_start_frame(void* ctx, input_frame_t* frame, read_cache_hint_t* cache_hint)
+mp4_cenc_decrypt_start_frame(void* ctx, input_frame_t* frame, read_cache_hint_t* cache_hint)
 {
-	mp4_decrypt_state_t* state = ctx;
+	mp4_cenc_decrypt_state_t* state = ctx;
 	vod_status_t rc;
 
 	rc = state->frames_source->start_frame(state->frames_source_context, frame, cache_hint);
@@ -107,7 +107,7 @@ mp4_decrypt_start_frame(void* ctx, input_frame_t* frame, read_cache_hint_t* cach
 	if (state->auxiliary_info_pos + MP4_AES_CTR_IV_SIZE > state->auxiliary_info_end)
 	{
 		vod_log_error(VOD_LOG_ERR, state->request_context->log, 0,
-			"mp4_decrypt_start_frame: failed to get iv from auxiliary info");
+			"mp4_cenc_decrypt_start_frame: failed to get iv from auxiliary info");
 		return VOD_BAD_DATA;
 	}
 
@@ -124,7 +124,7 @@ mp4_decrypt_start_frame(void* ctx, input_frame_t* frame, read_cache_hint_t* cach
 	if (state->auxiliary_info_pos + sizeof(uint16_t) + sizeof(cenc_sample_auxiliary_data_subsample_t) > state->auxiliary_info_end)
 	{
 		vod_log_error(VOD_LOG_ERR, state->request_context->log, 0,
-			"mp4_decrypt_start_frame: failed to get subsample info from auxiliary info");
+			"mp4_cenc_decrypt_start_frame: failed to get subsample info from auxiliary info");
 		return VOD_BAD_DATA;
 	}
 
@@ -132,7 +132,7 @@ mp4_decrypt_start_frame(void* ctx, input_frame_t* frame, read_cache_hint_t* cach
 	if (state->subsample_count <= 0)
 	{
 		vod_log_error(VOD_LOG_ERR, state->request_context->log, 0,
-			"mp4_decrypt_start_frame: invalid subsample count");
+			"mp4_cenc_decrypt_start_frame: invalid subsample count");
 		return VOD_BAD_DATA;
 	}
 
@@ -145,8 +145,8 @@ mp4_decrypt_start_frame(void* ctx, input_frame_t* frame, read_cache_hint_t* cach
 }
 
 static vod_status_t
-mp4_decrypt_process(
-	mp4_decrypt_state_t* state, 
+mp4_cenc_decrypt_process(
+	mp4_cenc_decrypt_state_t* state, 
 	size_t size)
 {
 	u_char* dest = state->output_pos;
@@ -162,14 +162,14 @@ mp4_decrypt_process(
 			if (state->subsample_count <= 0)
 			{
 				vod_log_error(VOD_LOG_ERR, state->request_context->log, 0,
-					"mp4_decrypt_process: exhausted subsample bytes");
+					"mp4_cenc_decrypt_process: exhausted subsample bytes");
 				return VOD_BAD_DATA;
 			}
 
 			if (state->auxiliary_info_pos + sizeof(cenc_sample_auxiliary_data_subsample_t) > state->auxiliary_info_end)
 			{
 				vod_log_error(VOD_LOG_ERR, state->request_context->log, 0,
-					"mp4_decrypt_process: failed to get subsample info from auxiliary info");
+					"mp4_cenc_decrypt_process: failed to get subsample info from auxiliary info");
 				return VOD_BAD_DATA;
 			}
 
@@ -210,9 +210,9 @@ mp4_decrypt_process(
 }
 
 static vod_status_t
-mp4_decrypt_read(void* ctx, u_char** buffer, uint32_t* size, bool_t* frame_done)
+mp4_cenc_decrypt_read(void* ctx, u_char** buffer, uint32_t* size, bool_t* frame_done)
 {
-	mp4_decrypt_state_t* state = ctx;
+	mp4_cenc_decrypt_state_t* state = ctx;
 	vod_status_t rc;
 	uint32_t cur_size;
 	size_t buffer_size;
@@ -230,7 +230,7 @@ mp4_decrypt_read(void* ctx, u_char** buffer, uint32_t* size, bool_t* frame_done)
 			if (state->output_start == NULL)
 			{
 				vod_log_debug0(VOD_LOG_DEBUG_LEVEL, state->request_context->log, 0,
-					"mp4_decrypt_read: vod_alloc failed");
+					"mp4_cenc_decrypt_read: vod_alloc failed");
 				return VOD_ALLOC_FAILED;
 			}
 			state->output_end = state->output_start + buffer_size - VOD_BUFFER_PADDING_SIZE;
@@ -262,7 +262,7 @@ mp4_decrypt_read(void* ctx, u_char** buffer, uint32_t* size, bool_t* frame_done)
 	*size = cur_size;
 	*frame_done = state->input_size <= 0 ? state->frame_done : FALSE;
 
-	rc = mp4_decrypt_process(state, cur_size);
+	rc = mp4_cenc_decrypt_process(state, cur_size);
 	if (rc != VOD_OK)
 	{
 		return rc;
@@ -272,45 +272,45 @@ mp4_decrypt_read(void* ctx, u_char** buffer, uint32_t* size, bool_t* frame_done)
 }
 
 static void
-mp4_decrypt_disable_buffer_reuse(void* ctx)
+mp4_cenc_decrypt_disable_buffer_reuse(void* ctx)
 {
-	mp4_decrypt_state_t* state = ctx;
+	mp4_cenc_decrypt_state_t* state = ctx;
 
 	state->reuse_buffers = FALSE;
 }
 
 u_char* 
-mp4_decrypt_get_key(void* ctx)
+mp4_cenc_decrypt_get_key(void* ctx)
 {
-	mp4_decrypt_state_t* state = ctx;
+	mp4_cenc_decrypt_state_t* state = ctx;
 
 	return state->key;
 }
 
 void 
-mp4_decrypt_get_original_source(
+mp4_cenc_decrypt_get_original_source(
 	void* ctx,
 	frames_source_t** frames_source,
 	void** frames_source_context)
 {
-	mp4_decrypt_state_t* state = ctx;
+	mp4_cenc_decrypt_state_t* state = ctx;
 
 	*frames_source = state->frames_source;
 	*frames_source_context = state->frames_source_context;
 }
 
 // globals
-frames_source_t mp4_decrypt_frames_source = {
-	mp4_decrypt_set_cache_slot_id,
-	mp4_decrypt_start_frame,
-	mp4_decrypt_read,
-	mp4_decrypt_disable_buffer_reuse,
+frames_source_t mp4_cenc_decrypt_frames_source = {
+	mp4_cenc_decrypt_set_cache_slot_id,
+	mp4_cenc_decrypt_start_frame,
+	mp4_cenc_decrypt_read,
+	mp4_cenc_decrypt_disable_buffer_reuse,
 };
 
 #else
 
 // empty stubs
-frames_source_t mp4_decrypt_frames_source = {
+frames_source_t mp4_cenc_decrypt_frames_source = {
 	NULL,
 	NULL,
 	NULL,
@@ -318,7 +318,7 @@ frames_source_t mp4_decrypt_frames_source = {
 };
 
 vod_status_t 
-mp4_decrypt_init(
+mp4_cenc_decrypt_init(
 	request_context_t* request_context,
 	frames_source_t* frames_source,
 	void* frames_source_context,

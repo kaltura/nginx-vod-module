@@ -113,7 +113,7 @@ ngx_http_vod_mss_init_frame_processor(
 
 		case VOD_OK:
 			segment_writer = &drm_writer;
-			reuse_buffers = TRUE;		// mp4_encrypt allocates new buffers
+			reuse_buffers = TRUE;		// mp4_cenc_encrypt allocates new buffers
 			break;
 
 		default:
