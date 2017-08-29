@@ -6,7 +6,7 @@
 #include "vod/mp4/mp4_muxer.h"
 #include "vod/mp4/mp4_fragment.h"
 #include "vod/mp4/mp4_init_segment.h"
-#include "vod/mp4/mp4_encrypt_cbcs.h"
+#include "vod/mp4/mp4_cbcs_encrypt.h"
 #include "vod/udrm.h"
 
 // constants
@@ -518,7 +518,7 @@ ngx_http_vod_hls_init_fmp4_frame_processor(
 
 	if (conf->hls.encryption_method == HLS_ENC_SAMPLE_AES)
 	{
-		rc = mp4_encrypt_cbcs_get_writers(
+		rc = mp4_cbcs_encrypt_get_writers(
 			&submodule_context->request_context,
 			&submodule_context->media_set,
 			segment_writer,
@@ -528,7 +528,7 @@ ngx_http_vod_hls_init_fmp4_frame_processor(
 		if (rc != VOD_OK)
 		{
 			ngx_log_debug1(NGX_LOG_DEBUG_HTTP, submodule_context->request_context.log, 0,
-				"ngx_http_vod_hls_init_fmp4_frame_processor: mp4_encrypt_cbcs_get_writers failed %i", rc);
+				"ngx_http_vod_hls_init_fmp4_frame_processor: mp4_cbcs_encrypt_get_writers failed %i", rc);
 			return ngx_http_vod_status_to_ngx_error(submodule_context->r, rc);
 		}
 		per_stream_writer = TRUE;
