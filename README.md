@@ -224,7 +224,7 @@ Where:
   * hls media playlist - index.m3u8
   * mss - manifest
   * thumb - `thumb-<offset>.jpg` (offset is the thumbnail video offset in milliseconds)
-* seqparams - can be used to select specific seqeuences by id (provided in the mapping JSON), e.g. master-sseq1.m3u8.
+* seqparams - can be used to select specific sequences by id (provided in the mapping JSON), e.g. master-sseq1.m3u8.
 * fileparams - can be used to select specific sequences by index when using multi URLs.
 	For example, manifest-f1.mpd will return an MPD only from the first URL.
 * trackparams - can be used to select specific audio/video tracks.
@@ -505,7 +505,7 @@ Optional fields:
 * `id` - a string that identifies the sequence. The id can be retrieved by `$vod_sequence_id`.
 * `language` - a 3-letter (ISO-639-2) language code, this field takes priority over any language
 	specified on the media file (MP4 mdhd atom)
-* `label` - a friendly string that identifies the sequence. if a language is specified,
+* `label` - a friendly string that identifies the sequence. If a language is specified,
 	a default label will be automatically derived by it - e.g. if language is `ita`, 
 	by default `italiano` will be used as the label.
 * `bitrate` - an object that can be used to set the bitrate for the different media types,
