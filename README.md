@@ -441,6 +441,8 @@ Optional fields:
 	and a multi period MPD in DASH. The default value is true, set to false only if the media
 	files were transcoded with exactly the same parameters (in AVC for example, 
 	the clips should have exactly the same SPS/PPS).
+* `segmentDuration` - integer, sets the segment duration in milliseconds. This field, 
+	if specified, takes priority over the value set in `vod_segment_duration`.
 * `consistentSequenceMediaInfo` - boolean, currently affects only DASH. When set to true (default)
 	the MPD will report the same media parameters in each period element. Setting to false
 	can have severe performance implications for long sequences (nginx-vod-module has 
