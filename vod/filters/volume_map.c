@@ -241,7 +241,7 @@ volume_map_writer_init_track(volume_map_writer_state_t* state)
 	cln = vod_pool_cleanup_add(state->request_context->pool, 0);
 	if (cln == NULL)
 	{
-		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
+		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, state->request_context->log, 0,
 			"volume_map_writer_init_track: vod_pool_cleanup_add failed");
 		return VOD_ALLOC_FAILED;
 	}
