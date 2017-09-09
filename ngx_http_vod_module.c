@@ -20,6 +20,8 @@
 #include "vod/subtitle/dfxp_format.h"
 #include "vod/subtitle/cap_format.h"
 #include "vod/input/read_cache.h"
+#include "vod/filters/audio_decoder.h"
+#include "vod/filters/audio_encoder.h"
 #include "vod/filters/audio_filter.h"
 #include "vod/filters/dynamic_clip.h"
 #include "vod/filters/concat_clip.h"
@@ -29,6 +31,7 @@
 #include "vod/manifest_utils.h"
 #include "vod/thumb/thumb_grabber.h"
 #include "ngx_http_vod_thumb.h"
+#include "ngx_http_vod_volume_map.h"
 
 // macros
 #define DEFINE_VAR(name) \
@@ -37,6 +40,9 @@
 // constants
 #define OPEN_FILE_FALLBACK_ENABLED (0x80000000)
 #define MAX_STALE_RETRIES (2)
+
+#define SEGMENT_REQUEST_MAX_FRAME_COUNT (64 * 1024)
+#define NON_SEGMENT_REQUEST_MAX_FRAME_COUNT (1024 * 1024)
 
 enum {
 	// mapping state machine
@@ -244,7 +250,7 @@ static media_format_t* media_formats[] = {
 	&mp4_format,
 	// XXXXX add &mkv_format,
 	&webvtt_format,
-#if (VOD_HAVE_LIBXML2)
+#if (NGX_HAVE_LIBXML2)
 	&dfxp_format,
 #endif
 	&cap_format,
@@ -1494,7 +1500,7 @@ ngx_http_vod_parse_metadata(
 	{
 		request_context->simulation_only = TRUE;
 
-		parse_params.max_frame_count = 1024 * 1024;
+		parse_params.max_frame_count = NON_SEGMENT_REQUEST_MAX_FRAME_COUNT;
 		range.timescale = 1000;
 		range.original_clip_time = 0;
 		range.start = 0;
@@ -1512,7 +1518,7 @@ ngx_http_vod_parse_metadata(
 	{
 		request_context->simulation_only = FALSE;
 
-		parse_params.max_frame_count = 64 * 1024;
+		parse_params.max_frame_count = SEGMENT_REQUEST_MAX_FRAME_COUNT;
 
 		if (cur_source->range != NULL)
 		{
@@ -2983,10 +2989,12 @@ ngx_http_vod_init_process(ngx_cycle_t *cycle)
 	vod_status_t rc;
 
 	audio_filter_process_init(cycle->log);
-	
-#if (VOD_HAVE_LIB_AV_CODEC)
+
+#if (NGX_HAVE_LIB_AV_CODEC)
+	audio_decoder_process_init(cycle->log);
+	audio_encoder_process_init(cycle->log);
 	thumb_grabber_process_init(cycle->log);
-#endif // (VOD_HAVE_LIB_AV_CODEC)
+#endif // (NGX_HAVE_LIB_AV_CODEC)
 
 	rc = language_code_process_init(cycle->pool, cycle->log);
 	if (rc != VOD_OK)
@@ -3113,6 +3121,8 @@ static ngx_int_t
 ngx_http_vod_run_state_machine(ngx_http_vod_ctx_t *ctx)
 {
 	ngx_int_t rc;
+	uint32_t max_frame_count;
+	uint32_t output_codec_id;
 
 	switch (ctx->state)
 	{
@@ -3242,10 +3252,32 @@ ngx_http_vod_run_state_machine(ngx_http_vod_ctx_t *ctx)
 			ctx->state = STATE_FILTER_FRAMES;
 			ctx->cur_source = ctx->submodule_context.media_set.sources_head;
 
+			if ((ctx->request->request_class & (REQUEST_CLASS_MANIFEST | REQUEST_CLASS_OTHER)) != 0)
+			{
+				max_frame_count = NON_SEGMENT_REQUEST_MAX_FRAME_COUNT;
+			}
+			else
+			{
+				max_frame_count = SEGMENT_REQUEST_MAX_FRAME_COUNT;
+			}
+
+#if (NGX_HAVE_LIB_AV_CODEC)
+			if (ctx->submodule_context.conf->submodule.name == volume_map.name)
+			{
+				output_codec_id = VOD_CODEC_ID_VOLUME_MAP;
+			}
+			else
+#endif // (NGX_HAVE_LIB_AV_CODEC)
+			{
+				output_codec_id = VOD_CODEC_ID_AAC;
+			}
+
 			rc = filter_init_state(
 				&ctx->submodule_context.request_context,
 				&ctx->read_cache_state,
-				&ctx->submodule_context.media_set, 
+				&ctx->submodule_context.media_set,
+				max_frame_count,
+				output_codec_id,
 				&ctx->frame_processor_state);
 			if (rc != VOD_OK)
 			{

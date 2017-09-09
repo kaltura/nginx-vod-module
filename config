@@ -82,7 +82,7 @@ ngx_feature_test="avcodec_send_packet(NULL, NULL)"
 . auto/feature
 
 if [ $ngx_found = yes ]; then
-    ngx_module_libs="$ngx_module_libs $LIB_AV_CODEC $LIB_AV_UTIL"
+    ngx_module_libs="$ngx_module_libs $LIB_AV_CODEC $LIB_AV_UTIL -lm"
 fi
 
 # libavfilter
@@ -147,6 +147,9 @@ VOD_DEPS="$ngx_addon_dir/ngx_async_open_file_cache.h          \
           $ngx_addon_dir/ngx_http_vod_thumb_commands.h        \
           $ngx_addon_dir/ngx_http_vod_thumb_conf.h            \
           $ngx_addon_dir/ngx_http_vod_utils.h                 \
+          $ngx_addon_dir/ngx_http_vod_volume_map.h            \
+          $ngx_addon_dir/ngx_http_vod_volume_map_commands.h   \
+          $ngx_addon_dir/ngx_http_vod_volume_map_conf.h       \
           $ngx_addon_dir/ngx_perf_counters.h                  \
           $ngx_addon_dir/ngx_perf_counters_x.h                \
           $ngx_addon_dir/vod/aes_defs.h                       \
@@ -159,6 +162,8 @@ VOD_DEPS="$ngx_addon_dir/ngx_async_open_file_cache.h          \
           $ngx_addon_dir/vod/dash/dash_packager.h             \
           $ngx_addon_dir/vod/dash/edash_packager.h            \
           $ngx_addon_dir/vod/dynamic_buffer.h                 \
+          $ngx_addon_dir/vod/filters/audio_decoder.h          \
+          $ngx_addon_dir/vod/filters/audio_encoder.h          \
           $ngx_addon_dir/vod/filters/audio_filter.h           \
           $ngx_addon_dir/vod/filters/concat_clip.h            \
           $ngx_addon_dir/vod/filters/dynamic_clip.h           \
@@ -166,6 +171,7 @@ VOD_DEPS="$ngx_addon_dir/ngx_async_open_file_cache.h          \
           $ngx_addon_dir/vod/filters/gain_filter.h            \
           $ngx_addon_dir/vod/filters/mix_filter.h             \
           $ngx_addon_dir/vod/filters/rate_filter.h            \
+          $ngx_addon_dir/vod/filters/volume_map.h             \
           $ngx_addon_dir/vod/hds/hds_amf0_encoder.h           \
           $ngx_addon_dir/vod/hds/hds_amf0_fields_x.h          \
           $ngx_addon_dir/vod/hds/hds_encryption.h             \
@@ -251,6 +257,7 @@ VOD_SRCS="$ngx_addon_dir/ngx_async_open_file_cache.c          \
           $ngx_addon_dir/ngx_http_vod_submodule.c             \
           $ngx_addon_dir/ngx_http_vod_thumb.c                 \
           $ngx_addon_dir/ngx_http_vod_utils.c                 \
+          $ngx_addon_dir/ngx_http_vod_volume_map.c            \
           $ngx_addon_dir/ngx_perf_counters.c                  \
           $ngx_addon_dir/vod/avc_parser.c                     \
           $ngx_addon_dir/vod/buffer_pool.c                    \
@@ -259,6 +266,8 @@ VOD_SRCS="$ngx_addon_dir/ngx_async_open_file_cache.c          \
           $ngx_addon_dir/vod/dash/dash_packager.c             \
           $ngx_addon_dir/vod/dash/edash_packager.c            \
           $ngx_addon_dir/vod/dynamic_buffer.c                 \
+          $ngx_addon_dir/vod/filters/audio_decoder.c          \
+          $ngx_addon_dir/vod/filters/audio_encoder.c          \
           $ngx_addon_dir/vod/filters/audio_filter.c           \
           $ngx_addon_dir/vod/filters/concat_clip.c            \
           $ngx_addon_dir/vod/filters/dynamic_clip.c           \
@@ -266,6 +275,7 @@ VOD_SRCS="$ngx_addon_dir/ngx_async_open_file_cache.c          \
           $ngx_addon_dir/vod/filters/gain_filter.c            \
           $ngx_addon_dir/vod/filters/mix_filter.c             \
           $ngx_addon_dir/vod/filters/rate_filter.c            \
+          $ngx_addon_dir/vod/filters/volume_map.c             \
           $ngx_addon_dir/vod/hds/hds_amf0_encoder.c           \
           $ngx_addon_dir/vod/hds/hds_fragment.c               \
           $ngx_addon_dir/vod/hds/hds_manifest.c               \

@@ -1291,6 +1291,7 @@ ngx_command_t ngx_http_vod_commands[] = {
 #include "ngx_http_vod_hls_commands.h"
 #include "ngx_http_vod_mss_commands.h"
 #include "ngx_http_vod_thumb_commands.h"
+#include "ngx_http_vod_volume_map_commands.h"
 
 	ngx_null_command
 };
