@@ -146,10 +146,11 @@ volume_map_encoder_write_frame(
 		return rc;
 	}
 
+	data = (void*)(uintptr_t)cur_frame->offset;
 	rc = volume_map_calc_frame(
 		state->request_context, 
 		frame, 
-		(void*)(uintptr_t)cur_frame->offset);
+		data);
 	if (rc != VOD_OK)
 	{
 		return rc;

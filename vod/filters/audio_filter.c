@@ -597,7 +597,7 @@ audio_filter_alloc_state(
 
 	if (!initialized)
 	{
-		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
+		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
 			"audio_filter_alloc_state: module failed to initialize successfully");
 		return VOD_UNEXPECTED;
 	}
@@ -1016,7 +1016,7 @@ audio_filter_process_frame(audio_filter_state_t* state, AVFrame* frame)
 	if (avrc < 0) 
 	{
 		vod_log_error(VOD_LOG_ERR, state->request_context->log, 0,
-			"audio_filter_process_frame: av_buffersrc_add_frame_flags failed %d (1)", avrc);
+			"audio_filter_process_frame: av_buffersrc_add_frame_flags failed %d", avrc);
 		return VOD_ALLOC_FAILED;
 	}
 
@@ -1073,7 +1073,7 @@ audio_filter_choose_source(audio_filter_state_t* state)
 				if (avrc < 0)
 				{
 					vod_log_error(VOD_LOG_ERR, state->request_context->log, 0,
-						"audio_filter_process_frame: av_buffersrc_add_frame_flags failed %d (2)", avrc);
+						"audio_filter_choose_source: av_buffersrc_add_frame_flags failed %d", avrc);
 					return VOD_ALLOC_FAILED;
 				}
 

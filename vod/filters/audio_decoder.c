@@ -104,6 +104,13 @@ audio_decoder_init(
 	input_frame_t* cur_frame;
 	vod_status_t rc;
 
+	if (!initialized)
+	{
+		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+			"audio_decoder_init: module failed to initialize successfully");
+		return VOD_UNEXPECTED;
+	}
+
 	state->request_context = request_context;
 
 	// init the decoder

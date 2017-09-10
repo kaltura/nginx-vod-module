@@ -72,7 +72,7 @@ audio_encoder_init(
 
 	if (!initialized)
 	{
-		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
+		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
 			"audio_encoder_init: module failed to initialize successfully");
 		return VOD_UNEXPECTED;
 	}
