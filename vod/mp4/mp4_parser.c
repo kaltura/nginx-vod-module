@@ -12,7 +12,10 @@
 #include "../common.h"
 
 #include <limits.h>
+#if (NGX_HAVE_ZLIB)
 #include <zlib.h>
+#endif //(NGX_HAVE_ZLIB)
+
 
 // TODO: use iterators from mp4_parser_base.c to reduce code duplication
 
@@ -3222,14 +3225,16 @@ mp4_parser_uncompress_moov(
 {
 	save_relevant_atoms_context_t save_atoms_context;
 	moov_atom_infos_t moov_atom_infos;
+	vod_status_t rc;
+#if (NGX_HAVE_ZLIB)
 	atom_info_t find_context;
 	dcom_atom_t* dcom;
 	cmvd_atom_t* cmvd;
 	u_char* uncomp_buffer;
 	uLongf uncomp_size;
 	size_t alloc_size;
-	vod_status_t rc;
 	int zrc;
+#endif	
 
 	// get the relevant atoms
 	vod_memzero(&moov_atom_infos, sizeof(moov_atom_infos));
@@ -3248,6 +3253,7 @@ mp4_parser_uncompress_moov(
 		return VOD_OK;		// non compressed or corrupt, if corrupt, will fail in trak parsing
 	}
 
+#if (NGX_HAVE_ZLIB)
 	// validate the compression type
 	if (moov_atom_infos.dcom.size < sizeof(*dcom))
 	{
@@ -3324,4 +3330,9 @@ mp4_parser_uncompress_moov(
 	*moov_size = find_context.size;
 
 	return VOD_OK;
+#else
+	vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+		"mp4_parser_parse_frames: compressed moov atom not supported, recompile with zlib to enable it");
+	return VOD_BAD_REQUEST;
+#endif //(NGX_HAVE_ZLIB)
 }

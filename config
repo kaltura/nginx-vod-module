@@ -9,6 +9,59 @@ VOD_VERSION=`git --git-dir=$ngx_addon_dir/.git describe 2>/dev/null`
 VOD_VERSION=${VOD_VERSION:-$VOD_DEFAULT_VERSION}
 echo "#define NGINX_VOD_VERSION \""$VOD_VERSION"\"" > $NGX_OBJS/ngx_vod_version.h
 
+# zlib
+#
+if [ $ZLIB = NONE ]; then
+	ngx_feature="zlib library"
+	ngx_feature_name="NGX_HAVE_ZLIB"
+	ngx_feature_run=no
+	ngx_feature_incs="#include <zlib.h>"
+	ngx_feature_path=
+	ngx_feature_libs="-lz"
+	ngx_feature_test="z_stream z; deflate(&z, Z_NO_FLUSH)"
+	. auto/feature
+
+	if [ $ngx_found = yes ]; then
+		ngx_module_libs="$ngx_module_libs $ngx_feature_libs"
+	fi
+else
+	cat << END >> $NGX_AUTO_CONFIG_H
+
+#ifndef NGX_HAVE_ZLIB
+#define NGX_HAVE_ZLIB  1
+#endif
+
+END
+fi
+
+# openssl evp
+#
+if [ $OPENSSL = NONE ]; then
+	LIB_CRYPTO=${LIB_CRYPTO:--lcrypto}
+	LIB_PTHREAD=${LIB_PTHREAD:--lpthread}
+
+	ngx_feature="OpenSSL EVP library"
+	ngx_feature_name="NGX_HAVE_OPENSSL_EVP"
+	ngx_feature_run=no
+	ngx_feature_incs="#include <openssl/evp.h>"
+	ngx_feature_path=
+	ngx_feature_libs="$LIB_CRYPTO $NGX_LIBDL $LIB_PTHREAD"
+	ngx_feature_test="EVP_CIPHER_CTX_new();"
+	. auto/feature
+
+	if [ $ngx_found = yes ]; then
+		ngx_module_libs="$ngx_module_libs $ngx_feature_libs"
+	fi
+else
+	cat << END >> $NGX_AUTO_CONFIG_H
+
+#ifndef NGX_HAVE_OPENSSL_EVP
+#define NGX_HAVE_OPENSSL_EVP  1
+#endif
+
+END
+fi
+
 # iconv
 #
 ngx_feature="iconv"
@@ -19,31 +72,6 @@ ngx_feature_path=
 ngx_feature_libs=
 ngx_feature_test="iconv_open(NULL, NULL);"
 . auto/feature
-
-# openssl evp
-#
-LIB_CRYPTO=${LIB_CRYPTO:--lcrypto}
-LIB_PTHREAD=${LIB_PTHREAD:--lpthread}
-
-ngx_feature="OpenSSL EVP library"
-ngx_feature_name="NGX_HAVE_OPENSSL_EVP"
-ngx_feature_run=no
-ngx_feature_incs="#include <openssl/evp.h>"
-ngx_feature_test="EVP_CIPHER_CTX_new();"
-
-if [ -n "$OPENSSL" -a -d "$OPENSSL/.openssl" ]; then
-	ngx_feature_path="$OPENSSL/.openssl/include"
-	ngx_feature_libs="$OPENSSL/.openssl/lib/libcrypto.a $NGX_LIBDL"
-else
-	ngx_feature_path=
-	ngx_feature_libs="$LIB_CRYPTO $NGX_LIBDL $LIB_PTHREAD"
-fi
-
-. auto/feature
-
-if [ $ngx_found = yes ]; then
-	ngx_module_libs="$ngx_module_libs $ngx_feature_libs"
-fi
 
 # clock_gettime
 #
