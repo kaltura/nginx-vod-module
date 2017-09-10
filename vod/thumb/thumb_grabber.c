@@ -649,4 +649,4 @@ thumb_grabber_process(void* context)
 	}
 }
 
-#endif // VOD_HAVE_LIB_AV_CODEC
+#endif // (VOD_HAVE_LIB_AV_CODEC)

@@ -56,6 +56,8 @@ without the overhead of short segments for the whole duration of the video
 
 * Thumbnail capture (requires libavcodec)
 
+* Volume map (requires libavcodec) - returns a CSV containing the volume level in each interval
+
 * Decryption of CENC-encrypted MP4 files (it is possible to create such files with MP4Box)
 
 * DASH: common encryption (CENC) support
@@ -83,7 +85,7 @@ However, some optional features of this module depend on additional packages. Th
 during `configure` - if a package is missing, the respective feature will be disabled.
 
 The optional features are:
-1. Thumbnail capture - depends on ffmpeg (3.0 or newer)
+1. Thumbnail capture & volume map - depend on ffmpeg (3.0 or newer)
 2. Audio filtering (for changing playback rate / gain) - depends on ffmpeg (3.0 or newer) and also on libfdk_aac.
 	Due to licensing issues, libfdk_aac is not built into kaltura ffmpeg packages
 3. Encryption / decryption (DRM / HLS AES) - depends on openssl
@@ -224,6 +226,7 @@ Where:
   * hls media playlist - index.m3u8
   * mss - manifest
   * thumb - `thumb-<offset>.jpg` (offset is the thumbnail video offset in milliseconds)
+  * volume_map - `volume_map.csv`
 * seqparams - can be used to select specific sequences by id (provided in the mapping JSON), e.g. master-sseq1.m3u8.
 * fileparams - can be used to select specific sequences by index when using multi URLs.
 	For example, manifest-f1.mpd will return an MPD only from the first URL.
@@ -794,6 +797,7 @@ The allowed values for `segmenter` are:
 4. `hls` - Apple HTTP Live Streaming packager
 5. `mss` - Microsoft Smooth Streaming packager
 6. `thumb` - thumbnail capture
+7. `volume_map` - audio volume map
 
 #### vod_mode
 * **syntax**: `vod_mode mode`
@@ -1607,6 +1611,22 @@ is loaded, however only the frames of the minimum GOP containing `offset` will b
 * **context**: `http`, `server`, `location`
 
 Sets the interval (in milliseconds) after the thumbnail offset that should be loaded.
+
+### Configuration directives - volume map
+
+#### vod_volume_map_file_name_prefix
+* **syntax**: `vod_volume_map_file_name_prefix name`
+* **default**: `volume_map`
+* **context**: `http`, `server`, `location`
+
+The name of the volume map file (a csv extension is implied).
+
+#### vod_volume_map_interval
+* **syntax**: `vod_volume_map_interval millis`
+* **default**: `1000`
+* **context**: `http`, `server`, `location`
+
+Sets the interval/resolution (in milliseconds) of the volume map.
 
 ### Configuration directives - misc
 
