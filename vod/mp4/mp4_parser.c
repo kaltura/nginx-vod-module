@@ -667,10 +667,13 @@ mp4_parser_parse_stts_atom(atom_info_t* atom_info, frames_parse_context_t* conte
 			next_accum_duration = accum_duration + (uint64_t)sample_duration * sample_count;
 		}
 
-		skip_count = vod_div_ceil(clip_from - accum_duration, sample_duration);
-		sample_count -= skip_count;
-		frame_index += skip_count;
-		accum_duration += (uint64_t)skip_count * sample_duration;
+		if (clip_from > accum_duration)
+		{
+			skip_count = vod_div_ceil(clip_from - accum_duration, sample_duration);
+			sample_count -= skip_count;
+			frame_index += skip_count;
+			accum_duration += (uint64_t)skip_count * sample_duration;
+		}
 
 		if (context->stss_entries != 0)
 		{
