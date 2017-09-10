@@ -240,6 +240,7 @@ static vod_status_t
 mp4_parser_parse_hdlr_atom(atom_info_t* atom_info, metadata_parse_context_t* context)
 {
 	const hdlr_atom_t* atom = (const hdlr_atom_t*)atom_info->ptr;
+	vod_str_t name;
 	uint32_t type;
 
 	if (atom_info->size < sizeof(*atom))
@@ -265,6 +266,32 @@ mp4_parser_parse_hdlr_atom(atom_info_t* atom_info, metadata_parse_context_t* con
 		break;
 	}
 	
+	// parse the name
+	name.data = (u_char*)(atom + 1);
+	name.len = atom_info->ptr + atom_info->size - name.data;
+	if (name.len > 0 && name.data[0] == name.len - 1)
+	{
+		name.data++;
+		name.len--;
+	}
+
+	if (name.len > 0)
+	{
+		context->media_info.label.data = vod_alloc(
+			context->request_context->pool, 
+			name.len + 1);
+		if (context->media_info.label.data == NULL)
+		{
+			vod_log_debug0(VOD_LOG_DEBUG_LEVEL, context->request_context->log, 0,
+				"mp4_parser_parse_hdlr_atom: vod_alloc failed");
+			return VOD_ALLOC_FAILED;
+		}
+
+		vod_memcpy(context->media_info.label.data, name.data, name.len);
+		context->media_info.label.data[name.len] = '\0';
+		context->media_info.label.len = name.len;
+	}
+
 	return VOD_OK;
 }
 
@@ -473,7 +500,10 @@ mp4_parser_parse_mdhd_atom(atom_info_t* atom_info, metadata_parse_context_t* con
 	context->media_info.full_duration = duration;
 	context->media_info.duration_millis = rescale_time(duration, timescale, 1000);
 	context->media_info.language = lang_parse_iso639_3_code(language);
-	lang_get_native_name(context->media_info.language, &context->media_info.label);
+	if (context->media_info.label.len == 0)
+	{
+		lang_get_native_name(context->media_info.language, &context->media_info.label);
+	}
 
 	return VOD_OK;
 }
