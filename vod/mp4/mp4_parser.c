@@ -275,6 +275,11 @@ mp4_parser_parse_hdlr_atom(atom_info_t* atom_info, metadata_parse_context_t* con
 		name.len--;
 	}
 
+	while (name.len > 0 && name.data[name.len - 1] == '\0')
+	{
+		name.len--;
+	}
+
 	if (name.len > 0)
 	{
 		context->media_info.label.data = vod_alloc(
