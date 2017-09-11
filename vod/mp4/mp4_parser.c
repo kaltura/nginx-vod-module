@@ -268,18 +268,13 @@ mp4_parser_parse_hdlr_atom(atom_info_t* atom_info, metadata_parse_context_t* con
 	
 	// parse the name
 	name.data = (u_char*)(atom + 1);
-	name.len = atom_info->ptr + atom_info->size - name.data;
-	if (name.len > 0 && name.data[0] == name.len - 1)
-	{
-		name.data++;
-		name.len--;
-	}
+	name.len = atom_info->ptr + atom_info->size - name.data - 1;
 
 	if (name.len > 0)
 	{
 		context->media_info.label.data = vod_alloc(
 			context->request_context->pool, 
-			name.len + 1);
+			name.len);
 		if (context->media_info.label.data == NULL)
 		{
 			vod_log_debug0(VOD_LOG_DEBUG_LEVEL, context->request_context->log, 0,
@@ -288,7 +283,6 @@ mp4_parser_parse_hdlr_atom(atom_info_t* atom_info, metadata_parse_context_t* con
 		}
 
 		vod_memcpy(context->media_info.label.data, name.data, name.len);
-		context->media_info.label.data[name.len] = '\0';
 		context->media_info.label.len = name.len;
 	}
 
