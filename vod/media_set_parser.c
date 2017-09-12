@@ -16,6 +16,7 @@
 enum {
 	MEDIA_SET_PARAM_ID,
 	MEDIA_SET_PARAM_DISCONTINUITY,
+	MEDIA_SET_PARAM_SEGMENT_DURATION,
 	MEDIA_SET_PARAM_CONSISTENT_SEQUENCE_MEDIA_INFO,
 	MEDIA_SET_PARAM_DURATIONS,
 	MEDIA_SET_PARAM_SEQUENCES,
@@ -127,6 +128,7 @@ static json_object_key_def_t media_clip_params[] = {
 static json_object_key_def_t media_set_params[] = {
 	{ vod_string("id"),								VOD_JSON_STRING,MEDIA_SET_PARAM_ID },
 	{ vod_string("discontinuity"),					VOD_JSON_BOOL,	MEDIA_SET_PARAM_DISCONTINUITY },
+	{ vod_string("segmentDuration"),				VOD_JSON_INT,	MEDIA_SET_PARAM_SEGMENT_DURATION },
 	{ vod_string("consistentSequenceMediaInfo"),	VOD_JSON_BOOL,	MEDIA_SET_PARAM_CONSISTENT_SEQUENCE_MEDIA_INFO },
 	{ vod_string("durations"),						VOD_JSON_ARRAY, MEDIA_SET_PARAM_DURATIONS },
 	{ vod_string("sequences"),						VOD_JSON_ARRAY,	MEDIA_SET_PARAM_SEQUENCES },
@@ -1813,6 +1815,41 @@ media_set_end_relative_offset_to_absolute(
 	return timing->times[clip_index] + clip_duration - time_left;
 }
 
+static vod_status_t
+media_set_parse_segment_duration(
+	request_context_t* request_context,
+	int64_t segment_duration,
+	segmenter_conf_t** result)
+{
+	segmenter_conf_t* segmenter;
+
+	if (segment_duration < MIN_SEGMENT_DURATION ||
+		segment_duration > MAX_SEGMENT_DURATION)
+	{
+		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+			"media_set_parse_segment_duration: invalid segment duration %L", 
+			segment_duration);
+		return VOD_BAD_MAPPING;
+	}
+
+	segmenter = vod_alloc(request_context->pool, sizeof(*segmenter));
+	if (segmenter == NULL)
+	{
+		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
+			"media_set_parse_segment_duration: vod_alloc failed");
+		return VOD_ALLOC_FAILED;
+	}
+
+	*segmenter = **result;
+	segmenter->segment_duration = segment_duration;
+	segmenter->max_segment_duration = vod_max(segment_duration, 
+		segmenter->max_bootstrap_segment_duration);
+
+	*result = segmenter;
+
+	return VOD_OK;
+}
+
 vod_status_t
 media_set_parse_json(
 	request_context_t* request_context, 
@@ -1865,10 +1902,23 @@ media_set_parse_json(
 	}
 
 	vod_memzero(result, sizeof(*result));
-	result->segmenter_conf = segmenter;
 	result->uri = *uri;
 	result->timing.segment_base_time = SEGMENT_BASE_TIME_RELATIVE;
 	result->version = request_params->version;
+
+	if (params[MEDIA_SET_PARAM_SEGMENT_DURATION] != NULL)
+	{
+		rc = media_set_parse_segment_duration(
+			request_context,
+			params[MEDIA_SET_PARAM_SEGMENT_DURATION]->v.num.num,
+			&segmenter);
+		if (rc != VOD_OK)
+		{
+			return rc;
+		}
+	}
+
+	result->segmenter_conf = segmenter;
 
 	if (params[MEDIA_SET_PARAM_ID] != NULL)
 	{

@@ -1379,7 +1379,7 @@ ngx_http_vod_parse_metadata(
 	const ngx_http_vod_request_t* request = ctx->request;
 	media_clip_source_t* cur_source = ctx->cur_source;
 	request_context_t* request_context = &ctx->submodule_context.request_context;
-	segmenter_conf_t* segmenter = &ctx->submodule_context.conf->segmenter;
+	segmenter_conf_t* segmenter = ctx->submodule_context.media_set.segmenter_conf;
 	get_clip_ranges_result_t clip_ranges;
 	uint64_t last_segment_end;
 	media_range_t range;
@@ -1946,7 +1946,7 @@ ngx_http_vod_read_frames(ngx_http_vod_ctx_t *ctx)
 			request_context,
 			ctx->base_metadata,
 			NULL,
-			&ctx->submodule_context.conf->segmenter,
+			ctx->submodule_context.media_set.segmenter_conf,
 			&ctx->read_cache_state,
 			&read_buffer,
 			&read_req,
@@ -4715,7 +4715,7 @@ ngx_http_vod_map_media_set_apply(ngx_http_vod_ctx_t *ctx, ngx_str_t* mapping, in
 		&ctx->submodule_context.request_context,
 		mapping->data,
 		&ctx->submodule_context.request_params,
-		&ctx->submodule_context.conf->segmenter,
+		ctx->submodule_context.media_set.segmenter_conf,
 		&cur_source->uri,
 		request_flags,
 		&mapped_media_set);

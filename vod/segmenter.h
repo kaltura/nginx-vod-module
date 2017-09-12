@@ -8,6 +8,8 @@
 // constants
 #define INVALID_SEGMENT_COUNT UINT_MAX
 #define SEGMENT_FROM_TIMESTAMP_MARGIN (100)		// in case of clipping, a segment may start up to 2 frames before the segment boundary
+#define MIN_SEGMENT_DURATION (500)
+#define MAX_SEGMENT_DURATION (600000)
 
 // typedefs
 struct segmenter_conf_s;
@@ -92,6 +94,7 @@ struct segmenter_conf_s {
 	uint32_t bootstrap_segments_count;
 	uint32_t* bootstrap_segments_durations;
 	uint32_t max_segment_duration;
+	uint32_t max_bootstrap_segment_duration;
 	uint32_t bootstrap_segments_total_duration;
 	uint32_t* bootstrap_segments_start;
 	uint32_t* bootstrap_segments_mid;
