@@ -84,9 +84,8 @@ read_cache_get_from_cache(
 	//		in the output segment is <video1><audio1> while on disk it's <audio1><video1>. 
 	//		in this case it would be better to start reading from the beginning, even 
 	//		though the first frame that is requested is the second one
-	hint = request->hint;
-	if (hint != NULL && 
-		hint->min_offset < offset && 
+	hint = &request->hint;
+	if (hint->min_offset < offset && 
 		hint->min_offset + state->buffer_size / 4 > offset &&
 		request->end_offset < (hint->min_offset & ~alignment) + state->buffer_size)
 	{

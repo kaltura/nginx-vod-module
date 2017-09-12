@@ -37,7 +37,7 @@ typedef struct {
 	struct media_clip_source_s* source;
 	uint64_t cur_offset;
 	uint64_t end_offset;
-	read_cache_hint_t* hint;
+	read_cache_hint_t hint;
 } read_cache_request_t;
 
 typedef struct {
