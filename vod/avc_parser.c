@@ -1080,7 +1080,7 @@ avc_parser_get_slice_header_size(
 	if (slice_type > 9)
 	{
 		vod_log_error(VOD_LOG_ERR, ctx->request_context->log, 0,
-			"avc_parser_skip_slice_header: invalid slice type %uD", (uint32_t)slice_type);
+			"avc_parser_get_slice_header_size: invalid slice type %uD", (uint32_t)slice_type);
 		return VOD_BAD_DATA;
 	}
 	
@@ -1093,7 +1093,7 @@ avc_parser_get_slice_header_size(
 	if (pps_id >= ctx->pps.nelts)
 	{
 		vod_log_error(VOD_LOG_ERR, ctx->request_context->log, 0,
-			"avc_parser_skip_slice_header: invalid pps id %uD", pps_id);
+			"avc_parser_get_slice_header_size: invalid pps id %uD", pps_id);
 		return VOD_BAD_DATA;
 	}
 
@@ -1101,7 +1101,7 @@ avc_parser_get_slice_header_size(
 	if (pps == NULL)
 	{
 		vod_log_error(VOD_LOG_ERR, ctx->request_context->log, 0,
-			"avc_parser_skip_slice_header: non-existing pps id %uD", pps_id);
+			"avc_parser_get_slice_header_size: non-existing pps id %uD", pps_id);
 		return VOD_BAD_DATA;
 	}
 
@@ -1219,7 +1219,7 @@ avc_parser_get_slice_header_size(
 	if (reader.stream.eof_reached)
 	{
 		vod_log_error(VOD_LOG_ERR, ctx->request_context->log, 0,
-			"avc_parser_skip_slice_header: bit stream overflow");
+			"avc_parser_get_slice_header_size: bit stream overflow");
 		return VOD_BAD_DATA;
 	}
 	

@@ -1662,6 +1662,7 @@ ngx_http_vod_identify_format(ngx_http_vod_ctx_t* ctx)
 
 	buffer.data = ctx->read_buffer.pos;
 	buffer.len = ctx->read_buffer.last - ctx->read_buffer.pos;
+	buffer.data[buffer.len] = '\0';
 
 	for (cur_format_ptr = media_formats; ; cur_format_ptr++)
 	{
@@ -2003,7 +2004,7 @@ ngx_http_vod_state_machine_parse_metadata(ngx_http_vod_ctx_t *ctx)
 			{
 				// the string "empty" identifies an empty srt file
 				ctx->metadata_parts = ngx_palloc(ctx->submodule_context.request_context.pool,
-					sizeof(ctx->metadata_parts) + 1);
+					sizeof(*ctx->metadata_parts) + 1);
 				if (ctx->metadata_parts == NULL)
 				{
 					ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,

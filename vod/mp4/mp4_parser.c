@@ -931,7 +931,7 @@ mp4_parser_parse_stts_atom(atom_info_t* atom_info, frames_parse_context_t* conte
 				cur_count = sample_count;
 			}
 
-			if (frames_array.nelts + cur_count > context->parse_params.max_frame_count)
+			if (cur_count > context->parse_params.max_frame_count - frames_array.nelts)
 			{
 				vod_log_error(VOD_LOG_ERR, context->request_context->log, 0,
 					"mp4_parser_parse_stts_atom: frame count exceeds the limit %uD", context->parse_params.max_frame_count);
@@ -1017,7 +1017,7 @@ mp4_parser_parse_stts_atom(atom_info_t* atom_info, frames_parse_context_t* conte
 				sample_count = vod_min(cur_count, sample_count);
 			}
 
-			if (frames_array.nelts + sample_count > context->parse_params.max_frame_count)
+			if (sample_count > context->parse_params.max_frame_count - frames_array.nelts)
 			{
 				vod_log_error(VOD_LOG_ERR, context->request_context->log, 0,
 					"mp4_parser_parse_stts_atom: frame count exceeds the limit %uD", context->parse_params.max_frame_count);
@@ -1075,12 +1075,20 @@ mp4_parser_parse_stts_atom(atom_info_t* atom_info, frames_parse_context_t* conte
 		context->clip_from = clip_from_accum_duration;
 	}
 
+	context->first_frame = first_frame;
+	context->last_frame = first_frame + frames_array.nelts;
+
+	if (context->last_frame < context->first_frame)
+	{
+		vod_log_error(VOD_LOG_ERR, context->request_context->log, 0,
+			"mp4_parser_parse_stts_atom: last frame %uD smaller than first frame %uD", context->last_frame, context->first_frame);
+		return VOD_BAD_DATA;
+	}
+
 	context->total_frames_duration = accum_duration - context->first_frame_time_offset;
 	context->first_frame_time_offset -= clip_from_accum_duration;	
 	context->frames = frames_array.elts;
 	context->frame_count = frames_array.nelts;
-	context->first_frame = first_frame;
-	context->last_frame = first_frame + frames_array.nelts;
 
 	if (clip_to != ULLONG_MAX &&
 		(cur_entry >= last_entry || (accum_duration - clip_from_accum_duration) > clip_to - clip_from))

@@ -43,7 +43,14 @@ frames_source_cache_start_frame(void* ctx, input_frame_t* frame, read_cache_hint
 
 	state->req.cur_offset = frame->offset;
 	state->req.end_offset = frame->offset + frame->size;
-	state->req.hint = cache_hint;
+	if (cache_hint != NULL)
+	{
+		state->req.hint = *cache_hint;
+	}
+	else
+	{
+		state->req.hint.min_offset = ULLONG_MAX;
+	}
 
 	return VOD_OK;
 }
