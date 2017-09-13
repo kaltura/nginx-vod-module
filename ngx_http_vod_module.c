@@ -1452,11 +1452,7 @@ ngx_http_vod_parse_metadata(
 	{
 		parse_params.parse_type |= segmenter->parse_type;
 	}
-
-	if (!ctx->submodule_context.conf->ignore_edit_list)
-	{
-		parse_params.parse_type |= PARSE_FLAG_EDIT_LIST;
-	}
+	parse_params.parse_type |= ctx->submodule_context.conf->parse_flags;
 	parse_params.codecs_mask = request->codecs_mask;
 
 	request_tracks_mask = ctx->submodule_context.request_params.tracks_mask;
