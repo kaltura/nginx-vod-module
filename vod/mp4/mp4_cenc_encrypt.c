@@ -954,14 +954,14 @@ mp4_cenc_encrypt_audio_get_fragment_writer(
 		return rc;
 	}
 
+	segment_writer->write_tail = mp4_cenc_encrypt_audio_write_buffer;
+	segment_writer->write_head = NULL;
+	segment_writer->context = state;
+
 	if (!mp4_cenc_encrypt_move_to_next_frame(state, NULL))
 	{
 		return VOD_OK;
 	}
-
-	segment_writer->write_tail = mp4_cenc_encrypt_audio_write_buffer;
-	segment_writer->write_head = NULL;
-	segment_writer->context = state;
 
 	return VOD_OK;
 }
