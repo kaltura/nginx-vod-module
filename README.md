@@ -1639,6 +1639,13 @@ Sets the interval/resolution (in milliseconds) of the volume map.
 
 When enabled, the module ignores any edit lists (elst) in the MP4 file.
 
+#### vod_parse_hdlr_name
+* **syntax**: `vod_parse_hdlr_name on/off`
+* **default**: `off`
+* **context**: `http`, `server`, `location`
+
+When enabled, the module parses the name field of the hdlr MP4 atom, and uses it as the stream label.
+
 ### Nginx variables
 
 The module adds the following nginx variables:

@@ -270,6 +270,11 @@ mp4_parser_parse_hdlr_atom(atom_info_t* atom_info, metadata_parse_context_t* con
 	}
 	
 	// parse the name
+	if ((context->parse_params.parse_type & PARSE_FLAG_HDLR_NAME) == 0)
+	{
+		return VOD_OK;
+	}
+
 	name.data = (u_char*)(atom + 1);
 	name.len = atom_info->ptr + atom_info->size - name.data;
 	if (name.len > 0 && name.data[0] == name.len - 1)
@@ -283,22 +288,24 @@ mp4_parser_parse_hdlr_atom(atom_info_t* atom_info, metadata_parse_context_t* con
 		name.len--;
 	}
 
-	if (name.len > 0)
+	if (name.len <= 0)
 	{
-		context->media_info.label.data = vod_alloc(
-			context->request_context->pool, 
-			name.len + 1);
-		if (context->media_info.label.data == NULL)
-		{
-			vod_log_debug0(VOD_LOG_DEBUG_LEVEL, context->request_context->log, 0,
-				"mp4_parser_parse_hdlr_atom: vod_alloc failed");
-			return VOD_ALLOC_FAILED;
-		}
-
-		vod_memcpy(context->media_info.label.data, name.data, name.len);
-		context->media_info.label.data[name.len] = '\0';
-		context->media_info.label.len = name.len;
+		return VOD_OK;
 	}
+
+	context->media_info.label.data = vod_alloc(
+		context->request_context->pool, 
+		name.len + 1);
+	if (context->media_info.label.data == NULL)
+	{
+		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, context->request_context->log, 0,
+			"mp4_parser_parse_hdlr_atom: vod_alloc failed");
+		return VOD_ALLOC_FAILED;
+	}
+
+	vod_memcpy(context->media_info.label.data, name.data, name.len);
+	context->media_info.label.data[name.len] = '\0';
+	context->media_info.label.len = name.len;
 
 	return VOD_OK;
 }
@@ -3378,7 +3385,7 @@ mp4_parser_uncompress_moov(
 	return VOD_OK;
 #else
 	vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-		"mp4_parser_parse_frames: compressed moov atom not supported, recompile with zlib to enable it");
+		"mp4_parser_uncompress_moov: compressed moov atom not supported, recompile with zlib to enable it");
 	return VOD_BAD_REQUEST;
 #endif //(NGX_HAVE_ZLIB)
 }
