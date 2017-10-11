@@ -118,19 +118,10 @@ Debug settings:
 
 ### Installation
 
-#### RHEL/CentOS RPM
-If you are using RHEL or CentOS 6, you can install by setting up the repo:
+#### RHEL/CentOS 6/7 RPM
 ```
 # rpm -ihv http://installrepo.kaltura.org/releases/kaltura-release.noarch.rpm
 # yum install kaltura-nginx
-```
-If you are using RHEL/CentOS7, install the kaltura-release RPM and modify /etc/yum.repos.d/kaltura.repo to read:
-```
-baseurl = http://installrepo.kaltura.org/releases/rhel7/RPMS/$basearch/
-```
-Instead of the default:
-```
-baseurl = http://installrepo.kaltura.org/releases/latest/RPMS/$basearch/
 ```
 
 #### Debian/Ubuntu deb package
