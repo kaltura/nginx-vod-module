@@ -95,12 +95,12 @@ hevc_parser_hrd_parameters(
 	int max_num_sublayers_minus1)
 {
 	uint32_t sub_pic_hrd_params_present_flag = 0;
-	uint32_t nal_hrd_parameters_present_flag;
-	uint32_t vcl_hrd_parameters_present_flag;
+	uint32_t nal_hrd_parameters_present_flag = 0;
+	uint32_t vcl_hrd_parameters_present_flag = 0;
 	uint32_t fixed_pic_rate_general_flag;
 	uint32_t fixed_pic_rate_within_cvs_flag;
 	uint32_t low_delay_hrd_flag;
-	uint32_t cpb_cnt_minus1;
+	uint32_t cpb_cnt_minus1 = 0;
 	int i;
 
 	if (common_inf_present_flag)
@@ -836,7 +836,7 @@ hevc_parser_skip_delta_dlt(
 	uint32_t pps_bit_depth_for_depth_layers)
 {
 	int num_val_delta_dlt;
-	int max_diff;
+	int max_diff = 0;
 	int min_diff;
 	int k;
 
@@ -850,6 +850,10 @@ hevc_parser_skip_delta_dlt(
 		if (num_val_delta_dlt > 2 && max_diff > 0)
 		{
 			min_diff = bit_read_stream_get(reader, avc_hevc_parser_ceil_log2(max_diff + 1)) + 1;
+		}
+		else
+		{
+			min_diff = max_diff;
 		}
 		bit_read_stream_skip(reader, pps_bit_depth_for_depth_layers);	// delta_dlt_val0
 		if (max_diff > min_diff)
@@ -1106,7 +1110,7 @@ hevc_parser_skip_pps_scc_extension(
 	uint32_t monochrome_palette_flag;
 	int pps_num_palette_predictor_initializer;
 	int luma_bit_depth_entry;
-	int chroma_bit_depth_entry;
+	int chroma_bit_depth_entry = 0;
 	int num_comps;
 	int comp;
 	int i;
@@ -1591,7 +1595,7 @@ hevc_parser_get_slice_header_size(
 	uint32_t slice_sao_luma_flag = 0;
 	uint32_t num_entry_point_offsets;
 	uint32_t num_long_term_pics;
-	uint32_t num_long_term_sps;
+	uint32_t num_long_term_sps = 0;
 	uint32_t offset_len_minus1;
 	uint32_t num_ref_idx[2];
 	uint32_t slice_type;
