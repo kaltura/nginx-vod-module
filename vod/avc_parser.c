@@ -1,15 +1,10 @@
-#include "bit_read_stream.h"
+#include "avc_hevc_parser.h"
 #include "codec_config.h"
 #include "avc_parser.h"
 #include "avc_defs.h"
 
-// macros
-#define bit_read_stream_skip_signed_exp bit_read_stream_skip_unsigned_exp
-
 // constants
-#define MAX_SPS_COUNT (32)
-#define MAX_PPS_COUNT (256)
-#define EXTENDED_SAR (255)
+#define AVC_NAL_HEADER_SIZE (1)
 
 // typedefs
 typedef struct {
@@ -41,138 +36,12 @@ typedef struct {
 
 // enums
 enum {
-	SLICE_P,
-	SLICE_B,
-	SLICE_I,
-	SLICE_SP,
-	SLICE_SI,
+	AVC_SLICE_P,
+	AVC_SLICE_B,
+	AVC_SLICE_I,
+	AVC_SLICE_SP,
+	AVC_SLICE_SI,
 };
-
-// bit stream
-static vod_inline void
-bit_read_stream_skip_unsigned_exp(bit_reader_state_t* reader)
-{
-	int zero_count;
-
-	for (zero_count = 0; bit_read_stream_get_one(reader) == 0 && !reader->stream.eof_reached; zero_count++);
-
-	bit_read_stream_skip(reader, zero_count);
-}
-
-static vod_inline uint32_t 
-bit_read_stream_get_unsigned_exp(bit_reader_state_t* reader)
-{
-	int zero_count;
-
-	for (zero_count = 0; bit_read_stream_get_one(reader) == 0 && !reader->stream.eof_reached; zero_count++);
-
-	return (1 << zero_count) - 1 + bit_read_stream_get(reader, zero_count);
-}
-
-static vod_inline int32_t
-bit_read_stream_get_signed_exp(bit_reader_state_t* reader)
-{
-	int32_t value = bit_read_stream_get_unsigned_exp(reader);
-	if (value > 0)
-	{
-		if (value & 1)		// positive
-		{
-			value = (value + 1) / 2;
-		}
-		else
-		{
-			value = -(value / 2);
-		}
-	}
-	return value;
-}
-
-static bool_t
-avc_parser_rbsp_trailing_bits(bit_reader_state_t* reader)
-{
-	uint32_t one_bit;
-
-	if (reader->stream.eof_reached)
-	{
-		return FALSE;
-	}
-
-	one_bit = bit_read_stream_get_one(reader);
-	if (one_bit != 1)
-	{
-		return FALSE;
-	}
-
-	while (!reader->stream.eof_reached)
-	{
-		if (bit_read_stream_get_one(reader) != 0)
-		{
-			return FALSE;
-		}
-	}
-
-	return TRUE;
-}
-
-// base functions
-static void*
-avc_parser_get_array_item(vod_array_t* arr, size_t index)
-{
-	size_t alloc_count;
-	void* new_ptr;
-
-	if (index >= arr->nelts)
-	{
-		alloc_count = index + 1 - arr->nelts;
-		new_ptr = vod_array_push_n(arr, alloc_count);
-		if (new_ptr == NULL)
-		{
-			return NULL;
-		}
-
-		vod_memzero(new_ptr, alloc_count * arr->size);
-	}
-
-	return (u_char*)arr->elts + index * arr->size;
-}
-
-static unsigned
-avc_parser_ceil_log2(unsigned val)
-{
-	unsigned result = 0;
-
-	val--;
-	while (val != 0)
-	{
-		val >>= 1;
-		result++;
-	}
-	return result;
-}
-
-vod_status_t
-avc_parser_init_ctx(
-	avc_parse_ctx_t* ctx, 
-	request_context_t* request_context)
-{
-	if (vod_array_init(&ctx->sps, request_context->pool, 1, sizeof(avc_sps_t*)) != VOD_OK)
-	{
-		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
-			"avc_parser_init_ctx: vod_array_init failed (1)");
-		return VOD_ALLOC_FAILED;
-	}
-
-	if (vod_array_init(&ctx->pps, request_context->pool, 1, sizeof(avc_pps_t*)) != VOD_OK)
-	{
-		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
-			"avc_parser_init_ctx: vod_array_init failed (2)");
-		return VOD_ALLOC_FAILED;
-	}
-
-	ctx->request_context = request_context;
-
-	return VOD_OK;
-}
 
 // SPS
 static void 
@@ -299,7 +168,7 @@ avc_parser_skip_scaling_list(bit_reader_state_t* reader, int size_of_scaling_lis
 }
 
 static vod_status_t 
-avc_parser_seq_parameter_set_rbsp(avc_parse_ctx_t* ctx, bit_reader_state_t* reader)
+avc_parser_seq_parameter_set_rbsp(avc_hevc_parse_ctx_t* ctx, bit_reader_state_t* reader)
 {
 	avc_sps_t* sps;
 	uint32_t profile_idc;
@@ -311,8 +180,7 @@ avc_parser_seq_parameter_set_rbsp(avc_parse_ctx_t* ctx, bit_reader_state_t* read
 	bool_t seq_scaling_list_present_flag;
 	bool_t vui_parameters_present_flag;
 	bool_t frame_cropping_flag;
-	avc_sps_t** sps_ptr;
-
+	
 	profile_idc = bit_read_stream_get(reader, 8); // profile_idc
 	bit_read_stream_get_one(reader); // constraint_set0_flag
 	bit_read_stream_get_one(reader); // constraint_set1_flag
@@ -328,29 +196,13 @@ avc_parser_seq_parameter_set_rbsp(avc_parse_ctx_t* ctx, bit_reader_state_t* read
 		return VOD_BAD_DATA;
 	}
 
-	sps_ptr = avc_parser_get_array_item(&ctx->sps, seq_parameter_set_id);
-	if (sps_ptr == NULL)
-	{
-		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, ctx->request_context->log, 0,
-			"avc_parser_seq_parameter_set_rbsp: avc_parser_get_array_item failed");
-		return VOD_ALLOC_FAILED;
-	}
-
-	sps = *sps_ptr;
+	sps = avc_hevc_parser_get_ptr_array_item(&ctx->sps, seq_parameter_set_id, sizeof(*sps));
 	if (sps == NULL)
 	{
-		sps = vod_alloc(ctx->request_context->pool, sizeof(*sps));
-		if (sps == NULL)
-		{
-			vod_log_debug0(VOD_LOG_DEBUG_LEVEL, ctx->request_context->log, 0,
-				"avc_parser_seq_parameter_set_rbsp: vod_alloc failed");
-			return VOD_ALLOC_FAILED;
-		}
-
-		*sps_ptr = sps;
+		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, ctx->request_context->log, 0,
+			"avc_parser_seq_parameter_set_rbsp: avc_hevc_parser_get_ptr_array_item failed");
+		return VOD_ALLOC_FAILED;
 	}
-
-	vod_memzero(sps, sizeof(*sps));
 
 	switch (profile_idc)
 	{
@@ -450,7 +302,7 @@ avc_parser_seq_parameter_set_rbsp(avc_parse_ctx_t* ctx, bit_reader_state_t* read
 	{
 		avc_parser_skip_vui_parameters(reader);
 	}
-	if (!avc_parser_rbsp_trailing_bits(reader))
+	if (!avc_hevc_parser_rbsp_trailing_bits(reader))
 	{
 		vod_log_error(VOD_LOG_ERR, ctx->request_context->log, 0,
 			"avc_parser_seq_parameter_set_rbsp: invalid trailing bits");
@@ -463,13 +315,12 @@ avc_parser_seq_parameter_set_rbsp(avc_parse_ctx_t* ctx, bit_reader_state_t* read
 // PPS
 static vod_status_t
 avc_parser_pic_parameter_set_rbsp(
-	avc_parse_ctx_t* ctx,
+	avc_hevc_parse_ctx_t* ctx,
 	bit_reader_state_t* reader)
 {
 	bit_reader_state_t temp_reader;
 	uint32_t seq_parameter_set_id;
 	uint32_t pic_parameter_set_id;
-	avc_pps_t** pps_ptr;
 	avc_pps_t* pps;
 	unsigned pic_size_in_map_units_minus1;
 	unsigned group;
@@ -488,29 +339,13 @@ avc_parser_pic_parameter_set_rbsp(
 		return VOD_BAD_DATA;
 	}
 
-	pps_ptr = avc_parser_get_array_item(&ctx->pps, pic_parameter_set_id);
-	if (pps_ptr == NULL)
-	{
-		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, ctx->request_context->log, 0,
-			"avc_parser_pic_parameter_set_rbsp: avc_parser_get_array_item failed");
-		return VOD_ALLOC_FAILED;
-	}
-
-	pps = *pps_ptr;
+	pps = avc_hevc_parser_get_ptr_array_item(&ctx->pps, pic_parameter_set_id, sizeof(*pps));
 	if (pps == NULL)
 	{
-		pps = vod_alloc(ctx->request_context->pool, sizeof(*pps));
-		if (pps == NULL)
-		{
-			vod_log_debug0(VOD_LOG_DEBUG_LEVEL, ctx->request_context->log, 0,
-				"avc_parser_pic_parameter_set_rbsp: vod_alloc failed");
-			return VOD_ALLOC_FAILED;
-		}
-
-		*pps_ptr = pps;
+		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, ctx->request_context->log, 0,
+			"avc_parser_pic_parameter_set_rbsp: avc_hevc_parser_get_ptr_array_item failed");
+		return VOD_ALLOC_FAILED;
 	}
-
-	vod_memzero(pps, sizeof(*pps));
 
 	seq_parameter_set_id = bit_read_stream_get_unsigned_exp(reader);
 	if (seq_parameter_set_id >= ctx->sps.nelts)
@@ -559,7 +394,7 @@ avc_parser_pic_parameter_set_rbsp(
 			pic_size_in_map_units_minus1 = bit_read_stream_get_unsigned_exp(reader);
 			for (i = 0; i <= pic_size_in_map_units_minus1 && !reader->stream.eof_reached; i++)
 			{
-				bit_read_stream_skip(reader, avc_parser_ceil_log2(pps->num_slice_groups_minus1 + 1));		// slice_group_id[ i ]
+				bit_read_stream_skip(reader, avc_hevc_parser_ceil_log2(pps->num_slice_groups_minus1 + 1));		// slice_group_id[ i ]
 			}
 		}
 	}
@@ -583,7 +418,7 @@ avc_parser_pic_parameter_set_rbsp(
 	}
 
 	temp_reader = *reader;
-	if (avc_parser_rbsp_trailing_bits(&temp_reader))	// !more_rbsp_data
+	if (avc_hevc_parser_rbsp_trailing_bits(&temp_reader))	// !more_rbsp_data
 	{
 		return VOD_OK;
 	}
@@ -610,7 +445,7 @@ avc_parser_pic_parameter_set_rbsp(
 		}
 	}
 
-	if (!avc_parser_rbsp_trailing_bits(reader))
+	if (!avc_hevc_parser_rbsp_trailing_bits(reader))
 	{
 		vod_log_error(VOD_LOG_ERR, ctx->request_context->log, 0,
 			"avc_parser_pic_parameter_set_rbsp: invalid trailing bits");
@@ -620,106 +455,15 @@ avc_parser_pic_parameter_set_rbsp(
 	return VOD_OK;
 }
 
-// emulation prevention
-static uint32_t
-avc_parser_emulation_prevention_encode_bytes(
-	const u_char* cur_pos, 
-	const u_char* end_pos)
-{
-	uint32_t result = 0;
-
-	end_pos -= 2;
-	for (; cur_pos < end_pos; cur_pos++)
-	{
-		if (cur_pos[0] == 0 && cur_pos[1] == 0 && cur_pos[2] <= 3)
-		{
-			result++;
-			cur_pos += 2;
-		}
-	}
-
-	return result;
-}
-
-static vod_status_t
-avc_parser_emulation_prevention_decode(
-	request_context_t* request_context,
-	bit_reader_state_t* reader,
-	const u_char* buffer,
-	uint32_t size)
-{
-	uint32_t last_three_bytes;
-	const u_char* cur_pos;
-	const u_char* end_pos = buffer + size;
-	u_char* output;
-	u_char cur_byte;
-	bool_t requires_strip;
-
-	requires_strip = FALSE;
-	for (cur_pos = buffer + 2; cur_pos < end_pos; cur_pos++)
-	{
-		if (*cur_pos == 3 && cur_pos[-1] == 0 && cur_pos[-2] == 0)
-		{
-			requires_strip = TRUE;
-			break;
-		}
-	}
-
-	if (!requires_strip)
-	{
-		bit_read_stream_init(reader, buffer, size);
-		return VOD_OK;
-	}
-
-	output = vod_alloc(request_context->pool, size);
-	if (output == NULL)
-	{
-		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
-			"avc_parser_emulation_prevention_decode: vod_alloc failed");
-		return VOD_ALLOC_FAILED;
-	}
-
-	bit_read_stream_init(reader, output, 0);	// size updated later
-
-	last_three_bytes = 1;
-	for (cur_pos = buffer; cur_pos < end_pos; cur_pos++)
-	{
-		cur_byte = *cur_pos;
-		last_three_bytes = ((last_three_bytes << 8) | cur_byte) & 0xffffff;
-		if (last_three_bytes != 3)
-		{
-			*output++ = cur_byte;
-			continue;
-		}
-
-		cur_pos++;
-		if (cur_pos >= end_pos)
-		{
-			// this can happen when decoding a part of a packet, just output what we have so far
-			break;
-		}
-
-		cur_byte = *cur_pos;
-		if (cur_byte > 3)
-		{
-			vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-				"avc_parser_emulation_prevention_decode: invalid byte 0x%02uxD after escape sequence", 
-				(uint32_t)cur_byte);
-			return VOD_BAD_DATA;
-		}
-		*output++ = cur_byte;
-	}
-
-	reader->stream.end_pos = output;
-	return VOD_OK;
-}
-
 // extra data
 vod_status_t
 avc_parser_parse_extra_data(
-	avc_parse_ctx_t* ctx,
-	vod_str_t* extra_data)
+	void* context,
+	vod_str_t* extra_data,
+	uint32_t* nal_packet_size_length,
+	uint32_t* min_packet_size)
 {
+	avc_hevc_parse_ctx_t* ctx = context;
 	bit_reader_state_t reader;
 	const u_char* extra_data_end;
 	const u_char* cur_pos;
@@ -735,6 +479,9 @@ avc_parser_parse_extra_data(
 			"avc_parser_parse_extra_data: extra data size %uz too small", extra_data->len);
 		return VOD_BAD_DATA;
 	}
+
+	*nal_packet_size_length = (((avcc_config_t*)extra_data->data)->nula_length_size & 0x3) + 1;
+	*min_packet_size = *nal_packet_size_length + AVC_NAL_HEADER_SIZE;
 
 	cur_pos = extra_data->data + sizeof(avcc_config_t);
 	extra_data_end = extra_data->data + extra_data->len;
@@ -766,7 +513,7 @@ avc_parser_parse_extra_data(
 				return VOD_BAD_DATA;
 			}
 
-			if (unit_size == 0)
+			if (unit_size < AVC_NAL_HEADER_SIZE)
 			{
 				vod_log_error(VOD_LOG_ERR, ctx->request_context->log, 0,
 					"avc_parser_parse_extra_data: unit of zero size");
@@ -774,10 +521,11 @@ avc_parser_parse_extra_data(
 			}
 
 			// skip the nal unit type
-			nal_type = *cur_pos++;
-			unit_size--;
+			nal_type = *cur_pos;
+			cur_pos += AVC_NAL_HEADER_SIZE;
+			unit_size -= AVC_NAL_HEADER_SIZE;
 
-			rc = avc_parser_emulation_prevention_decode(ctx->request_context, &reader, cur_pos, unit_size);
+			rc = avc_hevc_parser_emulation_prevention_decode(ctx->request_context, &reader, cur_pos, unit_size);
 			if (rc != VOD_OK)
 			{
 				return rc;
@@ -821,7 +569,7 @@ avc_parser_skip_ref_pic_list_modification(
 
 	slice_type %= 5;
 
-	if (slice_type != SLICE_I && slice_type != SLICE_SI) 
+	if (slice_type != AVC_SLICE_I && slice_type != AVC_SLICE_SI)
 	{
 		ref_pic_list_modification_flag_l0 = bit_read_stream_get_one(reader);
 		if (ref_pic_list_modification_flag_l0)
@@ -842,7 +590,7 @@ avc_parser_skip_ref_pic_list_modification(
 		}
 	}
 
-	if (slice_type == SLICE_B)
+	if (slice_type == AVC_SLICE_B)
 	{
 		ref_pic_list_modification_flag_l1 = bit_read_stream_get_one(reader);
 		if (ref_pic_list_modification_flag_l1)
@@ -875,7 +623,7 @@ avc_parser_skip_ref_pic_list_mvc_modification(
 
 	slice_type %= 5;
 
-	if (slice_type != SLICE_I && slice_type != SLICE_SI)
+	if (slice_type != AVC_SLICE_I && slice_type != AVC_SLICE_SI)
 	{
 		ref_pic_list_modification_flag_l0 = bit_read_stream_get_one(reader);
 		if (ref_pic_list_modification_flag_l0)
@@ -901,7 +649,7 @@ avc_parser_skip_ref_pic_list_mvc_modification(
 		}
 	}
 
-	if (slice_type == SLICE_B)
+	if (slice_type == AVC_SLICE_B)
 	{
 		ref_pic_list_modification_flag_l1 = bit_read_stream_get_one(reader);
 		if (ref_pic_list_modification_flag_l1)
@@ -967,7 +715,7 @@ avc_parser_skip_pred_weight_table(
 			}
 		}
 	}
-	if (slice_type % 5 == SLICE_B)
+	if (slice_type % 5 == AVC_SLICE_B)
 	{
 		for (i = 0; i < num_ref_idx[1] && !reader->stream.eof_reached; i++)
 		{
@@ -1037,11 +785,12 @@ avc_parser_skip_dec_ref_pic_marking(
 
 vod_status_t
 avc_parser_get_slice_header_size(
-	avc_parse_ctx_t* ctx,
+	void* context,
 	const u_char* buffer,
 	uint32_t size,
 	uint32_t* result)
 {
+	avc_hevc_parse_ctx_t* ctx = context;
 	bit_reader_state_t reader;
 	const u_char* start_pos;
 	vod_status_t rc;
@@ -1058,11 +807,11 @@ avc_parser_get_slice_header_size(
 	int pic_size_in_map_units;
 	int len;
 
-	rc = avc_parser_emulation_prevention_decode(
+	rc = avc_hevc_parser_emulation_prevention_decode(
 		ctx->request_context,
 		&reader,
-		buffer,
-		size);
+		buffer + AVC_NAL_HEADER_SIZE,
+		size - AVC_NAL_HEADER_SIZE);
 	if (rc != VOD_OK)
 	{
 		return rc;
@@ -1070,9 +819,8 @@ avc_parser_get_slice_header_size(
 
 	start_pos = reader.stream.cur_pos;
 
-	bit_read_stream_get_one(&reader);	// forbidden_zero_bit
-	nal_ref_idc = bit_read_stream_get(&reader, 2);
-	nal_unit_type = bit_read_stream_get(&reader, 5);
+	nal_ref_idc = (buffer[0] >> 5) & 0x3;
+	nal_unit_type = buffer[0] & 0x1f;
 
 	bit_read_stream_skip_unsigned_exp(&reader); // first_mb_in_slice
 	slice_type = bit_read_stream_get_unsigned_exp(&reader);
@@ -1145,19 +893,19 @@ avc_parser_get_slice_header_size(
 		bit_read_stream_skip_unsigned_exp(&reader);		// redundant_pic_cnt
 	}
 
-	if (slice_type == SLICE_B)
+	if (slice_type == AVC_SLICE_B)
 	{
 		bit_read_stream_get_one(&reader);				// direct_spatial_mv_pred_flag
 	}
 
 	vod_memcpy(num_ref_idx, pps->num_ref_idx, sizeof(num_ref_idx));
-	if (slice_type == SLICE_P || slice_type == SLICE_SP || slice_type == SLICE_B)
+	if (slice_type == AVC_SLICE_P || slice_type == AVC_SLICE_SP || slice_type == AVC_SLICE_B)
 	{
 		num_ref_idx_active_override_flag = bit_read_stream_get_one(&reader);
 		if (num_ref_idx_active_override_flag)
 		{
 			num_ref_idx[0] = bit_read_stream_get_unsigned_exp(&reader) + 1;
-			if (slice_type == SLICE_B)
+			if (slice_type == AVC_SLICE_B)
 			{
 				num_ref_idx[1] = bit_read_stream_get_unsigned_exp(&reader) + 1;
 			}
@@ -1172,8 +920,8 @@ avc_parser_get_slice_header_size(
 	{
 		avc_parser_skip_ref_pic_list_modification(&reader, slice_type);
 	}
-	if ((pps->weighted_pred_flag && (slice_type == SLICE_P || slice_type == SLICE_SP)) || 
-		(pps->weighted_bipred_idc == 1 && slice_type == SLICE_B))
+	if ((pps->weighted_pred_flag && (slice_type == AVC_SLICE_P || slice_type == AVC_SLICE_SP)) ||
+		(pps->weighted_bipred_idc == 1 && slice_type == AVC_SLICE_B))
 	{
 		avc_parser_skip_pred_weight_table(&reader, slice_type, num_ref_idx, sps->chroma_array_type);
 	}
@@ -1183,15 +931,15 @@ avc_parser_get_slice_header_size(
 		avc_parser_skip_dec_ref_pic_marking(&reader, nal_unit_type);
 	}
 
-	if (pps->entropy_coding_mode_flag && slice_type != SLICE_I && slice_type != SLICE_SI)
+	if (pps->entropy_coding_mode_flag && slice_type != AVC_SLICE_I && slice_type != AVC_SLICE_SI)
 	{
 		bit_read_stream_skip_unsigned_exp(&reader);	// cabac_init_idc
 	}
 
 	bit_read_stream_skip_signed_exp(&reader);		// slice_qp_delta
-	if (slice_type == SLICE_SP || slice_type == SLICE_SI)
+	if (slice_type == AVC_SLICE_SP || slice_type == AVC_SLICE_SI)
 	{
-		if (slice_type == SLICE_SP)
+		if (slice_type == AVC_SLICE_SP)
 		{
 			bit_read_stream_get_one(&reader);		// sp_for_switch_flag
 		}
@@ -1212,7 +960,7 @@ avc_parser_get_slice_header_size(
 	{
 		pic_size_in_map_units = sps->pic_height_in_map_units * sps->pic_width_in_mbs;
 		len = vod_div_ceil(pic_size_in_map_units, pps->slice_group_change_rate);
-		len = avc_parser_ceil_log2(len + 1);
+		len = avc_hevc_parser_ceil_log2(len + 1);
 		bit_read_stream_skip(&reader, len);		// slice_group_change_cycle
 	}
 	
@@ -1223,13 +971,40 @@ avc_parser_get_slice_header_size(
 		return VOD_BAD_DATA;
 	}
 	
-	*result = reader.stream.cur_pos - start_pos;
+	*result = AVC_NAL_HEADER_SIZE + (reader.stream.cur_pos - start_pos);
 
-	if (start_pos != buffer)
+	if (start_pos != buffer + AVC_NAL_HEADER_SIZE)
 	{
-		*result += avc_parser_emulation_prevention_encode_bytes(
+		*result += avc_hevc_parser_emulation_prevention_encode_bytes(
 			start_pos, 
 			reader.stream.cur_pos);
+	}
+
+	return VOD_OK;
+}
+
+vod_status_t
+avc_parser_is_slice(void* context, uint8_t nal_type, bool_t* is_slice)
+{
+	avc_hevc_parse_ctx_t* ctx = context;
+
+	switch (nal_type & 0x1f)
+	{
+	case AVC_NAL_SLICE:
+	case AVC_NAL_IDR_SLICE:
+		*is_slice = TRUE;
+		break;
+
+	case AVC_NAL_DPA:
+	case AVC_NAL_DPB:
+	case AVC_NAL_DPC:
+		vod_log_error(VOD_LOG_ERR, ctx->request_context->log, 0,
+			"avc_parser_is_slice: nal types 2-4 are not supported");
+		return VOD_BAD_DATA;
+
+	default:
+		*is_slice = FALSE;
+		break;
 	}
 
 	return VOD_OK;

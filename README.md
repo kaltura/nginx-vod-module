@@ -1245,6 +1245,14 @@ Sets the seed that is used to generate the TS encryption key and DASH/MSS encryp
 The parameter value can contain variables, and will usually have the structure "secret-$vod_filepath".
 See the list of nginx variables added by this module below.
 
+#### vod_encryption_iv_seed
+* **syntax**: `vod_encryption_iv_seed string`
+* **default**: `empty`
+* **context**: `http`, `server`, `location`
+
+Sets the seed that is used to generate the encryption IV, currently applies only to HLS/fMP4 with AES-128 encryption.
+The parameter value can contain variables.
+
 #### vod_drm_enabled
 * **syntax**: `vod_drm_enabled on/off`
 * **default**: `off`

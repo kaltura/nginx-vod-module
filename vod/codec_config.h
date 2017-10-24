@@ -66,11 +66,6 @@ typedef struct {
 	uint8_t channel_config;
 } mp4a_config_t;
 
-vod_status_t codec_config_avcc_get_nal_packet_size_length(
-	request_context_t* request_context,
-	vod_str_t* extra_data,
-	uint32_t* nal_packet_size_length);
-
 // functions
 vod_status_t codec_config_hevc_get_nal_units(
 	request_context_t* request_context,
@@ -94,5 +89,11 @@ vod_status_t codec_config_mp4a_config_parse(
 	request_context_t* request_context,
 	vod_str_t* extra_data, 
 	mp4a_config_t* result);
+
+vod_status_t codec_config_hevc_config_parse(
+	request_context_t* request_context,
+	vod_str_t* extra_data,
+	hevc_config_t* cfg,
+	const u_char** end_pos);
 
 #endif // __CODEC_CONFIG_H__

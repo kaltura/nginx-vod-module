@@ -6,6 +6,8 @@
 #include "mp4_defs.h"
 #include "../write_buffer.h"
 #include "../read_stream.h"
+#include "../avc_hevc_parser.h"
+#include "../hevc_parser.h"
 #include "../avc_parser.h"
 #include "../avc_defs.h"
 #include "../udrm.h"
@@ -45,10 +47,36 @@ typedef struct {
 } mp4_cbcs_encrypt_stream_state_t;
 
 typedef struct {
+	vod_status_t (*init_ctx)(
+		request_context_t* request_context,
+		void** ctx);
+
+	vod_status_t (*parse_extra_data)(
+		void* ctx,
+		vod_str_t* extra_data,
+		uint32_t* nal_packet_size_length,
+		uint32_t* min_packet_size);
+
+	vod_status_t (*is_slice)(
+		void* ctx,
+		uint8_t nal_type,
+		bool_t* is_slice);
+
+	vod_status_t (*get_slice_header_size)(
+		void* ctx,
+		const u_char* buffer,
+		uint32_t size,
+		uint32_t* result);
+
+} slice_parser_t;
+
+typedef struct {
 	mp4_cbcs_encrypt_stream_state_t base;
 
-	avc_parse_ctx_t avc_parse;
+	slice_parser_t slice_parser;
+	void* slice_parser_context;
 	uint32_t nal_packet_size_length;
+	uint32_t min_packet_size;
 
 	// nal packet state
 	int cur_state;
@@ -70,6 +98,20 @@ enum {
 	STATE_SLICE_HEADER,
 	STATE_PACKET_ENCRYPT,
 	STATE_PACKET_COPY,
+};
+
+static slice_parser_t avc_parser = {
+	avc_hevc_parser_init_ctx,
+	avc_parser_parse_extra_data,
+	avc_parser_is_slice,
+	avc_parser_get_slice_header_size,
+};
+
+static slice_parser_t hevc_parser = {
+	avc_hevc_parser_init_ctx,
+	hevc_parser_parse_extra_data,
+	hevc_parser_is_slice,
+	hevc_parser_get_slice_header_size,
 };
 
 ////// base functions
@@ -268,10 +310,11 @@ mp4_cbcs_encrypt_video_init_track(mp4_cbcs_encrypt_video_stream_state_t* stream_
 	media_track_t* track = stream_state->base.cur_track;
 	vod_status_t rc;
 
-	rc = codec_config_avcc_get_nal_packet_size_length(
-		state->request_context,
+	rc = stream_state->slice_parser.parse_extra_data(
+		stream_state->slice_parser_context,
 		&track->media_info.extra_data,
-		&stream_state->nal_packet_size_length);
+		&stream_state->nal_packet_size_length,
+		&stream_state->min_packet_size);
 	if (rc != VOD_OK)
 	{
 		return rc;
@@ -280,17 +323,9 @@ mp4_cbcs_encrypt_video_init_track(mp4_cbcs_encrypt_video_stream_state_t* stream_
 	if (stream_state->nal_packet_size_length < 1 || stream_state->nal_packet_size_length > 4)
 	{
 		vod_log_error(VOD_LOG_ERR, state->request_context->log, 0,
-			"mp4_cbcs_encrypt_video_init_track: invalid nal packet size length %uD", 
+			"mp4_cbcs_encrypt_video_init_track: invalid nal packet size length %uD",
 			stream_state->nal_packet_size_length);
 		return VOD_BAD_DATA;
-	}
-
-	rc = avc_parser_parse_extra_data(
-		&stream_state->avc_parse,
-		&track->media_info.extra_data);
-	if (rc != VOD_OK)
-	{
-		return rc;
 	}
 
 	stream_state->cur_state = STATE_PACKET_SIZE;
@@ -316,6 +351,7 @@ mp4_cbcs_encrypt_video_write_buffer(void* context, u_char* buffer, uint32_t size
 	int32_t cur_shift;
 	uint8_t nal_type;
 	bool_t init_track;
+	bool_t is_slice;
 	vod_status_t rc;
 
 	while (cur_pos < buffer_end)
@@ -332,11 +368,11 @@ mp4_cbcs_encrypt_video_write_buffer(void* context, u_char* buffer, uint32_t size
 					return rc;
 				}
 
-				if (stream_state->base.frame_size_left <= stream_state->nal_packet_size_length)
+				if (stream_state->base.frame_size_left < stream_state->min_packet_size)
 				{
 					vod_log_error(VOD_LOG_ERR, state->request_context->log, 0,
-						"mp4_cbcs_encrypt_video_write_buffer: frame size %uD too small, nalu size %uD",
-						stream_state->base.frame_size_left, stream_state->nal_packet_size_length);
+						"mp4_cbcs_encrypt_video_write_buffer: frame size %uD too small, min packet size %uD",
+						stream_state->base.frame_size_left, stream_state->min_packet_size);
 					return VOD_BAD_DATA;
 				}
 			}
@@ -372,11 +408,11 @@ mp4_cbcs_encrypt_video_write_buffer(void* context, u_char* buffer, uint32_t size
 			stream_state->base.frame_size_left -= stream_state->nal_packet_size_length + stream_state->packet_size_left;
 
 			if (stream_state->base.frame_size_left > 0 &&
-				stream_state->base.frame_size_left <= stream_state->nal_packet_size_length)
+				stream_state->base.frame_size_left < stream_state->min_packet_size)
 			{
 				vod_log_error(VOD_LOG_ERR, state->request_context->log, 0,
-					"mp4_cbcs_encrypt_video_write_buffer: frame size left %uD too small, nalu size %uD",
-					stream_state->base.frame_size_left, stream_state->nal_packet_size_length);
+					"mp4_cbcs_encrypt_video_write_buffer: frame size left %uD too small, min packet size %uD",
+					stream_state->base.frame_size_left, stream_state->min_packet_size);
 				return VOD_BAD_DATA;
 			}
 
@@ -408,30 +444,22 @@ mp4_cbcs_encrypt_video_write_buffer(void* context, u_char* buffer, uint32_t size
 			// update the packet size
 			stream_state->packet_size_left--;
 
-			switch (nal_type & 0x1f)
+			rc = stream_state->slice_parser.is_slice(
+				stream_state->slice_parser_context,
+				nal_type, 
+				&is_slice);
+			if (rc != VOD_OK)
 			{
-			case AVC_NAL_SLICE:
-			case AVC_NAL_IDR_SLICE:
-				if (stream_state->packet_size_left < MIN_ENCRYPTED_PACKET_SIZE)
-				{
-					stream_state->cur_state = STATE_PACKET_COPY;
-					continue;
-				}
-				break;
+				return rc;
+			}
 
-			case AVC_NAL_DPA:
-			case AVC_NAL_DPB:
-			case AVC_NAL_DPC:
-				vod_log_error(VOD_LOG_ERR, state->request_context->log, 0,
-					"mp4_cbcs_encrypt_video_write_buffer: nal types 2-4 are not supported");
-				return VOD_BAD_DATA;
-
-				// TODO: parse in-stream SPS/PPS
-
-			default:
+			if (!is_slice || stream_state->packet_size_left < MIN_ENCRYPTED_PACKET_SIZE)
+			{
 				stream_state->cur_state = STATE_PACKET_COPY;
 				continue;
 			}
+
+			// TODO: parse in-stream SPS/PPS
 
 			// initialize the slice header state
 			stream_state->slice_header[0] = nal_type;
@@ -456,8 +484,8 @@ mp4_cbcs_encrypt_video_write_buffer(void* context, u_char* buffer, uint32_t size
 			// get the slice header size
 			slice_header_buf_size = stream_state->slice_header_end - stream_state->slice_header;
 
-			rc = avc_parser_get_slice_header_size(
-				&stream_state->avc_parse,
+			rc = stream_state->slice_parser.get_slice_header_size(
+				stream_state->slice_parser_context,
 				stream_state->slice_header,
 				slice_header_buf_size,
 				&slice_header_size);
@@ -638,16 +666,6 @@ mp4_cbcs_encrypt_video_get_fragment_writer(
 	request_context_t* request_context = state->request_context;
 	vod_status_t rc;
 
-	// TODO: support hevc
-
-	if (track->media_info.codec_id != VOD_CODEC_ID_AVC)
-	{
-		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-			"mp4_cbcs_encrypt_video_get_fragment_writer: codec id %uD is not supported", 
-			track->media_info.codec_id);
-		return VOD_BAD_REQUEST;
-	}
-
 	// allocate the state
 	stream_state = vod_alloc(request_context->pool, sizeof(*stream_state));
 	if (stream_state == NULL)
@@ -657,7 +675,24 @@ mp4_cbcs_encrypt_video_get_fragment_writer(
 		return VOD_ALLOC_FAILED;
 	}
 
-	rc = avc_parser_init_ctx(&stream_state->avc_parse, request_context);
+	switch (track->media_info.codec_id)
+	{
+	case VOD_CODEC_ID_AVC:
+		stream_state->slice_parser = avc_parser;
+		break;
+
+	case VOD_CODEC_ID_HEVC:
+		stream_state->slice_parser = hevc_parser;
+		break;
+
+	default:
+		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+			"mp4_cbcs_encrypt_video_get_fragment_writer: codec id %uD is not supported",
+			track->media_info.codec_id);
+		return VOD_BAD_REQUEST;
+	}
+
+	rc = stream_state->slice_parser.init_ctx(request_context, &stream_state->slice_parser_context);
 	if (rc != VOD_OK)
 	{
 		return rc;
