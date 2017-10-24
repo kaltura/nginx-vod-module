@@ -357,4 +357,6 @@ int vod_get_int_print_len(uint64_t n);
 
 uint32_t vod_get_number_of_set_bits(uint32_t i);
 
+u_char* vod_append_hex_string(u_char* p, const u_char* buffer, uint32_t buffer_size);
+
 #endif // __COMMON_H__

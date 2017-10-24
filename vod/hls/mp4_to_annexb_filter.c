@@ -82,7 +82,7 @@ mp4_to_annexb_set_media_info(
 		}
 
 		state->unit_type_mask = (0x3F << 1);
-		state->aud_unit_type = (HEVC_NAL_AUD << 1);
+		state->aud_unit_type = (HEVC_NAL_AUD_NUT << 1);
 		state->aud_nal_packet = hevc_aud_nal_packet;
 		state->aud_nal_packet_size = sizeof(hevc_aud_nal_packet);
 		break;

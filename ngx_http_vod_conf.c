@@ -164,6 +164,11 @@ ngx_http_vod_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child)
 		conf->secret_key = prev->secret_key;
 	}
 
+	if (conf->encryption_iv_seed == NULL)
+	{
+		conf->encryption_iv_seed = prev->encryption_iv_seed;
+	}
+
 	if (conf->base_url == NULL)
 	{
 		conf->base_url = prev->base_url;
@@ -927,6 +932,13 @@ ngx_command_t ngx_http_vod_commands[] = {
 	ngx_http_set_complex_value_slot,
 	NGX_HTTP_LOC_CONF_OFFSET,
 	offsetof(ngx_http_vod_loc_conf_t, secret_key),
+	NULL },
+
+	{ ngx_string("vod_encryption_iv_seed"),
+	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1,
+	ngx_http_set_complex_value_slot,
+	NGX_HTTP_LOC_CONF_OFFSET,
+	offsetof(ngx_http_vod_loc_conf_t, encryption_iv_seed),
 	NULL },
 
 	{ ngx_string("vod_base_url"),

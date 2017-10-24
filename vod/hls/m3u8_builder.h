@@ -49,6 +49,7 @@ vod_status_t m3u8_builder_build_index_playlist(
 	vod_str_t* segments_base_url,
 	request_params_t* request_params,
 	hls_encryption_params_t* encryption_params,
+	vod_uint_t container_format,
 	media_set_t* media_set,
 	vod_str_t* result);
 

@@ -10,24 +10,6 @@
 
 #define AOT_ESCAPE (31)
 
-vod_status_t
-codec_config_avcc_get_nal_packet_size_length(
-	request_context_t* request_context,
-	vod_str_t* extra_data,
-	uint32_t* nal_packet_size_length)
-{
-	if (extra_data->len < sizeof(avcc_config_t))
-	{
-		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-			"codec_config_avcc_get_nal_packet_size_length: extra data size %uz too small", extra_data->len);
-		return VOD_BAD_DATA;
-	}
-
-	*nal_packet_size_length = (((avcc_config_t*)extra_data->data)->nula_length_size & 0x3) + 1;
-
-	return VOD_OK;
-}
-
 vod_status_t 
 codec_config_avcc_get_nal_units(
 	request_context_t* request_context,
@@ -40,21 +22,20 @@ codec_config_avcc_get_nal_units(
 	const u_char* extra_data_start = extra_data->data;
 	const u_char* extra_data_end = extra_data_start + extra_data_size;
 	const u_char* cur_pos;
-	vod_status_t rc;
 	u_char* p;
 	size_t actual_size;
 	uint16_t unit_size;
 	int unit_count;
 	int i;
 
-	rc = codec_config_avcc_get_nal_packet_size_length(
-		request_context,
-		extra_data,
-		nal_packet_size_length);
-	if (rc != VOD_OK)
+	if (extra_data->len < sizeof(avcc_config_t))
 	{
-		return rc;
+		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+			"codec_config_avcc_get_nal_units: extra data size %uz too small", extra_data->len);
+		return VOD_BAD_DATA;
 	}
+
+	*nal_packet_size_length = (((avcc_config_t*)extra_data->data)->nula_length_size & 0x3) + 1;
 
 	// calculate total size and validate
 	result->len = 0;
@@ -138,7 +119,7 @@ codec_config_avcc_get_nal_units(
 }
 
 // Note: taken from gf_odf_hevc_cfg_read_bs in GPAC code
-static vod_status_t 
+vod_status_t 
 codec_config_hevc_config_parse(
 	request_context_t* request_context, 
 	vod_str_t* extra_data, 

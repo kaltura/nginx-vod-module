@@ -114,20 +114,6 @@ static const char* stream_type_by_media_type[] = {
 };
 
 static u_char*
-mss_append_hex_string(u_char* p, const u_char* buffer, uint32_t buffer_size)
-{
-	const u_char* buffer_end = buffer + buffer_size;
-	static const u_char hex_chars[] = "0123456789ABCDEF";
-
-	for (; buffer < buffer_end; buffer++)
-	{
-		*p++ = hex_chars[*buffer >> 4];
-		*p++ = hex_chars[*buffer & 0x0F];
-	}
-	return p;
-}
-
-static u_char*
 mss_write_manifest_chunks(u_char* p, segment_durations_t* segment_durations)
 {
 	segment_duration_item_t* cur_item;
@@ -587,7 +573,7 @@ mss_packager_build_manifest(
 				continue;
 			}
 
-			p = mss_append_hex_string(p, cur_track->media_info.extra_data.data, cur_track->media_info.extra_data.len);
+			p = vod_append_hex_string(p, cur_track->media_info.extra_data.data, cur_track->media_info.extra_data.len);
 
 			p = vod_copy(p, MSS_QUALITY_LEVEL_FOOTER, sizeof(MSS_QUALITY_LEVEL_FOOTER) - 1);
 		}

@@ -38,6 +38,7 @@ static const char m3u8_clip_index[] = "-c%uD";
 
 static const char encryption_key_tag_method[] = "#EXT-X-KEY:METHOD=";
 static const char encryption_key_tag_uri[] = ",URI=\"";
+static const char encryption_key_tag_iv[] = ",IV=0x";
 static const char encryption_key_tag_key_format[] = ",KEYFORMAT=\"";
 static const char encryption_key_tag_key_format_versions[] = ",KEYFORMATVERSIONS=\"";
 static const char encryption_key_extension[] = ".key";
@@ -196,24 +197,6 @@ m3u8_builder_build_tracks_spec(
 	return VOD_OK;
 }
 
-static vod_uint_t
-m3u8_builder_get_container_format(
-	m3u8_config_t* conf,
-	media_set_t* media_set)
-{
-	if (conf->container_format != HLS_CONTAINER_AUTO)
-	{
-		return conf->container_format;
-	}
-
-	if (media_set->filtered_tracks[0].media_info.codec_id == VOD_CODEC_ID_HEVC)
-	{
-		return HLS_CONTAINER_FMP4;
-	}
-
-	return HLS_CONTAINER_MPEGTS;
-}
-
 vod_status_t
 m3u8_builder_build_iframe_playlist(
 	request_context_t* request_context,
@@ -232,13 +215,6 @@ m3u8_builder_build_iframe_playlist(
 	size_t result_size;
 	uint64_t duration_millis;
 	vod_status_t rc; 
-
-	if (m3u8_builder_get_container_format(conf, media_set) == HLS_CONTAINER_FMP4)
-	{
-		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-			"m3u8_builder_build_iframe_playlist: iframes playlist not supported with fmp4 container");
-		return VOD_BAD_REQUEST;
-	}
 
 	// iframes list is not supported with encryption, since:
 	// 1. AES-128 - the IV of each key frame is not known in advance
@@ -348,6 +324,7 @@ m3u8_builder_build_index_playlist(
 	vod_str_t* segments_base_url,
 	request_params_t* request_params,
 	hls_encryption_params_t* encryption_params,
+	vod_uint_t container_format,
 	media_set_t* media_set,
 	vod_str_t* result)
 {
@@ -356,7 +333,6 @@ m3u8_builder_build_index_playlist(
 	segment_duration_item_t* last_item;
 	hls_encryption_type_t encryption_type;
 	segmenter_conf_t* segmenter_conf = media_set->segmenter_conf;
-	vod_uint_t container_format;
 	vod_str_t extinf;
 	vod_str_t name_suffix;
 	vod_str_t* suffix;
@@ -376,8 +352,6 @@ m3u8_builder_build_index_playlist(
 	if (media_set->track_count[MEDIA_TYPE_VIDEO] != 0 || media_set->track_count[MEDIA_TYPE_AUDIO] != 0)
 	{
 		encryption_type = encryption_params->type;
-
-		container_format = m3u8_builder_get_container_format(conf, media_set);
 
 		if (container_format == HLS_CONTAINER_MPEGTS)
 		{
@@ -458,6 +432,13 @@ m3u8_builder_build_index_playlist(
 				conf->encryption_key_file_name.len +
 				sizeof("-f") - 1 + VOD_INT32_LEN +
 				sizeof(encryption_key_extension) - 1;
+		}
+
+		if (encryption_params->return_iv)
+		{
+			result_size +=
+				sizeof(encryption_key_tag_iv) - 1 +
+				sizeof(encryption_params->iv_buf) * 2;
 		}
 
 		if (conf->encryption_key_format.len != 0)
@@ -548,6 +529,13 @@ m3u8_builder_build_index_playlist(
 			p = vod_copy(p, encryption_key_extension, sizeof(encryption_key_extension) - 1);
 		}
 		*p++ = '"';
+
+		// iv
+		if (encryption_params->return_iv)
+		{
+			p = vod_copy(p, encryption_key_tag_iv, sizeof(encryption_key_tag_iv) - 1);
+			p = vod_append_hex_string(p, encryption_params->iv, sizeof(encryption_params->iv_buf));
+		}
 
 		// keyformat
 		if (conf->encryption_key_format.len != 0)
