@@ -6,6 +6,8 @@
 #define WEBVTT_TIMESTAMP_MAX_SIZE (VOD_INT32_LEN + sizeof(":00:00.000") - 1)
 #define WEBVTT_CUE_TIMINGS_MAX_SIZE (WEBVTT_TIMESTAMP_MAX_SIZE * 2 + sizeof(WEBVTT_TIMESTAMP_DELIM) - 1)
 
+#define WEBVTT_MIN_SEGMENT_SIZE (10)	// iOS11 doesn't play when the first vtt segment is smaller than 10 bytes
+
 static u_char*
 webvtt_builder_write_timestamp(u_char* p, uint64_t timestamp)
 {
@@ -31,6 +33,7 @@ webvtt_builder_build(
 	uint64_t start_time;
 	uint32_t id_size;
 	size_t result_size;
+	u_char* end;
 	u_char* src;
 	u_char* p;
 
@@ -39,6 +42,11 @@ webvtt_builder_build(
 	for (cur_track = first_track; cur_track < media_set->filtered_tracks_end; cur_track++)
 	{
 		result_size += cur_track->total_frames_size + WEBVTT_CUE_TIMINGS_MAX_SIZE * cur_track->frame_count;
+	}
+
+	if (result_size < WEBVTT_MIN_SEGMENT_SIZE)
+	{
+		result_size = WEBVTT_MIN_SEGMENT_SIZE;
 	}
 
 	// allocate the buffer
@@ -93,6 +101,13 @@ webvtt_builder_build(
 			// cue settings list + cue payload
 			p = vod_copy(p, src, cur_frame->size - id_size);
 		}
+	}
+
+	// pad with newlines if the size is smaller than the min
+	end = result->data + WEBVTT_MIN_SEGMENT_SIZE;
+	while (p < end)
+	{
+		*p++ = '\n';
 	}
 
 	result->len = p - result->data;

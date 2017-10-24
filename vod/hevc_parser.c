@@ -1708,7 +1708,7 @@ hevc_parser_get_slice_header_size(
 				if (short_term_ref_pic_set_idx >= sps->num_short_term_ref_pic_sets)
 				{
 					vod_log_error(VOD_LOG_ERR, ctx->request_context->log, 0,
-						"hevc_parser_seq_parameter_set_rbsp: invalid short_term_ref_pic_set_idx %uD",
+						"hevc_parser_get_slice_header_size: invalid short_term_ref_pic_set_idx %uD",
 						sps->num_short_term_ref_pic_sets);
 					return VOD_BAD_DATA;
 				}				
