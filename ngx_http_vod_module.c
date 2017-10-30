@@ -82,7 +82,7 @@ typedef size_t(*ngx_http_vod_get_size_t)(void* context);
 typedef void(*ngx_http_vod_get_path_t)(void* context, ngx_str_t* path);
 typedef ngx_int_t(*ngx_http_vod_enable_directio_t)(void* context);
 
-typedef ngx_int_t(*ngx_http_vod_dump_request_t)(ngx_http_vod_ctx_t* context);
+typedef ngx_int_t(*ngx_http_vod_dump_request_t)(void* context);
 typedef ngx_int_t(*ngx_http_vod_mapping_apply_t)(ngx_http_vod_ctx_t *ctx, ngx_str_t* mapping, int* cache_index);
 typedef ngx_int_t(*ngx_http_vod_mapping_get_uri_t)(ngx_http_vod_ctx_t *ctx, ngx_str_t* uri);
 
@@ -219,11 +219,11 @@ static void ngx_http_vod_exit_process();
 
 static ngx_int_t ngx_http_vod_init_file_reader_with_fallback(ngx_http_request_t *r, ngx_str_t* path, uint32_t flags, void** context);
 static ngx_int_t ngx_http_vod_init_file_reader(ngx_http_request_t *r, ngx_str_t* path, uint32_t flags, void** context);
-static ngx_int_t ngx_http_vod_dump_file(ngx_http_vod_ctx_t* ctx);
+static ngx_int_t ngx_http_vod_dump_file(void* context);
 
 static ngx_int_t ngx_http_vod_http_reader_open_file(ngx_http_request_t* r, ngx_str_t* path, uint32_t flags, void** context);
 static ngx_int_t ngx_http_vod_dump_http_part(void* context, off_t start, off_t end);
-static ngx_int_t ngx_http_vod_dump_http_request(ngx_http_vod_ctx_t *ctx);
+static ngx_int_t ngx_http_vod_dump_http_request(void* context);
 static void	ngx_http_vod_http_reader_get_path(void* context, ngx_str_t* path);
 
 // globals
@@ -3339,7 +3339,7 @@ ngx_http_vod_run_state_machine(ngx_http_vod_ctx_t *ctx)
 		return ngx_http_vod_finalize_segment_response(ctx);
 
 	case STATE_DUMP_OPEN_FILE:
-		return ctx->reader->dump_request(ctx);
+		return ctx->reader->dump_request(ctx->cur_source->reader_context);
 
 	case STATE_DUMP_FILE_PART:
 		rc = ngx_http_send_special(ctx->submodule_context.r, NGX_HTTP_LAST);
@@ -3542,7 +3542,7 @@ ngx_http_vod_start_processing_media_file(ngx_http_vod_ctx_t *ctx)
 			return rc;
 		}
 
-		return ctx->reader->dump_request(ctx);
+		return ctx->reader->dump_request(ctx->cur_source->reader_context);
 	}
 
 	// initialize the file keys
@@ -3831,11 +3831,11 @@ ngx_http_vod_set_request_extension(ngx_http_request_t *r, ngx_str_t* path)
 }
 
 static ngx_int_t
-ngx_http_vod_dump_file(ngx_http_vod_ctx_t* ctx)
+ngx_http_vod_dump_file(void* context)
 {
-	ngx_http_request_t* r = ctx->submodule_context.r;
-	ngx_file_reader_state_t* state = ctx->cur_source->reader_context;
-	ngx_int_t                  rc;
+	ngx_file_reader_state_t* state = context;
+	ngx_http_request_t* r = state->r;
+	ngx_int_t rc;
 
 	ngx_http_vod_set_request_extension(r, &state->file.name);
 
@@ -3894,12 +3894,11 @@ static ngx_int_t
 ngx_http_vod_dump_http_part(void* context, off_t start, off_t end)
 {
 	ngx_http_vod_http_reader_state_t *state = context;
-	ngx_http_vod_loc_conf_t *conf;
-	ngx_http_vod_ctx_t *ctx;
 	ngx_child_request_params_t child_params;
+	ngx_http_request_t* r = state->r;
+	ngx_http_vod_ctx_t *ctx;
 
-	ctx = ngx_http_get_module_ctx(state->r, ngx_http_vod_module);
-	conf = ctx->submodule_context.conf;
+	ctx = ngx_http_get_module_ctx(r, ngx_http_vod_module);
 
 	ngx_memzero(&child_params, sizeof(child_params));
 	child_params.method = NGX_HTTP_GET;
@@ -3909,27 +3908,27 @@ ngx_http_vod_dump_http_part(void* context, off_t start, off_t end)
 	child_params.range_end = end;
 
 	return ngx_child_request_start(
-		state->r,
+		r,
 		ngx_http_vod_handle_read_completed,
 		ctx,
-		&conf->upstream_location,
+		&state->upstream_location,
 		&child_params,
 		NULL);
 }
 
 static ngx_int_t
-ngx_http_vod_dump_http_request(ngx_http_vod_ctx_t *ctx)
+ngx_http_vod_dump_http_request(void* context)
 {
-	ngx_http_request_t* r;
-	ngx_http_vod_loc_conf_t *conf;
+	ngx_http_vod_http_reader_state_t* state = context;
 	ngx_child_request_params_t child_params;
+	ngx_http_request_t* r = state->r;
+	ngx_http_vod_ctx_t *ctx;
 
-	conf = ctx->submodule_context.conf;
-	r = ctx->submodule_context.r;
+	ctx = ngx_http_get_module_ctx(r, ngx_http_vod_module);
 
 	ngx_memzero(&child_params, sizeof(child_params));
 	child_params.method = r->method;
-	child_params.base_uri = r->uri;
+	child_params.base_uri = state->cur_remote_suburi;
 	child_params.extra_args = ctx->upstream_extra_args;
 	child_params.proxy_range = 1;
 	child_params.proxy_all_headers = 1;
@@ -3938,7 +3937,7 @@ ngx_http_vod_dump_http_request(ngx_http_vod_ctx_t *ctx)
 		r,
 		NULL,
 		NULL,
-		&conf->upstream_location,
+		&state->upstream_location,
 		&child_params,
 		NULL);
 }
