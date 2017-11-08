@@ -6,6 +6,7 @@
 #include "filters/mix_filter.h"
 #include "filters/concat_clip.h"
 #include "filters/dynamic_clip.h"
+#include "input/silence_generator.h"
 #include "parse_utils.h"
 
 // macros
@@ -92,6 +93,7 @@ static json_parser_union_type_def_t media_clip_union_params[] = {
 	{ vod_string("rateFilter"), rate_filter_parse },
 	{ vod_string("concat"), concat_clip_parse },
 	{ vod_string("dynamic"), dynamic_clip_parse },
+	{ vod_string("silence"), silence_generator_parse },
 	{ vod_string("source"), media_set_parse_source },
 	{ vod_null_string, NULL }
 };
@@ -937,6 +939,7 @@ media_set_parse_sequences_clips(
 
 	context->base.sources_head = NULL;
 	context->base.mapped_sources_head = NULL;
+	context->base.generators_head = NULL;
 	context->base.dynamic_clips_head = NULL;
 	context->base.notifications_head = media_set->notifications_head;
 
@@ -956,6 +959,7 @@ media_set_parse_sequences_clips(
 
 	media_set->sources_head = context->base.sources_head;
 	media_set->mapped_sources_head = context->base.mapped_sources_head;
+	media_set->generators_head = context->base.generators_head;
 	media_set->dynamic_clips_head = context->base.dynamic_clips_head;
 	media_set->notifications_head = context->base.notifications_head;
 

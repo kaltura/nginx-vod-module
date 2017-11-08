@@ -30,6 +30,7 @@
 #include "vod/media_set_parser.h"
 #include "vod/manifest_utils.h"
 #include "vod/thumb/thumb_grabber.h"
+#include "vod/input/silence_generator.h"
 #include "ngx_http_vod_thumb.h"
 #include "ngx_http_vod_volume_map.h"
 
@@ -1369,26 +1370,198 @@ ngx_http_vod_get_sequence_tracks_mask(
 	}
 }
 
+static void
+ngx_http_vod_init_parse_params_metadata(
+	ngx_http_vod_ctx_t *ctx,
+	uint32_t* tracks_mask,
+	media_parse_params_t* parse_params)
+{
+	const ngx_http_vod_request_t* request = ctx->request;
+	media_clip_source_t* cur_source = ctx->cur_source;
+	segmenter_conf_t* segmenter = ctx->submodule_context.media_set.segmenter_conf;
+	uint32_t* request_tracks_mask;
+	uint32_t media_type;
+
+	parse_params->parse_type = request->parse_type;
+	if (request->request_class == REQUEST_CLASS_MANIFEST &&
+		ctx->submodule_context.media_set.timing.durations == NULL)
+	{
+		parse_params->parse_type |= segmenter->parse_type;
+	}
+	parse_params->parse_type |= ctx->submodule_context.conf->parse_flags;
+	parse_params->codecs_mask = request->codecs_mask;
+
+	request_tracks_mask = ctx->submodule_context.request_params.tracks_mask;
+	if (ctx->submodule_context.request_params.sequence_tracks_mask != NULL)
+	{
+		ngx_http_vod_get_sequence_tracks_mask(
+			&ctx->submodule_context.request_params,
+			cur_source->sequence,
+			&request_tracks_mask);
+	}
+
+	for (media_type = 0; media_type < MEDIA_TYPE_COUNT; media_type++)
+	{
+		tracks_mask[media_type] = cur_source->tracks_mask[media_type] & request_tracks_mask[media_type];
+	}
+	parse_params->required_tracks_mask = tracks_mask;
+	parse_params->langs_mask = ctx->submodule_context.request_params.langs_mask;
+	parse_params->source = cur_source;
+}
+
+static ngx_int_t
+ngx_http_vod_init_parse_params_frames(
+	ngx_http_vod_ctx_t *ctx,
+	media_range_t* range,
+	media_parse_params_t* parse_params)
+{
+	const ngx_http_vod_request_t* request = ctx->request;
+	get_clip_ranges_params_t get_ranges_params;
+	get_clip_ranges_result_t clip_ranges;
+	media_clip_source_t* cur_source = ctx->cur_source;
+	request_context_t* request_context = &ctx->submodule_context.request_context;
+	segmenter_conf_t* segmenter = ctx->submodule_context.media_set.segmenter_conf;
+	vod_fraction_t rate;
+	vod_status_t rc;
+	uint64_t last_segment_end;
+	uint32_t duration_millis;
+
+	parse_params->max_frames_size = ctx->submodule_context.conf->max_frames_size;
+
+	if ((request->request_class & (REQUEST_CLASS_MANIFEST | REQUEST_CLASS_OTHER)) != 0)
+	{
+		request_context->simulation_only = TRUE;
+
+		parse_params->max_frame_count = NON_SEGMENT_REQUEST_MAX_FRAME_COUNT;
+		range->timescale = 1000;
+		range->original_clip_time = 0;
+		range->start = 0;
+		if (cur_source->clip_to == ULLONG_MAX)
+		{
+			range->end = ULLONG_MAX;
+		}
+		else
+		{
+			range->end = cur_source->clip_to - cur_source->clip_from;
+		}
+		parse_params->range = range;
+		return NGX_OK;
+	}
+
+	request_context->simulation_only = FALSE;
+
+	parse_params->max_frame_count = SEGMENT_REQUEST_MAX_FRAME_COUNT;
+
+	if (cur_source->range != NULL)
+	{
+		// the range was already determined while parsing the media set
+		parse_params->range = cur_source->range;
+		return NGX_OK;
+	}
+
+	// get the rate
+	if (cur_source->base.parent != NULL && cur_source->base.parent->type == MEDIA_CLIP_RATE_FILTER)
+	{
+		rate = ((media_clip_rate_filter_t*)cur_source->base.parent)->rate;
+	}
+	else
+	{
+		rate.num = 1;
+		rate.denom = 1;
+	}
+
+	// get the last segment end
+	if (cur_source->clip_to == ULLONG_MAX)
+	{
+		last_segment_end = ULLONG_MAX;
+	}
+	else
+	{
+		last_segment_end = ((cur_source->clip_to - cur_source->clip_from) * rate.denom) / rate.num;
+	}
+
+	// get the start/end offsets
+	duration_millis = rescale_time(ctx->base_metadata->duration * rate.denom, ctx->base_metadata->timescale * rate.num, 1000);
+
+	get_ranges_params.request_context = request_context;
+	get_ranges_params.conf = segmenter;
+	get_ranges_params.last_segment_end = last_segment_end;
+	get_ranges_params.key_frame_durations = NULL;
+	get_ranges_params.allow_last_segment = TRUE;
+
+	ngx_memzero(&get_ranges_params.timing, sizeof(get_ranges_params.timing));
+	get_ranges_params.timing.durations = &duration_millis;
+	get_ranges_params.timing.total_count = 1;
+	get_ranges_params.timing.total_duration = duration_millis;
+	get_ranges_params.timing.times = &get_ranges_params.timing.first_time;
+	get_ranges_params.timing.original_times = &get_ranges_params.timing.first_time;
+
+	if (ctx->submodule_context.request_params.segment_index != INVALID_SEGMENT_INDEX)
+	{
+		// segment request
+		get_ranges_params.segment_index = ctx->submodule_context.request_params.segment_index;
+
+		rc = segmenter_get_start_end_ranges_no_discontinuity(
+			&get_ranges_params,
+			&clip_ranges);
+
+		ctx->submodule_context.media_set.initial_segment_clip_relative_index = clip_ranges.clip_relative_segment_index;
+	}
+	else
+	{
+		// thumbnail request
+		get_ranges_params.time = ctx->submodule_context.request_params.segment_time;
+
+		rc = segmenter_get_start_end_ranges_gop(
+			&get_ranges_params,
+			&clip_ranges);
+	}
+
+	if (rc != VOD_OK)
+	{
+		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, request_context->log, 0,
+			"ngx_http_vod_init_parse_params_frames: segmenter_get_start_end_ranges_no_discontinuity failed %i", rc);
+		return ngx_http_vod_status_to_ngx_error(ctx->submodule_context.r, rc);
+	}
+
+	if (clip_ranges.clip_count == 0)
+	{
+		return NGX_DONE;
+	}
+
+	if (clip_ranges.clip_ranges->end == ULLONG_MAX)
+	{
+		ctx->submodule_context.media_set.segment_duration =
+			duration_millis - clip_ranges.clip_ranges->start;
+	}
+	else
+	{
+		ctx->submodule_context.media_set.segment_duration =
+			clip_ranges.clip_ranges->end - clip_ranges.clip_ranges->start;
+	}
+
+	parse_params->range = clip_ranges.clip_ranges;
+	parse_params->range->start = (parse_params->range->start * rate.num) / rate.denom;
+	if (parse_params->range->end != ULLONG_MAX)
+	{
+		parse_params->range->end = (parse_params->range->end * rate.num) / rate.denom;
+	}
+
+	return NGX_OK;
+}
+
 static ngx_int_t 
 ngx_http_vod_parse_metadata(
 	ngx_http_vod_ctx_t *ctx, 
 	ngx_flag_t fetched_from_cache)
 {
-	get_clip_ranges_params_t get_ranges_params;
 	media_parse_params_t parse_params;
 	const ngx_http_vod_request_t* request = ctx->request;
 	media_clip_source_t* cur_source = ctx->cur_source;
 	request_context_t* request_context = &ctx->submodule_context.request_context;
-	segmenter_conf_t* segmenter = ctx->submodule_context.media_set.segmenter_conf;
-	get_clip_ranges_result_t clip_ranges;
-	uint64_t last_segment_end;
 	media_range_t range;
 	vod_status_t rc;
-	uint32_t* request_tracks_mask;
 	uint32_t tracks_mask[MEDIA_TYPE_COUNT];
-	uint32_t duration_millis;
-	uint32_t media_type;
-	vod_fraction_t rate;
 
 	// initialize clipping params
 	if (cur_source->clip_to == ULLONG_MAX)
@@ -1445,33 +1618,11 @@ ngx_http_vod_parse_metadata(
 
 	ngx_perf_counter_start(ctx->perf_counter_context);
 
-	// init the parsing params
-	parse_params.parse_type = request->parse_type;
-	if (request->request_class == REQUEST_CLASS_MANIFEST && 
-		ctx->submodule_context.media_set.timing.durations == NULL)
-	{
-		parse_params.parse_type |= segmenter->parse_type;
-	}
-	parse_params.parse_type |= ctx->submodule_context.conf->parse_flags;
-	parse_params.codecs_mask = request->codecs_mask;
+	ngx_http_vod_init_parse_params_metadata(
+		ctx,
+		tracks_mask,
+		&parse_params);
 
-	request_tracks_mask = ctx->submodule_context.request_params.tracks_mask;
-	if (ctx->submodule_context.request_params.sequence_tracks_mask != NULL)
-	{
-		ngx_http_vod_get_sequence_tracks_mask(
-			&ctx->submodule_context.request_params,
-			cur_source->sequence,
-			&request_tracks_mask);
-	}
-
-	for (media_type = 0; media_type < MEDIA_TYPE_COUNT; media_type++)
-	{
-		tracks_mask[media_type] = cur_source->tracks_mask[media_type] & request_tracks_mask[media_type];
-	}
-	parse_params.required_tracks_mask = tracks_mask;
-	parse_params.langs_mask = ctx->submodule_context.request_params.langs_mask;
-	parse_params.source = cur_source;
-	
 	// parse the basic metadata
 	rc = ctx->format->parse_metadata(
 		request_context,
@@ -1492,136 +1643,29 @@ ngx_http_vod_parse_metadata(
 		return VOD_OK;
 	}
 
-	if ((request->request_class & (REQUEST_CLASS_MANIFEST | REQUEST_CLASS_OTHER)) != 0)
+	rc = ngx_http_vod_init_parse_params_frames(
+		ctx,
+		&range,
+		&parse_params);
+	switch (rc)
 	{
-		request_context->simulation_only = TRUE;
+	case NGX_OK:
+		break;		// handled outside the switch
 
-		parse_params.max_frame_count = NON_SEGMENT_REQUEST_MAX_FRAME_COUNT;
-		range.timescale = 1000;
-		range.original_clip_time = 0;
-		range.start = 0;
-		if (cur_source->clip_to == ULLONG_MAX)
-		{
-			range.end = ULLONG_MAX;
-		}
-		else
-		{
-			range.end = cur_source->clip_to - cur_source->clip_from;
-		}
-		parse_params.range = &range;
+	case NGX_DONE:
+		ngx_memzero(&cur_source->track_array, sizeof(cur_source->track_array));
+		return NGX_OK;
+
+	default:
+		return rc;
 	}
-	else
-	{
-		request_context->simulation_only = FALSE;
-
-		parse_params.max_frame_count = SEGMENT_REQUEST_MAX_FRAME_COUNT;
-
-		if (cur_source->range != NULL)
-		{
-			// the range was already determined while parsing the media set
-			parse_params.range = cur_source->range;
-		}
-		else
-		{
-			// get the rate
-			if (cur_source->base.parent != NULL && cur_source->base.parent->type == MEDIA_CLIP_RATE_FILTER)
-			{
-				rate = ((media_clip_rate_filter_t*)cur_source->base.parent)->rate;
-			}
-			else
-			{
-				rate.num = 1;
-				rate.denom = 1;
-			}
-
-			// get the last segment end
-			if (cur_source->clip_to == ULLONG_MAX)
-			{
-				last_segment_end = ULLONG_MAX;
-			}
-			else
-			{
-				last_segment_end = ((cur_source->clip_to - cur_source->clip_from) * rate.denom) / rate.num;
-			}
-
-			// get the start/end offsets
-			duration_millis = rescale_time(ctx->base_metadata->duration * rate.denom, ctx->base_metadata->timescale * rate.num, 1000);
-
-			get_ranges_params.request_context = request_context;
-			get_ranges_params.conf = segmenter;
-			get_ranges_params.last_segment_end = last_segment_end;
-			get_ranges_params.key_frame_durations = NULL;
-			get_ranges_params.allow_last_segment = TRUE;
-
-			ngx_memzero(&get_ranges_params.timing, sizeof(get_ranges_params.timing));
-			get_ranges_params.timing.durations = &duration_millis;
-			get_ranges_params.timing.total_count = 1;
-			get_ranges_params.timing.total_duration = duration_millis;
-			get_ranges_params.timing.times = &get_ranges_params.timing.first_time;
-			get_ranges_params.timing.original_times = &get_ranges_params.timing.first_time;
-
-			if (ctx->submodule_context.request_params.segment_index != INVALID_SEGMENT_INDEX)
-			{
-				// segment request
-				get_ranges_params.segment_index = ctx->submodule_context.request_params.segment_index;
-
-				rc = segmenter_get_start_end_ranges_no_discontinuity(
-					&get_ranges_params,
-					&clip_ranges);
-
-				ctx->submodule_context.media_set.initial_segment_clip_relative_index = clip_ranges.clip_relative_segment_index;
-			}
-			else
-			{
-				// thumbnail request
-				get_ranges_params.time = ctx->submodule_context.request_params.segment_time;
-
-				rc = segmenter_get_start_end_ranges_gop(
-					&get_ranges_params,
-					&clip_ranges);
-			}
-
-			if (rc != VOD_OK)
-			{
-				ngx_log_debug1(NGX_LOG_DEBUG_HTTP, request_context->log, 0,
-					"ngx_http_vod_parse_metadata: segmenter_get_start_end_ranges_no_discontinuity failed %i", rc);
-				return ngx_http_vod_status_to_ngx_error(ctx->submodule_context.r, rc);
-			}
-
-			if (clip_ranges.clip_count == 0)
-			{
-				ngx_memzero(&cur_source->track_array, sizeof(cur_source->track_array));
-				return VOD_OK;
-			}
-
-			if (clip_ranges.clip_ranges->end == ULLONG_MAX)
-			{
-				ctx->submodule_context.media_set.segment_duration =
-					duration_millis - clip_ranges.clip_ranges->start;
-			}
-			else
-			{
-				ctx->submodule_context.media_set.segment_duration =
-					clip_ranges.clip_ranges->end - clip_ranges.clip_ranges->start;
-			}
-
-			parse_params.range = clip_ranges.clip_ranges;
-			parse_params.range->start = (parse_params.range->start * rate.num) / rate.denom;
-			if (parse_params.range->end != ULLONG_MAX)
-			{
-				parse_params.range->end = (parse_params.range->end * rate.num) / rate.denom;
-			}
-		}
-	}
-
-	parse_params.max_frames_size = ctx->submodule_context.conf->max_frames_size;
 
 	// parse the frames
 	rc = ctx->format->read_frames(
 		request_context,
 		ctx->base_metadata,
 		&parse_params,
-		segmenter,
+		ctx->submodule_context.media_set.segmenter_conf,
 		&ctx->read_cache_state,
 		NULL,
 		&ctx->frames_read_req,
@@ -1995,6 +2039,7 @@ ngx_http_vod_state_machine_parse_metadata(ngx_http_vod_ctx_t *ctx)
 		case STATE_READ_METADATA_INITIAL:
 			metadata_loaded = FALSE;
 			cur_source = ctx->cur_source;
+
 			if (cur_source->mapped_uri.len == empty_file_string.len &&
 				ngx_strncasecmp(cur_source->mapped_uri.data, empty_file_string.data, empty_file_string.len) == 0)
 			{
@@ -3114,6 +3159,109 @@ ngx_http_vod_send_clip_header(ngx_http_vod_ctx_t *ctx)
 
 ////// Common
 
+static ngx_flag_t
+ngx_http_vod_generator_matches(
+	media_parse_params_t* parse_params,
+	media_generator_t* generator)
+{
+	uint32_t media_type;
+
+	if ((parse_params->codecs_mask & generator->codec_mask) == 0)
+	{
+		return 0;
+	}
+
+	for (media_type = 0; media_type < MEDIA_TYPE_COUNT; media_type++)
+	{
+		if ((parse_params->required_tracks_mask[media_type] & generator->track_mask[media_type]) != 0)
+		{
+			return 1;
+		}
+	}
+
+	return 0;
+}
+
+static ngx_int_t
+ngx_http_vod_run_generators(ngx_http_vod_ctx_t *ctx)
+{
+	media_clip_source_t* cur_source;
+	media_parse_params_t parse_params;
+	media_generator_t* generator;
+	media_range_t range;
+	uint32_t tracks_mask[MEDIA_TYPE_COUNT];
+	ngx_int_t rc;
+
+	for (cur_source = ctx->submodule_context.media_set.generators_head;
+		cur_source != NULL;
+		cur_source = cur_source->next)
+	{
+		ctx->cur_source = cur_source;
+
+		if (cur_source->clip_to >= UINT_MAX)
+		{
+			ngx_log_error(NGX_LOG_ERR, ctx->submodule_context.request_context.log, 0,
+				"ngx_http_vod_run_generators: unbounded generator source");
+			return ngx_http_vod_status_to_ngx_error(ctx->submodule_context.r, VOD_BAD_REQUEST);
+		}
+
+		parse_params.clip_to = cur_source->clip_to;
+		parse_params.clip_from = 0;
+
+		ngx_http_vod_init_parse_params_metadata(ctx, tracks_mask, &parse_params);
+
+		// Note: currently, the only generator is the silence generator
+		generator = &silence_generator;
+
+		if (!ngx_http_vod_generator_matches(
+			&parse_params,
+			generator))
+		{
+			ngx_memzero(&cur_source->track_array, sizeof(cur_source->track_array));
+			continue;
+		}
+
+		if (parse_params.langs_mask != NULL &&
+			!vod_is_bit_set(parse_params.langs_mask, cur_source->sequence->language))
+		{
+			ngx_memzero(&cur_source->track_array, sizeof(cur_source->track_array));
+			continue;
+		}
+
+		rc = ngx_http_vod_init_parse_params_frames(
+			ctx,
+			&range,
+			&parse_params);
+		switch (rc)
+		{
+		case NGX_OK:
+			break;		// handled outside the switch
+
+		case NGX_DONE:
+			ngx_memzero(&cur_source->track_array, sizeof(cur_source->track_array));
+			continue;
+
+		default:
+			return rc;
+		}
+
+		rc = generator->generate(
+			&ctx->submodule_context.request_context,
+			&parse_params,
+			&cur_source->track_array);
+		if (rc != VOD_OK)
+		{
+			ngx_log_debug1(NGX_LOG_DEBUG_HTTP, ctx->submodule_context.request_context.log, 0,
+				"ngx_http_vod_run_generators: generator failed %i", rc);
+			return ngx_http_vod_status_to_ngx_error(ctx->submodule_context.r, rc);
+		}
+	}
+
+	ctx->cur_source = NULL;
+
+	return NGX_OK;
+}
+
 static ngx_int_t
 ngx_http_vod_run_state_machine(ngx_http_vod_ctx_t *ctx)
 {
@@ -3165,6 +3313,12 @@ ngx_http_vod_run_state_machine(ngx_http_vod_ctx_t *ctx)
 		}
 		else
 		{
+			rc = ngx_http_vod_run_generators(ctx);
+			if (rc != NGX_OK)
+			{
+				return rc;
+			}
+
 			rc = filter_init_filtered_clips(
 				&ctx->submodule_context.request_context,
 				&ctx->submodule_context.media_set, 

@@ -122,6 +122,7 @@ typedef struct {
 
 	media_clip_source_t* sources_head;
 	media_clip_source_t* mapped_sources_head;
+	media_clip_source_t* generators_head;
 	struct media_clip_dynamic_s* dynamic_clips_head;
 
 	uint64_t segment_start_time;

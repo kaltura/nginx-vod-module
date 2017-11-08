@@ -238,14 +238,15 @@ This section contains a few simple examples followed by a reference of the suppo
 But first, a couple of definitions:
 
 1. `Source Clip` - a set of audio and/or video frames (tracks) extracted from a single media file
-2. `Filter` - a manipulation that can be applied on audio/video frames. The following filters are supported: 
+2. `Generator` - a component that can generate audio/video frames. Currently, the only supported generator is the silence generator.
+3. `Filter` - a manipulation that can be applied on audio/video frames. The following filters are supported: 
   * rate (speed) change - applies to both audio and video
   * audio volume change
   * mix - can be used to merge several audio tracks together, or to merge the audio of source A with the video of source B
-2. `Clip` - the result of applying zero or more filters on a set of source clips
-3. `Dynamic Clip` - a clip whose contents is not known in advance, e.g. targeted ad content
-4. `Sequence` - a set of clips that should be played one after the other. 
-5. `Set` - several sequences that play together as an adaptive set, each sequence must have the same number of clips.
+4. `Clip` - the result of applying zero or more filters on a set of source clips
+5. `Dynamic Clip` - a clip whose contents is not known in advance, e.g. targeted ad content
+6. `Sequence` - a set of clips that should be played one after the other. 
+7. `Set` - several sequences that play together as an adaptive set, each sequence must have the same number of clips.
 
 #### Simple mapping
 
@@ -514,6 +515,7 @@ Mandatory fields:
 	* rateFilter
 	* mixFilter
 	* gainFilter
+	* silence
 	* concat
 	* dynamic
 

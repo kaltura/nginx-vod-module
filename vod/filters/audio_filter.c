@@ -114,9 +114,8 @@ audio_filter_walk_filters_prepare_init(
 	uint32_t cur_frame_count;
 	uint32_t source_count;
 
-	switch (clip->type)
+	if (media_clip_is_source(clip->type))
 	{
-	case MEDIA_CLIP_SOURCE:
 		source = vod_container_of(clip, media_clip_source_t, base);
 
 		audio_track = NULL;
@@ -151,7 +150,10 @@ audio_filter_walk_filters_prepare_init(
 			state->output_frame_count = cur_frame_count;
 		}
 		return VOD_OK;
+	}
 
+	switch (clip->type)
+	{
 	case MEDIA_CLIP_RATE_FILTER:
 		rate_filter = vod_container_of(clip, media_clip_rate_filter_t, base);
 		speed_num = ((uint64_t)speed_num * rate_filter->rate.num) / rate_filter->rate.denom;
@@ -478,7 +480,7 @@ audio_filter_init_sources_and_graph_desc(audio_filter_init_context_t* state, med
 	u_char filter_name[VOD_INT32_LEN + 1];
 	vod_status_t rc;
 
-	if (clip->type == MEDIA_CLIP_SOURCE)
+	if (media_clip_is_source(clip->type))
 	{
 		source = vod_container_of(clip, media_clip_source_t, base);
 
@@ -589,7 +591,7 @@ audio_filter_alloc_state(
 		return VOD_UNEXPECTED;
 	}
 
-	if (clip->type == MEDIA_CLIP_SOURCE)
+	if (media_clip_is_source(clip->type))
 	{
 		// got left with a source, following a mix of a single source, nothing to do
 		return VOD_OK;
@@ -1192,7 +1194,7 @@ audio_filter_alloc_state(
 		return VOD_UNEXPECTED;
 	}
 
-	if (clip->type == MEDIA_CLIP_SOURCE)
+	if (media_clip_is_source(clip->type))
 	{
 		// got left with a source, following a mix of a single source, nothing to do
 		return VOD_OK;
