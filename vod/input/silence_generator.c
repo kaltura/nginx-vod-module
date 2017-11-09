@@ -67,6 +67,7 @@ silence_generator_generate(
 	vod_status_t rc;
 	uint64_t start_time;
 	uint64_t end_time;
+	u_char* data;
 
 	track = vod_alloc(request_context->pool, sizeof(*track));
 	if (track == NULL)
@@ -170,9 +171,19 @@ silence_generator_generate(
 		track->frames.clip_to = UINT_MAX;
 	}
 
+	data = vod_alloc(request_context->pool, AAC_SILENCE_FRAME_SIZE + VOD_BUFFER_PADDING_SIZE);
+	if (data == NULL)
+	{
+		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
+			"silence_generator_generate: vod_alloc failed (3)");
+		return VOD_ALLOC_FAILED;
+	}
+
+	vod_memcpy(data, AAC_SILENCE_FRAME, AAC_SILENCE_FRAME_SIZE);
+
 	for (; cur_frame < track->frames.last_frame; cur_frame++)
 	{
-		cur_frame->offset = (uintptr_t)AAC_SILENCE_FRAME;
+		cur_frame->offset = (uintptr_t)data;
 		cur_frame->size = AAC_SILENCE_FRAME_SIZE;
 		cur_frame->duration = AAC_FRAME_SAMPLES;
 		cur_frame->key_frame = 0;
