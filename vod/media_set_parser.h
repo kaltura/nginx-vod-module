@@ -13,6 +13,7 @@ typedef struct {
 	uint32_t duration;
 	media_clip_source_t* sources_head;
 	media_clip_source_t* mapped_sources_head;
+	media_clip_source_t* generators_head;
 	struct media_clip_dynamic_s* dynamic_clips_head;
 	media_notification_t* notifications_head;
 } media_filter_parse_context_t;
