@@ -21,7 +21,7 @@ silence_generator_parse(
 	if (source == NULL)
 	{
 		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, context->request_context->log, 0,
-			"media_set_parse_silence_generator: vod_alloc failed");
+			"silence_generator_parse: vod_alloc failed");
 		return VOD_ALLOC_FAILED;
 	}
 
@@ -47,7 +47,7 @@ silence_generator_parse(
 	context->generators_head = source;
 
 	vod_log_debug0(VOD_LOG_DEBUG_LEVEL, context->request_context->log, 0,
-		"media_set_parse_silence_generator: parsed silence source");
+		"silence_generator_parse: parsed silence source");
 
 	*result = &source->base;
 
