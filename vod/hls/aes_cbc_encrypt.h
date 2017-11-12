@@ -7,6 +7,7 @@
 // typedefs
 typedef struct {
 	request_context_t* request_context;
+	buffer_pool_t* buffer_pool;
 	write_callback_t callback;
 	void* callback_context;
 #if (VOD_HAVE_OPENSSL_EVP)
@@ -21,7 +22,8 @@ vod_status_t aes_cbc_encrypt_init(
 	request_context_t* request_context,
 	write_callback_t callback, 
 	void* callback_context, 
-	const u_char* key, 
+	buffer_pool_t* buffer_pool,
+	const u_char* key,
 	const u_char* iv);
 
 vod_status_t aes_cbc_encrypt(
