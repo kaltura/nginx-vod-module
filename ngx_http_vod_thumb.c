@@ -294,7 +294,7 @@ ngx_http_vod_thumb_parse_uri_file_name(
 	if (start_pos == NULL)
 	{
 		ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
-			"ngx_http_vod_thumb_parse_dimensions: failed to parse width/height");
+			"ngx_http_vod_thumb_parse_uri_file_name: failed to parse width/height");
 		return ngx_http_vod_status_to_ngx_error(r, VOD_BAD_REQUEST);
 	}
 #endif //(NGX_HAVE_LIB_SW_SCALE)
