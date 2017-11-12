@@ -414,6 +414,7 @@ ngx_http_vod_hls_init_segment_encryption(
 	hls_encryption_params_t* encryption_params)
 {
 	aes_cbc_encrypt_context_t* encrypted_write_context;
+	buffer_pool_t* buffer_pool;
 	vod_status_t rc;
 
 	rc = ngx_http_vod_hls_init_encryption_params(encryption_params, submodule_context, container_format);
@@ -427,11 +428,22 @@ ngx_http_vod_hls_init_segment_encryption(
 		return NGX_OK;
 	}
 
+	if (container_format == HLS_CONTAINER_MPEGTS)
+	{
+		buffer_pool = submodule_context->request_context.output_buffer_pool;
+	}
+	else
+	{
+		// Note: should not use buffer pool for fmp4 since the buffers have varying sizes
+		buffer_pool = NULL;
+	}
+
 	rc = aes_cbc_encrypt_init(
 		&encrypted_write_context,
 		&submodule_context->request_context,
 		segment_writer->write_tail,
 		segment_writer->context,
+		buffer_pool,
 		encryption_params->key,
 		encryption_params->iv);
 	if (rc != VOD_OK)
@@ -565,6 +577,7 @@ ngx_http_vod_hls_handle_mp4_init_segment(
 		rc = aes_cbc_encrypt_init(
 			&encrypted_write_context,
 			&submodule_context->request_context,
+			NULL,
 			NULL,
 			NULL,
 			encryption_params.key,
