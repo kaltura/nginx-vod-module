@@ -410,6 +410,8 @@ thumb_grabber_init_state(
 		return VOD_BAD_REQUEST;
 	}
 
+	// TODO: postpone the initialization of the encoder to after a frame is decoded
+
 	rc = thumb_grabber_init_encoder(request_context, output_width, output_height, &state->encoder);
 	if (rc != VOD_OK)
 	{
