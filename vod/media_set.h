@@ -163,6 +163,8 @@ typedef struct {
 	sequence_tracks_mask_t* sequence_tracks_mask_end;
 	uint8_t* langs_mask;			// [LANG_MASK_SIZE]
 	uint32_t version;
+	uint32_t width;
+	uint32_t height;
 } request_params_t;
 
 #endif //__MEDIA_SET_H__
