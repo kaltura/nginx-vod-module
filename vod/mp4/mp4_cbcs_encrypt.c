@@ -918,13 +918,13 @@ mp4_cbcs_encrypt_get_writers(
 			break;
 		}
 
-		if (rc == VOD_NOT_FOUND)
-		{
-			continue;
-		}
-
 		if (rc != VOD_OK)
 		{
+			if (rc == VOD_NOT_FOUND)
+			{
+				continue;
+			}
+
 			return rc;
 		}
 
