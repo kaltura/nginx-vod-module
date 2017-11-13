@@ -711,7 +711,7 @@ mp4_cbcs_encrypt_video_get_fragment_writer(
 	// init writing for the first track
 	if (!mp4_cbcs_encrypt_move_to_next_frame(&stream_state->base, NULL))
 	{
-		return VOD_OK;
+		return VOD_NOT_FOUND;
 	}
 
 	rc = mp4_cbcs_encrypt_video_init_track(stream_state);
@@ -836,7 +836,10 @@ mp4_cbcs_encrypt_audio_get_fragment_writer(
 	segment_writer->write_head = NULL;
 	segment_writer->context = stream_state;
 
-	mp4_cbcs_encrypt_move_to_next_frame(stream_state, NULL);	// ignore the result
+	if (!mp4_cbcs_encrypt_move_to_next_frame(stream_state, NULL))
+	{
+		return VOD_NOT_FOUND;
+	}
 
 	return VOD_OK;
 }
@@ -888,7 +891,7 @@ mp4_cbcs_encrypt_get_writers(
 
 	vod_memcpy(state->iv, iv, sizeof(state->iv));
 	vod_memcpy(state->key, key, sizeof(state->key));
-	state->flush_left = media_set->total_track_count;
+	state->flush_left = 0;
 
 	for (i = 0; i < media_set->total_track_count; i++)
 	{
@@ -917,8 +920,15 @@ mp4_cbcs_encrypt_get_writers(
 
 		if (rc != VOD_OK)
 		{
+			if (rc == VOD_NOT_FOUND)
+			{
+				continue;
+			}
+
 			return rc;
 		}
+
+		state->flush_left++;
 	}
 
 	*result = segment_writers;
