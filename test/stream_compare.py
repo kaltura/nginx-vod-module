@@ -14,7 +14,7 @@ def convertBody(body):
 	try:
 		return body.decode('ascii')
 	except UnicodeDecodeError:
-		return body.encode('hex')
+		return body[:100].encode('hex')
 
 
 class TestThread(stress_base.TestThreadBase):
