@@ -11,10 +11,10 @@ from stream_compare_params import *
 
 manifest_utils.CHUNK_LIST_ITEMS_TO_COMPARE = CHUNK_LIST_ITEMS_TO_COMPARE
 def convertBody(body):
-	try:
-		return body.decode('ascii')
-	except UnicodeDecodeError:
-		return body.encode('hex')
+        try:
+                return body.decode('ascii')
+        except UnicodeDecodeError:
+                return body[:100].encode('hex')
 
 
 class TestThread(stress_base.TestThreadBase):
