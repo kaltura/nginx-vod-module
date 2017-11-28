@@ -124,6 +124,7 @@ rate_filter_parse(
 	vod_json_value_t* params[RATE_FILTER_PARAM_COUNT];
 	vod_json_value_t* source;
 	vod_json_value_t* rate;
+	uint32_t old_clip_from;
 	uint32_t old_duration;
 	vod_status_t rc;
 
@@ -197,7 +198,9 @@ rate_filter_parse(
 	}
 
 	old_duration = context->duration;
+	old_clip_from = context->clip_from;
 	context->duration = ((uint64_t)old_duration * filter->rate.num) / filter->rate.denom;
+	context->clip_from = ((uint64_t)old_clip_from * filter->rate.num) / filter->rate.denom;
 
 	rc = media_set_parse_clip(
 		context, 
@@ -211,6 +214,7 @@ rate_filter_parse(
 
 	context->range = old_range;
 	context->duration = old_duration;
+	context->clip_from = old_clip_from;
 
 	*result = &filter->base;
 

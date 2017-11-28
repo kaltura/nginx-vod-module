@@ -76,6 +76,7 @@ ngx_http_vod_create_loc_conf(ngx_conf_t *cf)
 	conf->segmenter.manifest_duration_policy = NGX_CONF_UNSET_UINT;
 	conf->segmenter.gop_look_ahead = NGX_CONF_UNSET_UINT;
 	conf->segmenter.gop_look_behind = NGX_CONF_UNSET_UINT;
+	conf->force_playlist_type_vod = NGX_CONF_UNSET;
 	conf->force_continuous_timestamps = NGX_CONF_UNSET;
 	conf->initial_read_size = NGX_CONF_UNSET_SIZE;
 	conf->max_metadata_size = NGX_CONF_UNSET_SIZE;
@@ -157,6 +158,7 @@ ngx_http_vod_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child)
 	ngx_conf_merge_uint_value(conf->segmenter.manifest_duration_policy, prev->segmenter.manifest_duration_policy, MDP_MAX);
 	ngx_conf_merge_uint_value(conf->segmenter.gop_look_ahead, prev->segmenter.gop_look_ahead, 1000);
 	ngx_conf_merge_uint_value(conf->segmenter.gop_look_behind, prev->segmenter.gop_look_behind, 10000);
+	ngx_conf_merge_value(conf->force_playlist_type_vod, prev->force_playlist_type_vod, 0);
 	ngx_conf_merge_value(conf->force_continuous_timestamps, prev->force_continuous_timestamps, 0);
 
 	if (conf->secret_key == NULL)
@@ -918,6 +920,13 @@ ngx_command_t ngx_http_vod_commands[] = {
 	ngx_http_vod_manifest_segment_durations_mode_command,
 	NGX_HTTP_LOC_CONF_OFFSET,
 	0,
+	NULL },
+
+	{ ngx_string("vod_force_playlist_type_vod"),
+	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1,
+	ngx_conf_set_flag_slot,
+	NGX_HTTP_LOC_CONF_OFFSET,
+	offsetof(ngx_http_vod_loc_conf_t, force_playlist_type_vod),
 	NULL },
 
 	{ ngx_string("vod_force_continuous_timestamps"),

@@ -68,6 +68,7 @@ struct ngx_http_vod_loc_conf_s {
 	ngx_http_complex_value_t* apply_dynamic_mapping;
 	ngx_str_t fallback_upstream_location;
 	ngx_table_elt_t proxy_header;
+	ngx_flag_t force_playlist_type_vod;
 	ngx_flag_t force_continuous_timestamps;
 
 	time_t expires[EXPIRES_TYPE_COUNT];

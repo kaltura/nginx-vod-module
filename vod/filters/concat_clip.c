@@ -213,6 +213,8 @@ concat_clip_parse(
 			offset = 0;
 		}
 
+		offset -= context->clip_from;
+
 		min_index = UINT_MAX;
 		max_index = durations->count - 1;
 		part = &durations->part;

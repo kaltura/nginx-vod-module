@@ -10,6 +10,7 @@ typedef struct {
 	media_sequence_t* sequence;
 	media_range_t* range;
 	int64_t clip_time;
+	uint32_t clip_from;
 	uint32_t duration;
 	media_clip_source_t* sources_head;
 	media_clip_source_t* mapped_sources_head;
@@ -28,7 +29,7 @@ vod_status_t media_set_parse_json(
 	u_char* string,
 	request_params_t* request_params,
 	struct segmenter_conf_s* segmenter,
-	vod_str_t* uri,
+	media_clip_source_t* source,
 	int request_flags,
 	media_set_t* result);
 

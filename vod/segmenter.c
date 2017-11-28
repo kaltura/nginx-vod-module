@@ -5,13 +5,6 @@
 
 // typedefs
 typedef struct {
-	request_context_t* request_context;
-	vod_array_part_t* part;
-	int64_t* cur_pos;
-	int64_t offset;
-} align_to_key_frames_context_t;
-
-typedef struct {
 	uint64_t start_time;
 	uint32_t start_clip_offset;
 	uint32_t start_clip_index;
@@ -262,7 +255,7 @@ segmenter_get_start_end_offsets(segmenter_conf_t* conf, uint32_t segment_index, 
 	}
 }
 
-static int64_t 
+int64_t 
 segmenter_align_to_key_frames(
 	align_to_key_frames_context_t* context, 
 	int64_t offset, 
