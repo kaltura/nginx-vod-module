@@ -2553,7 +2553,7 @@ ngx_http_vod_handle_metadata_request(ngx_http_vod_ctx_t *ctx)
 	ngx_perf_counter_end(ctx->perf_counters, ctx->perf_counter_context, PC_BUILD_MANIFEST);
 
 	conf = ctx->submodule_context.conf;
-	if (ctx->submodule_context.media_set.type != MEDIA_SET_LIVE ||
+	if (ctx->submodule_context.media_set.original_type != MEDIA_SET_LIVE ||
 		(ctx->request->flags & REQUEST_FLAG_TIME_DEPENDENT_ON_LIVE) == 0)
 	{
 		cache_type = CACHE_TYPE_VOD;
@@ -4861,12 +4861,17 @@ ngx_http_vod_map_media_set_apply(ngx_http_vod_ctx_t *ctx, ngx_str_t* mapping, in
 		request_flags |= REQUEST_FLAG_NO_DISCONTINUITY;
 	}
 
+	if (conf->force_playlist_type_vod)
+	{
+		request_flags |= REQUEST_FLAG_FORCE_PLAYLIST_TYPE_VOD;
+	}
+
 	rc = media_set_parse_json(
 		&ctx->submodule_context.request_context,
 		mapping->data,
 		&ctx->submodule_context.request_params,
 		ctx->submodule_context.media_set.segmenter_conf,
-		&cur_source->uri,
+		cur_source,
 		request_flags,
 		&mapped_media_set);
 
@@ -4944,7 +4949,7 @@ ngx_http_vod_map_media_set_apply(ngx_http_vod_ctx_t *ctx, ngx_str_t* mapping, in
 		ctx->cur_source = NULL;
 
 		// Note: this is ok because CACHE_TYPE_xxx matches MEDIA_TYPE_xxx in order
-		*cache_index = mapped_media_set.type;
+		*cache_index = mapped_media_set.original_type;
 
 		return NGX_OK;
 	}

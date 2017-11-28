@@ -831,6 +831,19 @@ If the value is positive, nginx vod returns a range of maximum `vod_live_window_
 If the value is negative, nginx vod returns a range of maximum `-vod_live_window_duration` milliseconds from the end of the mapping json.
 If the value is set to zero, the live manifest will contain all the segments that are fully contained in the mapping json time frame.
 
+#### vod_force_playlist_type_vod
+* **syntax**: `vod_force_playlist_type_vod on/off`
+* **default**: `off
+* **context**: `http`, `server`, `location`
+
+Generate a vod stream even when the media set has `playlistType=live`. 
+Enabling this setting has the following effects:
+1. Frame timestamps will be continuous and start from zero
+2. Segment indexes will start from one
+3. In case of HLS, the returned manifest will have both `#EXT-X-PLAYLIST-TYPE:VOD` and `#EXT-X-ENDLIST`
+
+This can be useful for clipping vod sections out of a live stream.
+
 #### vod_force_continuous_timestamps
 * **syntax**: `vod_force_continuous_timestamps on/off`
 * **default**: `off
