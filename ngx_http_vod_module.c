@@ -4788,18 +4788,49 @@ ngx_http_vod_map_media_set_apply(ngx_http_vod_ctx_t *ctx, ngx_str_t* mapping, in
 	media_clip_source_t* mapped_source;
 	media_sequence_t* sequence;
 	media_set_t mapped_media_set;
+	ngx_str_t override;
 	ngx_str_t src_path;
 	ngx_str_t path;
 	ngx_int_t rc;
 	uint32_t request_flags;
+	u_char* override_str = NULL;
+
+	if (conf->media_set_override_json != NULL)
+	{
+		if (ngx_http_complex_value(
+			ctx->submodule_context.r,
+			conf->media_set_override_json,
+			&override) != NGX_OK)
+		{
+			ngx_log_debug0(NGX_LOG_DEBUG_HTTP, ctx->submodule_context.request_context.log, 0,
+				"ngx_http_vod_map_media_set_apply: ngx_http_complex_value failed");
+			return NGX_ERROR;
+		}
+
+		if (override.len > 0)
+		{
+			// copy the string to make sure it's null terminated
+			override_str = ngx_pnalloc(ctx->submodule_context.request_context.pool, override.len + 1);
+			if (override_str == NULL)
+			{
+				ngx_log_debug0(NGX_LOG_DEBUG_HTTP, ctx->submodule_context.request_context.log, 0,
+					"ngx_http_vod_map_media_set_apply: ngx_pnalloc failed");
+				return ngx_http_vod_status_to_ngx_error(ctx->submodule_context.r, VOD_ALLOC_FAILED);
+			}
+
+			ngx_memcpy(override_str, override.data, override.len);
+			override_str[override.len] = '\0';
+		}
+	}
 
 	// optimization for the case of simple mapping response
 	if (mapping->len >= conf->path_response_prefix.len + conf->path_response_postfix.len &&
 		ngx_memcmp(mapping->data, conf->path_response_prefix.data, conf->path_response_prefix.len) == 0 &&
 		ngx_memcmp(mapping->data + mapping->len - conf->path_response_postfix.len,
-		conf->path_response_postfix.data, conf->path_response_postfix.len) == 0 &&
+			conf->path_response_postfix.data, conf->path_response_postfix.len) == 0 &&
 		memchr(mapping->data + conf->path_response_prefix.len, '"',
-		mapping->len - conf->path_response_prefix.len - conf->path_response_postfix.len) == NULL)
+			mapping->len - conf->path_response_prefix.len - conf->path_response_postfix.len) == NULL &&
+		override_str == NULL)
 	{
 		src_path.len = mapping->len - conf->path_response_prefix.len - conf->path_response_postfix.len;
 		if (src_path.len <= 0)
@@ -4850,7 +4881,7 @@ ngx_http_vod_map_media_set_apply(ngx_http_vod_ctx_t *ctx, ngx_str_t* mapping, in
 		return NGX_OK;
 	}
 
-	// TODO: in case the new media set may replace the existing one, propagate clip from, clip to, rate
+	// TODO: in case the new media set may replace the existing one, propagate rate
 
 	ngx_perf_counter_start(perf_counter_context);
 
@@ -4869,6 +4900,7 @@ ngx_http_vod_map_media_set_apply(ngx_http_vod_ctx_t *ctx, ngx_str_t* mapping, in
 	rc = media_set_parse_json(
 		&ctx->submodule_context.request_context,
 		mapping->data,
+		override_str,
 		&ctx->submodule_context.request_params,
 		ctx->submodule_context.media_set.segmenter_conf,
 		cur_source,

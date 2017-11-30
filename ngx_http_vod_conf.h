@@ -66,6 +66,7 @@ struct ngx_http_vod_loc_conf_s {
 	ngx_http_complex_value_t* redirect_segments_url;
 	ngx_http_complex_value_t* media_set_map_uri;
 	ngx_http_complex_value_t* apply_dynamic_mapping;
+	ngx_http_complex_value_t* media_set_override_json;
 	ngx_str_t fallback_upstream_location;
 	ngx_table_elt_t proxy_header;
 	ngx_flag_t force_playlist_type_vod;

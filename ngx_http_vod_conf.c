@@ -251,6 +251,10 @@ ngx_http_vod_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child)
 	{
 		conf->apply_dynamic_mapping = prev->apply_dynamic_mapping;
 	}
+	if (conf->media_set_override_json == NULL)
+	{
+		conf->media_set_override_json = prev->media_set_override_json;
+	}
 
 	ngx_conf_merge_str_value(conf->fallback_upstream_location, prev->fallback_upstream_location, "");
 	ngx_conf_merge_str_value(conf->proxy_header.key, prev->proxy_header.key, "X-Kaltura-Proxy");
@@ -1140,6 +1144,13 @@ ngx_command_t ngx_http_vod_commands[] = {
 	ngx_http_set_complex_value_slot,
 	NGX_HTTP_LOC_CONF_OFFSET,
 	offsetof(ngx_http_vod_loc_conf_t, apply_dynamic_mapping),
+	NULL },
+
+	{ ngx_string("vod_media_set_override_json"),
+	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1,
+	ngx_http_set_complex_value_slot,
+	NGX_HTTP_LOC_CONF_OFFSET,
+	offsetof(ngx_http_vod_loc_conf_t, media_set_override_json),
 	NULL },
 
 	// fallback upstream - only for local/mapped modes

@@ -451,6 +451,10 @@ Optional fields:
 * `notifications` - array of notification objects (see below), when a segment is requested,
 	all the notifications that fall between the start/end times of the segment are fired.
 	the notifications must be ordered in an increasing offset order.
+* `clipFrom` - integer, contains a timestamp indicating where the returned stream should start.
+	Setting this parameter is equivalent to passing /clipFrom/ on the URL.
+* `clipTo` - integer, contains a timestamp indicating where the returned stream should end.
+	Setting this parameter is equivalent to passing /clipTo/ on the URL.
 	
 Live fields:
 * `firstClipTime` - integer, mandatory for all live playlists unless `clipTimes` is specified.
@@ -899,6 +903,15 @@ an HLS manifest will contain #EXTINF:10
 * accurate - reports the exact duration of the segment, taking into account the frame durations, e.g. for a 
 frame rate of 29.97 and 10 second segments it will report the first segment as 10.01. accurate mode also
 takes into account the key frame alignment, in case `vod_align_segments_to_key_frames` is on
+
+### vod_media_set_override_json
+* **syntax**: `vod_media_set_override_json json`
+* **default**: `{}`
+* **context**: `http`, `server`, `location`
+
+This parameter provides a way to override portions of the media set JSON (mapped mode only).
+For example, `vod_media_set_override_json '{"clipTo":20000}'` clips the media set to 20 sec.
+The parameter value can contain variables.
 
 ### Configuration directives - upstream
 
