@@ -1,7 +1,4 @@
 #include <ngx_http.h>
-
-#if (NGX_HAVE_LIB_AV_CODEC)
-
 #include "ngx_http_vod_submodule.h"
 #include "ngx_http_vod_utils.h"
 #include "vod/filters/volume_map.h"
@@ -134,5 +131,3 @@ ngx_http_vod_volume_map_parse_drm_info(
 }
 
 DEFINE_SUBMODULE(volume_map);
-
-#endif // (NGX_HAVE_LIB_AV_CODEC)

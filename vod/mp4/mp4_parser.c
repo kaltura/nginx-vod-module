@@ -1,5 +1,4 @@
 #include "mp4_parser.h"
-#include "mp4_cenc_decrypt.h"
 #include "mp4_format.h"
 #include "mp4_defs.h"
 #include "../media_format.h"
@@ -12,10 +11,14 @@
 #include "../common.h"
 
 #include <limits.h>
-#if (NGX_HAVE_ZLIB)
-#include <zlib.h>
-#endif //(NGX_HAVE_ZLIB)
 
+#if (VOD_HAVE_ZLIB)
+#include <zlib.h>
+#endif // VOD_HAVE_ZLIB
+
+#if (VOD_HAVE_OPENSSL_EVP)
+#include "mp4_cenc_decrypt.h"
+#endif // VOD_HAVE_OPENSSL_EVP
 
 // TODO: use iterators from mp4_parser_base.c to reduce code duplication
 
@@ -3179,6 +3182,7 @@ mp4_parser_parse_frames(
 
 		if (context.encryption_info.auxiliary_info < context.encryption_info.auxiliary_info_end)
 		{
+#if (VOD_HAVE_OPENSSL_EVP)
 			if (parse_params->source->encryption_key == NULL)
 			{
 				vod_log_error(VOD_LOG_ERR, request_context->log, 0,
@@ -3199,6 +3203,11 @@ mp4_parser_parse_frames(
 			}
 
 			frames_source = &mp4_cenc_decrypt_frames_source;
+#else
+			vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+				"mp4_parser_parse_frames: decryption is not supported, recompile with openssl to enable it");
+			return VOD_BAD_REQUEST;
+#endif // VOD_HAVE_OPENSSL_EVP
 		}
 
 		result_track->frames.next = NULL;
@@ -3279,7 +3288,7 @@ mp4_parser_uncompress_moov(
 	save_relevant_atoms_context_t save_atoms_context;
 	moov_atom_infos_t moov_atom_infos;
 	vod_status_t rc;
-#if (NGX_HAVE_ZLIB)
+#if (VOD_HAVE_ZLIB)
 	atom_info_t find_context;
 	dcom_atom_t* dcom;
 	cmvd_atom_t* cmvd;
@@ -3287,7 +3296,7 @@ mp4_parser_uncompress_moov(
 	uLongf uncomp_size;
 	size_t alloc_size;
 	int zrc;
-#endif	
+#endif // VOD_HAVE_ZLIB
 
 	// get the relevant atoms
 	vod_memzero(&moov_atom_infos, sizeof(moov_atom_infos));
@@ -3306,7 +3315,7 @@ mp4_parser_uncompress_moov(
 		return VOD_OK;		// non compressed or corrupt, if corrupt, will fail in trak parsing
 	}
 
-#if (NGX_HAVE_ZLIB)
+#if (VOD_HAVE_ZLIB)
 	// validate the compression type
 	if (moov_atom_infos.dcom.size < sizeof(*dcom))
 	{
@@ -3387,5 +3396,5 @@ mp4_parser_uncompress_moov(
 	vod_log_error(VOD_LOG_ERR, request_context->log, 0,
 		"mp4_parser_uncompress_moov: compressed moov atom not supported, recompile with zlib to enable it");
 	return VOD_BAD_REQUEST;
-#endif //(NGX_HAVE_ZLIB)
+#endif // VOD_HAVE_ZLIB
 }

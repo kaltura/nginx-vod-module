@@ -1,7 +1,4 @@
 #include "mp4_cenc_passthrough.h"
-
-#if (VOD_HAVE_OPENSSL_EVP)
-
 #include "mp4_cenc_decrypt.h"
 #include "mp4_cenc_encrypt.h"
 #include "mp4_write_stream.h"
@@ -100,25 +97,3 @@ mp4_cenc_passthrough_write_saiz_saio(
 
 	return p;
 }
-
-#else
-
-// empty stubs
-bool_t
-mp4_cenc_passthrough_init(
-	mp4_cenc_passthrough_context_t* context,
-	media_sequence_t* sequence)
-{
-	return FALSE;
-}
-
-u_char* 
-mp4_cenc_passthrough_write_saiz_saio(
-	mp4_cenc_passthrough_context_t* context,
-	u_char* p,
-	size_t auxiliary_data_offset)
-{
-	return NULL;
-}
-
-#endif //(VOD_HAVE_OPENSSL_EVP)

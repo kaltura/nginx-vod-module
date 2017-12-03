@@ -846,6 +846,8 @@ mp4_init_segment_build(
 }
 
 // encryption
+#if (VOD_HAVE_OPENSSL_EVP)
+#include "../aes_defs.h"
 
 static vod_status_t
 mp4_init_segment_init_encrypted_stsd_writer(
@@ -1058,3 +1060,4 @@ mp4_init_segment_get_encrypted_stsd_writers(
 
 	return VOD_OK;
 }
+#endif // VOD_HAVE_OPENSSL_EVP

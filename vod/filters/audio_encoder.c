@@ -1,7 +1,4 @@
 #include "audio_encoder.h"
-
-#if (VOD_HAVE_LIB_AV_CODEC)
-
 #include "audio_filter.h"
 
 // constants
@@ -315,5 +312,3 @@ audio_encoder_update_media_info(
 
 	return VOD_OK;
 }
-
-#endif // (VOD_HAVE_LIB_AV_CODEC)

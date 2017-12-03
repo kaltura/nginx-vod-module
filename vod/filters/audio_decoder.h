@@ -3,9 +3,6 @@
 
 // includes
 #include "../media_format.h"
-
-#if (VOD_HAVE_LIB_AV_CODEC)
-
 #include <libavcodec/avcodec.h>
 
 // macros
@@ -43,7 +40,5 @@ void audio_decoder_free(audio_decoder_state_t* state);
 vod_status_t audio_decoder_get_frame(
 	audio_decoder_state_t* state,
 	AVFrame** result);
-
-#endif // (VOD_HAVE_LIB_AV_CODEC)
 
 #endif // __AUDIO_DECODER_H__

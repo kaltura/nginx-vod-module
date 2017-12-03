@@ -1,7 +1,4 @@
 #include "mp4_cenc_decrypt.h"
-
-#if (VOD_HAVE_OPENSSL_EVP)
-
 #include "mp4_aes_ctr.h"
 #include "mp4_parser.h"
 #include "../read_stream.h"
@@ -306,27 +303,3 @@ frames_source_t mp4_cenc_decrypt_frames_source = {
 	mp4_cenc_decrypt_read,
 	mp4_cenc_decrypt_disable_buffer_reuse,
 };
-
-#else
-
-// empty stubs
-frames_source_t mp4_cenc_decrypt_frames_source = {
-	NULL,
-	NULL,
-	NULL,
-	NULL,
-};
-
-vod_status_t 
-mp4_cenc_decrypt_init(
-	request_context_t* request_context,
-	frames_source_t* frames_source,
-	void* frames_source_context,
-	u_char* key,
-	media_encryption_t* encryption,
-	void** result)
-{
-	return VOD_UNEXPECTED;
-}
-
-#endif //(VOD_HAVE_OPENSSL_EVP)

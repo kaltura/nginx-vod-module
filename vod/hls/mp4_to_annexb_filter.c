@@ -1,7 +1,10 @@
 #include "mp4_to_annexb_filter.h"
-#include "sample_aes_avc_filter.h"
 #include "../read_stream.h"
 #include "../avc_defs.h"
+
+#if (VOD_HAVE_OPENSSL_EVP)
+#include "sample_aes_avc_filter.h"
+#endif // VOD_HAVE_OPENSSL_EVP
 
 // macros
 #define THIS_FILTER (MEDIA_FILTER_MP4_TO_ANNEXB)
@@ -211,6 +214,7 @@ mp4_to_annexb_write(media_filter_context_t* context, const u_char* buffer, uint3
 				break;
 			}
 
+#if (VOD_HAVE_OPENSSL_EVP)
 			if (state->sample_aes)
 			{
 				rc = sample_aes_avc_start_nal_unit(
@@ -222,6 +226,7 @@ mp4_to_annexb_write(media_filter_context_t* context, const u_char* buffer, uint3
 					return rc;
 				}
 			}
+#endif // VOD_HAVE_OPENSSL_EVP
 						
 			if (state->first_frame_packet)
 			{
@@ -330,7 +335,9 @@ mp4_to_annexb_init(
 {
 	mp4_to_annexb_state_t* state;
 	request_context_t* request_context = context->request_context;
+#if (VOD_HAVE_OPENSSL_EVP)
 	vod_status_t rc;
+#endif // VOD_HAVE_OPENSSL_EVP
 
 	// allocate state
 	state = vod_alloc(request_context->pool, sizeof(*state));
@@ -342,6 +349,7 @@ mp4_to_annexb_init(
 	}
 
 	// init sample aes
+#if (VOD_HAVE_OPENSSL_EVP)
 	if (encryption_params->type == HLS_ENC_SAMPLE_AES)
 	{
 		rc = sample_aes_avc_filter_init(
@@ -358,6 +366,7 @@ mp4_to_annexb_init(
 		state->body_write = sample_aes_avc_filter_write_nal_body;
 	}
 	else
+#endif // VOD_HAVE_OPENSSL_EVP
 	{
 		state->sample_aes = FALSE;
 		state->body_write = filter->write;

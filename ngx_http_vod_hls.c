@@ -7,8 +7,12 @@
 #include "vod/mp4/mp4_muxer.h"
 #include "vod/mp4/mp4_fragment.h"
 #include "vod/mp4/mp4_init_segment.h"
-#include "vod/mp4/mp4_cbcs_encrypt.h"
 #include "vod/udrm.h"
+
+#if (NGX_HAVE_OPENSSL_EVP)
+#include "vod/mp4/mp4_cbcs_encrypt.h"
+#include "vod/hls/aes_cbc_encrypt.h"
+#endif // NGX_HAVE_OPENSSL_EVP
 
 // constants
 #define SUPPORTED_CODECS \
@@ -49,9 +53,6 @@ ngx_conf_enum_t  hls_container_formats[] = {
 	{ ngx_null_string, 0 }
 };
 
-// some random salt to prevent the iv from being equal to key in case encryption_iv_seed is null
-static u_char iv_salt[] = { 0xa7, 0xc6, 0x17, 0xab, 0x52, 0x2c, 0x40, 0x3c, 0xf6, 0x8a };
-
 static ngx_uint_t
 ngx_http_vod_hls_get_container_format(
 	m3u8_config_t* conf,
@@ -69,6 +70,10 @@ ngx_http_vod_hls_get_container_format(
 
 	return HLS_CONTAINER_MPEGTS;
 }
+
+#if (NGX_HAVE_OPENSSL_EVP)
+// some random salt to prevent the iv from being equal to key in case encryption_iv_seed is null
+static u_char iv_salt[] = { 0xa7, 0xc6, 0x17, 0xab, 0x52, 0x2c, 0x40, 0x3c, 0xf6, 0x8a };
 
 static void
 ngx_http_vod_hls_init_encryption_iv(u_char* iv, uint32_t segment_index)
@@ -128,7 +133,7 @@ ngx_http_vod_hls_init_encryption_params(
 	ngx_uint_t container_format)
 {
 	ngx_http_vod_loc_conf_t* conf = submodule_context->conf;
-	media_sequence_t* sequence = &submodule_context->media_set.sequences[0];
+	media_sequence_t* sequence;
 	drm_info_t* drm_info;
 	ngx_str_t iv_seed;
 	ngx_md5_t md5;
@@ -142,6 +147,8 @@ ngx_http_vod_hls_init_encryption_params(
 
 	encryption_params->iv = encryption_params->iv_buf;
 	encryption_params->return_iv = FALSE;
+
+	sequence = &submodule_context->media_set.sequences[0];
 
 	if (conf->drm_enabled)
 	{
@@ -184,6 +191,59 @@ ngx_http_vod_hls_init_encryption_params(
 	encryption_params->return_iv = TRUE;
 	return NGX_OK;
 }
+
+static ngx_int_t
+ngx_http_vod_hls_init_segment_encryption(
+	ngx_http_vod_submodule_context_t* submodule_context,
+	segment_writer_t* segment_writer,
+	ngx_uint_t container_format,
+	hls_encryption_params_t* encryption_params)
+{
+	aes_cbc_encrypt_context_t* encrypted_write_context;
+	buffer_pool_t* buffer_pool;
+	vod_status_t rc;
+
+	rc = ngx_http_vod_hls_init_encryption_params(encryption_params, submodule_context, container_format);
+	if (rc != NGX_OK)
+	{
+		return rc;
+	}
+
+	if (encryption_params->type != HLS_ENC_AES_128)
+	{
+		return NGX_OK;
+	}
+
+	if (container_format == HLS_CONTAINER_MPEGTS)
+	{
+		buffer_pool = submodule_context->request_context.output_buffer_pool;
+	}
+	else
+	{
+		// Note: should not use buffer pool for fmp4 since the buffers have varying sizes
+		buffer_pool = NULL;
+	}
+
+	rc = aes_cbc_encrypt_init(
+		&encrypted_write_context,
+		&submodule_context->request_context,
+		segment_writer->write_tail,
+		segment_writer->context,
+		buffer_pool,
+		encryption_params->key,
+		encryption_params->iv);
+	if (rc != VOD_OK)
+	{
+		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, submodule_context->request_context.log, 0,
+			"ngx_http_vod_hls_init_segment_encryption: aes_cbc_encrypt_init failed %i", rc);
+		return ngx_http_vod_status_to_ngx_error(submodule_context->r, rc);
+	}
+
+	segment_writer->write_tail = (write_callback_t)aes_cbc_encrypt_write;
+	segment_writer->context = encrypted_write_context;
+	return NGX_OK;
+}
+#endif // NGX_HAVE_OPENSSL_EVP
 
 static ngx_int_t
 ngx_http_vod_hls_handle_master_playlist(
@@ -267,6 +327,7 @@ ngx_http_vod_hls_handle_index_playlist(
 		&conf->hls.m3u8_config, 
 		&submodule_context->media_set);
 
+#if (NGX_HAVE_OPENSSL_EVP)
 	rc = ngx_http_vod_hls_init_encryption_params(&encryption_params, submodule_context, container_format);
 	if (rc != NGX_OK)
 	{
@@ -292,6 +353,9 @@ ngx_http_vod_hls_handle_index_playlist(
 			encryption_params.key_uri.len = 0;
 		}
 	}
+#else
+	encryption_params.type = HLS_ENC_NONE;
+#endif // NGX_HAVE_OPENSSL_EVP
 
 	rc = m3u8_builder_build_index_playlist(
 		&submodule_context->request_context,
@@ -407,58 +471,6 @@ ngx_http_vod_hls_handle_encryption_key(
 }
 
 static ngx_int_t
-ngx_http_vod_hls_init_segment_encryption(
-	ngx_http_vod_submodule_context_t* submodule_context,
-	segment_writer_t* segment_writer,
-	ngx_uint_t container_format,
-	hls_encryption_params_t* encryption_params)
-{
-	aes_cbc_encrypt_context_t* encrypted_write_context;
-	buffer_pool_t* buffer_pool;
-	vod_status_t rc;
-
-	rc = ngx_http_vod_hls_init_encryption_params(encryption_params, submodule_context, container_format);
-	if (rc != NGX_OK)
-	{
-		return rc;
-	}
-
-	if (encryption_params->type != HLS_ENC_AES_128)
-	{
-		return NGX_OK;
-	}
-
-	if (container_format == HLS_CONTAINER_MPEGTS)
-	{
-		buffer_pool = submodule_context->request_context.output_buffer_pool;
-	}
-	else
-	{
-		// Note: should not use buffer pool for fmp4 since the buffers have varying sizes
-		buffer_pool = NULL;
-	}
-
-	rc = aes_cbc_encrypt_init(
-		&encrypted_write_context,
-		&submodule_context->request_context,
-		segment_writer->write_tail,
-		segment_writer->context,
-		buffer_pool,
-		encryption_params->key,
-		encryption_params->iv);
-	if (rc != VOD_OK)
-	{
-		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, submodule_context->request_context.log, 0,
-			"ngx_http_vod_hls_init_segment_encryption: aes_cbc_encrypt_init failed %i", rc);
-		return ngx_http_vod_status_to_ngx_error(submodule_context->r, rc);
-	}
-
-	segment_writer->write_tail = (write_callback_t)aes_cbc_encrypt_write;
-	segment_writer->context = encrypted_write_context;
-	return NGX_OK;
-}
-
-static ngx_int_t
 ngx_http_vod_hls_init_ts_frame_processor(
 	ngx_http_vod_submodule_context_t* submodule_context,
 	segment_writer_t* segment_writer,
@@ -473,6 +485,7 @@ ngx_http_vod_hls_init_ts_frame_processor(
 	vod_status_t rc;
 	bool_t reuse_output_buffers;
 
+#if (NGX_HAVE_OPENSSL_EVP)
 	rc = ngx_http_vod_hls_init_segment_encryption(
 		submodule_context,
 		segment_writer,
@@ -484,6 +497,10 @@ ngx_http_vod_hls_init_ts_frame_processor(
 	}
 
 	reuse_output_buffers = encryption_params.type == HLS_ENC_AES_128;
+#else
+	encryption_params.type = HLS_ENC_NONE;
+	reuse_output_buffers = FALSE;
+#endif // NGX_HAVE_OPENSSL_EVP
 
 	rc = hls_muxer_init_segment(
 		&submodule_context->request_context,
@@ -525,10 +542,12 @@ ngx_http_vod_hls_handle_mp4_init_segment(
 	ngx_str_t* response,
 	ngx_str_t* content_type)
 {
-	aes_cbc_encrypt_context_t* encrypted_write_context;
-	hls_encryption_params_t encryption_params;
 	atom_writer_t* stsd_atom_writers;
 	vod_status_t rc;
+
+#if (NGX_HAVE_OPENSSL_EVP)
+	aes_cbc_encrypt_context_t* encrypted_write_context;
+	hls_encryption_params_t encryption_params;
 
 	rc = ngx_http_vod_hls_init_encryption_params(&encryption_params, submodule_context, HLS_CONTAINER_FMP4);
 	if (rc != NGX_OK)
@@ -554,6 +573,7 @@ ngx_http_vod_hls_handle_mp4_init_segment(
 		}
 	}
 	else
+#endif // NGX_HAVE_OPENSSL_EVP
 	{
 		stsd_atom_writers = NULL;
 	}
@@ -572,6 +592,7 @@ ngx_http_vod_hls_handle_mp4_init_segment(
 		return ngx_http_vod_status_to_ngx_error(submodule_context->r, rc);
 	}
 
+#if (NGX_HAVE_OPENSSL_EVP)
 	if (encryption_params.type == HLS_ENC_AES_128)
 	{
 		rc = aes_cbc_encrypt_init(
@@ -601,6 +622,7 @@ ngx_http_vod_hls_handle_mp4_init_segment(
 			return ngx_http_vod_status_to_ngx_error(submodule_context->r, rc);
 		}
 	}
+#endif // NGX_HAVE_OPENSSL_EVP
 
 	mp4_fragment_get_content_type(
 		submodule_context->media_set.track_count[MEDIA_TYPE_VIDEO],
@@ -619,15 +641,16 @@ ngx_http_vod_hls_init_fmp4_frame_processor(
 	ngx_str_t* content_type)
 {
 	dash_fragment_header_extensions_t header_extensions;
-	ngx_http_vod_loc_conf_t* conf = submodule_context->conf;
 	fragment_writer_state_t* state;
-	hls_encryption_params_t encryption_params;
 	mp4_muxer_state_t* muxer_state;
 	segment_writer_t* segment_writers;
 	vod_status_t rc;
 	bool_t per_stream_writer;
-	bool_t reuse_input_buffers;
+	bool_t reuse_input_buffers = FALSE;
 	bool_t size_only = ngx_http_vod_submodule_size_only(submodule_context);
+
+#if (NGX_HAVE_OPENSSL_EVP)
+	hls_encryption_params_t encryption_params;
 
 	rc = ngx_http_vod_hls_init_segment_encryption(
 		submodule_context,
@@ -639,7 +662,9 @@ ngx_http_vod_hls_init_fmp4_frame_processor(
 		return rc;
 	}
 
-	if (conf->hls.encryption_method == HLS_ENC_SAMPLE_AES)
+	reuse_input_buffers = encryption_params.type != HLS_ENC_NONE;
+
+	if (submodule_context->conf->hls.encryption_method == HLS_ENC_SAMPLE_AES)
 	{
 		rc = mp4_cbcs_encrypt_get_writers(
 			&submodule_context->request_context,
@@ -657,12 +682,11 @@ ngx_http_vod_hls_init_fmp4_frame_processor(
 		per_stream_writer = TRUE;
 	}
 	else
+#endif // NGX_HAVE_OPENSSL_EVP
 	{
 		segment_writers = segment_writer;
 		per_stream_writer = FALSE;
 	}
-
-	reuse_input_buffers = encryption_params.type != HLS_ENC_NONE;
 
 	if (submodule_context->media_set.total_track_count > 1)
 	{
@@ -731,10 +755,12 @@ ngx_http_vod_hls_init_fmp4_frame_processor(
 		}
 	}
 
+#if (NGX_HAVE_OPENSSL_EVP)
 	if (encryption_params.type == HLS_ENC_AES_128)
 	{
 		*response_size = aes_round_up_to_block(*response_size);
 	}
+#endif // NGX_HAVE_OPENSSL_EVP
 
 	// set the 'Content-type' header
 	mp4_fragment_get_content_type(

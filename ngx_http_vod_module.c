@@ -17,11 +17,8 @@
 #include "vod/mp4/mp4_format.h"
 #include "vod/mkv/mkv_format.h"
 #include "vod/subtitle/webvtt_format.h"
-#include "vod/subtitle/dfxp_format.h"
 #include "vod/subtitle/cap_format.h"
 #include "vod/input/read_cache.h"
-#include "vod/filters/audio_decoder.h"
-#include "vod/filters/audio_encoder.h"
 #include "vod/filters/audio_filter.h"
 #include "vod/filters/dynamic_clip.h"
 #include "vod/filters/concat_clip.h"
@@ -29,10 +26,19 @@
 #include "vod/filters/filter.h"
 #include "vod/media_set_parser.h"
 #include "vod/manifest_utils.h"
-#include "vod/thumb/thumb_grabber.h"
 #include "vod/input/silence_generator.h"
+
+#if (NGX_HAVE_LIB_AV_CODEC)
 #include "ngx_http_vod_thumb.h"
 #include "ngx_http_vod_volume_map.h"
+#include "vod/filters/audio_decoder.h"
+#include "vod/filters/audio_encoder.h"
+#include "vod/thumb/thumb_grabber.h"
+#endif // NGX_HAVE_LIB_AV_CODEC
+
+#if (NGX_HAVE_LIBXML2)
+#include "vod/subtitle/dfxp_format.h"
+#endif // NGX_HAVE_LIBXML2
 
 // macros
 #define DEFINE_VAR(name) \
@@ -187,7 +193,7 @@ struct ngx_http_vod_ctx_s {
 	// read state - file
 #if (NGX_THREADS)
 	void* async_open_context;
-#endif
+#endif // NGX_THREADS
 
 	// read state - http
 	ngx_str_t* file_key_prefix;
@@ -253,7 +259,7 @@ static media_format_t* media_formats[] = {
 	&webvtt_format,
 #if (NGX_HAVE_LIBXML2)
 	&dfxp_format,
-#endif
+#endif // NGX_HAVE_LIBXML2
 	&cap_format,
 	NULL
 };
@@ -664,9 +670,13 @@ ngx_http_vod_preconfiguration(ngx_conf_t *cf)
 
 	ngx_http_vod_set_status_index(rc);
 
+#if (NGX_HAVE_LIBXML2)
 	dfxp_init_process();
+#endif // NGX_HAVE_LIBXML2
 
+#if (VOD_HAVE_ICONV)
 	webvtt_init_process(cf->log);
+#endif // VOD_HAVE_ICONV
 
 	return NGX_OK;
 }
@@ -3036,7 +3046,7 @@ ngx_http_vod_init_process(ngx_cycle_t *cycle)
 	audio_decoder_process_init(cycle->log);
 	audio_encoder_process_init(cycle->log);
 	thumb_grabber_process_init(cycle->log);
-#endif // (NGX_HAVE_LIB_AV_CODEC)
+#endif // NGX_HAVE_LIB_AV_CODEC
 
 	rc = language_code_process_init(cycle->pool, cycle->log);
 	if (rc != VOD_OK)
@@ -3050,9 +3060,13 @@ ngx_http_vod_init_process(ngx_cycle_t *cycle)
 static void 
 ngx_http_vod_exit_process()
 {
+#if (VOD_HAVE_ICONV)
 	webvtt_exit_process();
+#endif // VOD_HAVE_ICONV
 
+#if (NGX_HAVE_LIBXML2)
 	dfxp_exit_process();
+#endif // NGX_HAVE_LIBXML2
 }
 
 ////// Clipping
@@ -3418,7 +3432,7 @@ ngx_http_vod_run_state_machine(ngx_http_vod_ctx_t *ctx)
 				output_codec_id = VOD_CODEC_ID_VOLUME_MAP;
 			}
 			else
-#endif // (NGX_HAVE_LIB_AV_CODEC)
+#endif // NGX_HAVE_LIB_AV_CODEC
 			{
 				output_codec_id = VOD_CODEC_ID_AAC;
 			}
@@ -3907,8 +3921,8 @@ ngx_http_vod_init_file_reader_internal(ngx_http_request_t *r, ngx_str_t* path, v
 			flags);
 	}
 	else
+#endif // NGX_THREADS
 	{
-#endif
 		rc = ngx_file_reader_init(
 			state,
 			ngx_http_vod_handle_read_completed,
@@ -3917,9 +3931,7 @@ ngx_http_vod_init_file_reader_internal(ngx_http_request_t *r, ngx_str_t* path, v
 			clcf,
 			path,
 			flags);
-#if (NGX_THREADS)
 	}
-#endif
 	if (rc != NGX_OK)
 	{
 		if (fallback && rc == NGX_HTTP_NOT_FOUND)
@@ -4777,7 +4789,7 @@ ngx_http_vod_handle_thumb_redirect(
 
 	return r->headers_out.status;
 }
-#endif // (NGX_HAVE_LIB_AV_CODEC)
+#endif // NGX_HAVE_LIB_AV_CODEC
 
 static ngx_int_t
 ngx_http_vod_map_media_set_apply(ngx_http_vod_ctx_t *ctx, ngx_str_t* mapping, int* cache_index)
@@ -4924,7 +4936,7 @@ ngx_http_vod_map_media_set_apply(ngx_http_vod_ctx_t *ctx, ngx_str_t* mapping, in
 #if (NGX_HAVE_LIB_AV_CODEC)
 	case VOD_REDIRECT:
 		return ngx_http_vod_handle_thumb_redirect(ctx, &mapped_media_set);
-#endif // (NGX_HAVE_LIB_AV_CODEC)
+#endif // NGX_HAVE_LIB_AV_CODEC
 
 	default:
 		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, ctx->submodule_context.request_context.log, 0,
@@ -5216,7 +5228,7 @@ ngx_http_vod_handler(ngx_http_request_t *r)
 	int cache_type;
 #if (NGX_DEBUG)
 	ngx_str_t time_str;
-#endif
+#endif // NGX_DEBUG
 
 	ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0, "ngx_http_vod_handler: started");
 
@@ -5410,7 +5422,7 @@ ngx_http_vod_handler(ngx_http_request_t *r)
 	{
 		ctx->submodule_context.request_context.time = ngx_atotm(time_str.data, time_str.len);
 	}
-#endif
+#endif // NGX_DEBUG
 
 	clcf = ngx_http_get_module_loc_conf(r, ngx_http_core_module);
 	ctx->alloc_params[READER_FILE].alignment = clcf->directio_alignment;

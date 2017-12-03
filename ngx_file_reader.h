@@ -9,7 +9,7 @@
 
 #if (NGX_THREADS)
 #include "ngx_async_open_file_cache.h"
-#endif
+#endif // NGX_THREADS
 
 // constants
 #define OPEN_FILE_NO_CACHE (0x1)
@@ -29,7 +29,7 @@ typedef struct {
 	ngx_async_read_callback_t read_callback;
 	void* callback_context;
 	ngx_buf_t* buf;
-#endif
+#endif // NGX_HAVE_FILE_AIO
 } ngx_file_reader_state_t;
 
 // functions
@@ -54,7 +54,7 @@ ngx_int_t ngx_file_reader_init_async(
 	ngx_http_core_loc_conf_t  *clcf,
 	ngx_str_t* path,
 	uint32_t flags);
-#endif
+#endif // NGX_THREADS
 
 ngx_int_t ngx_file_reader_dump_file_part(void* context, off_t start, off_t end);
 

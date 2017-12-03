@@ -1,6 +1,8 @@
 ngx_addon_name=ngx_http_vod_module
 ngx_module_incs=
 ngx_module_libs=
+VOD_SRCS=
+VOD_DEPS=
 
 # version
 #
@@ -36,6 +38,34 @@ fi
 
 # openssl evp
 #
+VOD_FEATURE_SRCS="                                      \
+    $ngx_addon_dir/vod/dash/edash_packager.c            \
+    $ngx_addon_dir/vod/hls/aes_cbc_encrypt.c            \
+    $ngx_addon_dir/vod/hls/eac3_encrypt_filter.c        \
+    $ngx_addon_dir/vod/hls/frame_encrypt_filter.c       \
+    $ngx_addon_dir/vod/hls/sample_aes_avc_filter.c      \
+    $ngx_addon_dir/vod/mp4/mp4_aes_ctr.c                \
+    $ngx_addon_dir/vod/mp4/mp4_cbcs_encrypt.c           \
+    $ngx_addon_dir/vod/mp4/mp4_cenc_decrypt.c           \
+    $ngx_addon_dir/vod/mp4/mp4_cenc_encrypt.c           \
+    $ngx_addon_dir/vod/mp4/mp4_cenc_passthrough.c       \
+    $ngx_addon_dir/vod/mss/mss_playready.c              \
+    "
+
+VOD_FEATURE_DEPS="                                      \
+    $ngx_addon_dir/vod/dash/edash_packager.h            \
+    $ngx_addon_dir/vod/hls/aes_cbc_encrypt.h            \
+    $ngx_addon_dir/vod/hls/eac3_encrypt_filter.h        \
+    $ngx_addon_dir/vod/hls/frame_encrypt_filter.h       \
+    $ngx_addon_dir/vod/hls/sample_aes_avc_filter.h      \
+    $ngx_addon_dir/vod/mp4/mp4_aes_ctr.h                \
+    $ngx_addon_dir/vod/mp4/mp4_cbcs_encrypt.h           \
+    $ngx_addon_dir/vod/mp4/mp4_cenc_decrypt.h           \
+    $ngx_addon_dir/vod/mp4/mp4_cenc_encrypt.h           \
+    $ngx_addon_dir/vod/mp4/mp4_cenc_passthrough.h       \
+    $ngx_addon_dir/vod/mss/mss_playready.h              \
+    "
+
 if [ $OPENSSL = NONE ]; then
     LIB_CRYPTO=${LIB_CRYPTO:--lcrypto}
     LIB_PTHREAD=${LIB_PTHREAD:--lpthread}
@@ -51,8 +81,12 @@ if [ $OPENSSL = NONE ]; then
 
     if [ $ngx_found = yes ]; then
         ngx_module_libs="$ngx_module_libs $ngx_feature_libs"
+        VOD_SRCS="$VOD_SRCS $VOD_FEATURE_SRCS"
+        VOD_DEPS="$VOD_DEPS $VOD_FEATURE_DEPS"
     fi
 else
+    VOD_SRCS="$VOD_SRCS $VOD_FEATURE_SRCS"
+    VOD_DEPS="$VOD_DEPS $VOD_FEATURE_DEPS"
     cat << END >> $NGX_AUTO_CONFIG_H
 
 #ifndef NGX_HAVE_OPENSSL_EVP
@@ -111,6 +145,30 @@ ngx_feature_test="avcodec_send_packet(NULL, NULL)"
 
 if [ $ngx_found = yes ]; then
     ngx_module_libs="$ngx_module_libs $LIB_AV_CODEC $LIB_AV_UTIL -lm"
+    VOD_FEATURE_SRCS="                                      \
+        $ngx_addon_dir/ngx_http_vod_thumb.c                 \
+        $ngx_addon_dir/ngx_http_vod_volume_map.c            \
+        $ngx_addon_dir/vod/filters/audio_decoder.c          \
+        $ngx_addon_dir/vod/filters/audio_encoder.c          \
+        $ngx_addon_dir/vod/filters/volume_map.c             \
+        $ngx_addon_dir/vod/thumb/thumb_grabber.c            \
+        "
+
+    VOD_FEATURE_DEPS="                                      \
+        $ngx_addon_dir/ngx_http_vod_thumb.h                 \
+        $ngx_addon_dir/ngx_http_vod_thumb_commands.h        \
+        $ngx_addon_dir/ngx_http_vod_thumb_conf.h            \
+        $ngx_addon_dir/ngx_http_vod_volume_map.h            \
+        $ngx_addon_dir/ngx_http_vod_volume_map_commands.h   \
+        $ngx_addon_dir/ngx_http_vod_volume_map_conf.h       \
+        $ngx_addon_dir/vod/filters/audio_decoder.h          \
+        $ngx_addon_dir/vod/filters/audio_encoder.h          \
+        $ngx_addon_dir/vod/filters/volume_map.h             \
+        $ngx_addon_dir/vod/thumb/thumb_grabber.h            \
+        "
+
+    VOD_SRCS="$VOD_SRCS $VOD_FEATURE_SRCS"
+    VOD_DEPS="$VOD_DEPS $VOD_FEATURE_DEPS"
 fi
 
 # libswscale
@@ -125,7 +183,7 @@ ngx_feature_test="sws_scale(NULL, NULL, NULL, 0, 0, NULL, NULL)"
 . auto/feature
 
 if [ $ngx_found = yes ]; then
-	ngx_module_libs="$ngx_module_libs -lswscale"
+    ngx_module_libs="$ngx_module_libs -lswscale"
 fi
 
 # libavfilter
@@ -162,9 +220,18 @@ ngx_feature_test="xmlReadMemory(NULL, 0, NULL, NULL, 0);"
 if [ $ngx_found = yes ]; then
     ngx_module_incs="$ngx_module_incs $ngx_feature_path"
     ngx_module_libs="$ngx_module_libs $ngx_feature_libs"
+    VOD_FEATURE_SRCS="                                      \
+        $ngx_addon_dir/vod/subtitle/dfxp_format.c           \
+        "
+    VOD_FEATURE_DEPS="                                      \
+        $ngx_addon_dir/vod/subtitle/dfxp_format.h           \
+        "
+    VOD_SRCS="$VOD_SRCS $VOD_FEATURE_SRCS"
+    VOD_DEPS="$VOD_DEPS $VOD_FEATURE_DEPS"
 fi
 
-VOD_DEPS="$ngx_addon_dir/ngx_async_open_file_cache.h          \
+VOD_DEPS="$VOD_DEPS                                           \
+          $ngx_addon_dir/ngx_async_open_file_cache.h          \
           $ngx_addon_dir/ngx_buffer_cache.h                   \
           $ngx_addon_dir/ngx_buffer_cache_internal.h          \
           $ngx_addon_dir/ngx_child_http_request.h             \
@@ -186,13 +253,7 @@ VOD_DEPS="$ngx_addon_dir/ngx_async_open_file_cache.h          \
           $ngx_addon_dir/ngx_http_vod_request_parse.h         \
           $ngx_addon_dir/ngx_http_vod_status.h                \
           $ngx_addon_dir/ngx_http_vod_submodule.h             \
-          $ngx_addon_dir/ngx_http_vod_thumb.h                 \
-          $ngx_addon_dir/ngx_http_vod_thumb_commands.h        \
-          $ngx_addon_dir/ngx_http_vod_thumb_conf.h            \
           $ngx_addon_dir/ngx_http_vod_utils.h                 \
-          $ngx_addon_dir/ngx_http_vod_volume_map.h            \
-          $ngx_addon_dir/ngx_http_vod_volume_map_commands.h   \
-          $ngx_addon_dir/ngx_http_vod_volume_map_conf.h       \
           $ngx_addon_dir/ngx_perf_counters.h                  \
           $ngx_addon_dir/ngx_perf_counters_x.h                \
           $ngx_addon_dir/vod/aes_defs.h                       \
@@ -204,10 +265,7 @@ VOD_DEPS="$ngx_addon_dir/ngx_async_open_file_cache.h          \
           $ngx_addon_dir/vod/codec_config.h                   \
           $ngx_addon_dir/vod/common.h                         \
           $ngx_addon_dir/vod/dash/dash_packager.h             \
-          $ngx_addon_dir/vod/dash/edash_packager.h            \
           $ngx_addon_dir/vod/dynamic_buffer.h                 \
-          $ngx_addon_dir/vod/filters/audio_decoder.h          \
-          $ngx_addon_dir/vod/filters/audio_encoder.h          \
           $ngx_addon_dir/vod/filters/audio_filter.h           \
           $ngx_addon_dir/vod/filters/concat_clip.h            \
           $ngx_addon_dir/vod/filters/dynamic_clip.h           \
@@ -215,7 +273,6 @@ VOD_DEPS="$ngx_addon_dir/ngx_async_open_file_cache.h          \
           $ngx_addon_dir/vod/filters/gain_filter.h            \
           $ngx_addon_dir/vod/filters/mix_filter.h             \
           $ngx_addon_dir/vod/filters/rate_filter.h            \
-          $ngx_addon_dir/vod/filters/volume_map.h             \
           $ngx_addon_dir/vod/hds/hds_amf0_encoder.h           \
           $ngx_addon_dir/vod/hds/hds_amf0_fields_x.h          \
           $ngx_addon_dir/vod/hds/hds_encryption.h             \
@@ -223,11 +280,8 @@ VOD_DEPS="$ngx_addon_dir/ngx_async_open_file_cache.h          \
           $ngx_addon_dir/vod/hds/hds_manifest.h               \
           $ngx_addon_dir/vod/hevc_parser.h                    \
           $ngx_addon_dir/vod/hls/adts_encoder_filter.h        \
-          $ngx_addon_dir/vod/hls/aes_cbc_encrypt.h            \
           $ngx_addon_dir/vod/hls/bit_fields.h                 \
           $ngx_addon_dir/vod/hls/buffer_filter.h              \
-          $ngx_addon_dir/vod/hls/eac3_encrypt_filter.h        \
-          $ngx_addon_dir/vod/hls/frame_encrypt_filter.h       \
           $ngx_addon_dir/vod/hls/frame_joiner_filter.h        \
           $ngx_addon_dir/vod/hls/hls_encryption.h             \
           $ngx_addon_dir/vod/hls/hls_muxer.h                  \
@@ -236,7 +290,6 @@ VOD_DEPS="$ngx_addon_dir/ngx_async_open_file_cache.h          \
           $ngx_addon_dir/vod/hls/media_filter.h               \
           $ngx_addon_dir/vod/hls/mp4_to_annexb_filter.h       \
           $ngx_addon_dir/vod/hls/mpegts_encoder_filter.h      \
-          $ngx_addon_dir/vod/hls/sample_aes_avc_filter.h      \
           $ngx_addon_dir/vod/input/silence_generator.h        \
           $ngx_addon_dir/vod/input/frames_source.h            \
           $ngx_addon_dir/vod/input/frames_source_cache.h      \
@@ -255,11 +308,6 @@ VOD_DEPS="$ngx_addon_dir/ngx_async_open_file_cache.h          \
           $ngx_addon_dir/vod/mkv/mkv_builder.h                \
           $ngx_addon_dir/vod/mkv/mkv_defs.h                   \
           $ngx_addon_dir/vod/mkv/mkv_format.h                 \
-          $ngx_addon_dir/vod/mp4/mp4_aes_ctr.h                \
-          $ngx_addon_dir/vod/mp4/mp4_cbcs_encrypt.h           \
-          $ngx_addon_dir/vod/mp4/mp4_cenc_decrypt.h           \
-          $ngx_addon_dir/vod/mp4/mp4_cenc_encrypt.h           \
-          $ngx_addon_dir/vod/mp4/mp4_cenc_passthrough.h       \
           $ngx_addon_dir/vod/mp4/mp4_clipper.h                \
           $ngx_addon_dir/vod/mp4/mp4_defs.h                   \
           $ngx_addon_dir/vod/mp4/mp4_format.h                 \
@@ -270,8 +318,6 @@ VOD_DEPS="$ngx_addon_dir/ngx_async_open_file_cache.h          \
           $ngx_addon_dir/vod/mp4/mp4_parser_base.h            \
           $ngx_addon_dir/vod/mp4/mp4_write_stream.h           \
           $ngx_addon_dir/vod/mss/mss_packager.h               \
-          $ngx_addon_dir/vod/mss/mss_playready.h              \
-          $ngx_addon_dir/vod/thumb/thumb_grabber.h            \
           $ngx_addon_dir/vod/subtitle/cap_format.h            \
           $ngx_addon_dir/vod/subtitle/dfxp_format.h           \
           $ngx_addon_dir/vod/subtitle/subtitle_format.h       \
@@ -288,7 +334,8 @@ VOD_DEPS="$ngx_addon_dir/ngx_async_open_file_cache.h          \
           $ngx_addon_dir/vod/write_stream.h                   \
           "
 
-VOD_SRCS="$ngx_addon_dir/ngx_async_open_file_cache.c          \
+VOD_SRCS="$VOD_SRCS                                           \
+          $ngx_addon_dir/ngx_async_open_file_cache.c          \
           $ngx_addon_dir/ngx_buffer_cache.c                   \
           $ngx_addon_dir/ngx_child_http_request.c             \
           $ngx_addon_dir/ngx_file_reader.c                    \
@@ -301,9 +348,7 @@ VOD_SRCS="$ngx_addon_dir/ngx_async_open_file_cache.c          \
           $ngx_addon_dir/ngx_http_vod_request_parse.c         \
           $ngx_addon_dir/ngx_http_vod_status.c                \
           $ngx_addon_dir/ngx_http_vod_submodule.c             \
-          $ngx_addon_dir/ngx_http_vod_thumb.c                 \
           $ngx_addon_dir/ngx_http_vod_utils.c                 \
-          $ngx_addon_dir/ngx_http_vod_volume_map.c            \
           $ngx_addon_dir/ngx_perf_counters.c                  \
           $ngx_addon_dir/vod/avc_parser.c                     \
           $ngx_addon_dir/vod/avc_hevc_parser.c                \
@@ -311,10 +356,7 @@ VOD_SRCS="$ngx_addon_dir/ngx_async_open_file_cache.c          \
           $ngx_addon_dir/vod/codec_config.c                   \
           $ngx_addon_dir/vod/common.c                         \
           $ngx_addon_dir/vod/dash/dash_packager.c             \
-          $ngx_addon_dir/vod/dash/edash_packager.c            \
           $ngx_addon_dir/vod/dynamic_buffer.c                 \
-          $ngx_addon_dir/vod/filters/audio_decoder.c          \
-          $ngx_addon_dir/vod/filters/audio_encoder.c          \
           $ngx_addon_dir/vod/filters/audio_filter.c           \
           $ngx_addon_dir/vod/filters/concat_clip.c            \
           $ngx_addon_dir/vod/filters/dynamic_clip.c           \
@@ -322,23 +364,18 @@ VOD_SRCS="$ngx_addon_dir/ngx_async_open_file_cache.c          \
           $ngx_addon_dir/vod/filters/gain_filter.c            \
           $ngx_addon_dir/vod/filters/mix_filter.c             \
           $ngx_addon_dir/vod/filters/rate_filter.c            \
-          $ngx_addon_dir/vod/filters/volume_map.c             \
           $ngx_addon_dir/vod/hds/hds_amf0_encoder.c           \
           $ngx_addon_dir/vod/hds/hds_fragment.c               \
           $ngx_addon_dir/vod/hds/hds_manifest.c               \
           $ngx_addon_dir/vod/hevc_parser.c                    \
           $ngx_addon_dir/vod/hls/adts_encoder_filter.c        \
-          $ngx_addon_dir/vod/hls/aes_cbc_encrypt.c            \
           $ngx_addon_dir/vod/hls/buffer_filter.c              \
-          $ngx_addon_dir/vod/hls/eac3_encrypt_filter.c        \
-          $ngx_addon_dir/vod/hls/frame_encrypt_filter.c       \
           $ngx_addon_dir/vod/hls/frame_joiner_filter.c        \
           $ngx_addon_dir/vod/hls/hls_muxer.c                  \
           $ngx_addon_dir/vod/hls/id3_encoder_filter.c         \
           $ngx_addon_dir/vod/hls/m3u8_builder.c               \
           $ngx_addon_dir/vod/hls/mp4_to_annexb_filter.c       \
           $ngx_addon_dir/vod/hls/mpegts_encoder_filter.c      \
-          $ngx_addon_dir/vod/hls/sample_aes_avc_filter.c      \
           $ngx_addon_dir/vod/input/silence_generator.c        \
           $ngx_addon_dir/vod/input/frames_source_cache.c      \
           $ngx_addon_dir/vod/input/frames_source_memory.c     \
@@ -352,11 +389,6 @@ VOD_SRCS="$ngx_addon_dir/ngx_async_open_file_cache.c          \
           $ngx_addon_dir/vod/mkv/mkv_builder.c                \
           $ngx_addon_dir/vod/mkv/mkv_defs.c                   \
           $ngx_addon_dir/vod/mkv/mkv_format.c                 \
-          $ngx_addon_dir/vod/mp4/mp4_aes_ctr.c                \
-          $ngx_addon_dir/vod/mp4/mp4_cbcs_encrypt.c           \
-          $ngx_addon_dir/vod/mp4/mp4_cenc_decrypt.c           \
-          $ngx_addon_dir/vod/mp4/mp4_cenc_encrypt.c           \
-          $ngx_addon_dir/vod/mp4/mp4_cenc_passthrough.c       \
           $ngx_addon_dir/vod/mp4/mp4_clipper.c                \
           $ngx_addon_dir/vod/mp4/mp4_format.c                 \
           $ngx_addon_dir/vod/mp4/mp4_fragment.c               \
@@ -365,10 +397,7 @@ VOD_SRCS="$ngx_addon_dir/ngx_async_open_file_cache.c          \
           $ngx_addon_dir/vod/mp4/mp4_parser.c                 \
           $ngx_addon_dir/vod/mp4/mp4_parser_base.c            \
           $ngx_addon_dir/vod/mss/mss_packager.c               \
-          $ngx_addon_dir/vod/mss/mss_playready.c              \
-          $ngx_addon_dir/vod/thumb/thumb_grabber.c            \
           $ngx_addon_dir/vod/subtitle/cap_format.c            \
-          $ngx_addon_dir/vod/subtitle/dfxp_format.c           \
           $ngx_addon_dir/vod/subtitle/subtitle_format.c       \
           $ngx_addon_dir/vod/subtitle/ttml_builder.c          \
           $ngx_addon_dir/vod/subtitle/webvtt_builder.c        \

@@ -3,9 +3,6 @@
 
 // includes
 #include "../media_format.h"
-
-#if (VOD_HAVE_LIB_AV_CODEC)
-
 #include <libavcodec/avcodec.h>
 
 // constants
@@ -47,7 +44,5 @@ vod_status_t audio_encoder_flush(
 vod_status_t audio_encoder_update_media_info(
 	void* context,
 	media_info_t* media_info);
-
-#endif // (VOD_HAVE_LIB_AV_CODEC)
 
 #endif // __AUDIO_ENCODER_H__

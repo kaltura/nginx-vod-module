@@ -9,6 +9,10 @@
 #include "input/silence_generator.h"
 #include "parse_utils.h"
 
+#if (VOD_HAVE_OPENSSL_EVP)
+#include "mp4/mp4_aes_ctr.h"
+#endif // VOD_HAVE_OPENSSL_EVP
+
 // macros
 #define HASH_TABLE(name) \
 	{ #name "_hash", name ## _params, sizeof(name ## _params[0]), &name ## _hash }
@@ -305,7 +309,7 @@ media_set_parse_encryption_key(
 	vod_log_error(VOD_LOG_ERR, context->request_context->log, 0,
 		"media_set_parse_encryption_key: decryption not supported, recompile with openssl to enable it");
 	return VOD_BAD_REQUEST;
-#endif //(VOD_HAVE_OPENSSL_EVP)
+#endif // VOD_HAVE_OPENSSL_EVP
 }
 
 vod_status_t 
@@ -1773,7 +1777,7 @@ media_set_parse_sequence_key_frame_offsets(
 		vod_log_debug1(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
 			"media_set_parse_sequence_key_frame_offsets: last_key_frame_time %L", sequence->last_key_frame_time);
 	}
-#endif
+#endif // VOD_DEBUG
 
 	return VOD_OK;
 }

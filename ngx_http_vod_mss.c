@@ -3,9 +3,12 @@
 #include "ngx_http_vod_utils.h"
 #include "vod/mp4/mp4_fragment.h"
 #include "vod/mss/mss_packager.h"
-#include "vod/mss/mss_playready.h"
 #include "vod/subtitle/ttml_builder.h"
 #include "vod/udrm.h"
+
+#if (NGX_HAVE_OPENSSL_EVP)
+#include "vod/mss/mss_playready.h"
+#endif // NGX_HAVE_OPENSSL_EVP
 
 // constants
 #define SUPPORTED_CODECS (VOD_CODEC_FLAG(AVC) | VOD_CODEC_FLAG(AAC) | VOD_CODEC_FLAG(MP3))
@@ -42,6 +45,7 @@ ngx_http_vod_mss_handle_manifest(
 {
 	vod_status_t rc;
 
+#if (NGX_HAVE_OPENSSL_EVP)
 	if (submodule_context->conf->drm_enabled)
 	{
 		rc = mss_playready_build_manifest(
@@ -51,6 +55,7 @@ ngx_http_vod_mss_handle_manifest(
 			response);
 	}
 	else
+#endif // NGX_HAVE_OPENSSL_EVP
 	{
 		rc = mss_packager_build_manifest(
 			&submodule_context->request_context,
@@ -85,12 +90,14 @@ ngx_http_vod_mss_init_frame_processor(
 	size_t* response_size,
 	ngx_str_t* content_type)
 {
-	ngx_http_vod_loc_conf_t* conf = submodule_context->conf;
 	fragment_writer_state_t* state;
-	segment_writer_t drm_writer;
 	vod_status_t rc;
 	bool_t reuse_buffers = FALSE;
 	bool_t size_only = ngx_http_vod_submodule_size_only(submodule_context);
+
+#if (NGX_HAVE_OPENSSL_EVP)
+	ngx_http_vod_loc_conf_t* conf = submodule_context->conf;
+	segment_writer_t drm_writer;
 
 	if (conf->drm_enabled)
 	{
@@ -123,6 +130,7 @@ ngx_http_vod_mss_init_frame_processor(
 		}
 	}
 	else
+#endif // NGX_HAVE_OPENSSL_EVP
 	{
 		rc = mss_packager_build_fragment_header(
 			&submodule_context->request_context,

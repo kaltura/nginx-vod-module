@@ -1,7 +1,4 @@
 #include "volume_map.h"
-
-#if (VOD_HAVE_LIB_AV_CODEC)
-
 #include "audio_filter.h"
 #include "audio_decoder.h"
 
@@ -442,5 +439,3 @@ volume_map_writer_process(void* context)
 		}
 	}
 }
-
-#endif // (VOD_HAVE_LIB_AV_CODEC)
