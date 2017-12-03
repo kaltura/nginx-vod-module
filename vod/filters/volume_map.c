@@ -1,6 +1,7 @@
 #include "volume_map.h"
 #include "audio_filter.h"
 #include "audio_decoder.h"
+#include "../write_buffer.h"
 
 // constants
 #define RMS_LEVEL_PRECISION (100)
