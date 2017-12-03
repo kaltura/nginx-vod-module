@@ -33,6 +33,8 @@ enum {
 	MEDIA_SET_PARAM_EXPIRATION_TIME,
 	MEDIA_SET_PARAM_LIVE_WINDOW_DURATION,
 	MEDIA_SET_PARAM_NOTIFICATIONS,
+	MEDIA_SET_PARAM_CLIP_FROM,
+	MEDIA_SET_PARAM_CLIP_TO,
 
 	MEDIA_SET_PARAM_COUNT
 };
@@ -148,6 +150,8 @@ static json_object_key_def_t media_set_params[] = {
 	{ vod_string("expirationTime"),					VOD_JSON_INT,	MEDIA_SET_PARAM_EXPIRATION_TIME },
 	{ vod_string("liveWindowDuration"),				VOD_JSON_INT,	MEDIA_SET_PARAM_LIVE_WINDOW_DURATION },
 	{ vod_string("notifications"),					VOD_JSON_ARRAY,	MEDIA_SET_PARAM_NOTIFICATIONS },
+	{ vod_string("clipFrom"),						VOD_JSON_INT,	MEDIA_SET_PARAM_CLIP_FROM },
+	{ vod_string("clipTo"),							VOD_JSON_INT,	MEDIA_SET_PARAM_CLIP_TO },
 	{ vod_null_string, 0, 0 }
 };
 
@@ -2076,6 +2080,7 @@ vod_status_t
 media_set_parse_json(
 	request_context_t* request_context, 
 	u_char* string, 
+	u_char* override,
 	request_params_t* request_params,
 	segmenter_conf_t* segmenter,
 	media_clip_source_t* source,
@@ -2085,6 +2090,7 @@ media_set_parse_json(
 	media_set_parse_context_t context;
 	get_clip_ranges_params_t get_ranges_params;
 	vod_json_value_t* params[MEDIA_SET_PARAM_COUNT];
+	vod_json_value_t override_json;
 	vod_json_value_t json;
 	vod_status_t rc;
 	uint64_t last_clip_end;
@@ -2101,6 +2107,23 @@ media_set_parse_json(
 		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
 			"media_set_parse_json: failed to parse json %i: %s", rc, error);
 		return VOD_BAD_MAPPING;
+	}
+
+	if (override != NULL)
+	{
+		rc = vod_json_parse(request_context->pool, override, &override_json, error, sizeof(error));
+		if (rc != VOD_JSON_OK)
+		{
+			vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+				"media_set_parse_json: failed to parse override json %i: %s", rc, error);
+			return VOD_BAD_REQUEST;
+		}
+
+		rc = vod_json_replace(&json, &override_json);
+		if (rc != VOD_OK)
+		{
+			return rc;
+		}
 	}
 
 	if (json.type != VOD_JSON_OBJECT)
@@ -2153,6 +2176,27 @@ media_set_parse_json(
 		{
 			return rc;
 		}
+	}
+
+	// apply the json clipping params on the source clipping params
+	if (params[MEDIA_SET_PARAM_CLIP_FROM] != NULL &&
+		(uint64_t)params[MEDIA_SET_PARAM_CLIP_FROM]->v.num.num > source->clip_from)
+	{
+		source->clip_from = params[MEDIA_SET_PARAM_CLIP_FROM]->v.num.num;
+	}
+
+	if (params[MEDIA_SET_PARAM_CLIP_TO] != NULL &&
+		(uint64_t)params[MEDIA_SET_PARAM_CLIP_TO]->v.num.num < source->clip_to)
+	{
+		source->clip_to = params[MEDIA_SET_PARAM_CLIP_TO]->v.num.num;
+	}
+
+	if (source->clip_from >= source->clip_to)
+	{
+		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+			"media_set_parse_json: clip from %uL greater than clip to %uL",
+			source->clip_from, source->clip_to);
+		return VOD_BAD_REQUEST;
 	}
 
 	if (params[MEDIA_SET_PARAM_DURATIONS] == NULL)
@@ -2350,6 +2394,8 @@ media_set_parse_json(
 		{
 			return rc;
 		}
+
+		last_clip_end = result->timing.first_time + result->timing.total_duration;
 	}
 
 	// get the key frame durations
@@ -2374,7 +2420,7 @@ media_set_parse_json(
 		context.first_clip_from = 0;
 	}
 
-	if (source->clip_to != ULLONG_MAX)
+	if (source->clip_to < last_clip_end)
 	{
 		rc = media_set_apply_clip_to(request_context, result, source->clip_to);
 		if (rc != VOD_OK)

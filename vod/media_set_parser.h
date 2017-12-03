@@ -27,6 +27,7 @@ vod_status_t media_set_parser_init(
 vod_status_t media_set_parse_json(
 	request_context_t* request_context,
 	u_char* string,
+	u_char* override,
 	request_params_t* request_params,
 	struct segmenter_conf_s* segmenter,
 	media_clip_source_t* source,
