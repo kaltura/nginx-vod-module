@@ -1,7 +1,5 @@
 #include "mp4_aes_ctr.h"
 
-#if (VOD_HAVE_OPENSSL_EVP)
-
 #define MIN_ALLOC_SIZE (16)
 
 static void
@@ -194,5 +192,3 @@ mp4_aes_ctr_write_encrypted(
 
 	return VOD_OK;
 }
-
-#endif //(VOD_HAVE_OPENSSL_EVP)

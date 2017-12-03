@@ -3,12 +3,15 @@
 #include "ngx_http_vod_submodule.h"
 #include "ngx_http_vod_utils.h"
 #include "vod/dash/dash_packager.h"
-#include "vod/dash/edash_packager.h"
 #include "vod/mkv/mkv_builder.h"
 #include "vod/mp4/mp4_fragment.h"
 #include "vod/mp4/mp4_init_segment.h"
 #include "vod/subtitle/webvtt_builder.h"
 #include "vod/udrm.h"
+
+#if (NGX_HAVE_OPENSSL_EVP)
+#include "vod/dash/edash_packager.h"
+#endif // NGX_HAVE_OPENSSL_EVP
 
 // constants
 #define SUPPORTED_CODECS_MP4 (VOD_CODEC_FLAG(AVC) | VOD_CODEC_FLAG(HEVC) | VOD_CODEC_FLAG(AAC) | VOD_CODEC_FLAG(AC3) | VOD_CODEC_FLAG(EAC3))
@@ -66,6 +69,7 @@ ngx_http_vod_dash_handle_manifest(
 		}
 	}
 
+#if (NGX_HAVE_OPENSSL_EVP)
 	if (conf->drm_enabled)
 	{
 		rc = edash_packager_build_mpd(
@@ -77,6 +81,7 @@ ngx_http_vod_dash_handle_manifest(
 			response);
 	}
 	else
+#endif // NGX_HAVE_OPENSSL_EVP
 	{
 		vod_memzero(&extensions, sizeof(extensions));
 
@@ -107,8 +112,10 @@ ngx_http_vod_dash_mp4_handle_init_segment(
 	ngx_str_t* response,
 	ngx_str_t* content_type)
 {
-	ngx_http_vod_loc_conf_t* conf = submodule_context->conf;
 	vod_status_t rc;
+
+#if (NGX_HAVE_OPENSSL_EVP)
+	ngx_http_vod_loc_conf_t* conf = submodule_context->conf;
 	uint32_t flags;
 
 	if (conf->drm_enabled)
@@ -133,6 +140,7 @@ ngx_http_vod_dash_mp4_handle_init_segment(
 			response);
 	}
 	else
+#endif // NGX_HAVE_OPENSSL_EVP
 	{
 		rc = mp4_init_segment_build(
 			&submodule_context->request_context,
@@ -169,12 +177,14 @@ ngx_http_vod_dash_mp4_init_frame_processor(
 	dash_fragment_header_extensions_t header_extensions;
 	ngx_http_vod_loc_conf_t* conf = submodule_context->conf;
 	fragment_writer_state_t* state;
-	segment_writer_t drm_writer;
 	vod_status_t rc;
 	bool_t reuse_buffers = FALSE;
 	bool_t size_only = ngx_http_vod_submodule_size_only(submodule_context);
 
-	if (conf->drm_enabled && 
+#if (NGX_HAVE_OPENSSL_EVP)
+	segment_writer_t drm_writer;
+
+	if (conf->drm_enabled &&
 		submodule_context->request_params.segment_index >= conf->drm_clear_lead_segment_count)
 	{
 		drm_writer = *segment_writer;		// must not change segment_writer, otherwise the header will be encrypted
@@ -208,6 +218,7 @@ ngx_http_vod_dash_mp4_init_frame_processor(
 		}
 	}
 	else
+#endif // NGX_HAVE_OPENSSL_EVP
 	{
 		// unencrypted
 		ngx_memzero(&header_extensions, sizeof(header_extensions));

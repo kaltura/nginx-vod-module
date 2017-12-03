@@ -4,13 +4,16 @@
 #include "ngx_http_vod_submodule.h"
 #include "ngx_http_vod_module.h"
 #include "ngx_http_vod_status.h"
-#include "ngx_http_vod_thumb.h"
 #include "ngx_perf_counters.h"
 #include "ngx_buffer_cache.h"
 #include "vod/media_set_parser.h"
 #include "vod/buffer_pool.h"
 #include "vod/common.h"
 #include "vod/udrm.h"
+
+#if (NGX_HAVE_LIB_AV_CODEC)
+#include "ngx_http_vod_thumb.h"
+#endif // NGX_HAVE_LIB_AV_CODEC
 
 // globals
 static ngx_str_t ngx_http_vod_last_modified_default_types[] = {
@@ -110,7 +113,7 @@ ngx_http_vod_create_loc_conf(ngx_conf_t *cf)
 
 #if (NGX_THREADS)
 	conf->open_file_thread_pool = NGX_CONF_UNSET_PTR;
-#endif
+#endif // NGX_THREADS
 
 	// submodules
 	for (cur_module = submodules; *cur_module != NULL; cur_module++)
@@ -298,7 +301,7 @@ ngx_http_vod_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child)
 
 #if (NGX_THREADS)
 	ngx_conf_merge_ptr_value(conf->open_file_thread_pool, prev->open_file_thread_pool, NULL);
-#endif
+#endif // NGX_THREADS
 
 	// validate vod_upstream / vod_upstream_host_header used when needed
 	if (conf->request_handler == ngx_http_vod_remote_request_handler)
@@ -323,7 +326,7 @@ ngx_http_vod_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child)
 	{
 		conf->segmenter.align_to_key_frames = 1;
 	}
-#endif //(NGX_HAVE_LIB_AV_CODEC)
+#endif // NGX_HAVE_LIB_AV_CODEC
 
 	rc = segmenter_init_config(&conf->segmenter, cf->pool);
 	if (rc != VOD_OK)
@@ -1269,7 +1272,7 @@ ngx_command_t ngx_http_vod_commands[] = {
 	NGX_HTTP_LOC_CONF_OFFSET,
 	offsetof(ngx_http_vod_loc_conf_t, min_single_nalu_per_frame_segment),
 	NULL },
-#endif //(NGX_HAVE_OPENSSL_EVP)
+#endif // NGX_HAVE_OPENSSL_EVP
 
 	// request format settings
 	{ ngx_string("vod_clip_to_param_name"),
@@ -1335,14 +1338,17 @@ ngx_command_t ngx_http_vod_commands[] = {
 	NGX_HTTP_LOC_CONF_OFFSET,
 	offsetof(ngx_http_vod_loc_conf_t, open_file_thread_pool),
 	NULL },
-#endif
+#endif // NGX_THREADS
 
 #include "ngx_http_vod_dash_commands.h"
 #include "ngx_http_vod_hds_commands.h"
 #include "ngx_http_vod_hls_commands.h"
 #include "ngx_http_vod_mss_commands.h"
+
+#if (NGX_HAVE_LIB_AV_CODEC)
 #include "ngx_http_vod_thumb_commands.h"
 #include "ngx_http_vod_volume_map_commands.h"
+#endif // NGX_HAVE_LIB_AV_CODEC
 
 	ngx_null_command
 };

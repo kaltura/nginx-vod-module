@@ -1,7 +1,4 @@
 #include "mp4_cbcs_encrypt.h"
-
-#if (VOD_HAVE_OPENSSL_EVP)
-
 #include "mp4_write_stream.h"
 #include "mp4_defs.h"
 #include "../write_buffer.h"
@@ -10,6 +7,7 @@
 #include "../hevc_parser.h"
 #include "../avc_parser.h"
 #include "../avc_defs.h"
+#include "../aes_defs.h"
 #include "../udrm.h"
 
 // constants
@@ -934,20 +932,3 @@ mp4_cbcs_encrypt_get_writers(
 	*result = segment_writers;
 	return VOD_OK;
 }
-
-#else
-
-// empty stubs
-vod_status_t
-mp4_cbcs_encrypt_get_writers(
-	request_context_t* request_context,
-	media_set_t* media_set,
-	segment_writer_t* segment_writer,
-	const u_char* key,
-	const u_char* iv,
-	segment_writer_t** result)
-{
-	return VOD_UNEXPECTED;
-}
-
-#endif //(VOD_HAVE_OPENSSL_EVP)

@@ -1,7 +1,4 @@
 #include "aes_cbc_encrypt.h"
-
-#if (VOD_HAVE_OPENSSL_EVP)
-
 #include "../buffer_pool.h"
 
 static void 
@@ -184,39 +181,3 @@ aes_cbc_encrypt_write(
 
 	return state->callback(state->callback_context, encrypted_buffer, out_size);
 }
-
-#else
-
-// empty stubs
-vod_status_t 
-aes_cbc_encrypt_init(
-	aes_cbc_encrypt_context_t** ctx,
-	request_context_t* request_context,
-	write_callback_t callback,
-	void* callback_context,
-	const u_char* key,
-	const u_char* iv)
-{
-	return VOD_UNEXPECTED;
-}
-
-vod_status_t 
-aes_cbc_encrypt(
-	aes_cbc_encrypt_context_t* state,
-	vod_str_t* dest,
-	vod_str_t* src,
-	bool_t flush)
-{
-	return VOD_UNEXPECTED;
-}
-
-vod_status_t 
-aes_cbc_encrypt_write(
-	aes_cbc_encrypt_context_t* ctx,
-	u_char* buffer,
-	uint32_t size)
-{
-	return VOD_UNEXPECTED;
-}
-
-#endif //(VOD_HAVE_OPENSSL_EVP)

@@ -98,9 +98,13 @@ void vod_log_error(vod_uint_t level, vod_log_t *log, int err,
 
 #define VOD_HAVE_LIB_AV_CODEC NGX_HAVE_LIB_AV_CODEC
 #define VOD_HAVE_LIB_AV_FILTER NGX_HAVE_LIB_AV_FILTER
+#define VOD_HAVE_LIB_SW_SCALE NGX_HAVE_LIB_SW_SCALE
 #define VOD_HAVE_OPENSSL_EVP NGX_HAVE_OPENSSL_EVP
 #define VOD_HAVE_LIBXML2 NGX_HAVE_LIBXML2
 #define VOD_HAVE_ICONV NGX_HAVE_ICONV
+#define VOD_HAVE_ZLIB NGX_HAVE_ZLIB
+
+#define VOD_DEBUG NGX_DEBUG
 
 #if (VOD_HAVE_LIB_AV_CODEC)
 #include <libavcodec/avcodec.h>
@@ -180,7 +184,7 @@ void vod_log_error(vod_uint_t level, vod_log_t *log, int err,
 #define vod_hash_find(hash, key, name, len) ngx_hash_find(hash, key, name, len)
 
 // time functions
-#if (NGX_DEBUG)
+#if (VOD_DEBUG)
 #define vod_time(request_context) (request_context->time > 0 ? request_context->time : ngx_time())
 #else
 #define vod_time(request_context) ngx_time()
@@ -253,12 +257,6 @@ void vod_log_error(vod_uint_t level, vod_log_t *log, int err,
 		ngx_log_debug4(level, log, err, fmt, arg1, arg2, arg3, arg4)
 
 #define vod_errno ngx_errno
-
-#if (NGX_DEBUG)
-#define VOD_DEBUG (1)
-#else
-#define VOD_DEBUG (0)
-#endif
 
 typedef intptr_t bool_t;
 typedef ngx_int_t vod_status_t;
@@ -339,7 +337,7 @@ typedef struct {
 	vod_log_t *log;
 	buffer_pool_t* output_buffer_pool;
 	bool_t simulation_only;
-#if (NGX_DEBUG)
+#if (VOD_DEBUG)
 	time_t time;
 #endif
 } request_context_t;

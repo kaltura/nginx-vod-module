@@ -1,7 +1,4 @@
 #include <ngx_http.h>
-
-#if (NGX_HAVE_LIB_AV_CODEC)
-
 #include "ngx_http_vod_submodule.h"
 #include "ngx_http_vod_utils.h"
 #include "vod/thumb/thumb_grabber.h"
@@ -223,7 +220,7 @@ ngx_http_vod_thumb_parse_dimensions(
 
 	return start_pos;
 }
-#endif //(NGX_HAVE_LIB_SW_SCALE)
+#endif // NGX_HAVE_LIB_SW_SCALE
 
 static ngx_int_t
 ngx_http_vod_thumb_parse_uri_file_name(
@@ -297,7 +294,7 @@ ngx_http_vod_thumb_parse_uri_file_name(
 			"ngx_http_vod_thumb_parse_uri_file_name: failed to parse width/height");
 		return ngx_http_vod_status_to_ngx_error(r, VOD_BAD_REQUEST);
 	}
-#endif //(NGX_HAVE_LIB_SW_SCALE)
+#endif // NGX_HAVE_LIB_SW_SCALE
 
 	// parse the required tracks string
 	rc = ngx_http_vod_parse_uri_file_name(r, start_pos, end_pos, 0, request_params);
@@ -327,5 +324,3 @@ ngx_http_vod_thumb_parse_drm_info(
 }
 
 DEFINE_SUBMODULE(thumb);
-
-#endif // (NGX_HAVE_LIB_AV_CODEC)

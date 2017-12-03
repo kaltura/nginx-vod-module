@@ -1,10 +1,13 @@
 #include "../input/frames_source_memory.h"
 #include "../input/frames_source_cache.h"
-#include "frame_encrypt_filter.h"
-#include "eac3_encrypt_filter.h"
 #include "frame_joiner_filter.h"
 #include "id3_encoder_filter.h"
 #include "hls_muxer.h"
+
+#if (VOD_HAVE_OPENSSL_EVP)
+#include "frame_encrypt_filter.h"
+#include "eac3_encrypt_filter.h"
+#endif // VOD_HAVE_OPENSSL_EVP
 
 #define ID3_TEXT_JSON_FORMAT "{\"timestamp\":%uL}%Z"
 
@@ -381,6 +384,7 @@ hls_muxer_init_base(
 				}
 			}
 
+#if (VOD_HAVE_OPENSSL_EVP)
 			if (encryption_params->type == HLS_ENC_SAMPLE_AES)
 			{
 				switch (track->media_info.codec_id)
@@ -416,6 +420,7 @@ hls_muxer_init_base(
 					}
 				}
 			}
+#endif // VOD_HAVE_OPENSSL_EVP
 			break;
 		}
 
@@ -914,7 +919,7 @@ hls_muxer_simulate_get_iframes(
 	vod_status_t rc;
 #if (VOD_DEBUG)
 	off_t cur_frame_start;
-#endif
+#endif // VOD_DEBUG
 	
 	cur_item = segment_durations->items;
 	last_item = segment_durations->items + segment_durations->item_count;
@@ -1125,7 +1130,7 @@ hls_muxer_simulate_get_segment_size(hls_muxer_state_t* state, size_t* result)
 	vod_status_t rc;
 #if (VOD_DEBUG)
 	off_t cur_frame_start;
-#endif
+#endif // VOD_DEBUG
 
 	mpegts_encoder_simulated_start_segment(&state->queue);
 
@@ -1152,7 +1157,7 @@ hls_muxer_simulate_get_segment_size(hls_muxer_state_t* state, size_t* result)
 
 #if (VOD_DEBUG)
 		cur_frame_start = state->queue.cur_offset;
-#endif
+#endif // VOD_DEBUG
 		
 		// write the frame
 		hls_muxer_simulation_write_frame(
@@ -1172,7 +1177,7 @@ hls_muxer_simulate_get_segment_size(hls_muxer_state_t* state, size_t* result)
 				cur_frame_dts, 
 				selected_stream->mpegts_encoder_state.stream_info.pid);
 		}
-#endif
+#endif // VOD_DEBUG
 	}
 
 	segment_size = state->queue.cur_offset;

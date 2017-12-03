@@ -1,7 +1,5 @@
 #include "audio_decoder.h"
 
-#if (VOD_HAVE_LIB_AV_CODEC)
-
 // constants
 static const uint64_t aac_channel_layout[] = {
 	0,
@@ -344,5 +342,3 @@ audio_decoder_get_frame(
 		}
 	}
 }
-
-#endif // (VOD_HAVE_LIB_AV_CODEC)

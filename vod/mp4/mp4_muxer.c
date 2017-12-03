@@ -2,7 +2,6 @@
 #include "../input/frames_source_cache.h"
 #include "../mp4/mp4_defs.h"
 #include "../mp4/mp4_fragment.h"
-#include "../aes_defs.h"
 
 // constants
 #define MDAT_HEADER_SIZE (ATOM_HEADER_SIZE)

@@ -6,7 +6,6 @@
 #include "adts_encoder_filter.h"
 #include "mpegts_encoder_filter.h"
 #include "buffer_filter.h"
-#include "aes_cbc_encrypt.h"
 #include "../media_format.h"
 #include "../segmenter.h"
 

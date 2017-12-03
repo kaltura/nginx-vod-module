@@ -3,8 +3,6 @@
 #include "../media_set.h"
 #include "subtitle_format.h"
 
-#if (VOD_HAVE_LIBXML2)
-
 #include <libxml/parser.h>
 #include <libxml/tree.h>
 
@@ -935,18 +933,3 @@ media_format_t dfxp_format = {
 	dfxp_parse,
 	dfxp_parse_frames,
 };
-
-#else
-
-// empty stub
-void
-dfxp_init_process()
-{
-}
-
-void
-dfxp_exit_process()
-{
-}
-
-#endif

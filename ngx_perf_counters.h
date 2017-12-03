@@ -26,7 +26,7 @@ typedef struct timeval ngx_tick_count_t;
 #define ngx_tick_count_diff(start, end) \
 	(((end).tv_sec - (start).tv_sec) * 1000000 + ((end).tv_usec - (start).tv_usec))
 	
-#endif
+#endif // NGX_HAVE_CLOCK_GETTIME
 
 #ifdef NGX_PERF_COUNTERS_ENABLED
 
@@ -91,7 +91,7 @@ typedef struct {
 
 #define PC_COUNT (0)
 
-#endif
+#endif // NGX_PERF_COUNTERS_ENABLED
 
 // typedefs
 typedef struct {

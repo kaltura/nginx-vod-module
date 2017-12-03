@@ -8,9 +8,12 @@
 #include "ngx_http_vod_hds_conf.h"
 #include "ngx_http_vod_hls_conf.h"
 #include "ngx_http_vod_mss_conf.h"
+#include "vod/segmenter.h"
+
+#if (NGX_HAVE_LIB_AV_CODEC)
 #include "ngx_http_vod_thumb_conf.h"
 #include "ngx_http_vod_volume_map_conf.h"
-#include "vod/segmenter.h"
+#endif // NGX_HAVE_LIB_AV_CODEC
 
 // enum
 enum {
@@ -97,7 +100,7 @@ struct ngx_http_vod_loc_conf_s {
 
 #if (NGX_THREADS)
 	ngx_thread_pool_t *open_file_thread_pool;
-#endif
+#endif // NGX_THREADS
 
 	// derived fields
 	ngx_hash_t uri_params_hash;
@@ -108,8 +111,11 @@ struct ngx_http_vod_loc_conf_s {
 	ngx_http_vod_hds_loc_conf_t hds;
 	ngx_http_vod_hls_loc_conf_t hls;
 	ngx_http_vod_mss_loc_conf_t mss;
+
+#if (NGX_HAVE_LIB_AV_CODEC)
 	ngx_http_vod_thumb_loc_conf_t thumb;
 	ngx_http_vod_volume_map_loc_conf_t volume_map;
+#endif // NGX_HAVE_LIB_AV_CODEC
 };
 
 typedef struct ngx_http_vod_loc_conf_s ngx_http_vod_loc_conf_t;

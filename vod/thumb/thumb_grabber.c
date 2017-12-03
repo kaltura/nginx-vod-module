@@ -1,13 +1,12 @@
 #include "thumb_grabber.h"
 #include "../media_set.h"
 
-#if (VOD_HAVE_LIB_AV_CODEC)
 #include <libavcodec/avcodec.h>
 
-#if (NGX_HAVE_LIB_SW_SCALE)
+#if (VOD_HAVE_LIB_SW_SCALE)
 #include <libswscale/swscale.h>
 #include <libavutil/imgutils.h>
-#endif //(NGX_HAVE_LIB_SW_SCALE)
+#endif // VOD_HAVE_LIB_SW_SCALE
 
 // typedefs
 typedef struct
@@ -548,7 +547,7 @@ thumb_grabber_decode_frame(thumb_grabber_state_t* state, u_char* buffer)
 	return VOD_OK;
 }
 
-#if (NGX_HAVE_LIB_SW_SCALE)
+#if (VOD_HAVE_LIB_SW_SCALE)
 static vod_status_t
 thumb_grabber_resize_frame(thumb_grabber_state_t* state)
 {
@@ -611,7 +610,7 @@ end:
 	av_frame_free(&output_frame);
 	return rc;
 }
-#endif //(NGX_HAVE_LIB_SW_SCALE)
+#endif // VOD_HAVE_LIB_SW_SCALE
 
 static vod_status_t
 thumb_grabber_write_frame(thumb_grabber_state_t* state)
@@ -635,7 +634,7 @@ thumb_grabber_write_frame(thumb_grabber_state_t* state)
 		return VOD_UNEXPECTED;
 	}
 
-#if (NGX_HAVE_LIB_SW_SCALE)
+#if (VOD_HAVE_LIB_SW_SCALE)
 	if (state->encoder->width != state->decoded_frame->width ||
 		state->encoder->height != state->decoded_frame->height)
 	{
@@ -645,7 +644,7 @@ thumb_grabber_write_frame(thumb_grabber_state_t* state)
 			return rc;
 		}
 	}
-#endif //(NGX_HAVE_LIB_SW_SCALE)
+#endif // VOD_HAVE_LIB_SW_SCALE
 
 	avrc = avcodec_send_frame(state->encoder, state->decoded_frame);
 	if (avrc < 0)
@@ -781,5 +780,3 @@ thumb_grabber_process(void* context)
 		state->frame_started = FALSE;
 	}
 }
-
-#endif // (VOD_HAVE_LIB_AV_CODEC)

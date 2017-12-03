@@ -3,8 +3,6 @@
 
 // includes
 #include "../media_set.h"
-
-#if (VOD_HAVE_LIB_AV_CODEC)
 #include <libavcodec/avcodec.h>
 
 // constants
@@ -36,7 +34,5 @@ vod_status_t volume_map_writer_init(
 
 vod_status_t volume_map_writer_process(
 	void* state);
-
-#endif // (VOD_HAVE_LIB_AV_CODEC)
 
 #endif // __VOLUME_MAP_H__

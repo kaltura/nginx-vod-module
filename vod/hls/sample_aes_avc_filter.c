@@ -1,7 +1,5 @@
 #include "sample_aes_avc_filter.h"
 
-#if (VOD_HAVE_OPENSSL_EVP)
-
 // macros
 #define THIS_FILTER (MEDIA_FILTER_ENCRYPT)
 #define get_context(ctx) ((sample_aes_avc_filter_state_t*)ctx->context[THIS_FILTER])
@@ -231,36 +229,3 @@ sample_aes_avc_filter_write_nal_body(
 
 	return VOD_OK;
 }
-
-#else
-
-// empty stubs
-vod_status_t
-sample_aes_avc_filter_init(
-	media_filter_t* filter,
-	media_filter_context_t* context,
-	u_char* key,
-	u_char* iv)
-{
-	return VOD_UNEXPECTED;
-}
-
-vod_status_t 
-sample_aes_avc_start_nal_unit(
-	media_filter_context_t* context,
-	int unit_type,
-	uint32_t unit_size)
-{
-	return VOD_UNEXPECTED;
-}
-
-vod_status_t 
-sample_aes_avc_filter_write_nal_body(
-	media_filter_context_t* context,
-	const u_char* buffer,
-	uint32_t size)
-{
-	return VOD_UNEXPECTED;
-}
-
-#endif //(VOD_HAVE_OPENSSL_EVP)

@@ -1,7 +1,5 @@
 #include "frame_encrypt_filter.h"
 
-#if (VOD_HAVE_OPENSSL_EVP)
-
 // macros
 #define THIS_FILTER (MEDIA_FILTER_ENCRYPT)
 #define get_context(ctx) ((frame_encrypt_filter_state_t*)ctx->context[THIS_FILTER])
@@ -185,22 +183,3 @@ frame_encrypt_filter_init(
 
 	return VOD_OK;
 }
-
-#else
-
-// empty stubs
-vod_status_t
-frame_encrypt_filter_init(
-	media_filter_t* filter,
-	media_filter_context_t* context,
-	hls_encryption_params_t* encryption_params)
-{
-	return VOD_UNEXPECTED;
-}
-
-void
-frame_encrypt_start_sub_frame(media_filter_context_t* context, uint32_t size)
-{
-}
-
-#endif //(VOD_HAVE_OPENSSL_EVP)
