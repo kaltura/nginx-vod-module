@@ -924,6 +924,26 @@ static const ngx_http_vod_request_t hls_ts_segment_request = {
 
 static const ngx_http_vod_request_t hls_mp4_segment_request = {
 	REQUEST_FLAG_SINGLE_TRACK_PER_MEDIA_TYPE,
+	PARSE_FLAG_FRAMES_ALL | PARSE_FLAG_INITIAL_PTS_DELAY,
+	REQUEST_CLASS_SEGMENT,
+	SUPPORTED_CODECS,
+	HLS_TIMESCALE,
+	NULL,
+	ngx_http_vod_hls_init_fmp4_frame_processor,
+};
+
+static const ngx_http_vod_request_t hls_mp4_segment_request_cbcs = {
+	REQUEST_FLAG_SINGLE_TRACK_PER_MEDIA_TYPE,
+	PARSE_FLAG_FRAMES_ALL | PARSE_FLAG_EXTRA_DATA | PARSE_FLAG_INITIAL_PTS_DELAY,
+	REQUEST_CLASS_SEGMENT,
+	SUPPORTED_CODECS,
+	HLS_TIMESCALE,
+	NULL,
+	ngx_http_vod_hls_init_fmp4_frame_processor,
+};
+
+static const ngx_http_vod_request_t hls_mp4_segment_request_cenc = {
+	REQUEST_FLAG_SINGLE_TRACK_PER_MEDIA_TYPE,
 	PARSE_FLAG_FRAMES_ALL | PARSE_FLAG_PARSED_EXTRA_DATA | PARSE_FLAG_INITIAL_PTS_DELAY,
 	REQUEST_CLASS_SEGMENT,
 	SUPPORTED_CODECS,
@@ -1065,7 +1085,22 @@ ngx_http_vod_hls_parse_uri_file_name(
 	{
 		start_pos += conf->hls.m3u8_config.segment_file_name_prefix.len;
 		end_pos -= (sizeof(m4s_file_ext) - 1);
-		*request = &hls_mp4_segment_request;
+
+		switch (conf->hls.encryption_method)
+		{
+		case HLS_ENC_SAMPLE_AES:
+			*request = &hls_mp4_segment_request_cbcs;
+			break;
+
+		case HLS_ENC_SAMPLE_AES_CENC:
+			*request = &hls_mp4_segment_request_cenc;
+			break;
+
+		default:
+			*request = &hls_mp4_segment_request;
+			break;
+		}
+
 		flags = PARSE_FILE_NAME_EXPECT_SEGMENT_INDEX;
 	}
 	// vtt segment
