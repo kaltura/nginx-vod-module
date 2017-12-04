@@ -26,7 +26,7 @@ typedef struct
 	uint32_t cur_offset;
 	uint32_t next_encrypt_offset;
 	uint32_t max_encrypt_offset;
-	uint32_t last_three_bytes;
+	uint32_t zero_run;
 } sample_aes_avc_filter_state_t;
 
 static u_char emulation_prevention_byte[] = { 0x03 };
@@ -103,30 +103,40 @@ sample_aes_avc_write_emulation_prevention(
 
 	for (cur_pos = buffer; cur_pos < buffer_end; cur_pos++)
 	{
-		state->last_three_bytes = ((state->last_three_bytes << 8) | *cur_pos) & 0xffffff;
-		if (state->last_three_bytes > 3)
+		if (state->zero_run < 2)
 		{
+			if (*cur_pos == 0)
+			{
+				state->zero_run++;
+			}
+			else
+			{
+				state->zero_run = 0;
+			}
 			continue;
 		}
 
-		state->last_three_bytes = 1;
-
-		if (cur_pos > last_output_pos)
+		if ((*cur_pos & ~3) == 0)
 		{
-			rc = state->write(context, last_output_pos, cur_pos - last_output_pos);
+			if (cur_pos > last_output_pos)
+			{
+				rc = state->write(context, last_output_pos, cur_pos - last_output_pos);
+				if (rc != VOD_OK)
+				{
+					return rc;
+				}
+
+				last_output_pos = cur_pos;
+			}
+
+			rc = state->write(context, emulation_prevention_byte, sizeof(emulation_prevention_byte));
 			if (rc != VOD_OK)
 			{
 				return rc;
 			}
-
-			last_output_pos = cur_pos;
 		}
 
-		rc = state->write(context, emulation_prevention_byte, sizeof(emulation_prevention_byte));
-		if (rc != VOD_OK)
-		{
-			return rc;
-		}
+		state->zero_run = *cur_pos == 0;
 	}
 
 	return state->write(context, last_output_pos, buffer_end - last_output_pos);
@@ -150,7 +160,7 @@ sample_aes_avc_start_nal_unit(
 	state->cur_offset = 0;
 	state->next_encrypt_offset = FIRST_ENCRYPTED_OFFSET;
 	state->max_encrypt_offset = unit_size - AES_BLOCK_SIZE;
-	state->last_three_bytes = 1;
+	state->zero_run = 0;
 
 	// reset the IV (it is ok to call EVP_EncryptInit_ex several times without cleanup)
 	if (1 != EVP_EncryptInit_ex(state->cipher, EVP_aes_128_cbc(), NULL, state->key, state->iv))
