@@ -345,6 +345,13 @@ typedef struct {
 typedef struct {
 	u_char version[1];
 	u_char flags[3];
+	u_char system_id[16];
+	u_char data_size[4];
+} pssh_atom_t;
+
+typedef struct {
+	u_char version[1];
+	u_char flags[3];
 	u_char default_size[1];
 	u_char entries[4];
 } saiz_atom_t;

@@ -719,15 +719,35 @@ The response of the DRM server is a JSON, with the following format:
 * `iv` - optional base64 encoded initialization vector (128 bit). The IV is currently used only in HLS (FairPlay), 
 	in the other protocols an IV is generated automatically by nginx-vod-module.
 
-##### Sample configuration
+##### Sample configurations
 
-Below is a sample configuration for Apple FairPlay HLS:
+Apple FairPlay HLS:
 ```
 location ~ ^/fpshls/p/\d+/(sp/\d+/)?serveFlavor/entryId/([^/]+)/(.*) {
 	vod hls;
 	vod_hls_encryption_method sample-aes;
 	vod_hls_encryption_key_uri "skd://entry-$2";
 	vod_hls_encryption_key_format "com.apple.streamingkeydelivery";
+	vod_hls_encryption_key_format_versions "1";
+
+	vod_drm_enabled on;
+	vod_drm_request_uri "/udrm/system/ovp/$vod_suburi";
+
+	vod_last_modified_types *;
+	add_header Access-Control-Allow-Headers '*';
+	add_header Access-Control-Expose-Headers 'Server,range,Content-Length,Content-Range';
+	add_header Access-Control-Allow-Methods 'GET, HEAD, OPTIONS';
+	add_header Access-Control-Allow-Origin '*';
+	expires 100d;
+}
+```
+
+Common Encryption HLS:
+```
+location ~ ^/cenchls/p/\d+/(sp/\d+/)?serveFlavor/entryId/([^/]+)/(.*) {
+	vod hls;
+	vod_hls_encryption_method sample-aes-cenc;
+	vod_hls_encryption_key_format "urn:uuid:edef8ba9-79d6-4ace-a3c8-27dcd51d21ed";
 	vod_hls_encryption_key_format_versions "1";
 
 	vod_drm_enabled on;
@@ -1465,7 +1485,7 @@ Turning this parameter off reduces the packaging overhead, however the default i
 * **default**: `none`
 * **context**: `http`, `server`, `location`
 
-Sets the encryption method of HLS segments, allowed values are: none (default), aes-128, sample-aes.
+Sets the encryption method of HLS segments, allowed values are: none (default), aes-128, sample-aes, sample-aes-cenc.
 
 #### vod_hls_force_unmuxed_segments
 * **syntax**: `vod_hls_force_unmuxed_segments on/off`
