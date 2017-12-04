@@ -779,7 +779,6 @@ ngx_http_vod_hls_init_fmp4_frame_processor(
 
 			case VOD_OK:
 				segment_writers = &drm_writer;
-				reuse_input_buffers = TRUE;		// mp4_cenc_encrypt allocates new buffers
 				break;
 
 			default:
