@@ -603,6 +603,8 @@ ngx_http_vod_hls_handle_mp4_init_segment(
 			return ngx_http_vod_status_to_ngx_error(submodule_context->r, rc);
 		}
 		break;
+
+	default:;
 	}
 #endif // NGX_HAVE_OPENSSL_EVP
 
