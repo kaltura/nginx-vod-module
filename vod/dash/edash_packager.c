@@ -55,14 +55,6 @@ typedef struct {
 	bool_t write_playready_kid;
 } write_content_protection_context_t;
 
-// init segment types
-typedef struct {
-	u_char version[1];
-	u_char flags[3];
-	u_char system_id[DRM_SYSTEM_ID_SIZE];
-	u_char data_size[4];
-} pssh_atom_t;
-
 ////// mpd functions
 
 static u_char edash_playready_system_id[] = {
@@ -75,7 +67,7 @@ static u_char edash_clear_key_system_id[] = {
 	0xac, 0xe3, 0x3c, 0x1e, 0x52, 0xe2, 0xfb, 0x4b
 };
 
-static u_char*
+u_char*
 edash_packager_write_pssh(u_char* p, drm_system_info_t* cur_info)
 {
 	bool_t pssh_v1 = edash_pssh_v1(cur_info);
