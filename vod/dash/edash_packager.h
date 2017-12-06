@@ -3,6 +3,7 @@
 
 // includes
 #include "dash_packager.h"
+#include "../udrm.h"
 
 // constants
 #define EDASH_INIT_MP4_HAS_CLEAR_LEAD	(0x01)
@@ -25,15 +26,18 @@ vod_status_t edash_packager_build_init_mp4(
 	vod_str_t* result);
 
 vod_status_t edash_packager_get_fragment_writer(
-	segment_writer_t* result,
+	segment_writer_t* segment_writer,
 	request_context_t* request_context,
 	media_set_t* media_set,
 	uint32_t segment_index,
 	bool_t single_nalu_per_frame,
-	segment_writer_t* segment_writer,
 	const u_char* iv,
 	bool_t size_only,
 	vod_str_t* fragment_header,
 	size_t* total_fragment_size);
+
+u_char* edash_packager_write_pssh(
+	u_char* p,
+	drm_system_info_t* cur_info);
 
 #endif //__EDASH_PACKAGER_H__

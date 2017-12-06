@@ -142,19 +142,7 @@ webvtt_utf16le_to_utf8(
 	output->len = output_arr.nelts;
 	return VOD_OK;
 }
-
-#else
-// empty stubs
-void
-webvtt_init_process(vod_log_t* log)
-{
-}
-
-void
-webvtt_exit_process()
-{
-}
-#endif
+#endif // VOD_HAVE_ICONV
 
 static vod_status_t
 webvtt_reader_init(
@@ -193,7 +181,7 @@ webvtt_reader_init(
 		}
 	}
 	else
-#endif
+#endif // VOD_HAVE_ICONV
 	{
 		if (vod_strncmp(p, UTF8_BOM, sizeof(UTF8_BOM) - 1) == 0)
 		{
@@ -407,7 +395,7 @@ webvtt_parse(
 			return rc;
 		}
 	}
-#endif
+#endif // VOD_HAVE_ICONV
 
 	return subtitle_parse(
 		request_context,

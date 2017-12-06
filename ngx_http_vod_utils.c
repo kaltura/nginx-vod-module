@@ -268,7 +268,7 @@ ngx_http_vod_get_base_url(
 		use_https = (r->connection->ssl != NULL);
 #else
 		use_https = 0;
-#endif
+#endif // NGX_HTTP_SSL
 
 		if (use_https)
 		{

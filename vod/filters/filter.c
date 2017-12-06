@@ -27,6 +27,8 @@ typedef struct {
 	media_clip_filtered_t* output_clip;
 	media_track_t* cur_track;
 	void* audio_filter;
+	uint32_t max_frame_count;
+	uint32_t output_codec_id;
 } apply_filters_state_t;
 
 static void
@@ -37,7 +39,7 @@ filter_get_clip_track_count(media_clip_t* clip, uint32_t* track_count)
 	media_clip_t** cur_source;
 	media_clip_t** sources_end;
 
-	if (clip->type == MEDIA_CLIP_SOURCE)
+	if (media_clip_is_source(clip->type))
 	{
 		source = vod_container_of(clip, media_clip_source_t, base);
 		for (cur_track = source->track_array.first_track;
@@ -148,7 +150,7 @@ filter_scale_video_tracks(filters_init_state_t* state, media_clip_t* clip, uint3
 	media_clip_t** sources_end;
 	vod_status_t rc;
 
-	if (clip->type == MEDIA_CLIP_SOURCE)
+	if (media_clip_is_source(clip->type))
 	{
 		source = vod_container_of(clip, media_clip_source_t, base);
 
@@ -298,7 +300,7 @@ filter_init_filtered_clips(
 			vod_memzero(track_count, sizeof(track_count));
 			filter_get_clip_track_count(*cur_clip, track_count);
 
-			if (cur_clip[0]->type != MEDIA_CLIP_SOURCE && track_count[MEDIA_TYPE_AUDIO] > 1)
+			if (!media_clip_is_source(cur_clip[0]->type) && track_count[MEDIA_TYPE_AUDIO] > 1)
 			{
 				track_count[MEDIA_TYPE_AUDIO] = 1;		// audio filtering supports only a single output track
 			}
@@ -395,7 +397,7 @@ filter_init_filtered_clips(
 			init_state.audio_reference_track = NULL;
 
 			// in case of source, just copy all tracks as is
-			if (input_clip->type == MEDIA_CLIP_SOURCE)
+			if (media_clip_is_source(input_clip->type))
 			{
 				filter_init_filtered_clip_from_source(&init_state, (media_clip_source_t*)input_clip);
 
@@ -472,6 +474,8 @@ filter_init_state(
 	request_context_t* request_context,
 	read_cache_state_t* read_cache_state,
 	media_set_t* media_set,
+	uint32_t max_frame_count,
+	uint32_t output_codec_id,
 	void** context)
 {
 	apply_filters_state_t* state;
@@ -490,6 +494,8 @@ filter_init_state(
 	state->sequence = media_set->sequences;
 	state->output_clip = state->sequence->filtered_clips;
 	state->cur_track = state->output_clip->first_track;
+	state->max_frame_count = max_frame_count;
+	state->output_codec_id = output_codec_id;
 	state->audio_filter = NULL;
 
 	*context = state;
@@ -552,6 +558,8 @@ filter_run_state_machine(void* context)
 			state->sequence,
 			state->cur_track->source_clip,
 			state->cur_track,
+			state->max_frame_count,
+			state->output_codec_id,
 			&cache_buffer_count,
 			&state->audio_filter);
 		if (rc != VOD_OK)

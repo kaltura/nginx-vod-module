@@ -2,7 +2,6 @@
 #define __HDS_MANIFEST_H__
 
 // includes
-#include "../mp4/mp4_builder.h"
 #include "../media_format.h"
 #include "../segmenter.h"
 #include "../common.h"

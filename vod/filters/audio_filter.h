@@ -20,11 +20,19 @@ vod_status_t audio_filter_alloc_state(
 	media_sequence_t* sequence,
 	media_clip_t* clip,
 	media_track_t* output_track,
+	uint32_t max_frame_count,
+	uint32_t output_codec_id,
 	size_t* cache_buffer_count,
 	void** result);
 
 void audio_filter_free_state(void* context);
 
 vod_status_t audio_filter_process(void* context);
+
+vod_status_t audio_filter_alloc_memory_frame(
+	request_context_t* request_context,
+	vod_array_t* frames_array,
+	size_t size,
+	input_frame_t** result);
 
 #endif // __AUDIO_FILTER_H__

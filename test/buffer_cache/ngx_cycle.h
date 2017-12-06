@@ -27,4 +27,4 @@ struct ngx_cycle_s {
 
 ngx_shm_zone_t *ngx_shared_memory_add(ngx_conf_t *cf, ngx_str_t *name, size_t size, void *tag);
 
-#endif /* _NGX_CYCLE_H_INCLUDED_ */
+#endif // _NGX_CYCLE_H_INCLUDED_

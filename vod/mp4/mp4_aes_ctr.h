@@ -12,9 +12,7 @@
 // typedefs
 typedef struct {
 	request_context_t* request_context;
-#if (VOD_HAVE_OPENSSL_EVP)
 	EVP_CIPHER_CTX* cipher;
-#endif //(VOD_HAVE_OPENSSL_EVP)
 	u_char counter[MP4_AES_CTR_COUNTER_BUFFER_SIZE];
 	u_char encrypted_counter[MP4_AES_CTR_COUNTER_BUFFER_SIZE];
 	u_char* encrypted_pos;

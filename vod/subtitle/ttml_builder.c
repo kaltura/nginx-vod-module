@@ -1,5 +1,5 @@
 #include "ttml_builder.h"
-#include "../mp4/mp4_builder.h"
+#include "../mp4/mp4_fragment.h"
 #include "../mp4/mp4_defs.h"
 
 // constants
@@ -36,7 +36,7 @@ typedef struct {
 	u_char track_id[4];
 	u_char default_sample_duration[4];
 	u_char default_sample_size[4];
-} tfhd_atom_t;
+} ttml_tfhd_atom_t;
 
 // globals
 static u_char trun_atom[] = {
@@ -54,7 +54,7 @@ static u_char sdtp_atom[] = {
 static u_char*
 ttml_write_tfhd_atom(u_char* p, uint32_t default_sample_duration, u_char** default_sample_size)
 {
-	size_t atom_size = ATOM_HEADER_SIZE + sizeof(tfhd_atom_t);
+	size_t atom_size = ATOM_HEADER_SIZE + sizeof(ttml_tfhd_atom_t);
 
 	write_atom_header(p, atom_size, 't', 'f', 'h', 'd');
 	write_be32(p, 0x18);			// flags - default sample duration, default sample size
@@ -211,7 +211,7 @@ ttml_build_mp4(
 	}
 
 	traf_atom_size = ATOM_HEADER_SIZE +
-		ATOM_HEADER_SIZE + sizeof(tfhd_atom_t) +
+		ATOM_HEADER_SIZE + sizeof(ttml_tfhd_atom_t) +
 		sizeof(trun_atom) +
 		sizeof(sdtp_atom);
 
@@ -238,7 +238,7 @@ ttml_build_mp4(
 	write_atom_header(p, moof_atom_size, 'm', 'o', 'o', 'f');
 
 	// moof.mfhd
-	p = mp4_builder_write_mfhd_atom(p, segment_index + 1);
+	p = mp4_fragment_write_mfhd_atom(p, segment_index + 1);
 
 	// moof.traf
 	write_atom_header(p, traf_atom_size, 't', 'r', 'a', 'f');

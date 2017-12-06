@@ -54,7 +54,7 @@ ngx_file_reader_update_state_file_info(ngx_file_reader_state_t* state, ngx_open_
 #if (NGX_HAVE_OPENAT)
 		case NGX_EMLINK:
 		case NGX_ELOOP:
-#endif
+#endif // NGX_HAVE_OPENAT
 
 			level = NGX_LOG_ERR;
 			rc = NGX_HTTP_FORBIDDEN;
@@ -118,7 +118,7 @@ ngx_file_reader_init(
 	state->use_aio = clcf->aio;
 	state->read_callback = read_callback;
 	state->callback_context = callback_context;
-#endif
+#endif // NGX_HAVE_FILE_AIO
 
 	rc = ngx_file_reader_init_open_file_info(&of, r, clcf, path);
 	if (rc != NGX_OK)
@@ -189,7 +189,7 @@ ngx_file_reader_init_async(
 	state->use_aio = clcf->aio;
 	state->read_callback = read_callback;
 	state->callback_context = callback_context;
-#endif
+#endif // NGX_HAVE_FILE_AIO
 
 	open_context = *context;
 
@@ -442,4 +442,4 @@ ngx_async_file_read(ngx_file_reader_state_t* state, ngx_buf_t *buf, size_t size,
 	return NGX_OK;
 }
 
-#endif
+#endif // NGX_HAVE_FILE_AIO

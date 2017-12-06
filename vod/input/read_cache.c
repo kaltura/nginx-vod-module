@@ -54,12 +54,14 @@ read_cache_get_from_cache(
 	uint32_t* size)
 {
 	media_clip_source_t* source = request->source;
+	read_cache_hint_t* hint;
 	cache_buffer_t* target_buffer;
 	cache_buffer_t* cur_buffer;
 	uint32_t read_size;
 	uint64_t aligned_last_offset;
 	uint64_t offset = request->cur_offset;
 	size_t alignment;
+	int cache_slot_id;
 
 	// check whether we already have the requested offset
 	for (cur_buffer = state->buffers; cur_buffer < state->buffers_end; cur_buffer++)
@@ -75,31 +77,43 @@ read_cache_get_from_cache(
 
 	// don't have the offset in cache
 	alignment = state->alignment - 1;
-	target_buffer = &state->buffers[request->cache_slot_id % state->buffer_count];
+	cache_slot_id = request->cache_slot_id;
 
 	// start reading from the min offset, if that would contain the whole frame
 	// Note: this condition is intended to optimize the case in which the frame order 
 	//		in the output segment is <video1><audio1> while on disk it's <audio1><video1>. 
 	//		in this case it would be better to start reading from the beginning, even 
 	//		though the first frame that is requested is the second one
-	if (request->min_offset < offset && 
-		request->end_offset < (request->min_offset & ~alignment) + state->buffer_size)
+	hint = &request->hint;
+	if (hint->min_offset < offset && 
+		hint->min_offset + state->buffer_size / 4 > offset &&
+		request->end_offset < (hint->min_offset & ~alignment) + state->buffer_size)
 	{
-		offset = request->min_offset;
+		offset = hint->min_offset;
+		cache_slot_id = hint->min_offset_slot_id;
 	}
 	offset &= ~alignment;
 
 	// calculate the read size
 	read_size = state->buffer_size;
+	target_buffer = &state->buffers[cache_slot_id % state->buffer_count];
 
 	// don't read anything that is already in the cache
 	for (cur_buffer = state->buffers; cur_buffer < state->buffers_end; cur_buffer++)
 	{
-		if (cur_buffer != target_buffer &&
-			cur_buffer->source == source &&
-			cur_buffer->start_offset > offset)
+		if (cur_buffer == target_buffer ||
+			cur_buffer->source != source)
+		{
+			continue;
+		}
+
+		if (cur_buffer->start_offset > offset)
 		{
 			read_size = vod_min(read_size, cur_buffer->start_offset - offset);
+		}
+		else if (cur_buffer->end_offset > offset)
+		{
+			offset = cur_buffer->end_offset & ~alignment;
 		}
 	}
 

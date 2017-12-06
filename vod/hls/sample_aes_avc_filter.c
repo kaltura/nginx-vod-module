@@ -1,7 +1,5 @@
 #include "sample_aes_avc_filter.h"
 
-#if (VOD_HAVE_OPENSSL_EVP)
-
 // macros
 #define THIS_FILTER (MEDIA_FILTER_ENCRYPT)
 #define get_context(ctx) ((sample_aes_avc_filter_state_t*)ctx->context[THIS_FILTER])
@@ -18,7 +16,7 @@
 typedef struct
 {
 	// fixed input data
-	media_filter_write_t write_callback;
+	media_filter_write_t write;
 	u_char iv[AES_BLOCK_SIZE];
 	u_char key[SAMPLE_AES_KEY_SIZE];
 	EVP_CIPHER_CTX* cipher;
@@ -28,7 +26,7 @@ typedef struct
 	uint32_t cur_offset;
 	uint32_t next_encrypt_offset;
 	uint32_t max_encrypt_offset;
-	uint32_t last_three_bytes;
+	uint32_t zero_run;
 } sample_aes_avc_filter_state_t;
 
 static u_char emulation_prevention_byte[] = { 0x03 };
@@ -79,7 +77,7 @@ sample_aes_avc_filter_init(
 	cln->handler = (vod_pool_cleanup_pt)sample_aes_avc_cleanup;
 	cln->data = state;
 
-	state->write_callback = filter->write;
+	state->write = filter->write;
 	vod_memcpy(state->iv, iv, sizeof(state->iv));
 	vod_memcpy(state->key, key, sizeof(state->key));
 
@@ -105,33 +103,43 @@ sample_aes_avc_write_emulation_prevention(
 
 	for (cur_pos = buffer; cur_pos < buffer_end; cur_pos++)
 	{
-		state->last_three_bytes = ((state->last_three_bytes << 8) | *cur_pos) & 0xffffff;
-		if (state->last_three_bytes > 3)
+		if (state->zero_run < 2)
 		{
+			if (*cur_pos == 0)
+			{
+				state->zero_run++;
+			}
+			else
+			{
+				state->zero_run = 0;
+			}
 			continue;
 		}
 
-		state->last_three_bytes = 1;
-
-		if (cur_pos > last_output_pos)
+		if ((*cur_pos & ~3) == 0)
 		{
-			rc = state->write_callback(context, last_output_pos, cur_pos - last_output_pos);
+			if (cur_pos > last_output_pos)
+			{
+				rc = state->write(context, last_output_pos, cur_pos - last_output_pos);
+				if (rc != VOD_OK)
+				{
+					return rc;
+				}
+
+				last_output_pos = cur_pos;
+			}
+
+			rc = state->write(context, emulation_prevention_byte, sizeof(emulation_prevention_byte));
 			if (rc != VOD_OK)
 			{
 				return rc;
 			}
-
-			last_output_pos = cur_pos;
 		}
 
-		rc = state->write_callback(context, emulation_prevention_byte, sizeof(emulation_prevention_byte));
-		if (rc != VOD_OK)
-		{
-			return rc;
-		}
+		state->zero_run = *cur_pos == 0;
 	}
 
-	return state->write_callback(context, last_output_pos, buffer_end - last_output_pos);
+	return state->write(context, last_output_pos, buffer_end - last_output_pos);
 }
 
 vod_status_t
@@ -152,7 +160,7 @@ sample_aes_avc_start_nal_unit(
 	state->cur_offset = 0;
 	state->next_encrypt_offset = FIRST_ENCRYPTED_OFFSET;
 	state->max_encrypt_offset = unit_size - AES_BLOCK_SIZE;
-	state->last_three_bytes = 1;
+	state->zero_run = 0;
 
 	// reset the IV (it is ok to call EVP_EncryptInit_ex several times without cleanup)
 	if (1 != EVP_EncryptInit_ex(state->cipher, EVP_aes_128_cbc(), NULL, state->key, state->iv))
@@ -180,7 +188,7 @@ sample_aes_avc_filter_write_nal_body(
 
 	if (!state->encrypt)
 	{
-		return state->write_callback(context, buffer, size);
+		return state->write(context, buffer, size);
 	}
 
 	for (end_offset = state->cur_offset + size;
@@ -231,36 +239,3 @@ sample_aes_avc_filter_write_nal_body(
 
 	return VOD_OK;
 }
-
-#else
-
-// empty stubs
-vod_status_t
-sample_aes_avc_filter_init(
-	media_filter_t* filter,
-	media_filter_context_t* context,
-	u_char* key,
-	u_char* iv)
-{
-	return VOD_UNEXPECTED;
-}
-
-vod_status_t 
-sample_aes_avc_start_nal_unit(
-	media_filter_context_t* context,
-	int unit_type,
-	uint32_t unit_size)
-{
-	return VOD_UNEXPECTED;
-}
-
-vod_status_t 
-sample_aes_avc_filter_write_nal_body(
-	media_filter_context_t* context,
-	const u_char* buffer,
-	uint32_t size)
-{
-	return VOD_UNEXPECTED;
-}
-
-#endif //(VOD_HAVE_OPENSSL_EVP)

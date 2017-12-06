@@ -67,16 +67,14 @@ typedef struct {
 } mp4a_config_t;
 
 // functions
-vod_status_t
-codec_config_hevc_get_nal_units(
+vod_status_t codec_config_hevc_get_nal_units(
 	request_context_t* request_context,
 	vod_str_t* extra_data,
 	bool_t size_only,
 	uint32_t* nal_packet_size_length,
 	vod_str_t* result);
 
-vod_status_t
-codec_config_avcc_get_nal_units(
+vod_status_t codec_config_avcc_get_nal_units(
 	request_context_t* request_context,
 	vod_str_t* extra_data,
 	bool_t size_only,
@@ -91,5 +89,11 @@ vod_status_t codec_config_mp4a_config_parse(
 	request_context_t* request_context,
 	vod_str_t* extra_data, 
 	mp4a_config_t* result);
+
+vod_status_t codec_config_hevc_config_parse(
+	request_context_t* request_context,
+	vod_str_t* extra_data,
+	hevc_config_t* cfg,
+	const u_char** end_pos);
 
 #endif // __CODEC_CONFIG_H__

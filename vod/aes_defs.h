@@ -6,7 +6,7 @@
 
 #if (VOD_HAVE_OPENSSL_EVP)
 #include <openssl/evp.h>
-#endif // (VOD_HAVE_OPENSSL_EVP)
+#endif // VOD_HAVE_OPENSSL_EVP
 
 // constants
 #ifndef AES_BLOCK_SIZE

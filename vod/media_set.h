@@ -2,7 +2,6 @@
 #define __MEDIA_SET_H__
 
 // includes
-#include "mp4/mp4_aes_ctr.h"
 #include "media_format.h"
 #include "media_clip.h"
 #include "json_parser.h"
@@ -109,6 +108,7 @@ typedef struct {
 
 	vod_str_t id;
 	uint32_t type;
+	uint32_t original_type;					// will contain live in case of a live playlist that was forced to vod
 	media_clip_timing_t timing;
 	bool_t original_use_discontinuity;		// will be different than use_discontinuity in case force_continuous_timestamps is enabled
 	bool_t use_discontinuity;
@@ -122,6 +122,7 @@ typedef struct {
 
 	media_clip_source_t* sources_head;
 	media_clip_source_t* mapped_sources_head;
+	media_clip_source_t* generators_head;
 	struct media_clip_dynamic_s* dynamic_clips_head;
 
 	uint64_t segment_start_time;
@@ -162,6 +163,8 @@ typedef struct {
 	sequence_tracks_mask_t* sequence_tracks_mask_end;
 	uint8_t* langs_mask;			// [LANG_MASK_SIZE]
 	uint32_t version;
+	uint32_t width;
+	uint32_t height;
 } request_params_t;
 
 #endif //__MEDIA_SET_H__

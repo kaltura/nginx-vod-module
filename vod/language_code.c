@@ -123,7 +123,7 @@ lang_parse_iso639_3_code(uint16_t code)
 	}
 	
 	if (iso639_3_str_to_int(iso639_3_codes[result]) != code && 
-		iso639_3_str_to_int(iso639_2b_codes[result]) != code)
+		(iso639_2b_codes[result] == NULL || iso639_3_str_to_int(iso639_2b_codes[result]) != code))
 	{
 		return 0;
 	}

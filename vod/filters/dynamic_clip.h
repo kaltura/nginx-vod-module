@@ -17,6 +17,7 @@ struct media_clip_dynamic_s {
 	media_range_t* range;
 	int64_t clip_time;
 	uint32_t duration;
+	uint32_t clip_from;
 	media_clip_dynamic_t* next;
 };
 

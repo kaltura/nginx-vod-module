@@ -1,5 +1,5 @@
 #include "hds_amf0_encoder.h"
-#include "../mp4/mp4_builder.h"
+#include "../write_stream.h"
 
 // amf types
 #define AMF0_TYPE_NUMBER		(0x00)

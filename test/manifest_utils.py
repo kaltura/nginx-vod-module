@@ -341,6 +341,7 @@ PARSER_BY_MIME_TYPE = {
 	'application/dash+xml': getDashManifestUrls,
 	'video/f4m': getHdsManifestUrls,
 	'application/vnd.apple.mpegurl': getHlsMasterPlaylistUrls,
+	'application/x-mpegurl': getHlsMasterPlaylistUrls,
 	'text/xml': getMssManifestUrls,
 }
 

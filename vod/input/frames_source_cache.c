@@ -37,13 +37,20 @@ frames_source_cache_set_cache_slot_id(void* ctx, int cache_slot_id)
 }
 
 static vod_status_t
-frames_source_cache_start_frame(void* ctx, input_frame_t* frame, uint64_t min_offset)
+frames_source_cache_start_frame(void* ctx, input_frame_t* frame, read_cache_hint_t* cache_hint)
 {
 	frames_source_cache_state_t* state = ctx;
 
 	state->req.cur_offset = frame->offset;
 	state->req.end_offset = frame->offset + frame->size;
-	state->req.min_offset = min_offset;
+	if (cache_hint != NULL)
+	{
+		state->req.hint = *cache_hint;
+	}
+	else
+	{
+		state->req.hint.min_offset = ULLONG_MAX;
+	}
 
 	return VOD_OK;
 }

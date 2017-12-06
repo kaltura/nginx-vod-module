@@ -8,8 +8,12 @@
 #include "ngx_http_vod_hds_conf.h"
 #include "ngx_http_vod_hls_conf.h"
 #include "ngx_http_vod_mss_conf.h"
-#include "ngx_http_vod_thumb_conf.h"
 #include "vod/segmenter.h"
+
+#if (NGX_HAVE_LIB_AV_CODEC)
+#include "ngx_http_vod_thumb_conf.h"
+#include "ngx_http_vod_volume_map_conf.h"
+#endif // NGX_HAVE_LIB_AV_CODEC
 
 // enum
 enum {
@@ -39,6 +43,7 @@ struct ngx_http_vod_loc_conf_s {
 	ngx_str_t multi_uri_suffix;
 	segmenter_conf_t segmenter;
 	ngx_http_complex_value_t *secret_key;
+	ngx_http_complex_value_t *encryption_iv_seed;
 	ngx_http_complex_value_t *base_url;
 	ngx_http_complex_value_t *segments_base_url;
 	ngx_buffer_cache_t* metadata_cache;
@@ -50,6 +55,8 @@ struct ngx_http_vod_loc_conf_s {
 	buffer_pool_t* output_buffer_pool;
 	size_t max_upstream_headers_size;
 	ngx_flag_t ignore_edit_list;
+	ngx_flag_t parse_hdlr_name;
+	int parse_flags;
 	ngx_http_complex_value_t *upstream_extra_args;
 	ngx_buffer_cache_t* mapping_cache[CACHE_TYPE_COUNT];
 	ngx_buffer_cache_t* dynamic_mapping_cache;
@@ -62,8 +69,10 @@ struct ngx_http_vod_loc_conf_s {
 	ngx_http_complex_value_t* redirect_segments_url;
 	ngx_http_complex_value_t* media_set_map_uri;
 	ngx_http_complex_value_t* apply_dynamic_mapping;
+	ngx_http_complex_value_t* media_set_override_json;
 	ngx_str_t fallback_upstream_location;
 	ngx_table_elt_t proxy_header;
+	ngx_flag_t force_playlist_type_vod;
 	ngx_flag_t force_continuous_timestamps;
 
 	time_t expires[EXPIRES_TYPE_COUNT];
@@ -83,6 +92,7 @@ struct ngx_http_vod_loc_conf_s {
 	ngx_str_t clip_to_param_name;
 	ngx_str_t clip_from_param_name;
 	ngx_str_t tracks_param_name;
+	ngx_str_t time_shift_param_name;
 	ngx_str_t speed_param_name;
 	ngx_str_t lang_param_name;
 
@@ -90,7 +100,7 @@ struct ngx_http_vod_loc_conf_s {
 
 #if (NGX_THREADS)
 	ngx_thread_pool_t *open_file_thread_pool;
-#endif
+#endif // NGX_THREADS
 
 	// derived fields
 	ngx_hash_t uri_params_hash;
@@ -101,7 +111,11 @@ struct ngx_http_vod_loc_conf_s {
 	ngx_http_vod_hds_loc_conf_t hds;
 	ngx_http_vod_hls_loc_conf_t hls;
 	ngx_http_vod_mss_loc_conf_t mss;
+
+#if (NGX_HAVE_LIB_AV_CODEC)
 	ngx_http_vod_thumb_loc_conf_t thumb;
+	ngx_http_vod_volume_map_loc_conf_t volume_map;
+#endif // NGX_HAVE_LIB_AV_CODEC
 };
 
 typedef struct ngx_http_vod_loc_conf_s ngx_http_vod_loc_conf_t;

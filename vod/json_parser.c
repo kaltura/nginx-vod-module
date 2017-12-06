@@ -2,7 +2,7 @@
 #include <ctype.h>
 
 // constants
-#define MAX_JSON_ELEMENTS (131072)
+#define MAX_JSON_ELEMENTS (524288)
 #define MAX_RECURSION_DEPTH (32)
 #define FIRST_PART_COUNT (1)		// XXXXX increase this ! only for testing purpose
 #define MAX_PART_SIZE (65536)
@@ -934,4 +934,137 @@ vod_json_parse_union(
 	}
 
 	return type_def->parser(context, object, dest);
+}
+
+static vod_json_key_value_t*
+vod_json_get_object_value(vod_json_object_t* object, vod_uint_t key_hash, vod_str_t* key)
+{
+	vod_json_key_value_t* cur_element = object->elts;
+	vod_json_key_value_t* last_element = cur_element + object->nelts;
+
+	for (; cur_element < last_element; cur_element++)
+	{
+		if (cur_element->key_hash == key_hash &&
+			cur_element->key.len == key->len &&
+			vod_memcmp(cur_element->key.data, key->data, key->len) == 0)
+		{
+			return cur_element;
+		}
+	}
+
+	return NULL;
+}
+
+static vod_status_t
+vod_json_replace_object(vod_json_object_t* object1, vod_json_object_t* object2)
+{
+	vod_json_key_value_t* cur_element;
+	vod_json_key_value_t* last_element;
+	vod_json_key_value_t* dest_element;
+
+	cur_element = object2->elts;
+	last_element = cur_element + object2->nelts;
+	for (; cur_element < last_element; cur_element++)
+	{
+		dest_element = vod_json_get_object_value(object1, cur_element->key_hash, &cur_element->key);
+		if (dest_element != NULL)
+		{
+			vod_json_replace(&dest_element->value, &cur_element->value);
+			continue;
+		}
+
+		dest_element = (vod_json_key_value_t*)vod_array_push(object1);
+		if (dest_element == NULL)
+		{
+			return VOD_ALLOC_FAILED;
+		}
+
+		*dest_element = *cur_element;
+	}
+
+	return VOD_OK;
+}
+
+static vod_status_t
+vod_json_replace_array(vod_json_array_t* array1, vod_json_array_t* array2)
+{
+	vod_json_object_t* cur_object1;
+	vod_json_object_t* cur_object2;
+	vod_array_part_t* part1;
+	vod_array_part_t* part2;
+	vod_status_t rc;
+
+	if (array1->type != VOD_JSON_OBJECT || array2->type != VOD_JSON_OBJECT)
+	{
+		*array1 = *array2;
+		return VOD_OK;
+	}
+
+	part1 = &array1->part;
+	part2 = &array2->part;
+
+	for (cur_object1 = part1->first, cur_object2 = part2->first; 
+		; 
+		cur_object1++, cur_object2++)
+	{
+		if ((void*)cur_object2 >= part2->last)
+		{
+			if (part2->next == NULL)
+			{
+				break;
+			}
+
+			part2 = part2->next;
+			cur_object2 = part2->first;
+		}
+
+		if ((void*)cur_object1 >= part1->last)
+		{
+			if (part1->next == NULL)
+			{
+				// append the second array to the first
+				part2->first = cur_object2;
+				part2->count = (vod_json_object_t*)part2->last - cur_object2;
+				part1->next = part2;
+				array1->count = array2->count;
+				break;
+			}
+
+			part1 = part1->next;
+			cur_object1 = part1->first;
+		}
+
+		rc = vod_json_replace_object(cur_object1, cur_object2);
+		if (rc != VOD_OK)
+		{
+			return rc;
+		}
+	}
+
+	return VOD_OK;
+}
+
+vod_status_t
+vod_json_replace(vod_json_value_t* json1, vod_json_value_t* json2)
+{
+	if (json1->type != json2->type)
+	{
+		*json1 = *json2;
+		return VOD_OK;
+	}
+
+	switch (json1->type)
+	{
+	case VOD_JSON_OBJECT:
+		return vod_json_replace_object(&json1->v.obj, &json2->v.obj);
+
+	case VOD_JSON_ARRAY:
+		return vod_json_replace_array(&json1->v.arr, &json2->v.arr);
+
+	default:
+		*json1 = *json2;
+		break;
+	}
+
+	return VOD_OK;
 }

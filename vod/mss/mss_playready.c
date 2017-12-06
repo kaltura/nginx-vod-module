@@ -1,7 +1,8 @@
 #include "mss_playready.h"
-#include "../mp4/mp4_encrypt_passthrough.h"
-#include "../mp4/mp4_encrypt.h"
+#include "../mp4/mp4_cenc_passthrough.h"
+#include "../mp4/mp4_cenc_encrypt.h"
 #include "../mp4/mp4_defs.h"
+#include "../mp4/mp4_write_stream.h"
 #include "../udrm.h"
 
 // manifest constants
@@ -30,13 +31,13 @@ typedef struct {
 
 typedef struct
 {
-	mp4_encrypt_state_t* state;
+	mp4_cenc_encrypt_state_t* state;
 	size_t uuid_piff_atom_size;
 } mss_playready_audio_extra_traf_atoms_context;
 
 typedef struct
 {
-	mp4_encrypt_video_state_t* state;
+	mp4_cenc_encrypt_video_state_t* state;
 	size_t uuid_piff_atom_size;
 } mss_playready_video_extra_traf_atoms_context;
 
@@ -58,7 +59,7 @@ mss_playready_write_protection_tag(void* context, u_char* p, media_set_t* media_
 	for (cur_info = drm_info->pssh_array.first; cur_info < drm_info->pssh_array.last; cur_info++)
 	{
 		p = vod_copy(p, VOD_MSS_PLAYREADY_PROTECTION_HEADER_PREFIX, sizeof(VOD_MSS_PLAYREADY_PROTECTION_HEADER_PREFIX) - 1);
-		p = mp4_encrypt_write_guid(p, cur_info->system_id);
+		p = mp4_cenc_encrypt_write_guid(p, cur_info->system_id);
 		p = vod_copy(p, VOD_MSS_PLAYREADY_PROTECTION_HEADER_DELIMITER, sizeof(VOD_MSS_PLAYREADY_PROTECTION_HEADER_DELIMITER) - 1);
 		base64.data = p;
 		vod_encode_base64(&base64, &cur_info->data);
@@ -103,13 +104,13 @@ mss_playready_build_manifest(
 }
 
 static u_char*
-mss_playready_audio_write_uuid_piff_atom(u_char* p, mp4_encrypt_state_t* state, media_sequence_t* sequence, size_t atom_size)
+mss_playready_audio_write_uuid_piff_atom(u_char* p, mp4_cenc_encrypt_state_t* state, media_sequence_t* sequence, size_t atom_size)
 {
 	write_atom_header(p, atom_size, 'u', 'u', 'i', 'd');
 	p = vod_copy(p, piff_uuid, sizeof(piff_uuid));
 	write_be32(p, 0);
 	write_be32(p, sequence->total_frame_count);
-	p = mp4_encrypt_audio_write_auxiliary_data(state, p);
+	p = mp4_cenc_encrypt_audio_write_auxiliary_data(state, p);
 
 	return p;
 }
@@ -121,17 +122,17 @@ mss_playready_audio_write_extra_traf_atoms(void* ctx, u_char* p, size_t mdat_ato
 	size_t auxiliary_data_start;
 
 	auxiliary_data_start = mdat_atom_start -
-		(mp4_encrypt_audio_get_auxiliary_data_size(context->state) +
+		(mp4_cenc_encrypt_audio_get_auxiliary_data_size(context->state) +
 		context->state->saiz_atom_size +
 		context->state->saio_atom_size);
 
 	p = mss_playready_audio_write_uuid_piff_atom(p, context->state, context->state->sequence, context->uuid_piff_atom_size);
-	p = mp4_encrypt_audio_write_saiz_saio(context->state, p, auxiliary_data_start);
+	p = mp4_cenc_encrypt_audio_write_saiz_saio(context->state, p, auxiliary_data_start);
 	return p;
 }
 
 static u_char*
-mss_playready_video_write_uuid_piff_atom(u_char* p, mp4_encrypt_video_state_t* state, media_sequence_t* sequence, size_t atom_size)
+mss_playready_video_write_uuid_piff_atom(u_char* p, mp4_cenc_encrypt_video_state_t* state, media_sequence_t* sequence, size_t atom_size)
 {
 	write_atom_header(p, atom_size, 'u', 'u', 'i', 'd');
 	p = vod_copy(p, piff_uuid, sizeof(piff_uuid));
@@ -154,13 +155,13 @@ mss_playready_video_write_extra_traf_atoms(void* ctx, u_char* p, size_t mdat_ato
 		context->state->base.saio_atom_size);
 
 	p = mss_playready_video_write_uuid_piff_atom(p, context->state, context->state->base.sequence, context->uuid_piff_atom_size);
-	p = mp4_encrypt_video_write_saiz_saio(context->state, p, auxiliary_data_start);
+	p = mp4_cenc_encrypt_video_write_saiz_saio(context->state, p, auxiliary_data_start);
 	return p;
 }
 
 static vod_status_t
 mss_playready_audio_build_fragment_header(
-	mp4_encrypt_state_t* state,
+	mp4_cenc_encrypt_state_t* state,
 	bool_t size_only,
 	vod_str_t* fragment_header,
 	size_t* total_fragment_size)
@@ -168,7 +169,7 @@ mss_playready_audio_build_fragment_header(
 	vod_status_t rc;
 	mss_playready_audio_extra_traf_atoms_context writer_context;
 
-	writer_context.uuid_piff_atom_size = ATOM_HEADER_SIZE + sizeof(uuid_piff_atom_t) + mp4_encrypt_audio_get_auxiliary_data_size(state);
+	writer_context.uuid_piff_atom_size = ATOM_HEADER_SIZE + sizeof(uuid_piff_atom_t) + mp4_cenc_encrypt_audio_get_auxiliary_data_size(state);
 	writer_context.state = state;
 
 	rc = mss_packager_build_fragment_header(
@@ -193,7 +194,7 @@ mss_playready_audio_build_fragment_header(
 
 static vod_status_t
 mss_playready_video_build_fragment_header(
-	mp4_encrypt_video_state_t* state,
+	mp4_cenc_encrypt_video_state_t* state,
 	vod_str_t* fragment_header, 
 	size_t* total_fragment_size)
 {
@@ -217,7 +218,7 @@ mss_playready_video_build_fragment_header(
 static u_char*
 mss_playready_passthrough_write_encryption_atoms(void* ctx, u_char* p, size_t mdat_atom_start)
 {
-	mp4_encrypt_passthrough_context_t* context = ctx;
+	mp4_cenc_passthrough_context_t* context = ctx;
 	media_clip_filtered_t* cur_clip;
 	media_sequence_t* sequence = context->sequence;
 	media_track_t* cur_track;
@@ -246,29 +247,28 @@ mss_playready_passthrough_write_encryption_atoms(void* ctx, u_char* p, size_t md
 		context->saiz_atom_size +
 		context->saio_atom_size);
 
-	p = mp4_encrypt_passthrough_write_saiz_saio(ctx, p, auxiliary_data_offset);
+	p = mp4_cenc_passthrough_write_saiz_saio(ctx, p, auxiliary_data_offset);
 
 	return p;
 }
 
 vod_status_t
 mss_playready_get_fragment_writer(
-	segment_writer_t* result,
+	segment_writer_t* segment_writer,
 	request_context_t* request_context,
 	media_set_t* media_set,
 	uint32_t segment_index,
 	bool_t single_nalu_per_frame,
-	segment_writer_t* segment_writer,
 	const u_char* iv,
 	bool_t size_only,
 	vod_str_t* fragment_header,
 	size_t* total_fragment_size)
 {
-	mp4_encrypt_passthrough_context_t passthrough_context;
+	mp4_cenc_passthrough_context_t passthrough_context;
 	uint32_t media_type = media_set->sequences[0].media_type;
 	vod_status_t rc;
 
-	if (mp4_encrypt_passthrough_init(&passthrough_context, media_set->sequences))
+	if (mp4_cenc_passthrough_init(&passthrough_context, media_set->sequences))
 	{
 		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
 			"mss_playready_get_fragment_writer: using encryption passthrough");
@@ -292,33 +292,29 @@ mss_playready_get_fragment_writer(
 		}
 
 		// use original writer
-		vod_memzero(result, sizeof(*result));
-
-		return VOD_OK;
+		return VOD_DONE;
 	}
 
 	switch (media_type)
 	{
 	case MEDIA_TYPE_VIDEO:
-		return mp4_encrypt_video_get_fragment_writer(
-			result,
+		return mp4_cenc_encrypt_video_get_fragment_writer(
+			segment_writer,
 			request_context,
 			media_set,
 			segment_index,
 			single_nalu_per_frame,
 			mss_playready_video_build_fragment_header,
-			segment_writer,
 			iv, 
 			fragment_header,
 			total_fragment_size);
 
 	case MEDIA_TYPE_AUDIO:
-		rc = mp4_encrypt_audio_get_fragment_writer(
-			result,
+		rc = mp4_cenc_encrypt_audio_get_fragment_writer(
+			segment_writer,
 			request_context,
 			media_set,
 			segment_index,
-			segment_writer,
 			iv);
 		if (rc != VOD_OK)
 		{
@@ -326,7 +322,7 @@ mss_playready_get_fragment_writer(
 		}
 
 		rc = mss_playready_audio_build_fragment_header(
-			result->context,
+			segment_writer->context,
 			size_only,
 			fragment_header,
 			total_fragment_size);

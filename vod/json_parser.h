@@ -125,4 +125,9 @@ vod_status_t vod_json_parse_union(
 	void* context,
 	void** dest);
 
+// misc
+vod_status_t vod_json_replace(
+	vod_json_value_t* json1,
+	vod_json_value_t* json2);
+
 #endif // __JSON_PARSER_H__

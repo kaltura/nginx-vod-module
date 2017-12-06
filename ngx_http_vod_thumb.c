@@ -1,13 +1,26 @@
 #include <ngx_http.h>
-
-#if (NGX_HAVE_LIB_AV_CODEC)
-
 #include "ngx_http_vod_submodule.h"
 #include "ngx_http_vod_utils.h"
 #include "vod/thumb/thumb_grabber.h"
 #include "vod/manifest_utils.h"
+#include "vod/parse_utils.h"
 
 #define THUMB_TIMESCALE (1000)
+
+// macros
+#define skip_dash(start_pos, end_pos)	\
+	if (start_pos >= end_pos)			\
+	{									\
+		return start_pos;				\
+	}									\
+	if (*start_pos == '-')				\
+	{									\
+		start_pos++;					\
+		if (start_pos >= end_pos)		\
+		{								\
+			return start_pos;			\
+		}								\
+	}
 
 static const u_char jpg_file_ext[] = ".jpg";
 static u_char jpeg_content_type[] = "image/jpeg";
@@ -111,7 +124,7 @@ ngx_http_vod_thumb_init_frame_processor(
 	rc = thumb_grabber_init_state(
 		&submodule_context->request_context,
 		submodule_context->media_set.filtered_tracks,
-		submodule_context->request_params.segment_time,
+		&submodule_context->request_params,
 		submodule_context->conf->thumb.accurate,
 		segment_writer->write_tail,
 		segment_writer->context,
@@ -166,6 +179,48 @@ ngx_http_vod_thumb_get_file_path_components(ngx_str_t* uri)
 {
 	return 1;
 }
+
+#if (NGX_HAVE_LIB_SW_SCALE)
+static u_char*
+ngx_http_vod_thumb_parse_dimensions(
+	ngx_http_request_t* r,
+	u_char* start_pos,
+	u_char* end_pos,
+	request_params_t* result)
+{
+	skip_dash(start_pos, end_pos);
+
+	// width
+	if (*start_pos == 'w')
+	{
+		start_pos++;		// skip the w
+
+		start_pos = parse_utils_extract_uint32_token(start_pos, end_pos, &result->width);
+		if (result->width <= 0)
+		{
+			return NULL;
+		}
+
+		skip_dash(start_pos, end_pos);
+	}
+
+	// height
+	if (*start_pos == 'h')
+	{
+		start_pos++;		// skip the h
+
+		start_pos = parse_utils_extract_uint32_token(start_pos, end_pos, &result->height);
+		if (result->height <= 0)
+		{
+			return NULL;
+		}
+
+		skip_dash(start_pos, end_pos);
+	}
+
+	return start_pos;
+}
+#endif // NGX_HAVE_LIB_SW_SCALE
 
 static ngx_int_t
 ngx_http_vod_thumb_parse_uri_file_name(
@@ -231,6 +286,16 @@ ngx_http_vod_thumb_parse_uri_file_name(
 		return ngx_http_vod_status_to_ngx_error(r, VOD_BAD_REQUEST);
 	}
 
+#if (NGX_HAVE_LIB_SW_SCALE)
+	start_pos = ngx_http_vod_thumb_parse_dimensions(r, start_pos, end_pos, request_params);
+	if (start_pos == NULL)
+	{
+		ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
+			"ngx_http_vod_thumb_parse_uri_file_name: failed to parse width/height");
+		return ngx_http_vod_status_to_ngx_error(r, VOD_BAD_REQUEST);
+	}
+#endif // NGX_HAVE_LIB_SW_SCALE
+
 	// parse the required tracks string
 	rc = ngx_http_vod_parse_uri_file_name(r, start_pos, end_pos, 0, request_params);
 	if (rc != NGX_OK)
@@ -259,5 +324,3 @@ ngx_http_vod_thumb_parse_drm_info(
 }
 
 DEFINE_SUBMODULE(thumb);
-
-#endif // (NGX_HAVE_LIB_AV_CODEC)

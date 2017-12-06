@@ -1,18 +1,24 @@
 #include "mp4_parser.h"
-#include "mp4_builder.h"
-#include "mp4_decrypt.h"
 #include "mp4_format.h"
 #include "mp4_defs.h"
 #include "../media_format.h"
 #include "../input/frames_source_cache.h"
 #include "../read_stream.h"
+#include "../write_stream.h"
 #include "../codec_config.h"
 #include "../media_clip.h"
 #include "../segmenter.h"
 #include "../common.h"
 
 #include <limits.h>
+
+#if (VOD_HAVE_ZLIB)
 #include <zlib.h>
+#endif // VOD_HAVE_ZLIB
+
+#if (VOD_HAVE_OPENSSL_EVP)
+#include "mp4_cenc_decrypt.h"
+#endif // VOD_HAVE_OPENSSL_EVP
 
 // TODO: use iterators from mp4_parser_base.c to reduce code duplication
 
@@ -240,6 +246,7 @@ static vod_status_t
 mp4_parser_parse_hdlr_atom(atom_info_t* atom_info, metadata_parse_context_t* context)
 {
 	const hdlr_atom_t* atom = (const hdlr_atom_t*)atom_info->ptr;
+	vod_str_t name;
 	uint32_t type;
 
 	if (atom_info->size < sizeof(*atom))
@@ -265,6 +272,44 @@ mp4_parser_parse_hdlr_atom(atom_info_t* atom_info, metadata_parse_context_t* con
 		break;
 	}
 	
+	// parse the name
+	if ((context->parse_params.parse_type & PARSE_FLAG_HDLR_NAME) == 0)
+	{
+		return VOD_OK;
+	}
+
+	name.data = (u_char*)(atom + 1);
+	name.len = atom_info->ptr + atom_info->size - name.data;
+	if (name.len > 0 && name.data[0] == name.len - 1)
+	{
+		name.data++;
+		name.len--;
+	}
+
+	while (name.len > 0 && name.data[name.len - 1] == '\0')
+	{
+		name.len--;
+	}
+
+	if (name.len <= 0)
+	{
+		return VOD_OK;
+	}
+
+	context->media_info.label.data = vod_alloc(
+		context->request_context->pool, 
+		name.len + 1);
+	if (context->media_info.label.data == NULL)
+	{
+		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, context->request_context->log, 0,
+			"mp4_parser_parse_hdlr_atom: vod_alloc failed");
+		return VOD_ALLOC_FAILED;
+	}
+
+	vod_memcpy(context->media_info.label.data, name.data, name.len);
+	context->media_info.label.data[name.len] = '\0';
+	context->media_info.label.len = name.len;
+
 	return VOD_OK;
 }
 
@@ -473,7 +518,10 @@ mp4_parser_parse_mdhd_atom(atom_info_t* atom_info, metadata_parse_context_t* con
 	context->media_info.full_duration = duration;
 	context->media_info.duration_millis = rescale_time(duration, timescale, 1000);
 	context->media_info.language = lang_parse_iso639_3_code(language);
-	lang_get_native_name(context->media_info.language, &context->media_info.label);
+	if (context->media_info.label.len == 0)
+	{
+		lang_get_native_name(context->media_info.language, &context->media_info.label);
+	}
 
 	return VOD_OK;
 }
@@ -667,10 +715,13 @@ mp4_parser_parse_stts_atom(atom_info_t* atom_info, frames_parse_context_t* conte
 			next_accum_duration = accum_duration + (uint64_t)sample_duration * sample_count;
 		}
 
-		skip_count = vod_div_ceil(clip_from - accum_duration, sample_duration);
-		sample_count -= skip_count;
-		frame_index += skip_count;
-		accum_duration += (uint64_t)skip_count * sample_duration;
+		if (clip_from > accum_duration)
+		{
+			skip_count = vod_div_ceil(clip_from - accum_duration, sample_duration);
+			sample_count -= skip_count;
+			frame_index += skip_count;
+			accum_duration += (uint64_t)skip_count * sample_duration;
+		}
 
 		if (context->stss_entries != 0)
 		{
@@ -890,7 +941,7 @@ mp4_parser_parse_stts_atom(atom_info_t* atom_info, frames_parse_context_t* conte
 				cur_count = sample_count;
 			}
 
-			if (frames_array.nelts + cur_count > context->parse_params.max_frame_count)
+			if (cur_count > context->parse_params.max_frame_count - frames_array.nelts)
 			{
 				vod_log_error(VOD_LOG_ERR, context->request_context->log, 0,
 					"mp4_parser_parse_stts_atom: frame count exceeds the limit %uD", context->parse_params.max_frame_count);
@@ -976,7 +1027,7 @@ mp4_parser_parse_stts_atom(atom_info_t* atom_info, frames_parse_context_t* conte
 				sample_count = vod_min(cur_count, sample_count);
 			}
 
-			if (frames_array.nelts + sample_count > context->parse_params.max_frame_count)
+			if (sample_count > context->parse_params.max_frame_count - frames_array.nelts)
 			{
 				vod_log_error(VOD_LOG_ERR, context->request_context->log, 0,
 					"mp4_parser_parse_stts_atom: frame count exceeds the limit %uD", context->parse_params.max_frame_count);
@@ -1034,12 +1085,20 @@ mp4_parser_parse_stts_atom(atom_info_t* atom_info, frames_parse_context_t* conte
 		context->clip_from = clip_from_accum_duration;
 	}
 
+	context->first_frame = first_frame;
+	context->last_frame = first_frame + frames_array.nelts;
+
+	if (context->last_frame < context->first_frame)
+	{
+		vod_log_error(VOD_LOG_ERR, context->request_context->log, 0,
+			"mp4_parser_parse_stts_atom: last frame %uD smaller than first frame %uD", context->last_frame, context->first_frame);
+		return VOD_BAD_DATA;
+	}
+
 	context->total_frames_duration = accum_duration - context->first_frame_time_offset;
 	context->first_frame_time_offset -= clip_from_accum_duration;	
 	context->frames = frames_array.elts;
 	context->frame_count = frames_array.nelts;
-	context->first_frame = first_frame;
-	context->last_frame = first_frame + frames_array.nelts;
 
 	if (clip_to != ULLONG_MAX &&
 		(cur_entry >= last_entry || (accum_duration - clip_from_accum_duration) > clip_to - clip_from))
@@ -3123,6 +3182,7 @@ mp4_parser_parse_frames(
 
 		if (context.encryption_info.auxiliary_info < context.encryption_info.auxiliary_info_end)
 		{
+#if (VOD_HAVE_OPENSSL_EVP)
 			if (parse_params->source->encryption_key == NULL)
 			{
 				vod_log_error(VOD_LOG_ERR, request_context->log, 0,
@@ -3130,7 +3190,7 @@ mp4_parser_parse_frames(
 				return VOD_BAD_REQUEST;
 			}
 
-			rc = mp4_decrypt_init(
+			rc = mp4_cenc_decrypt_init(
 				request_context,
 				frames_source,
 				frames_source_context,
@@ -3142,7 +3202,12 @@ mp4_parser_parse_frames(
 				return rc;
 			}
 
-			frames_source = &mp4_decrypt_frames_source;
+			frames_source = &mp4_cenc_decrypt_frames_source;
+#else
+			vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+				"mp4_parser_parse_frames: decryption is not supported, recompile with openssl to enable it");
+			return VOD_BAD_REQUEST;
+#endif // VOD_HAVE_OPENSSL_EVP
 		}
 
 		result_track->frames.next = NULL;
@@ -3222,14 +3287,16 @@ mp4_parser_uncompress_moov(
 {
 	save_relevant_atoms_context_t save_atoms_context;
 	moov_atom_infos_t moov_atom_infos;
+	vod_status_t rc;
+#if (VOD_HAVE_ZLIB)
 	atom_info_t find_context;
 	dcom_atom_t* dcom;
 	cmvd_atom_t* cmvd;
 	u_char* uncomp_buffer;
 	uLongf uncomp_size;
 	size_t alloc_size;
-	vod_status_t rc;
 	int zrc;
+#endif // VOD_HAVE_ZLIB
 
 	// get the relevant atoms
 	vod_memzero(&moov_atom_infos, sizeof(moov_atom_infos));
@@ -3248,6 +3315,7 @@ mp4_parser_uncompress_moov(
 		return VOD_OK;		// non compressed or corrupt, if corrupt, will fail in trak parsing
 	}
 
+#if (VOD_HAVE_ZLIB)
 	// validate the compression type
 	if (moov_atom_infos.dcom.size < sizeof(*dcom))
 	{
@@ -3324,4 +3392,9 @@ mp4_parser_uncompress_moov(
 	*moov_size = find_context.size;
 
 	return VOD_OK;
+#else
+	vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+		"mp4_parser_uncompress_moov: compressed moov atom not supported, recompile with zlib to enable it");
+	return VOD_BAD_REQUEST;
+#endif // VOD_HAVE_ZLIB
 }

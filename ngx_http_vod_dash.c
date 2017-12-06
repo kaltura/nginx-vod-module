@@ -3,10 +3,15 @@
 #include "ngx_http_vod_submodule.h"
 #include "ngx_http_vod_utils.h"
 #include "vod/dash/dash_packager.h"
-#include "vod/dash/edash_packager.h"
 #include "vod/mkv/mkv_builder.h"
+#include "vod/mp4/mp4_fragment.h"
+#include "vod/mp4/mp4_init_segment.h"
 #include "vod/subtitle/webvtt_builder.h"
 #include "vod/udrm.h"
+
+#if (NGX_HAVE_OPENSSL_EVP)
+#include "vod/dash/edash_packager.h"
+#endif // NGX_HAVE_OPENSSL_EVP
 
 // constants
 #define SUPPORTED_CODECS_MP4 (VOD_CODEC_FLAG(AVC) | VOD_CODEC_FLAG(HEVC) | VOD_CODEC_FLAG(AAC) | VOD_CODEC_FLAG(AC3) | VOD_CODEC_FLAG(EAC3))
@@ -22,8 +27,6 @@ ngx_conf_enum_t  dash_manifest_formats[] = {
 
 // content types
 static u_char mpd_content_type[] = "application/dash+xml";
-static u_char mp4_audio_content_type[] = "audio/mp4";
-static u_char mp4_video_content_type[] = "video/mp4";
 static u_char webm_audio_content_type[] = "audio/webm";
 static u_char webm_video_content_type[] = "video/webm";
 static u_char vtt_content_type[] = "text/vtt";
@@ -66,6 +69,7 @@ ngx_http_vod_dash_handle_manifest(
 		}
 	}
 
+#if (NGX_HAVE_OPENSSL_EVP)
 	if (conf->drm_enabled)
 	{
 		rc = edash_packager_build_mpd(
@@ -77,6 +81,7 @@ ngx_http_vod_dash_handle_manifest(
 			response);
 	}
 	else
+#endif // NGX_HAVE_OPENSSL_EVP
 	{
 		vod_memzero(&extensions, sizeof(extensions));
 
@@ -98,7 +103,6 @@ ngx_http_vod_dash_handle_manifest(
 
 	content_type->data = mpd_content_type;
 	content_type->len = sizeof(mpd_content_type) - 1;
-
 	return NGX_OK;
 }
 
@@ -108,8 +112,10 @@ ngx_http_vod_dash_mp4_handle_init_segment(
 	ngx_str_t* response,
 	ngx_str_t* content_type)
 {
-	ngx_http_vod_loc_conf_t* conf = submodule_context->conf;
 	vod_status_t rc;
+
+#if (NGX_HAVE_OPENSSL_EVP)
+	ngx_http_vod_loc_conf_t* conf = submodule_context->conf;
 	uint32_t flags;
 
 	if (conf->drm_enabled)
@@ -134,8 +140,9 @@ ngx_http_vod_dash_mp4_handle_init_segment(
 			response);
 	}
 	else
+#endif // NGX_HAVE_OPENSSL_EVP
 	{
-		rc = dash_packager_build_init_mp4(
+		rc = mp4_init_segment_build(
 			&submodule_context->request_context,
 			&submodule_context->media_set,
 			ngx_http_vod_submodule_size_only(submodule_context),
@@ -151,17 +158,9 @@ ngx_http_vod_dash_mp4_handle_init_segment(
 		return ngx_http_vod_status_to_ngx_error(submodule_context->r, rc);
 	}
 
-	if (submodule_context->media_set.track_count[MEDIA_TYPE_VIDEO] != 0)
-	{
-		content_type->data = mp4_video_content_type;
-		content_type->len = sizeof(mp4_video_content_type) - 1;
-	}
-	else
-	{
-		content_type->data = mp4_audio_content_type;
-		content_type->len = sizeof(mp4_audio_content_type) - 1;
-	}
-
+	mp4_fragment_get_content_type(
+		submodule_context->media_set.track_count[MEDIA_TYPE_VIDEO],
+		content_type);
 	return NGX_OK;
 }
 
@@ -178,41 +177,48 @@ ngx_http_vod_dash_mp4_init_frame_processor(
 	dash_fragment_header_extensions_t header_extensions;
 	ngx_http_vod_loc_conf_t* conf = submodule_context->conf;
 	fragment_writer_state_t* state;
-	segment_writer_t edash_writer;
 	vod_status_t rc;
 	bool_t reuse_buffers = FALSE;
 	bool_t size_only = ngx_http_vod_submodule_size_only(submodule_context);
 
-	if (conf->drm_enabled && 
+#if (NGX_HAVE_OPENSSL_EVP)
+	segment_writer_t drm_writer;
+
+	if (conf->drm_enabled &&
 		submodule_context->request_params.segment_index >= conf->drm_clear_lead_segment_count)
 	{
+		drm_writer = *segment_writer;		// must not change segment_writer, otherwise the header will be encrypted
+
 		// encyrpted fragment
 		rc = edash_packager_get_fragment_writer(
-			&edash_writer,
+			&drm_writer,
 			&submodule_context->request_context,
 			&submodule_context->media_set,
 			submodule_context->request_params.segment_index,
 			conf->min_single_nalu_per_frame_segment > 0 && 
 				submodule_context->media_set.initial_segment_clip_relative_index >= conf->min_single_nalu_per_frame_segment - 1,
-			segment_writer,
 			submodule_context->media_set.sequences[0].encryption_key,		// iv
 			size_only,
 			output_buffer,
 			response_size);
-		if (rc != VOD_OK)
+		switch (rc)
 		{
+		case VOD_DONE:		// passthrough
+			break;
+
+		case VOD_OK:
+			segment_writer = &drm_writer;
+			reuse_buffers = TRUE;		// mp4_cenc_encrypt allocates new buffers
+			break;
+
+		default:
 			ngx_log_debug1(NGX_LOG_DEBUG_HTTP, submodule_context->request_context.log, 0,
 				"ngx_http_vod_dash_mp4_init_frame_processor: edash_packager_get_fragment_writer failed %i", rc);
 			return ngx_http_vod_status_to_ngx_error(submodule_context->r, rc);
 		}
-
-		if (edash_writer.write_tail != NULL)
-		{
-			segment_writer = &edash_writer;
-			reuse_buffers = TRUE;		// mp4_encrypt allocates new buffers
-		}
 	}
 	else
+#endif // NGX_HAVE_OPENSSL_EVP
 	{
 		// unencrypted
 		ngx_memzero(&header_extensions, sizeof(header_extensions));
@@ -237,7 +243,7 @@ ngx_http_vod_dash_mp4_init_frame_processor(
 	// initialize the frame processor
 	if (!size_only || *response_size == 0)
 	{
-		rc = mp4_builder_frame_writer_init(
+		rc = mp4_fragment_frame_writer_init(
 			&submodule_context->request_context,
 			submodule_context->media_set.sequences,
 			segment_writer->write_tail,
@@ -247,27 +253,36 @@ ngx_http_vod_dash_mp4_init_frame_processor(
 		if (rc != VOD_OK)
 		{
 			ngx_log_debug1(NGX_LOG_DEBUG_HTTP, submodule_context->request_context.log, 0,
-				"ngx_http_vod_dash_mp4_init_frame_processor: mp4_builder_frame_writer_init failed %i", rc);
+				"ngx_http_vod_dash_mp4_init_frame_processor: mp4_fragment_frame_writer_init failed %i", rc);
 			return ngx_http_vod_status_to_ngx_error(submodule_context->r, rc);
 		}
 
-		*frame_processor = (ngx_http_vod_frame_processor_t)mp4_builder_frame_writer_process;
+		*frame_processor = (ngx_http_vod_frame_processor_t)mp4_fragment_frame_writer_process;
 		*frame_processor_state = state;
 	}
 
 	// set the 'Content-type' header
-	if (submodule_context->media_set.track_count[MEDIA_TYPE_VIDEO] != 0)
+	mp4_fragment_get_content_type(
+		submodule_context->media_set.track_count[MEDIA_TYPE_VIDEO],
+		content_type);
+	return NGX_OK;
+}
+
+static void
+ngx_http_vod_dash_get_webm_content_type(
+	bool_t video,
+	ngx_str_t* content_type)
+{
+	if (video)
 	{
-		content_type->len = sizeof(mp4_video_content_type) - 1;
-		content_type->data = (u_char *)mp4_video_content_type;
+		content_type->data = webm_video_content_type;
+		content_type->len = sizeof(webm_video_content_type) - 1;
 	}
 	else
 	{
-		content_type->len = sizeof(mp4_audio_content_type) - 1;
-		content_type->data = (u_char *)mp4_audio_content_type;
+		content_type->data = webm_audio_content_type;
+		content_type->len = sizeof(webm_audio_content_type) - 1;
 	}
-
-	return NGX_OK;
 }
 
 static ngx_int_t
@@ -301,17 +316,9 @@ ngx_http_vod_dash_webm_handle_init_segment(
 		return ngx_http_vod_status_to_ngx_error(submodule_context->r, rc);
 	}
 
-	if (submodule_context->media_set.track_count[MEDIA_TYPE_VIDEO] != 0)
-	{
-		content_type->data = webm_video_content_type;
-		content_type->len = sizeof(webm_video_content_type) - 1;
-	}
-	else
-	{
-		content_type->data = webm_audio_content_type;
-		content_type->len = sizeof(webm_audio_content_type) - 1;
-	}
-
+	ngx_http_vod_dash_get_webm_content_type(
+		submodule_context->media_set.track_count[MEDIA_TYPE_VIDEO],
+		content_type);
 	return NGX_OK;
 }
 
@@ -366,17 +373,9 @@ ngx_http_vod_dash_webm_init_frame_processor(
 	*frame_processor = (ngx_http_vod_frame_processor_t)mkv_builder_frame_writer_process;
 
 	// set the 'Content-type' header
-	if (submodule_context->media_set.track_count[MEDIA_TYPE_VIDEO] != 0)
-	{
-		content_type->len = sizeof(webm_video_content_type) - 1;
-		content_type->data = (u_char *)webm_video_content_type;
-	}
-	else
-	{
-		content_type->len = sizeof(webm_audio_content_type) - 1;
-		content_type->data = (u_char *)webm_audio_content_type;
-	}
-
+	ngx_http_vod_dash_get_webm_content_type(
+		submodule_context->media_set.track_count[MEDIA_TYPE_VIDEO],
+		content_type);
 	return NGX_OK;
 }
 
@@ -402,7 +401,6 @@ ngx_http_vod_dash_handle_vtt_file(
 
 	content_type->len = sizeof(vtt_content_type) - 1;
 	content_type->data = (u_char *)vtt_content_type;
-
 	return NGX_OK;
 }
 

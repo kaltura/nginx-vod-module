@@ -65,6 +65,7 @@ dynamic_clip_parse(
 	filter->sequence = context->sequence;
 	filter->clip_time = context->clip_time;
 	filter->duration = context->duration;
+	filter->clip_from = context->clip_from;
 	filter->range = context->range;
 
 	*result = &filter->base;
@@ -132,6 +133,7 @@ dynamic_clip_apply_mapping_json(
 	context.sequence = clip->sequence;
 	context.clip_time = clip->clip_time;
 	context.duration = clip->duration;
+	context.clip_from = clip->clip_from;
 	context.range = clip->range;
 
 	rc = concat_clip_parse(&context, &json.v.obj, (void**)&concat_clip);

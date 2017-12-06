@@ -12,7 +12,7 @@ typedef struct
 	ngx_flag_t absolute_index_urls;
 	ngx_flag_t absolute_iframe_urls;
 	ngx_str_t master_file_name_prefix;
-	hls_muxer_conf_t muxer_config;
+	hls_mpegts_muxer_conf_t mpegts_muxer_config;
 	vod_uint_t encryption_method;
 	ngx_http_complex_value_t* encryption_key_uri;
 
@@ -22,5 +22,6 @@ typedef struct
 
 // globals
 extern ngx_conf_enum_t  hls_encryption_methods[];
+extern ngx_conf_enum_t  hls_container_formats[];
 
 #endif // _NGX_HTTP_VOD_HLS_CONF_H_INCLUDED_

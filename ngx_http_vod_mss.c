@@ -1,10 +1,14 @@
 #include <ngx_http.h>
 #include "ngx_http_vod_submodule.h"
 #include "ngx_http_vod_utils.h"
+#include "vod/mp4/mp4_fragment.h"
 #include "vod/mss/mss_packager.h"
-#include "vod/mss/mss_playready.h"
 #include "vod/subtitle/ttml_builder.h"
 #include "vod/udrm.h"
+
+#if (NGX_HAVE_OPENSSL_EVP)
+#include "vod/mss/mss_playready.h"
+#endif // NGX_HAVE_OPENSSL_EVP
 
 // constants
 #define SUPPORTED_CODECS (VOD_CODEC_FLAG(AVC) | VOD_CODEC_FLAG(AAC) | VOD_CODEC_FLAG(MP3))
@@ -28,8 +32,6 @@ static const ngx_http_vod_match_definition_t fragment_match_definition[] = {
 };
 
 // content types
-static u_char mp4_audio_content_type[] = "audio/mp4";
-static u_char mp4_video_content_type[] = "video/mp4";
 static u_char manifest_content_type[] = "text/xml";		// TODO: consider moving to application/vnd.ms-sstr+xml
 
 // extensions
@@ -43,6 +45,7 @@ ngx_http_vod_mss_handle_manifest(
 {
 	vod_status_t rc;
 
+#if (NGX_HAVE_OPENSSL_EVP)
 	if (submodule_context->conf->drm_enabled)
 	{
 		rc = mss_playready_build_manifest(
@@ -52,6 +55,7 @@ ngx_http_vod_mss_handle_manifest(
 			response);
 	}
 	else
+#endif // NGX_HAVE_OPENSSL_EVP
 	{
 		rc = mss_packager_build_manifest(
 			&submodule_context->request_context,
@@ -86,40 +90,47 @@ ngx_http_vod_mss_init_frame_processor(
 	size_t* response_size,
 	ngx_str_t* content_type)
 {
-	ngx_http_vod_loc_conf_t* conf = submodule_context->conf;
 	fragment_writer_state_t* state;
-	segment_writer_t drm_writer;
 	vod_status_t rc;
 	bool_t reuse_buffers = FALSE;
 	bool_t size_only = ngx_http_vod_submodule_size_only(submodule_context);
 
+#if (NGX_HAVE_OPENSSL_EVP)
+	ngx_http_vod_loc_conf_t* conf = submodule_context->conf;
+	segment_writer_t drm_writer;
+
 	if (conf->drm_enabled)
 	{
+		drm_writer = *segment_writer;		// must not change segment_writer, otherwise the header will be encrypted
+
 		rc = mss_playready_get_fragment_writer(
 			&drm_writer,
 			&submodule_context->request_context,
 			&submodule_context->media_set,
 			submodule_context->request_params.segment_index,
 			conf->min_single_nalu_per_frame_segment > 0 && submodule_context->request_params.segment_index >= conf->min_single_nalu_per_frame_segment - 1,
-			segment_writer,
 			submodule_context->media_set.sequences[0].encryption_key,		// iv
 			size_only,
 			output_buffer,
 			response_size);
-		if (rc != VOD_OK)
+		switch (rc)
 		{
+		case VOD_DONE:		// passthrough
+			break;
+
+		case VOD_OK:
+			segment_writer = &drm_writer;
+			reuse_buffers = TRUE;		// mp4_cenc_encrypt allocates new buffers
+			break;
+
+		default:
 			ngx_log_debug1(NGX_LOG_DEBUG_HTTP, submodule_context->request_context.log, 0,
 				"ngx_http_vod_mss_init_frame_processor: mss_playready_get_fragment_writer failed %i", rc);
 			return ngx_http_vod_status_to_ngx_error(submodule_context->r, rc);
 		}
-
-		if (drm_writer.write_tail != NULL)
-		{
-			segment_writer = &drm_writer;
-			reuse_buffers = TRUE;		// mp4_encrypt allocates new buffers
-		}
 	}
 	else
+#endif // NGX_HAVE_OPENSSL_EVP
 	{
 		rc = mss_packager_build_fragment_header(
 			&submodule_context->request_context,
@@ -141,7 +152,7 @@ ngx_http_vod_mss_init_frame_processor(
 
 	if (!size_only || *response_size == 0)
 	{
-		rc = mp4_builder_frame_writer_init(
+		rc = mp4_fragment_frame_writer_init(
 			&submodule_context->request_context,
 			submodule_context->media_set.sequences,
 			segment_writer->write_tail,
@@ -151,26 +162,18 @@ ngx_http_vod_mss_init_frame_processor(
 		if (rc != VOD_OK)
 		{
 			ngx_log_debug1(NGX_LOG_DEBUG_HTTP, submodule_context->request_context.log, 0,
-				"ngx_http_vod_mss_init_frame_processor: mp4_builder_frame_writer_init failed %i", rc);
+				"ngx_http_vod_mss_init_frame_processor: mp4_fragment_frame_writer_init failed %i", rc);
 			return ngx_http_vod_status_to_ngx_error(submodule_context->r, rc);
 		}
 
-		*frame_processor = (ngx_http_vod_frame_processor_t)mp4_builder_frame_writer_process;
+		*frame_processor = (ngx_http_vod_frame_processor_t)mp4_fragment_frame_writer_process;
 		*frame_processor_state = state;
 	}
 
 	// set the 'Content-type' header
-	if (submodule_context->media_set.track_count[MEDIA_TYPE_VIDEO])
-	{
-		content_type->len = sizeof(mp4_video_content_type) - 1;
-		content_type->data = mp4_video_content_type;
-	}
-	else
-	{
-		content_type->len = sizeof(mp4_audio_content_type) - 1;
-		content_type->data = mp4_audio_content_type;
-	}
-
+	mp4_fragment_get_content_type(
+		submodule_context->media_set.track_count[MEDIA_TYPE_VIDEO],
+		content_type);
 	return NGX_OK;
 }
 
@@ -195,9 +198,7 @@ ngx_http_vod_mss_handle_ttml_fragment(
 		return ngx_http_vod_status_to_ngx_error(submodule_context->r, rc);
 	}
 
-	content_type->len = sizeof(mp4_video_content_type) - 1;
-	content_type->data = (u_char *)mp4_video_content_type;
-
+	mp4_fragment_get_content_type(TRUE, content_type);
 	return NGX_OK;
 }
 

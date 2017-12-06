@@ -196,7 +196,7 @@ def getTestUrls():
 	return result
 
 if len(sys.argv) < 2:
-	print 'Usage:\n\t%s urls/conf' % os.path.basename(__file__)
+	print 'Usage:\n\tpython %s urls/conf' % os.path.basename(__file__)
 	sys.exit(1)
 
 if sys.argv[1] == 'conf':

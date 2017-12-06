@@ -2,16 +2,8 @@
 
 // constants
 #define MAX_SEGMENT_COUNT (100000)
-#define MIN_SEGMENT_DURATION (500)
 
 // typedefs
-typedef struct {
-	request_context_t* request_context;
-	vod_array_part_t* part;
-	int64_t* cur_pos;
-	int64_t offset;
-} align_to_key_frames_context_t;
-
 typedef struct {
 	uint64_t start_time;
 	uint32_t start_clip_offset;
@@ -49,12 +41,11 @@ segmenter_init_config(segmenter_conf_t* conf, vod_pool_t* pool)
 	uint32_t i;
 	int32_t cur_duration;
 
-	if (conf->segment_duration < MIN_SEGMENT_DURATION)
+	if (conf->segment_duration < MIN_SEGMENT_DURATION || 
+		conf->segment_duration > MAX_SEGMENT_DURATION)
 	{
 		return VOD_BAD_DATA;
 	}
-
-	conf->max_segment_duration = conf->segment_duration;
 
 	if (conf->get_segment_durations == segmenter_get_segment_durations_accurate)
 	{
@@ -69,8 +60,11 @@ segmenter_init_config(segmenter_conf_t* conf, vod_pool_t* pool)
 		conf->parse_type = 0;
 	}
 
+	conf->max_bootstrap_segment_duration = 0;
+
 	if (conf->bootstrap_segments == NULL)
 	{
+		conf->max_segment_duration = conf->segment_duration;
 		conf->bootstrap_segments_count = 0;
 		conf->bootstrap_segments_durations = NULL;
 		conf->bootstrap_segments_total_duration = 0;
@@ -108,11 +102,15 @@ segmenter_init_config(segmenter_conf_t* conf, vod_pool_t* pool)
 		cur_pos += conf->bootstrap_segments_durations[i];
 		conf->bootstrap_segments_end[i] = cur_pos;
 
-		if ((uint32_t)cur_duration > conf->max_segment_duration)
+		if ((uint32_t)cur_duration > conf->max_bootstrap_segment_duration)
 		{
-			conf->max_segment_duration = cur_duration;
+			conf->max_bootstrap_segment_duration = cur_duration;
 		}
 	}
+
+	conf->max_segment_duration = vod_max(conf->segment_duration, 
+		conf->max_bootstrap_segment_duration);
+
 	conf->bootstrap_segments_total_duration = cur_pos;
 
 	return VOD_OK;
@@ -257,7 +255,7 @@ segmenter_get_start_end_offsets(segmenter_conf_t* conf, uint32_t segment_index, 
 	}
 }
 
-static int64_t 
+int64_t 
 segmenter_align_to_key_frames(
 	align_to_key_frames_context_t* context, 
 	int64_t offset, 
