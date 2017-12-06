@@ -2991,7 +2991,8 @@ ngx_http_vod_finalize_segment_response(ngx_http_vod_ctx_t *ctx)
 	// if we already sent the headers and all the buffers, just signal completion and return
 	if (r->header_sent)
 	{
-		if (ctx->write_segment_buffer_context.total_size != ctx->content_length)
+		if (ctx->write_segment_buffer_context.total_size != ctx->content_length &&
+			(ctx->size_limit == 0 || ctx->write_segment_buffer_context.total_size < ctx->size_limit))
 		{
 			ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
 				"ngx_http_vod_finalize_segment_response: actual content length %uz is different than reported length %uz",
