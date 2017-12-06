@@ -201,6 +201,7 @@ struct ngx_http_vod_ctx_s {
 
 	// segment requests only
 	size_t content_length;
+	size_t size_limit;
 	read_cache_state_t read_cache_state;
 	ngx_http_vod_frame_processor_t frame_processor;
 	void* frame_processor_state;
@@ -2800,12 +2801,9 @@ ngx_http_vod_init_frame_processing(ngx_http_vod_ctx_t *ctx)
 	}
 
 	// initialize the response writer
-	ctx->out.buf = NULL;
-	ctx->out.next = NULL;
 	ctx->write_segment_buffer_context.r = r;
 	ctx->write_segment_buffer_context.chain_head = &ctx->out;
 	ctx->write_segment_buffer_context.chain_end = &ctx->out;
-	ctx->write_segment_buffer_context.total_size = 0;
 
 	ctx->segment_writer.write_tail = ngx_http_vod_write_segment_buffer;
 	ctx->segment_writer.write_head = ngx_http_vod_write_segment_header_buffer;
@@ -2849,6 +2847,17 @@ ngx_http_vod_init_frame_processing(ngx_http_vod_ctx_t *ctx)
 		{
 			return NGX_DONE;
 		}
+
+		// in case of range request, get the end offset
+		if (ctx->submodule_context.r->headers_in.range != NULL &&
+			ngx_http_vod_range_parse(
+				&ctx->submodule_context.r->headers_in.range->value,
+				ctx->content_length,
+				&range_start,
+				&range_end) == NGX_OK)
+		{
+			ctx->size_limit = range_end;
+		}
 	}
 
 	// write the initial buffer if provided
@@ -2866,14 +2875,7 @@ ngx_http_vod_init_frame_processing(ngx_http_vod_ctx_t *ctx)
 		}
 
 		// in case of a range request that is fully contained in the output buffer (e.g. 0-0), we're done
-		if (ctx->content_length != 0 &&
-			ctx->submodule_context.r->headers_in.range != NULL &&
-			ngx_http_vod_range_parse(
-				&ctx->submodule_context.r->headers_in.range->value,
-				ctx->content_length,
-				&range_start,
-				&range_end) == NGX_OK &&
-			(size_t)range_end <= output_buffer.len)
+		if (ctx->size_limit != 0 && output_buffer.len >= ctx->size_limit && r->header_sent)
 		{
 			return NGX_DONE;
 		}
@@ -2919,6 +2921,13 @@ ngx_http_vod_process_media_frames(ngx_http_vod_ctx_t *ctx)
 			ngx_log_debug1(NGX_LOG_DEBUG_HTTP, ctx->submodule_context.request_context.log, 0,
 				"ngx_http_vod_process_media_frames: frame_processor failed %i", rc);
 			return ngx_http_vod_status_to_ngx_error(ctx->submodule_context.r, rc);
+		}
+
+		if (ctx->size_limit != 0 && 
+			ctx->write_segment_buffer_context.total_size >= ctx->size_limit && 
+			ctx->submodule_context.r->header_sent)
+		{
+			return NGX_OK;
 		}
 
 		// get a buffer to read into
@@ -2982,7 +2991,8 @@ ngx_http_vod_finalize_segment_response(ngx_http_vod_ctx_t *ctx)
 	// if we already sent the headers and all the buffers, just signal completion and return
 	if (r->header_sent)
 	{
-		if (ctx->write_segment_buffer_context.total_size != ctx->content_length)
+		if (ctx->write_segment_buffer_context.total_size != ctx->content_length &&
+			(ctx->size_limit == 0 || ctx->write_segment_buffer_context.total_size < ctx->size_limit))
 		{
 			ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
 				"ngx_http_vod_finalize_segment_response: actual content length %uz is different than reported length %uz",
