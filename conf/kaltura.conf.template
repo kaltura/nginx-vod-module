@@ -1,38 +1,37 @@
 
-		
-		# static files (crossdomain.xml, robots.txt etc.) + fallback to api
-		location / {
-			root   @STATIC_FILES_PATH@;
-			try_files $uri @api_fallback;
-		}
+		# vod mapped settings
+		vod_mode mapped;
+		vod_upstream_location /kalapi_proxy;
+		vod_upstream_extra_args "pathOnly=1";
+		vod_mapping_cache mapping_cache 64m;
 
-		# nginx status page
-		location /nginx_status {
-			stub_status on;
-			access_log off;
-		}
+		# file handle caching / aio
+		open_file_cache max=1000 inactive=5m;
+		open_file_cache_valid 2m;
+		open_file_cache_min_uses 1;
+		open_file_cache_errors on;
+		aio on;
 
-		# vod status page
-		location /vod_status {
-			vod_status;
-			access_log off;
-		}
-		
 		# internal location for vod subrequests
 		location /kalapi_proxy/ {
 			internal;
 			proxy_pass http://kalapi/;
 			proxy_set_header Host $http_host;
 		}
-		
-		# serve flavor progressive (clipFrom/To are not supported with 'vod none' so they are proxied)
-		location ~ ^/p/\d+/(sp/\d+/)?serveFlavor/((?!clipFrom)(?!clipTo).)*$ {
+
+		# base locations
+		include /etc/nginx/conf.d/base.conf;
+
+		# serve flavor progressive
+		location ~ ^/p/\d+/(sp/\d+/)?serveFlavor/ {
 			vod none;
 
-			add_header Last-Modified "Sun, 19 Nov 2000 08:52:00 GMT";
-			expires 100d;
+			directio 512;
+			output_buffers 1 512k;
+
+			include /etc/nginx/conf.d/cors.conf;
 		}
-		
+
 		# serve flavor HLS
 		location ~ ^/hls/p/\d+/(sp/\d+/)?serveFlavor/ {
 			vod hls;
@@ -41,40 +40,26 @@
 			vod_bootstrap_segment_durations 2000;
 			vod_bootstrap_segment_durations 4000;
 
-			add_header Last-Modified "Sun, 19 Nov 2000 08:52:00 GMT";
-			add_header Access-Control-Allow-Headers "*";
-			add_header Access-Control-Expose-Headers "Server,range,Content-Length,Content-Range";
-			add_header Access-Control-Allow-Methods "GET, HEAD, OPTIONS";
-			add_header Access-Control-Allow-Origin "*";
-			expires 100d;
+			include /etc/nginx/conf.d/cors.conf;
 		}
-		
+
 		# serve flavor DASH
 		location ~ ^/dash/p/\d+/(sp/\d+/)?serveFlavor/ {
 			vod dash;
 			vod_segment_duration 4000;
-			vod_bootstrap_segment_durations 3500;
-			vod_align_segments_to_key_frames on;
 			vod_dash_manifest_format segmenttemplate;
-			
-			add_header Last-Modified "Sun, 19 Nov 2000 08:52:00 GMT";
-			add_header Access-Control-Allow-Headers "origin,range,accept-encoding,referer";
-			add_header Access-Control-Expose-Headers "Server,range,Content-Length,Content-Range";
-			add_header Access-Control-Allow-Methods "GET, HEAD, OPTIONS";
-			add_header Access-Control-Allow-Origin "*";
-			expires 100d;
+			vod_manifest_duration_policy min;
+
+			include /etc/nginx/conf.d/cors.conf;
 		}
-		
+
 		# serve flavor HDS
 		location ~ ^/hds/p/\d+/(sp/\d+/)?serveFlavor/ {
 			vod hds;
 			vod_segment_duration 6000;
-			vod_align_segments_to_key_frames on;
 			vod_segment_count_policy last_rounded;
-			
-			add_header Last-Modified "Sun, 19 Nov 2000 08:52:00 GMT";
-			add_header Access-Control-Allow-Origin "*";
-			expires 100d;
+
+			include /etc/nginx/conf.d/cors.conf;
 		}
 
 		# serve flavor MSS
@@ -82,22 +67,18 @@
 			vod mss;
 			vod_segment_duration 4000;
 			vod_manifest_segment_durations_mode accurate;
-			
-			add_header Last-Modified "Sun, 19 Nov 2000 08:52:00 GMT";
-			expires 100d;
-		}	
-		
+
+			include /etc/nginx/conf.d/cors.conf;
+		}
+
+		# static files (crossdomain.xml, robots.txt etc.) + fallback to api
+		location / {
+			root   @STATIC_FILES_PATH@;
+			try_files $uri @api_fallback;
+		}
+
 		# all unidentified requests fallback to api (inc. playManifest)
 		location @api_fallback {
 			proxy_pass http://kalapi;
 			proxy_set_header Host $http_host;
-		}
-		
-		#error_page  404			  /404.html;
-
-		# redirect server error pages to the static page /50x.html
-		#
-		error_page   500 502 503 504  /50x.html;
-		location = /50x.html {
-			root   html;
 		}
