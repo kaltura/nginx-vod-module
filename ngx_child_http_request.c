@@ -638,6 +638,10 @@ ngx_child_request_header_filter(ngx_http_request_t *r)
 	{
 		// send the parent request headers
 		pr->headers_out = r->headers_out;
+		if (r->headers_out.headers.last == &r->headers_out.headers.part)
+		{
+			pr->headers_out.headers.last = &pr->headers_out.headers.part;
+		}
 		ctx->send_header_result = ngx_http_send_header(pr);
 	}
 	else
