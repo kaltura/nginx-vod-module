@@ -1,0 +1,70 @@
+
+		# vod remote settings
+		vod_mode remote;
+		vod_upstream_location /media_proxy;
+
+		# internal location for vod subrequests
+		location ~ /media_proxy/[^/]+/(.*) {
+			internal;
+			proxy_pass http://media/$1;
+			proxy_http_version 1.1;
+			proxy_set_header Host $http_host;
+			proxy_set_header Connection "";
+		}
+
+		# base locations
+		include /etc/nginx/conf.d/base.conf;
+
+		# serve flavor progressive
+		location /pd/ {
+			vod none;
+
+			directio 512;
+			output_buffers 1 512k;
+
+			include /etc/nginx/conf.d/cors.conf;
+		}
+
+		# serve flavor HLS
+		location /hls/ {
+			vod hls;
+			vod_bootstrap_segment_durations 2000;
+			vod_bootstrap_segment_durations 2000;
+			vod_bootstrap_segment_durations 2000;
+			vod_bootstrap_segment_durations 4000;
+
+			include /etc/nginx/conf.d/cors.conf;
+		}
+
+		# serve flavor DASH
+		location /dash/ {
+			vod dash;
+			vod_segment_duration 4000;
+			vod_dash_manifest_format segmenttemplate;
+			vod_manifest_duration_policy min;
+
+			include /etc/nginx/conf.d/cors.conf;
+		}
+
+		# serve flavor HDS
+		location /hds/ {
+			vod hds;
+			vod_segment_duration 6000;
+			vod_segment_count_policy last_rounded;
+
+			include /etc/nginx/conf.d/cors.conf;
+		}
+
+		# serve flavor MSS
+		location /mss/ {
+			vod mss;
+			vod_segment_duration 4000;
+			vod_manifest_segment_durations_mode accurate;
+
+			include /etc/nginx/conf.d/cors.conf;
+		}
+
+		# static files (crossdomain.xml, robots.txt etc.) + fallback to api
+		location / {
+			root   @STATIC_FILES_PATH@;
+		}

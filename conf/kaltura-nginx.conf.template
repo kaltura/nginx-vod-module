@@ -1,0 +1,17 @@
+include /etc/nginx/conf.d/main.conf;
+
+http {
+	upstream kalapi {
+		server @WWW_HOST@;
+	}
+
+	include /etc/nginx/conf.d/http.conf;
+
+	server {
+		listen @VOD_PACKAGER_PORT@;
+		server_name @VOD_PACKAGER_HOST@;
+		include /etc/nginx/conf.d/server.conf;
+	}
+
+	include /etc/nginx/conf.d/ssl.conf;
+}

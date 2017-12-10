@@ -1,22 +1,3 @@
-user  kaltura;
-worker_processes  auto;
-
-error_log  @LOG_DIR@/kaltura_nginx_errors.log;
-
-pid		/var/run/nginx.pid;
-
-events {
-	worker_connections  1024;
-	worker_aio_requests 512;
-	multi_accept on;
-	use epoll;
-}
-
-http {
-	upstream kalapi {
-		server @WWW_HOST@;
-	}
-
 	include	   mime.types;
 	default_type  application/octet-stream;
 
@@ -59,12 +40,3 @@ http {
 	vod_expires_live_time_dependent 3;
 	vod_align_segments_to_key_frames on;
 	vod_output_buffer_pool 64k 32;
-
-	server {
-		listen @VOD_PACKAGER_PORT@;
-		server_name @VOD_PACKAGER_HOST@;
-		include /etc/nginx/conf.d/kaltura.conf;
-	}
-
-	include /etc/nginx/conf.d/ssl.conf;
-}

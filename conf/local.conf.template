@@ -1,0 +1,69 @@
+
+		# file handle caching / aio
+		open_file_cache max=1000 inactive=5m;
+		open_file_cache_valid 2m;
+		open_file_cache_min_uses 1;
+		open_file_cache_errors on;
+		aio on;
+
+		# base locations
+		include /etc/nginx/conf.d/base.conf;
+
+		# serve flavor progressive
+		location /pd/ {
+			alias @MEDIA_FILES_PATH@;
+			vod none;
+
+			directio 512;
+			output_buffers 1 512k;
+
+			include /etc/nginx/conf.d/cors.conf;
+		}
+
+		# serve flavor HLS
+		location /hls/ {
+			alias @MEDIA_FILES_PATH@;
+			vod hls;
+			vod_bootstrap_segment_durations 2000;
+			vod_bootstrap_segment_durations 2000;
+			vod_bootstrap_segment_durations 2000;
+			vod_bootstrap_segment_durations 4000;
+
+			include /etc/nginx/conf.d/cors.conf;
+		}
+
+		# serve flavor DASH
+		location /dash/ {
+			alias @MEDIA_FILES_PATH@;
+			vod dash;
+			vod_segment_duration 4000;
+			vod_dash_manifest_format segmenttemplate;
+			vod_manifest_duration_policy min;
+
+			include /etc/nginx/conf.d/cors.conf;
+		}
+
+		# serve flavor HDS
+		location /hds/ {
+			alias @MEDIA_FILES_PATH@;
+			vod hds;
+			vod_segment_duration 6000;
+			vod_segment_count_policy last_rounded;
+
+			include /etc/nginx/conf.d/cors.conf;
+		}
+
+		# serve flavor MSS
+		location /mss/ {
+			alias @MEDIA_FILES_PATH@;
+			vod mss;
+			vod_segment_duration 4000;
+			vod_manifest_segment_durations_mode accurate;
+
+			include /etc/nginx/conf.d/cors.conf;
+		}
+
+		# static files (crossdomain.xml, robots.txt etc.) + fallback to api
+		location / {
+			root   @STATIC_FILES_PATH@;
+		}
