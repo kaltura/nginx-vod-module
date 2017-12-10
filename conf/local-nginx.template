@@ -1,13 +1,13 @@
-include /etc/nginx/conf.d/main.conf;
+include @NGINX_CONF_PATH@/main.conf;
 
 http {
-	include /etc/nginx/conf.d/http.conf;
+	include @NGINX_CONF_PATH@/http.conf;
 
 	server {
 		listen @VOD_PACKAGER_PORT@;
 		server_name @VOD_PACKAGER_HOST@;
-		include /etc/nginx/conf.d/server.conf;
+		include @NGINX_CONF_PATH@/server.conf;
 	}
 
-	include /etc/nginx/conf.d/ssl.conf;
+	include @NGINX_CONF_PATH@/ssl.conf;
 }

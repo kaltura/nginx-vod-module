@@ -7,7 +7,7 @@
 		aio on;
 
 		# base locations
-		include /etc/nginx/conf.d/base.conf;
+		include @NGINX_CONF_PATH@/base.conf;
 
 		# serve flavor progressive
 		location /pd/ {
@@ -17,7 +17,7 @@
 			directio 512;
 			output_buffers 1 512k;
 
-			include /etc/nginx/conf.d/cors.conf;
+			include @NGINX_CONF_PATH@/cors.conf;
 		}
 
 		# serve flavor HLS
@@ -29,7 +29,7 @@
 			vod_bootstrap_segment_durations 2000;
 			vod_bootstrap_segment_durations 4000;
 
-			include /etc/nginx/conf.d/cors.conf;
+			include @NGINX_CONF_PATH@/cors.conf;
 		}
 
 		# serve flavor DASH
@@ -40,7 +40,7 @@
 			vod_dash_manifest_format segmenttemplate;
 			vod_manifest_duration_policy min;
 
-			include /etc/nginx/conf.d/cors.conf;
+			include @NGINX_CONF_PATH@/cors.conf;
 		}
 
 		# serve flavor HDS
@@ -50,7 +50,7 @@
 			vod_segment_duration 6000;
 			vod_segment_count_policy last_rounded;
 
-			include /etc/nginx/conf.d/cors.conf;
+			include @NGINX_CONF_PATH@/cors.conf;
 		}
 
 		# serve flavor MSS
@@ -60,7 +60,7 @@
 			vod_segment_duration 4000;
 			vod_manifest_segment_durations_mode accurate;
 
-			include /etc/nginx/conf.d/cors.conf;
+			include @NGINX_CONF_PATH@/cors.conf;
 		}
 
 		# static files (crossdomain.xml, robots.txt etc.) + fallback to api
