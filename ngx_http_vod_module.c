@@ -2,6 +2,9 @@
 #include <ngx_core.h>
 #include <ngx_http.h>
 #include <nginx.h>
+#if (nginx_version >= 1013000)
+    #error "Sorry, the Nginx VOD module does not currently support 1.13 and above. For more info, see https://github.com/kaltura/nginx-vod-module/issues/645.";
+#endif
 #include <ngx_event.h>
 #include <ngx_md5.h>
 
