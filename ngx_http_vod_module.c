@@ -28,6 +28,10 @@
 #include "vod/manifest_utils.h"
 #include "vod/input/silence_generator.h"
 
+#if (nginx_version >= 1013000)
+    #error "Sorry, the Nginx VOD module does not currently support 1.13 and above. For more info, see https://github.com/kaltura/nginx-vod-module/issues/645.";
+#endif
+
 #if (NGX_HAVE_LIB_AV_CODEC)
 #include "ngx_http_vod_thumb.h"
 #include "ngx_http_vod_volume_map.h"
