@@ -9,17 +9,28 @@ from uri_compare_params import *
 
 class TestThread(stress_base.TestThreadBase):
 
-	def getURL(self, hostHeader, url):
+	def getURL(self, hostHeader, url, range = None):
 		headers = {}
 		headers.update(EXTRA_HEADERS)
 		headers['Host'] = hostHeader
+		headers['Accept-encoding'] = 'gzip'
+		if range != None:
+			headers['Range'] = 'bytes=%s' % range
 		code, headers, body = http_utils.getUrl(url, headers)
 		if code == 0:
 			self.writeOutput(body)
 		return code, headers, body
 		
-	def runTest(self, uri):
-		hostHeader, uri = uri.split(' ')
+	def runTest(self, line):
+		splittedLine = line.split(' ')
+		if len(splittedLine) == 2:
+			hostHeader, uri = splittedLine
+			range = None
+		elif len(splittedLine) == 3:
+			range, hostHeader, uri = splittedLine
+			range = range.split('/')[0]
+		else:
+			return True
 	
 		urlBase1 = random.choice(URL1_BASE)
 		urlBase2 = random.choice(URL2_BASE)
@@ -37,8 +48,8 @@ class TestThread(stress_base.TestThreadBase):
 			url1 = re.sub('/p/\d+/sp/\d+/', '/p/%s/sp/%s00/' % (TEST_PARTNER_ID, TEST_PARTNER_ID), url1)
 			url2 = re.sub('/p/\d+/sp/\d+/', '/p/%s/sp/%s00/' % (TEST_PARTNER_ID, TEST_PARTNER_ID), url2)
 
-		code1, headers1, body1 = self.getURL(hostHeader, url1)
-		code2, headers2, body2 = self.getURL(hostHeader, url2)
+		code1, headers1, body1 = self.getURL(hostHeader, url1, range)
+		code2, headers2, body2 = self.getURL(hostHeader, url2, range)
 		if code1 != code2:
 			self.writeOutput('Error: got different status codes %s vs %s' % (code1, code2))
 			return False
@@ -48,7 +59,7 @@ class TestThread(stress_base.TestThreadBase):
 			self.writeOutput(headerCompare)
 			return False
 		
-		if str(code1) != '200':
+		if not str(code1) in ['200', '206']:
 			self.writeOutput('Notice: got status code %s' % (code1))
 			body1 = re.sub('nginx/\d+\.\d+\.\d+', 'nginx/0.0.0', body1)
 			body2 = re.sub('nginx/\d+\.\d+\.\d+', 'nginx/0.0.0', body2)

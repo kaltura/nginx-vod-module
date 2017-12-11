@@ -106,7 +106,7 @@ def main(testThread, stopFile):
 	
 	serverList = []
 	startOffset = 0
-	endOffset = None
+	endOffset = float("inf")
 	if len(sys.argv) == 7 and sys.argv[4] == 'child':
 		startOffset = int(sys.argv[5])
 		endOffset = int(sys.argv[6])
@@ -116,14 +116,16 @@ def main(testThread, stopFile):
 	# read all the request
 	writeOutput('Info: reading input file %s' % inputFile)
 	requests = []
+	index = 0
 	for inputLine in file(inputFile):
 		inputLine = inputLine.strip()
 		if len(inputLine) == 0 or inputLine[0] == '#':
 			continue
-		requests.append(inputLine)
-	if endOffset == None:
-		endOffset = len(requests)
-	requests = requests[startOffset:endOffset]
+		if index >= startOffset:
+			if index >= endOffset:
+				break
+			requests.append(inputLine)
+		index += 1
 		
 	# the following line makes use of worker processes on each server instead of threads
 	if len(serverList) == 0 and threadCount > 1:
@@ -133,6 +135,7 @@ def main(testThread, stopFile):
 	# parent
 	if len(serverList) > 0:
 		requestsPerServer = (len(requests) + len(serverList) - 1) / len(serverList)
+		requests = None		# don't need the requests in parent
 		threadContexts = []
 		for curIndex in xrange(len(serverList)):
 			threadContexts.append(

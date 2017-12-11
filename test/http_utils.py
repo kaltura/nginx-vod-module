@@ -47,9 +47,9 @@ def getUrl(url, extraHeaders={}):
 		
 	# decode gzip
 	if f.info().get('Content-Encoding') == 'gzip':
-		gzipFile = gzip.GzipFile(fileobj=StringIO(data))
+		gzipFile = gzip.GzipFile(fileobj=StringIO(body))
 		try:
-			data = gzipFile.read()
+			body = gzipFile.read()
 		except IOError, e:
 			return 0, {}, 'Error: failed to decode gzip %s' % url
 	return f.getcode(), parseHttpHeaders(f.info().headers), body
