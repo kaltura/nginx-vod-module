@@ -2,9 +2,6 @@
 #include <ngx_core.h>
 #include <ngx_http.h>
 #include <nginx.h>
-#if (nginx_version >= 1013000)
-    #error "Sorry, the Nginx VOD module does not currently support 1.13 and above. For more info, see https://github.com/kaltura/nginx-vod-module/issues/645.";
-#endif
 #include <ngx_event.h>
 #include <ngx_md5.h>
 
@@ -42,6 +39,10 @@
 #if (NGX_HAVE_LIBXML2)
 #include "vod/subtitle/dfxp_format.h"
 #endif // NGX_HAVE_LIBXML2
+
+#if (nginx_version >= 1013000)
+    #error "nginx-vod-module does not currently support Nginx 1.13 or higher (https://github.com/kaltura/nginx-vod-module/issues/645), please compile against Nginx 1.12";
+#endif
 
 // macros
 #define DEFINE_VAR(name) \
