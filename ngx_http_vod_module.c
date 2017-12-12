@@ -40,10 +40,6 @@
 #include "vod/subtitle/dfxp_format.h"
 #endif // NGX_HAVE_LIBXML2
 
-#if (nginx_version >= 1013000)
-    #error "nginx-vod-module does not currently support Nginx 1.13 or higher (https://github.com/kaltura/nginx-vod-module/issues/645), please compile against Nginx 1.12";
-#endif
-
 // macros
 #define DEFINE_VAR(name) \
 	{ ngx_string("vod_" #name), ngx_http_vod_set_##name##_var, 0 }
@@ -1042,13 +1038,13 @@ ngx_http_vod_send_header(
 		return rc;
 	}
 
-	return VOD_OK;
+	return NGX_OK;
 }
 
 static void
 ngx_http_vod_finalize_request(ngx_http_vod_ctx_t *ctx, ngx_int_t rc)
 {
-	if (ctx->submodule_context.r->header_sent && rc != NGX_OK && rc != NGX_AGAIN)
+	if (ctx->submodule_context.r->header_sent && rc != NGX_OK)
 	{
 		rc = NGX_ERROR;
 	}
@@ -1194,7 +1190,7 @@ ngx_http_vod_drm_info_request_finished(void* context, ngx_int_t rc, ngx_buf_t* r
 		return;
 	}
 
-	if (rc != NGX_OK && rc != NGX_DONE)
+	if (rc != NGX_OK)
 	{
 		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
 			"ngx_http_vod_drm_info_request_finished: ngx_http_vod_run_state_machine failed %i", rc);
@@ -1703,7 +1699,7 @@ ngx_http_vod_parse_metadata(
 
 	ngx_perf_counter_end(ctx->perf_counters, ctx->perf_counter_context, PC_MEDIA_PARSE);
 
-	return rc;
+	return NGX_OK;
 }
 
 static ngx_int_t
@@ -2133,7 +2129,7 @@ ngx_http_vod_state_machine_parse_metadata(ngx_http_vod_ctx_t *ctx)
 			rc = ctx->reader->open(r, &cur_source->mapped_uri, 0, &cur_source->reader_context);
 			if (rc != NGX_OK)
 			{
-				if (rc != NGX_AGAIN && rc != NGX_DONE)
+				if (rc != NGX_AGAIN)
 				{
 					ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
 						"ngx_http_vod_state_machine_parse_metadata: open_file failed %i", rc);
@@ -2638,7 +2634,7 @@ ngx_http_vod_state_machine_open_files(ngx_http_vod_ctx_t *ctx)
 		rc = ctx->reader->open(ctx->submodule_context.r, path, 0, &cur_source->reader_context);
 		if (rc != NGX_OK)
 		{
-			if (rc != NGX_AGAIN && rc != NGX_DONE)
+			if (rc != NGX_AGAIN)
 			{
 				ngx_log_debug1(NGX_LOG_DEBUG_HTTP, ctx->submodule_context.request_context.log, 0,
 					"ngx_http_vod_state_machine_open_files: open_file failed %i", rc);
@@ -3548,6 +3544,12 @@ ngx_http_vod_handle_read_completed(void* context, ngx_int_t rc, ngx_buf_t* buf, 
 
 	if (rc != NGX_OK)
 	{
+		if (rc == NGX_AGAIN)
+		{
+			ngx_http_finalize_request(ctx->submodule_context.r, rc);
+			return;
+		}
+
 		if (ctx->state == STATE_MAP_READ && 
 			ctx->mapping.stale_retries > 0 && 
 			errno == ESTALE)
@@ -3716,7 +3718,7 @@ ngx_http_vod_start_processing_media_file(ngx_http_vod_ctx_t *ctx)
 		rc = ctx->reader->open(r, &cur_source->mapped_uri, 0, &cur_source->reader_context);
 		if (rc != NGX_OK)
 		{
-			if (rc != NGX_AGAIN && rc != NGX_DONE)
+			if (rc != NGX_AGAIN)
 			{
 				ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
 					"ngx_http_vod_start_processing_media_file: open_file failed %i", rc);
@@ -3855,10 +3857,12 @@ ngx_http_vod_file_open_completed_internal(void* context, ngx_int_t rc, ngx_flag_
 		{
 			// try the fallback
 			rc = ngx_http_vod_dump_request_to_fallback(ctx->submodule_context.r);
-			if (rc != NGX_AGAIN)
+			if (rc == NGX_AGAIN)
 			{
-				rc = NGX_HTTP_NOT_FOUND;
+				return;
 			}
+
+			rc = NGX_HTTP_NOT_FOUND;
 			goto finalize_request;
 		}
 
@@ -4201,7 +4205,7 @@ ngx_http_vod_local_request_handler(ngx_http_request_t *r)
 
 	// start the state machine
 	rc = ngx_http_vod_start_processing_media_file(ctx);
-	if (rc != NGX_AGAIN && rc != NGX_DONE && rc != NGX_OK)
+	if (rc != NGX_OK && rc != NGX_AGAIN)
 	{
 		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
 			"ngx_http_vod_local_request_handler: ngx_http_vod_start_processing_media_file failed %i", rc);
@@ -4278,7 +4282,7 @@ ngx_http_vod_map_run_step(ngx_http_vod_ctx_t *ctx)
 		rc = ctx->reader->open(ctx->submodule_context.r, &uri, OPEN_FILE_NO_CACHE, &ctx->mapping.reader_context);
 		if (rc != NGX_OK)
 		{
-			if (rc != NGX_AGAIN && rc != NGX_DONE)
+			if (rc != NGX_AGAIN)
 			{
 				ngx_log_debug1(NGX_LOG_DEBUG_HTTP, ctx->submodule_context.request_context.log, 0,
 					"ngx_http_vod_map_run_step: open_file failed %i", rc);
@@ -5114,7 +5118,7 @@ ngx_http_vod_mapped_request_handler(ngx_http_request_t *r)
 	ctx->state_machine = ngx_http_vod_map_media_set_state_machine;
 
 	rc = ngx_http_vod_map_media_set_state_machine(ctx);
-	if (rc != NGX_AGAIN && rc != NGX_DONE && rc != NGX_OK)
+	if (rc != NGX_OK && rc != NGX_AGAIN)
 	{
 		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
 			"ngx_http_vod_mapped_request_handler: ngx_http_vod_map_media_set_state_machine failed %i", rc);
@@ -5141,7 +5145,7 @@ ngx_http_vod_remote_request_handler(ngx_http_request_t *r)
 	ctx->file_key_prefix = (r->headers_in.host != NULL ? &r->headers_in.host->value : NULL);
 
 	rc = ngx_http_vod_start_processing_media_file(ctx);
-	if (rc != NGX_AGAIN && rc != NGX_DONE && rc != NGX_OK)
+	if (rc != NGX_OK && rc != NGX_AGAIN)
 	{
 		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
 			"ngx_http_vod_remote_request_handler: ngx_http_vod_start_processing_media_file failed %i", rc);
@@ -5450,7 +5454,12 @@ ngx_http_vod_handler(ngx_http_request_t *r)
 
 done:
 
-	if (rc != NGX_AGAIN)
+	if (rc == NGX_AGAIN)
+	{
+		rc = NGX_DONE;
+		r->main->count++;
+	}
+	else
 	{
 		ngx_perf_counter_end(perf_counters, pcctx, PC_TOTAL);
 	}

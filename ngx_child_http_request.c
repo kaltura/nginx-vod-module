@@ -175,7 +175,7 @@ ngx_child_request_wev_handler(ngx_http_request_t *r)
 		rc = NGX_HTTP_BAD_GATEWAY;
 	}
 
-	if (ctx->send_header_result != NGX_OK)
+	if (ctx->send_header_result == NGX_ERROR || ctx->send_header_result > NGX_OK)
 	{
 		rc = ctx->send_header_result;
 	}
@@ -225,7 +225,7 @@ ngx_child_request_finished_handler(
 	ngx_child_request_context_t* ctx;
 
 	ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
-		"ngx_child_request_finished_handler: error code %ui", rc);
+		"ngx_child_request_finished_handler: error code %i", rc);
 
 	// make sure we are not called twice for the same request
 	r->post_subrequest = NULL;
