@@ -15,7 +15,7 @@
 		# internal location for vod subrequests
 		location /kalapi_proxy/ {
 			internal;
-			proxy_pass http://kalapi/;
+			proxy_pass @PROTOCOL@://kalapi/;
 			proxy_set_header Host $http_host;
 		}
 
@@ -79,6 +79,6 @@
 
 		# all unidentified requests fallback to api (inc. playManifest)
 		location @api_fallback {
-			proxy_pass http://kalapi;
+			proxy_pass @PROTOCOL@://kalapi;
 			proxy_set_header Host $http_host;
 		}
