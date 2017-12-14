@@ -3,7 +3,7 @@ worker_processes  auto;
 
 error_log  @LOG_DIR@/kaltura_nginx_errors.log;
 
-pid		/var/run/nginx.pid;
+pid		@PID_FILE_PATH@;
 
 events {
 	worker_connections  1024;
