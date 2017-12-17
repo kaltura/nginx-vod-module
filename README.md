@@ -116,8 +116,6 @@ Debug settings:
 1. `--with-debug` - enable debug messages (also requires passing `debug` in the `error_log` directive in nginx.conf).
 2. `--with-cc-opt="-O0"` - disable compiler optimizations (for debugging with gdb)
 
-Note: currently, nginx 1.13 or higher is not supported (see https://github.com/kaltura/nginx-vod-module/issues/645), please use version 1.12.
-
 ### Installation
 
 #### RHEL/CentOS 6/7 RPM
