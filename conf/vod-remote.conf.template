@@ -8,7 +8,7 @@
 			internal;
 			proxy_pass http://media/$1;
 			proxy_http_version 1.1;
-			proxy_set_header Host $http_host;
+			proxy_set_header Host @MEDIA_HOST@;
 			proxy_set_header Connection "";
 		}
 
