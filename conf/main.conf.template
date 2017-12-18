@@ -1,0 +1,13 @@
+user  kaltura;
+worker_processes  auto;
+
+error_log  @LOG_DIR@/kaltura_nginx_errors.log;
+
+pid		@PID_FILE_PATH@;
+
+events {
+	worker_connections  1024;
+	worker_aio_requests 512;
+	multi_accept on;
+	use epoll;
+}

@@ -13,5 +13,5 @@ server {
     ssl_ciphers  HIGH:!aNULL:!MD5;
     ssl_prefer_server_ciphers   on;
 
-    include /etc/nginx/conf.d/kaltura.conf;
+    include @NGINX_CONF_PATH@/server.conf;
 }
