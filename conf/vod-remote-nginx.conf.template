@@ -8,6 +8,10 @@ http {
 
 	include @NGINX_CONF_PATH@/http.conf;
 
+	# vod remote settings
+	vod_mode remote;
+	vod_upstream_location /media_proxy;
+
 	server {
 		listen @VOD_PACKAGER_PORT@;
 		server_name @VOD_PACKAGER_HOST@;

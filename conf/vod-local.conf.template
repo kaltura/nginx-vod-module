@@ -1,11 +1,4 @@
 
-		# file handle caching / aio
-		open_file_cache max=1000 inactive=5m;
-		open_file_cache_valid 2m;
-		open_file_cache_min_uses 1;
-		open_file_cache_errors on;
-		aio on;
-
 		# base locations
 		include @NGINX_CONF_PATH@/base.conf;
 

@@ -3,6 +3,13 @@ include @NGINX_CONF_PATH@/main.conf;
 http {
 	include @NGINX_CONF_PATH@/http.conf;
 
+	# file handle caching / aio
+	open_file_cache max=1000 inactive=5m;
+	open_file_cache_valid 2m;
+	open_file_cache_min_uses 1;
+	open_file_cache_errors on;
+	aio on;
+
 	server {
 		listen @VOD_PACKAGER_PORT@;
 		server_name @VOD_PACKAGER_HOST@;
