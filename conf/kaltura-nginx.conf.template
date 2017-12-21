@@ -2,7 +2,7 @@ include @NGINX_CONF_PATH@/main.conf;
 
 http {
 	upstream kalapi {
-		server @WWW_HOST@;
+		server @WWW_HOST@:@KALTURA_VIRTUAL_HOST_PORT@;
 	}
 
 	include @NGINX_CONF_PATH@/http.conf;
