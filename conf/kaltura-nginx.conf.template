@@ -7,6 +7,19 @@ http {
 
 	include @NGINX_CONF_PATH@/http.conf;
 
+	# vod mapped settings
+	vod_mode mapped;
+	vod_upstream_location /kalapi_proxy;
+	vod_upstream_extra_args "pathOnly=1";
+	vod_mapping_cache mapping_cache 64m;
+
+	# file handle caching / aio
+	open_file_cache max=1000 inactive=5m;
+	open_file_cache_valid 2m;
+	open_file_cache_min_uses 1;
+	open_file_cache_errors on;
+	aio on;
+
 	server {
 		listen @VOD_PACKAGER_PORT@;
 		server_name @VOD_PACKAGER_HOST@;

@@ -1,8 +1,4 @@
 
-		# vod remote settings
-		vod_mode remote;
-		vod_upstream_location /media_proxy;
-
 		# internal location for vod subrequests
 		location ~ /media_proxy/[^/]+/(.*) {
 			internal;
