@@ -3787,6 +3787,7 @@ ngx_http_vod_map_uris_to_paths(ngx_http_vod_ctx_t *ctx)
 		cur_source != NULL;
 		cur_source = cur_source->next)
 	{
+		ctx->cur_source = cur_source;
 		r->uri = cur_source->stripped_uri;
 		last = ngx_http_map_uri_to_path(r, &path, &root, 0);
 		r->uri = original_uri;
@@ -3801,6 +3802,8 @@ ngx_http_vod_map_uris_to_paths(ngx_http_vod_ctx_t *ctx)
 
 		cur_source->mapped_uri = path;
 	}
+
+	ctx->cur_source = ctx->submodule_context.media_set.sources_head;
 
 	return NGX_OK;
 }
