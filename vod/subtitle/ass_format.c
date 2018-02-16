@@ -1113,24 +1113,26 @@ static int process_style(ass_track_t *track, char *str)
 
 }
 
-static int process_styles_line(ass_track_t *track, char *str)
+static int process_styles_line(ass_track_t *track, char *str, request_context_t* request_context)
 {
     if (!strncmp(str, "Format:", 7)) {
         char *p = str + 7;
         skip_spaces(&p);
         free(track->style_format);
         track->style_format = strdup(p);
-        vod_log_debug1(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
-            "Style format: %s", track->style_format);
+        vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+            "Styles Format: %s", track->style_format);
     } else if (!strncmp(str, "Style:", 6)) {
         char *p = str + 6;
         skip_spaces(&p);
+        vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+            "Styles Style: '%.30s'", str);
         process_style(track, p);
     }
     return 0;
 }
 
-static int process_info_line(ass_track_t *track, char *str)
+static int process_info_line(ass_track_t *track, char *str, request_context_t* request_context)
 {
     if (!strncmp(str, "PlayResX:", 9)) {
         track->PlayResX = atoi(str + 9);
@@ -1168,14 +1170,14 @@ static void event_format_fallback(ass_track_t *track)
         "No event format found, using fallback");
 }
 
-static int process_events_line(ass_track_t *track, char *str)
+static int process_events_line(ass_track_t *track, char *str, request_context_t* request_context)
 {
     if (!strncmp(str, "Format:", 7)) {
         char *p = str + 7;
         skip_spaces(&p);
         free(track->event_format);
         track->event_format = strdup(p);
-        vod_log_debug1(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
+        vod_log_error(VOD_LOG_ERR, request_context->log, 0,
             "Event format: %s", track->event_format);
     } else if (!strncmp(str, "Dialogue:", 9)) {
         // This should never be reached for embedded subtitles.
@@ -1190,14 +1192,17 @@ static int process_events_line(ass_track_t *track, char *str)
         eid = ass_alloc_event(track);
         event = track->events + eid;
 
+        vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+            "Event Dialogue line: '%.30s'", str);
         // We can't parse events with event_format
         if (!track->event_format)
             event_format_fallback(track);
 
         process_event_tail(track, event, str, 0);
+
     } else {
-        vod_log_debug1(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
-            "Not understood: '%.30s'", str);
+        vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+            "Event line not understood: '%.30s'", str);
     }
     return 0;
 }
@@ -1224,13 +1229,13 @@ static int process_line(ass_track_t *track, char *str, request_context_t* reques
     } else {
         switch (track->state) {
         case PST_INFO:
-            process_info_line(track, str);
+            process_info_line(track, str, request_context);
             break;
         case PST_STYLES:
-            process_styles_line(track, str);
+            process_styles_line(track, str, request_context);
             break;
         case PST_EVENTS:
-            process_events_line(track, str);
+            process_events_line(track, str, request_context);
             break;
         case PST_FONTS:
             // ignore for now
