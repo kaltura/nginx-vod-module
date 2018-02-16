@@ -689,9 +689,12 @@ typedef struct ass_track {
     int             Kerning;
     char           *Language;
 
-    int             default_style;      // index of default style
+    int             default_style;    // index of default style
     char           *name;             // file name in case of external subs, 0 for streams
     ParserState     state;
+
+    long long       maxDuration;      // ms
+
 } ass_track_t;
 
 
@@ -913,15 +916,12 @@ static char *next_token(char **str)
  * \param track track
  * \param event parsed data goes here
  * \param str string to parse, zero-terminated
- * \param n_ignored number of format options to skip at the beginning
 */
-static int process_event_tail(ass_track_t *track, ass_event_t *event,
-                              char *str, int n_ignored)
+static int process_event_tail(ass_track_t *track, ass_event_t *event, char *str)
 {
     char *token;
     char *tname;
     char *p = str;
-    int i;
     ass_event_t *target = event;
 
     char *format = strdup(track->event_format);
@@ -935,10 +935,6 @@ static int process_event_tail(ass_track_t *track, ass_event_t *event,
         track->default_style = sid;
     }
 
-    for (i = 0; i < n_ignored; ++i) {
-        NEXT(q, tname);
-    }
-
     while (1) {
         NEXT(q, tname);
         if (ass_strcasecmp(tname, "Text") == 0) {
@@ -948,6 +944,10 @@ static int process_event_tail(ass_track_t *track, ass_event_t *event,
                 last = event->Text + strlen(event->Text) - 1;
                 if (last >= event->Text && *last == '\r')
                     *last = 0;
+            }
+            // need to track the largest end time in all events, since they are not in chronological order
+            if (track->maxDuration < event->Duration) {
+                track->maxDuration = event->Duration;
             }
             event->Duration -= event->Start;
             free(format);
@@ -1179,6 +1179,7 @@ static int process_events_line(ass_track_t *track, char *str, request_context_t*
         track->event_format = strdup(p);
         vod_log_error(VOD_LOG_ERR, request_context->log, 0,
             "Event format: %s", track->event_format);
+
     } else if (!strncmp(str, "Dialogue:", 9)) {
         // This should never be reached for embedded subtitles.
         // They have slightly different format and are parsed in ass_process_chunk,
@@ -1192,13 +1193,11 @@ static int process_events_line(ass_track_t *track, char *str, request_context_t*
         eid = ass_alloc_event(track);
         event = track->events + eid;
 
-        vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-            "Event Dialogue line: '%.30s'", str);
         // We can't parse events with event_format
         if (!track->event_format)
             event_format_fallback(track);
 
-        process_event_tail(track, event, str, 0);
+        process_event_tail(track, event, str);
 
     } else {
         vod_log_error(VOD_LOG_ERR, request_context->log, 0,
@@ -1249,7 +1248,10 @@ static int process_line(ass_track_t *track, char *str, request_context_t* reques
 
 static int process_text(ass_track_t *track, char *str, request_context_t* request_context)
 {
+    int retval;
     char *p = str;
+    retval = 1; // initially bad
+
     while (1) {
         char *q;
         while (1) {
@@ -1266,12 +1268,12 @@ static int process_text(ass_track_t *track, char *str, request_context_t* reques
             break;
         if (*q != '\0')
             *(q++) = '\0';
-        process_line(track, p, request_context);
+        retval = process_line(track, p, request_context);
         if (*q == '\0')
             break;
         p = q;
     }
-    return 0;
+    return retval;
 }
 
 /*
@@ -1282,9 +1284,10 @@ static ass_track_t *parse_memory(char *buf, request_context_t* request_context)
     ass_track_t *track;
     int i;
 
+    // initializes all fields to zero. If that doesn't suit your need, use another track_init function.
     track = calloc(1, sizeof(ass_track_t));
     if (!track)
-        return NULL;;
+        return NULL;
 
     // process header
     process_text(track, buf, request_context);
@@ -1310,21 +1313,18 @@ ass_reader_init(
 	size_t max_metadata_size,
 	void** ctx)
 {
-	char* p = (char *)(buffer->data);
+	u_char* p = buffer->data;
 
-    //if (buffer->len > 0 && vod_strncmp(p, ASS_SCRIPT_INFO_HEADER, sizeof(ASS_SCRIPT_INFO_HEADER) - 1) != 0)
-    if (parse_memory(p, request_context) == NULL)
+    // The line that says “[Script Info]” must be the first line in a v4/v4+ script.
+    if (buffer->len > 0 && vod_strncmp(p, ASS_SCRIPT_INFO_HEADER, sizeof(ASS_SCRIPT_INFO_HEADER) - 1) != 0)
     {
         vod_log_error(VOD_LOG_ERR, request_context->log, 0,
             "ass_reader_init failed, len=%d", buffer->len);
         return VOD_NOT_FOUND;
     }
-    vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-        "ass_reader_init passed and called subtitle_reader_init");
-
 
 	return subtitle_reader_init(
-		request_context,
+        request_context,
 		initial_read_size,
 		ctx);
 }
@@ -1337,14 +1337,35 @@ ass_parse(
 	size_t metadata_part_count,
 	media_base_metadata_t** result)
 {
-	return subtitle_parse(
+	ass_track_t *track;
+	vod_status_t ret_status;
+
+	char* p = (char *)(source->data);
+	track = parse_memory(p, request_context);
+
+    if (track == NULL)
+    {
+        vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+            "ass_parse failed");
+        return VOD_BAD_MAPPING;
+    }
+
+	ret_status = subtitle_parse(
 		request_context,
 		parse_params,
 		source,
 		NULL,
-		1, // implement ass_estimate_duration(source),
+		(uint64_t)(track->maxDuration),
 		metadata_part_count,
 		result);
+
+    vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+        "parse_memory() succeeded, len of data = %d, maxDuration = %D, nEvents = %d, nStyles = %d",
+        source->len, track->maxDuration, track->n_events, track->n_styles);
+        
+    ass_free_track(track);
+
+	return ret_status;
 }
 
 static vod_status_t
