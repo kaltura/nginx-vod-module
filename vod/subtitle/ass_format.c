@@ -1,17 +1,12 @@
 #include "../media_format.h"
 #include "../media_clip.h"
 #include "../media_set.h"
+//#include "../common.h"
 #include "subtitle_format.h"
 #include <ctype.h>
+#include <float.h>
 
 #define ASS_SCRIPT_INFO_HEADER ("[Script Info]")
-
-// utf8 functions
-#define CHAR_TYPE u_char
-#define METHOD(x) x
-#include "webvtt_format_template.h"
-#undef CHAR_TYPE
-#undef METHOD
 
 #define VALIGN_SUB 0
 #define VALIGN_CENTER 8
@@ -34,6 +29,14 @@
 #define FONT_WIDTH_NORMAL    100
 #define FONT_WIDTH_EXPANDED  125
 
+#define ASS_STYLES_ALLOC 20
+#define ASS_SIZE_MAX ((size_t)-1)
+
+#define ass_atof(STR) (ass_strtod((STR),NULL))
+
+#define FFMAX(a,b) ((a) > (b) ? (a) : (b))
+#define FFMIN(a,b) ((a) > (b) ? (b) : (a))
+#define FFMINMAX(c,a,b) FFMIN(FFMAX(c, a), b)
 
 static const unsigned char lowertab[] = {
     0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a,
@@ -62,6 +65,18 @@ static const unsigned char lowertab[] = {
     0xfd, 0xfe, 0xff
 };
 
+char *ass_strndup(const char *s, size_t n)
+{
+    char *end = memchr(s, 0, n);
+    int len = end ? end - s : (int)(n);
+    char *newp = len < (int)(ASS_SIZE_MAX) ? malloc(len + 1) : NULL;
+    if (newp) {
+        memcpy(newp, s, len);
+        newp[len] = 0;
+    }
+    return newp;
+}
+
 static int ass_strcasecmp(const char *s1, const char *s2)
 {
     unsigned char a, b;
@@ -73,6 +88,7 @@ static int ass_strcasecmp(const char *s1, const char *s2)
 
     return a - b;
 }
+
 
 static int ass_strncasecmp(const char *s1, const char *s2, size_t n)
 {
@@ -86,6 +102,496 @@ static int ass_strncasecmp(const char *s1, const char *s2, size_t n)
 
     return a - b;
 }
+
+void skip_spaces(char **str)
+{
+    char *p = *str;
+    while ((*p == ' ') || (*p == '\t'))
+        ++p;
+    *str = p;
+}
+
+void rskip_spaces(char **str, char *limit)
+{
+    char *p = *str;
+    while ((p > limit) && ((p[-1] == ' ') || (p[-1] == '\t')))
+        --p;
+    *str = p;
+}
+
+static inline uint32_t ass_bswap32(uint32_t x)
+{
+#ifdef _MSC_VER
+    return _byteswap_ulong(x);
+#else
+    return (x & 0x000000FF) << 24 | (x & 0x0000FF00) <<  8 |
+           (x & 0x00FF0000) >>  8 | (x & 0xFF000000) >> 24;
+#endif
+}
+
+static inline int ass_isspace(int c)
+{
+    return c == ' ' || c == '\t' || c == '\n' || c == '\v' ||
+           c == '\f' || c == '\r';
+}
+
+static inline int ass_isdigit(int c)
+{
+    return c >= '0' && c <= '9';
+}
+
+
+static
+const size_t maxExponent = 511; /* Largest possible base 10 exponent.  Any
+                                 * exponent larger than this will already
+                                 * produce underflow or overflow, so there's
+                                 * no need to worry about additional digits.
+                                 */
+
+static
+const double powersOf10[] = {   /* Table giving binary powers of 10.  Entry */
+    10.,                        /* is 10^2^i.  Used to convert decimal */
+    100.,                       /* exponents into floating-point numbers. */
+    1.0e4,
+    1.0e8,
+    1.0e16,
+    1.0e32,
+    1.0e64,
+    1.0e128,
+    1.0e256
+};
+
+static
+const double negPowOf10[] = {   /* Table giving negative binary powers */
+    0.1,                        /* of 10.  Entry is 10^-2^i. */
+    0.01,                       /* Used to convert decimal exponents */
+    1.0e-4,                     /* into floating-point numbers. */
+    1.0e-8,
+    1.0e-16,
+    1.0e-32,
+    1.0e-64,
+    1.0e-128,
+    1.0e-256
+};
+
+/*
+ *----------------------------------------------------------------------
+ *
+ * strtod --
+ *
+ * This procedure converts a floating-point number from an ASCII
+ * decimal representation to internal double-precision format.
+ *
+ * Results:
+ * The return value is the double-precision floating-point
+ * representation of the characters in string.  If endPtr isn't
+ * NULL, then *endPtr is filled in with the address of the
+ * next character after the last one that was part of the
+ * floating-point number.
+ *
+ * Side effects:
+ * None.
+ *
+ *----------------------------------------------------------------------
+ */
+
+double
+ass_strtod(
+    const char *string,     /* A decimal ASCII floating-point number,
+                             * optionally preceded by white space.
+                             * Must have form "-I.FE-X", where I is the
+                             * integer part of the mantissa, F is the
+                             * fractional part of the mantissa, and X
+                             * is the exponent.  Either of the signs
+                             * may be "+", "-", or omitted.  Either I
+                             * or F may be omitted, or both.  The decimal
+                             * point isn't necessary unless F is present.
+                             * The "E" may actually be an "e".  E and X
+                             * may both be omitted (but not just one).
+                             */
+    char **endPtr           /* If non-NULL, store terminating character's
+                             * address here. */
+    )
+{
+    int sign, fracExpSign, expSign;
+    double fraction, dblExp;
+    const double *d;
+    register const char *p;
+    register int c;
+    size_t exp = 0;         /* Exponent read from "EX" field. */
+    size_t fracExp;         /* Exponent that derives from the fractional
+                             * part.  Under normal circumstatnces, it is
+                             * the negative of the number of digits in F.
+                             * However, if I is very long, the last digits
+                             * of I get dropped (otherwise a long I with a
+                             * large negative exponent could cause an
+                             * unnecessary overflow on I alone).  In this
+                             * case, fracExp is incremented one for each
+                             * dropped digit. */
+    size_t mantSize;    /* Number of digits in mantissa. */
+    size_t decPt;       /* Number of mantissa digits BEFORE decimal
+                         * point. */
+    size_t leadZeros;   /* Number of leading zeros in mantissa. */
+    const char *pExp;       /* Temporarily holds location of exponent
+                             * in string. */
+
+    /*
+     * Strip off leading blanks and check for a sign.
+     */
+
+    p = string;
+    while (ass_isspace(*p)) {
+        p += 1;
+    }
+    if (*p == '-') {
+        sign = 1;
+        p += 1;
+    } else {
+        if (*p == '+') {
+            p += 1;
+        }
+        sign = 0;
+    }
+
+    /*
+     * Count the number of digits in the mantissa (including the decimal
+     * point), and also locate the decimal point.
+     */
+
+    decPt = -1;
+    leadZeros = -1;
+    for (mantSize = 0; ; mantSize += 1)
+    {
+        c = *p;
+        if (!ass_isdigit(c)) {
+            if ((c != '.') || (decPt != (size_t) -1)) {
+                break;
+            }
+            decPt = mantSize;
+        } else if ((c != '0') && (leadZeros == (size_t) -1)) {
+            leadZeros = mantSize;
+        }
+        p += 1;
+    }
+
+    /*
+     * Now suck up the digits in the mantissa.  Use two integers to
+     * collect 9 digits each (this is faster than using floating-point).
+     * If the mantissa has more than 18 digits, ignore the extras, since
+     * they can't affect the value anyway.
+     */
+
+    if (leadZeros == (size_t) -1) {
+        leadZeros = mantSize;
+    }
+    pExp  = p;
+    p -= mantSize - leadZeros;
+    if (decPt == (size_t) -1) {
+        decPt = mantSize;
+    } else {
+        mantSize -= 1;      /* One of the digits was the point. */
+        if (decPt < leadZeros) {
+            leadZeros -= 1;
+        }
+    }
+    if (mantSize - leadZeros > 18) {
+        mantSize = leadZeros + 18;
+    }
+    if (decPt < mantSize) {
+        fracExpSign = 1;
+        fracExp = mantSize - decPt;
+    } else {
+        fracExpSign = 0;
+        fracExp = decPt - mantSize;
+    }
+    if (mantSize == 0) {
+        fraction = 0.0;
+        p = string;
+        goto done;
+    } else {
+        int frac1, frac2, m;
+        mantSize -= leadZeros;
+        m = mantSize;
+        frac1 = 0;
+        for ( ; m > 9; m -= 1)
+        {
+            c = *p;
+            p += 1;
+            if (c == '.') {
+                c = *p;
+                p += 1;
+            }
+            frac1 = 10*frac1 + (c - '0');
+        }
+        frac2 = 0;
+        for (; m > 0; m -= 1)
+        {
+            c = *p;
+            p += 1;
+            if (c == '.') {
+                c = *p;
+                p += 1;
+            }
+            frac2 = 10*frac2 + (c - '0');
+        }
+        fraction = (1.0e9 * frac1) + frac2;
+    }
+
+    /*
+     * Skim off the exponent.
+     */
+
+    p = pExp;
+    if ((*p == 'E') || (*p == 'e')) {
+        size_t expLimit;    /* If exp > expLimit, appending another digit
+                             * to exp is guaranteed to make it too large.
+                             * If exp == expLimit, this may depend on
+                             * the exact digit, but in any case exp with
+                             * the digit appended and fracExp added will
+                             * still fit in size_t, even if it does
+                             * exceed maxExponent. */
+        int expWraparound = 0;
+        p += 1;
+        if (*p == '-') {
+            expSign = 1;
+            p += 1;
+        } else {
+            if (*p == '+') {
+                p += 1;
+            }
+            expSign = 0;
+        }
+        if (expSign == fracExpSign) {
+            if (maxExponent < fracExp) {
+                expLimit = 0;
+            } else {
+                expLimit = (maxExponent - fracExp) / 10;
+            }
+        } else {
+            expLimit = fracExp / 10 + (fracExp % 10 + maxExponent) / 10;
+        }
+        while (ass_isdigit(*p)) {
+            if ((exp > expLimit) || expWraparound) {
+                do {
+                    p += 1;
+                } while (ass_isdigit(*p));
+                goto expOverflow;
+            } else if (exp > ((size_t) -1 - (*p - '0')) / 10) {
+                expWraparound = 1;
+            }
+            exp = exp * 10 + (*p - '0');
+            p += 1;
+        }
+        if (expSign == fracExpSign) {
+            exp = fracExp + exp;
+        } else if ((fracExp <= exp) || expWraparound) {
+            exp = exp - fracExp;
+        } else {
+            exp = fracExp - exp;
+            expSign = fracExpSign;
+        }
+    } else {
+        exp = fracExp;
+        expSign = fracExpSign;
+    }
+
+    /*
+     * Generate a floating-point number that represents the exponent.
+     * Do this by processing the exponent one bit at a time to combine
+     * many powers of 2 of 10. Then combine the exponent with the
+     * fraction.
+     */
+
+    if (exp > maxExponent) {
+expOverflow:
+        exp = maxExponent;
+        if (fraction != 0.0) {
+            errno = ERANGE;
+        }
+    }
+    /* Prefer positive powers of 10 for increased precision, especially
+     * for small powers that are represented exactly in floating-point. */
+    if ((exp <= DBL_MAX_10_EXP) || !expSign) {
+        d = powersOf10;
+    } else {
+        /* The floating-point format supports more negative exponents
+         * than positive, or perhaps the result is a subnormal number. */
+        if (exp > -DBL_MIN_10_EXP) {
+            /* The result might be a valid subnormal number, but the
+             * exponent underflows.  Tweak fraction so that it is below
+             * 1.0 first, so that if the exponent still underflows after
+             * that, the result is sure to underflow as well. */
+            exp -= mantSize;
+            dblExp = 1.0;
+            for (d = powersOf10; mantSize != 0; mantSize >>= 1, d += 1) {
+                if (mantSize & 01) {
+                    dblExp *= *d;
+                }
+            }
+            fraction /= dblExp;
+        }
+        d = negPowOf10;
+        expSign = 0;
+    }
+    dblExp = 1.0;
+    for (; exp != 0; exp >>= 1, d += 1) {
+        if (exp & 01) {
+            dblExp *= *d;
+        }
+    }
+    if (expSign) {
+        fraction /= dblExp;
+    } else {
+        fraction *= dblExp;
+    }
+
+done:
+    if (endPtr != NULL) {
+        *endPtr = (char *) p;
+    }
+
+    if (sign) {
+        return -fraction;
+    }
+    return fraction;
+}
+
+int mystrtoi(char **p, int *res)
+{
+    char *start = *p;
+    double temp_res = ass_strtod(*p, p);
+    *res = (int) (temp_res + (temp_res > 0 ? 0.5 : -0.5));
+    return *p != start;
+}
+
+int mystrtoll(char **p, long long *res)
+{
+    char *start = *p;
+    double temp_res = ass_strtod(*p, p);
+    *res = (long long) (temp_res + (temp_res > 0 ? 0.5 : -0.5));
+    return *p != start;
+}
+
+int mystrtod(char **p, double *res)
+{
+    char *start = *p;
+    *res = ass_strtod(*p, p);
+    return *p != start;
+}
+
+int mystrtoi32(char **p, int base, int32_t *res)
+{
+    char *start = *p;
+    long long temp_res = strtoll(*p, p, base);
+    *res = FFMINMAX(temp_res, INT32_MIN, INT32_MAX);
+    return *p != start;
+}
+
+static int read_digits(char **str, int base, uint32_t *res)
+{
+    char *p = *str;
+    char *start = p;
+    uint32_t val = 0;
+
+    while (1) {
+        int digit;
+        if (*p >= '0' && *p < FFMIN(base, 10) + '0')
+            digit = *p - '0';
+        else if (*p >= 'a' && *p < base - 10 + 'a')
+            digit = *p - 'a' + 10;
+        else if (*p >= 'A' && *p < base - 10 + 'A')
+            digit = *p - 'A' + 10;
+        else
+            break;
+        val = val * base + digit;
+        ++p;
+    }
+
+    *res = val;
+    *str = p;
+    return p != start;
+}
+
+/*
+ * \brief Convert a string to an integer reduced modulo 2**32
+ * Follows the rules for strtoul but reduces the number modulo 2**32
+ * instead of saturating it to 2**32 - 1.
+ */
+static int mystrtou32_modulo(char **p, int base, uint32_t *res)
+{
+    // This emulates scanf with %d or %x format as it works on
+    // Windows, because that's what is used by VSFilter. In practice,
+    // scanf works the same way on other platforms too, but
+    // the standard leaves its behavior on overflow undefined.
+
+    // Unlike scanf and like strtoul, produce 0 for invalid inputs.
+
+    char *start = *p;
+    int sign = 1;
+
+    skip_spaces(p);
+
+    if (**p == '+')
+        ++*p;
+    else if (**p == '-')
+        sign = -1, ++*p;
+
+    if (base == 16 && !ass_strncasecmp(*p, "0x", 2))
+        *p += 2;
+
+    if (read_digits(p, base, res)) {
+        *res *= sign;
+        return 1;
+    } else {
+        *p = start;
+        return 0;
+    }
+}
+int32_t parse_alpha_tag(char *str)
+{
+    int32_t alpha = 0;
+
+    while (*str == '&' || *str == 'H')
+        ++str;
+
+    mystrtoi32(&str, 16, &alpha);
+    return alpha;
+}
+
+uint32_t parse_color_tag(char *str)
+{
+    int32_t color = 0;
+
+    while (*str == '&' || *str == 'H')
+        ++str;
+
+    mystrtoi32(&str, 16, &color);
+    return ass_bswap32((uint32_t) color);
+}
+
+uint32_t parse_color_header(char *str)
+{
+    uint32_t color = 0;
+    int base;
+
+    if (!ass_strncasecmp(str, "&h", 2) || !ass_strncasecmp(str, "0x", 2)) {
+        str += 2;
+        base = 16;
+    } else
+        base = 10;
+
+    mystrtou32_modulo(&str, base, &color);
+    return ass_bswap32(color);
+}
+
+// Return a boolean value for a string
+char parse_bool(char *str)
+{
+    skip_spaces(&str);
+    return !ass_strncasecmp(str, "yes", 3) || strtol(str, NULL, 10) > 0;
+}
+
+/******* End of Utilities. Start of ASS specific structs ********/
 
 typedef struct {
 	uint8_t  wrap_style;
@@ -189,6 +695,81 @@ typedef struct ass_track {
 } ass_track_t;
 
 
+int ass_alloc_style(ass_track_t *track)
+{
+    int sid;
+
+    //assert(track->n_styles <= track->max_styles);
+
+    if (track->n_styles == track->max_styles) {
+        track->max_styles += ASS_STYLES_ALLOC;
+        track->styles =
+            (ass_style_t *) realloc(track->styles,
+                                    sizeof(ass_style_t) *
+                                    track->max_styles);
+    }
+
+    sid = track->n_styles++;
+    memset(track->styles + sid, 0, sizeof(ass_style_t));
+    return sid;
+}
+
+int ass_alloc_event(ass_track_t *track)
+{
+    int eid;
+
+    //assert(track->n_events <= track->max_events);
+
+    if (track->n_events == track->max_events) {
+        track->max_events = track->max_events * 2 + 1;
+        track->events =
+            (ass_event_t *) realloc(track->events,
+                                    sizeof(ass_event_t) *
+                                    track->max_events);
+    }
+
+    eid = track->n_events++;
+    memset(track->events + eid, 0, sizeof(ass_event_t));
+    return eid;
+}
+void ass_free_event(ass_track_t *track, int eid)
+{
+    ass_event_t *event = track->events + eid;
+
+    free(event->Name);
+    free(event->Effect);
+    free(event->Text);
+}
+void ass_free_style(ass_track_t *track, int sid)
+{
+    ass_style_t *style = track->styles + sid;
+
+    free(style->Name);
+    free(style->FontName);
+}
+
+void ass_free_track(ass_track_t *track)
+{
+    int i;
+
+    free(track->style_format);
+    free(track->event_format);
+    free(track->Language);
+    if (track->styles) {
+        for (i = 0; i < track->n_styles; ++i)
+            ass_free_style(track, i);
+    }
+    free(track->styles);
+    if (track->events) {
+        for (i = 0; i < track->n_events; ++i)
+            ass_free_event(track, i);
+    }
+    free(track->events);
+    free(track->name);
+    free(track);
+}
+
+
 
 /**
  * \brief Set up default style
@@ -196,7 +777,7 @@ typedef struct ass_track {
  * The parameters are mostly taken directly from VSFilter source for
  * best compatibility.
  */
-static void set_default_style(ASS_Style *style)
+static void set_default_style(ass_style_t *style)
 {
     style->Name             = strdup("Default");
     style->FontName         = strdup("Arial");
@@ -216,17 +797,45 @@ static void set_default_style(ASS_Style *style)
     style->MarginL = style->MarginR = style->MarginV = 20;
 }
 
-static long long string2timecode(ASS_Library *library, char *p)
+static long long string2timecode(char *p)
 {
     int h, m, s, ms;
     long long tm;
     int res = sscanf(p, "%d:%d:%d.%d", &h, &m, &s, &ms);
     if (res < 4) {
-        ass_msg(library, MSGL_WARN, "Bad timestamp");
+        // error msg "Bad timestamp";
         return 0;
     }
     tm = ((h * 60LL + m) * 60 + s) * 1000 + ms * 10LL;
     return tm;
+}
+/**
+ * \brief find style by name
+ * \param track track
+ * \param name style name
+ * \return index in track->styles
+ * Returns 0 if no styles found => expects at least 1 style.
+ * Parsing code always adds "Default" style in the beginning.
+ */
+int lookup_style(ass_track_t *track, char *name)
+{
+    int i;
+    // '*' seem to mean literally nothing;
+    // VSFilter removes them as soon as it can
+    while (*name == '*')
+        ++name;
+    // VSFilter then normalizes the case of "Default"
+    // (only in contexts where this function is called)
+    if (ass_strcasecmp(name, "Default") == 0)
+        name = "Default";
+    for (i = track->n_styles - 1; i >= 0; --i) {
+        if (strcmp(track->styles[i].Name, name) == 0)
+            return i;
+    }
+    i = track->default_style;
+    vod_log_debug3(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
+       "[%p]: Warning: no style named '%s' found, using '%s'", track, name, track->styles[i].Name);
+    return i;
 }
 
 #define NEXT(str,token) \
@@ -245,7 +854,7 @@ static long long string2timecode(ASS_Library *library, char *p)
  *
  * The string that is passed is in str. str is advanced to the next token if
  * a header could be parsed. The parsed results are stored in the variable
- * target, which has the type ASS_Style* or ass_even_t*.
+ * target, which has the type ass_style_t* or ass_event_t*.
  */
 #define PARSE_START if (0) {
 #define PARSE_END   }
@@ -270,7 +879,7 @@ static long long string2timecode(ASS_Library *library, char *p)
 #define FPVAL(name) ANYVAL(name,ass_atof)
 #define TIMEVAL(name) \
 	} else if (ass_strcasecmp(tname, #name) == 0) { \
-		target->name = string2timecode(track->library, token);
+		target->name = string2timecode(token);
 
 #define STYLEVAL(name) \
 	} else if (ass_strcasecmp(tname, #name) == 0) { \
@@ -306,14 +915,14 @@ static char *next_token(char **str)
  * \param str string to parse, zero-terminated
  * \param n_ignored number of format options to skip at the beginning
 */
-static int process_event_tail(ass_track_t *track, ass_even_t *event,
+static int process_event_tail(ass_track_t *track, ass_event_t *event,
                               char *str, int n_ignored)
 {
     char *token;
     char *tname;
     char *p = str;
     int i;
-    ass_even_t *target = event;
+    ass_event_t *target = event;
 
     char *format = strdup(track->event_format);
     char *q = format;           // format scanning pointer
@@ -364,87 +973,25 @@ static int process_event_tail(ass_track_t *track, ass_even_t *event,
 }
 
 /**
- * \brief Parse command line style overrides (--ass-force-style option)
- * \param track track to apply overrides to
- * The format for overrides is [StyleName.]Field=Value
+ * \brief converts numpad-style align to align.
  */
-void ass_process_force_style(ass_track_t *track)
+int numpad2align(int val)
 {
-    char **fs, *eq, *dt, *style, *tname, *token;
-    ASS_Style *target;
-    int sid;
-    char **list = track->library->style_overrides;
+    if (val < -INT_MAX)
+        // Pick an alignment somewhat arbitrarily. VSFilter handles
+        // INT32_MIN as a mix of 1, 2 and 3, so prefer one of those values.
+        val = 2;
+    else if (val < 0)
+        val = -val;
 
-    if (!list)
-        return;
-
-    for (fs = list; *fs; ++fs) {
-        eq = strrchr(*fs, '=');
-        if (!eq)
-            continue;
-        *eq = '\0';
-        token = eq + 1;
-
-        if (!ass_strcasecmp(*fs, "PlayResX"))
-            track->PlayResX = atoi(token);
-        else if (!ass_strcasecmp(*fs, "PlayResY"))
-            track->PlayResY = atoi(token);
-        else if (!ass_strcasecmp(*fs, "Timer"))
-            track->Timer = ass_atof(token);
-        else if (!ass_strcasecmp(*fs, "WrapStyle"))
-            track->WrapStyle = atoi(token);
-        else if (!ass_strcasecmp(*fs, "ScaledBorderAndShadow"))
-            track->ScaledBorderAndShadow = parse_bool(token);
-        else if (!ass_strcasecmp(*fs, "Kerning"))
-            track->Kerning = parse_bool(token);
-        else if (!ass_strcasecmp(*fs, "YCbCr Matrix"))
-            track->YCbCrMatrix = parse_ycbcr_matrix(token);
-
-        dt = strrchr(*fs, '.');
-        if (dt) {
-            *dt = '\0';
-            style = *fs;
-            tname = dt + 1;
-        } else {
-            style = NULL;
-            tname = *fs;
-        }
-        for (sid = 0; sid < track->n_styles; ++sid) {
-            if (style == NULL
-                || ass_strcasecmp(track->styles[sid].Name, style) == 0) {
-                target = track->styles + sid;
-                PARSE_START
-                    STRVAL(FontName)
-                    COLORVAL(PrimaryColour)
-                    COLORVAL(SecondaryColour)
-                    COLORVAL(OutlineColour)
-                    COLORVAL(BackColour)
-                    FPVAL(FontSize)
-                    INTVAL(Bold)
-                    INTVAL(Italic)
-                    INTVAL(Underline)
-                    INTVAL(StrikeOut)
-                    FPVAL(Spacing)
-                    FPVAL(Angle)
-                    INTVAL(BorderStyle)
-                    INTVAL(Alignment)
-                    INTVAL(Justify)
-                    INTVAL(MarginL)
-                    INTVAL(MarginR)
-                    INTVAL(MarginV)
-                    INTVAL(Encoding)
-                    FPVAL(ScaleX)
-                    FPVAL(ScaleY)
-                    FPVAL(Outline)
-                    FPVAL(Shadow)
-                    FPVAL(Blur)
-                PARSE_END
-            }
-        }
-        *eq = '=';
-        if (dt)
-            *dt = '.';
-    }
+    int res = ((val - 1) % 3) + 1;  // horizontal alignment
+    if (val <= 3)
+        res |= VALIGN_SUB;
+    else if (val <= 6)
+        res |= VALIGN_CENTER;
+    else
+        res |= VALIGN_TOP;
+    return res;
 }
 
 /**
@@ -462,8 +1009,8 @@ static int process_style(ass_track_t *track, char *str)
     char *format;
     char *q;                    // format scanning pointer
     int sid;
-    ASS_Style *style;
-    ASS_Style *target;
+    ass_style_t *style;
+    ass_style_t *target;
 
     if (!track->style_format) {
         // no style format header
@@ -493,7 +1040,8 @@ static int process_style(ass_track_t *track, char *str)
         track->default_style = sid;
     }
 
-    ass_msg(track->library, MSGL_V, "[%p] Style: %s", track, str);
+    vod_log_debug2(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
+        "[%p] Style: %s", track, str);
 
     sid = ass_alloc_style(track);
 
@@ -572,8 +1120,8 @@ static int process_styles_line(ass_track_t *track, char *str)
         skip_spaces(&p);
         free(track->style_format);
         track->style_format = strdup(p);
-        ass_msg(track->library, MSGL_DBG2, "Style format: %s",
-               track->style_format);
+        vod_log_debug1(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
+            "Style format: %s", track->style_format);
     } else if (!strncmp(str, "Style:", 6)) {
         char *p = str + 6;
         skip_spaces(&p);
@@ -597,7 +1145,7 @@ static int process_info_line(ass_track_t *track, char *str)
     } else if (!strncmp(str, "Kerning:", 8)) {
         track->Kerning = parse_bool(str + 8);
     } else if (!strncmp(str, "YCbCr Matrix:", 13)) {
-        // log error here
+        // ignore for now
     } else if (!strncmp(str, "Language:", 9)) {
         char *p = str + 9;
         while (*p && ass_isspace(*p)) p++;
@@ -616,8 +1164,8 @@ static void event_format_fallback(ass_track_t *track)
     else
         track->event_format = strdup("Layer, Start, End, Style, "
             "Actor, MarginL, MarginR, MarginV, Effect, Text");
-    ass_msg(track->library, MSGL_V,
-            "No event format found, using fallback");
+    vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
+        "No event format found, using fallback");
 }
 
 static int process_events_line(ass_track_t *track, char *str)
@@ -627,13 +1175,14 @@ static int process_events_line(ass_track_t *track, char *str)
         skip_spaces(&p);
         free(track->event_format);
         track->event_format = strdup(p);
-        ass_msg(track->library, MSGL_DBG2, "Event format: %s", track->event_format);
+        vod_log_debug1(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
+            "Event format: %s", track->event_format);
     } else if (!strncmp(str, "Dialogue:", 9)) {
         // This should never be reached for embedded subtitles.
         // They have slightly different format and are parsed in ass_process_chunk,
         // called directly from demuxer
         int eid;
-        ass_even_t *event;
+        ass_event_t *event;
 
         str += 9;
         skip_spaces(&str);
@@ -647,63 +1196,8 @@ static int process_events_line(ass_track_t *track, char *str)
 
         process_event_tail(track, event, str, 0);
     } else {
-        ass_msg(track->library, MSGL_V, "Not understood: '%.30s'", str);
-    }
-    return 0;
-}
-
-/*
- * \param buf pointer to subtitle text in utf-8
- */
-static ass_track_t *parse_memory(char *buf)
-{
-    ass_track_t *track;
-    int i;
-
-    track = calloc(1, sizeof(ass_track_t));
-    if (!track)
-        return NULL;;
-
-    // process header
-    process_text(track, buf);
-
-    // external SSA/ASS subs does not have ReadOrder field
-    for (i = 0; i < track->n_events; ++i)
-        track->events[i].ReadOrder = i;
-
-    if (track->track_type == TRACK_TYPE_UNKNOWN) {
-        ass_free_track(track);
-        return 0;
-    }
-
-    ass_process_force_style(track);
-
-    return track;
-}
-
-static int process_text(ass_track_t *track, char *str)
-{
-    char *p = str;
-    while (1) {
-        char *q;
-        while (1) {
-            if ((*p == '\r') || (*p == '\n'))
-                ++p;
-            else if (p[0] == '\xef' && p[1] == '\xbb' && p[2] == '\xbf')
-                p += 3;         // U+FFFE (BOM)
-            else
-                break;
-        }
-        for (q = p; ((*q != '\0') && (*q != '\r') && (*q != '\n')); ++q) {
-        };
-        if (q == p)
-            break;
-        if (*q != '\0')
-            *(q++) = '\0';
-        process_line(track, p);
-        if (*q == '\0')
-            break;
-        p = q;
+        vod_log_debug1(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
+            "Not understood: '%.30s'", str);
     }
     return 0;
 }
@@ -713,7 +1207,7 @@ static int process_text(ass_track_t *track, char *str)
  * \param track track
  * \param str string to parse, zero-terminated
 */
-static int process_line(ass_track_t *track, char *str)
+static int process_line(ass_track_t *track, char *str, request_context_t* request_context)
 {
     if (!ass_strncasecmp(str, "[Script Info]", 13)) {
         track->state = PST_INFO;
@@ -739,7 +1233,7 @@ static int process_line(ass_track_t *track, char *str)
             process_events_line(track, str);
             break;
         case PST_FONTS:
-            // log some error
+            // ignore for now
             break;
         default:
             break;
@@ -747,6 +1241,61 @@ static int process_line(ass_track_t *track, char *str)
     }
     return 0;
 }
+
+static int process_text(ass_track_t *track, char *str, request_context_t* request_context)
+{
+    char *p = str;
+    while (1) {
+        char *q;
+        while (1) {
+            if ((*p == '\r') || (*p == '\n'))
+                ++p;
+            else if (p[0] == '\xef' && p[1] == '\xbb' && p[2] == '\xbf')
+                p += 3;         // U+FFFE (BOM)
+            else
+                break;
+        }
+        for (q = p; ((*q != '\0') && (*q != '\r') && (*q != '\n')); ++q) {
+        };
+        if (q == p)
+            break;
+        if (*q != '\0')
+            *(q++) = '\0';
+        process_line(track, p, request_context);
+        if (*q == '\0')
+            break;
+        p = q;
+    }
+    return 0;
+}
+
+/*
+ * \param buf pointer to subtitle text in utf-8
+ */
+static ass_track_t *parse_memory(char *buf, request_context_t* request_context)
+{
+    ass_track_t *track;
+    int i;
+
+    track = calloc(1, sizeof(ass_track_t));
+    if (!track)
+        return NULL;;
+
+    // process header
+    process_text(track, buf, request_context);
+
+    // external SSA/ASS subs does not have ReadOrder field
+    for (i = 0; i < track->n_events; ++i)
+        track->events[i].ReadOrder = i;
+
+    if (track->track_type == TRACK_TYPE_UNKNOWN) {
+        ass_free_track(track);
+        return NULL;
+    }
+
+    return track;
+}
+
 
 static vod_status_t
 ass_reader_init(
@@ -756,17 +1305,16 @@ ass_reader_init(
 	size_t max_metadata_size,
 	void** ctx)
 {
-    // RAFIK: here we should read the entire [SCRIPT_INFO] and [V4+ FORMAT] sections, in addition to header of Dialogue
-	u_char* p = buffer->data;
+	char* p = (char *)(buffer->data);
 
-    if (buffer->len > 0 &&
-        vod_strncmp(p, ASS_SCRIPT_INFO_HEADER, sizeof(ASS_SCRIPT_INFO_HEADER) - 1) != 0)
+    //if (buffer->len > 0 && vod_strncmp(p, ASS_SCRIPT_INFO_HEADER, sizeof(ASS_SCRIPT_INFO_HEADER) - 1) != 0)
+    if (parse_memory(p, request_context) == NULL)
     {
-        vod_log_debug1(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
+        vod_log_error(VOD_LOG_ERR, request_context->log, 0,
             "ass_reader_init failed, len=%d", buffer->len);
         return VOD_NOT_FOUND;
     }
-    vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
+    vod_log_error(VOD_LOG_ERR, request_context->log, 0,
         "ass_reader_init passed and called subtitle_reader_init");
 
 
@@ -789,7 +1337,7 @@ ass_parse(
 		parse_params,
 		source,
 		NULL,
-		ass_estimate_duration(source),
+		1, // implement ass_estimate_duration(source),
 		metadata_part_count,
 		result);
 }
