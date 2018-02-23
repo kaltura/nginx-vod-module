@@ -765,7 +765,7 @@ void ass_free_style(ass_track_t *track, int sid)
     free(style->FontName);
 }
 
-void ass_free_track(ass_track_t *track)
+void ass_free_track(vod_pool_t* pool, ass_track_t *track)
 {
     int i;
 
@@ -783,7 +783,7 @@ void ass_free_track(ass_track_t *track)
     }
     free(track->events);
     free(track->name);
-    free(track);
+    vod_free(pool, track);
 }
 
 
@@ -1269,6 +1269,11 @@ static int process_line(ass_track_t *track, char *str, request_context_t* reques
     return 0;
 }
 
+/**
+ * \brief Process all text in an ASS/SSA file
+ * \param track output ass_track_t pointer
+ * \param str utf-8 string to parse, zero-terminated
+*/
 static int process_text(ass_track_t *track, char *str, request_context_t* request_context)
 {
     int retval = 0;
@@ -1301,22 +1306,33 @@ static int process_text(ass_track_t *track, char *str, request_context_t* reques
 /*
  * \param buf pointer to subtitle text in utf-8
  */
-static ass_track_t *parse_memory(char *buf, request_context_t* request_context)
+static ass_track_t *parse_memory(char *buf, int len, request_context_t* request_context)
 {
     ass_track_t *track;
-    int i;
+    int bfailed, i;
+    // copy the input buffer, as the parsing is destructive.
+    char *pcopy = vod_alloc(request_context->pool, len+1);
+    if (pcopy == NULL)
+    {
+        vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+            "ass_parse_frames: vod_alloc failed");
+        return NULL;
+    }
+    vod_memcpy(pcopy, buf, len+1);
 
     // initializes all fields to zero. If that doesn't suit your need, use another track_init function.
-    track = calloc(1, sizeof(ass_track_t));
+    track = vod_calloc(request_context->pool, sizeof(ass_track_t));
     if (!track)
     {
         vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-            "calloc() failed");
+            "vod_calloc() failed");
+        vod_free(request_context->pool, pcopy);
         return NULL;
     }
-    // process header
-    i = process_text(track, buf, request_context);
-    if (i == 1)
+
+    // destructive parsing of pcopy
+    bfailed = process_text(track, pcopy, request_context);
+    if (bfailed == 1)
     {
         vod_log_error(VOD_LOG_ERR, request_context->log, 0,
             "process_text failed, track_type = %d", track->track_type);
@@ -1325,18 +1341,19 @@ static ass_track_t *parse_memory(char *buf, request_context_t* request_context)
         vod_log_error(VOD_LOG_ERR, request_context->log, 0,
             "process_text passed fine, track_type = %d", track->track_type);
     }
-
-    // external SSA/ASS subs does not have ReadOrder field
-    for (i = 0; i < track->n_events; ++i)
-        track->events[i].ReadOrder = i;
+    vod_free(request_context->pool, pcopy); // not needed anymore either way
 
     if (track->track_type == TRACK_TYPE_UNKNOWN) {
-        ass_free_track(track);
+        ass_free_track(request_context->pool, track);
         vod_log_error(VOD_LOG_ERR, request_context->log, 0,
             "track_type unknown");
         return NULL;
     }
 
+    // external SSA/ASS subs does not have ReadOrder field
+    for (i = 0; i < track->n_events; ++i)
+        track->events[i].ReadOrder = i;
+    // call ass_free_track outside, after info has been used
     return track;
 }
 
@@ -1373,20 +1390,18 @@ ass_parse(
     size_t metadata_part_count,
     media_base_metadata_t** result)
 {
-#if 0
+#if 1
 	ass_track_t *assTrack;
 	vod_status_t ret_status;
 
-        //vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-        //    "ass_parse() first line size %d, text is: '%.30s'", source->len, (char *)(source->data));
+    //vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+    //    "ass_parse() first line size %d, text is: '%.30s'", source->len, (char *)(source->data));
 
-    // We need to parse whole file just to get maxDuration, needed for parsing metaData.
-    // We will re-parse the whole file into input_frame_t(s) later.
-    // Here we only parse it into one ass_track_t with multiple ass_event_t and ass_style_t.
-	assTrack = parse_memory((char *)(source->data), request_context);
+	assTrack = parse_memory((char *)(source->data), source->len, request_context);
 
     if (assTrack == NULL)
     {
+        // assTrack was de-allocated already inside the function, for failure cases
         vod_log_error(VOD_LOG_ERR, request_context->log, 0,
             "ass_parse failed");
         return VOD_BAD_MAPPING;
@@ -1405,11 +1420,12 @@ ass_parse(
         "ass_parse(): parse_memory() succeeded, sub_parse succeeded, len of data = %d, maxDuration = %D, nEvents = %d, nStyles = %d",
         source->len, assTrack->maxDuration, assTrack->n_events, assTrack->n_styles);
 
-    ass_free_track(assTrack);
+    // now that we used maxDuration, we need to free the memory used by the track
+    ass_free_track(request_context->pool, assTrack);
 	return ret_status;
 #else
-        vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-            "ass_parse() clip_from = %uz, clip_to = %uz", parse_params->clip_from, parse_params->clip_to);
+    //vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+    //    "ass_parse() clip_from = %uz, clip_to = %uz", parse_params->clip_from, parse_params->clip_to);
 	return subtitle_parse(
         request_context,
         parse_params,
@@ -1440,7 +1456,6 @@ ass_parse_frames(
     media_track_t* vttTrack   = base->tracks.elts;
     input_frame_t* cur_frame  = NULL;
     vod_str_t* source         = &metadata->source;
-    char* cur_pos             = (char *)(source->data);
 	vod_str_t* header         = &vttTrack->media_info.extra_data;
 
 	vod_memzero(result, sizeof(*result));
@@ -1454,19 +1469,17 @@ ass_parse_frames(
         return VOD_OK;
 	}
 
-        //vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-        //   "ass_parse_frames() first line size %d, text is: '%.30s'", source->len, (char *)(source->data));
-
-    assTrack = parse_memory(cur_pos, request_context);
+    assTrack = parse_memory((char *)(source->data), source->len, request_context);
     if (assTrack == NULL)
     {
+        // assTrack was de-allocated already inside the function, for failure cases
         vod_log_error(VOD_LOG_ERR, request_context->log, 0,
             "ass_parse_frames: failed to parse memory into ass track");
         return VOD_BAD_MAPPING;
     } else {
         vod_log_error(VOD_LOG_ERR, request_context->log, 0,
             "frames parse_memory() succeeded, len of data = %d, maxDuration = %D, nEvents = %d, nStyles = %d",
-        source->len, assTrack->maxDuration, assTrack->n_events, assTrack->n_styles);
+            source->len, assTrack->maxDuration, assTrack->n_events, assTrack->n_styles);
     }
 
     // cues
@@ -1474,7 +1487,7 @@ ass_parse_frames(
     {
         vod_log_error(VOD_LOG_ERR, request_context->log, 0,
             "ass_parse_frames: vod_array_init failed");
-        ass_free_track(assTrack);
+        ass_free_track(request_context->pool, assTrack);
         return VOD_ALLOC_FAILED;
     }
 
@@ -1490,7 +1503,7 @@ ass_parse_frames(
         {
             vod_log_error(VOD_LOG_ERR, request_context->log, 0,
                 "ass_parse_frames: vod_array_push failed");
-            ass_free_track(assTrack);
+            ass_free_track(request_context->pool, assTrack);
             return VOD_ALLOC_FAILED;
         }
         // allocate the text of output frame
@@ -1499,6 +1512,7 @@ ass_parse_frames(
         {
             vod_log_error(VOD_LOG_ERR, request_context->log, 0,
                 "ass_parse_frames: vod_alloc failed");
+            ass_free_track(request_context->pool, assTrack);
             return VOD_ALLOC_FAILED;
         }
         vod_sprintf(p, FIXED_WEBVTT_CUE_FORMAT_STR, i);  // Cues are named "c<iteration_number_in_7_digits>" starting from c0000000
@@ -1535,8 +1549,8 @@ ass_parse_frames(
         if (i == 0)
             vttTrack->first_frame_time_offset = cur_event->Start;
 	}
-
-    ass_free_track(assTrack);
+    // now we got all the info from assTrack, deallocate its memory
+    ass_free_track(request_context->pool, assTrack);
 
     vttTrack->first_frame_index = 0;
     vttTrack->frame_count = frames.nelts;
