@@ -85,7 +85,7 @@ char *ass_strndup(const char *s, size_t n)
     int len = end ? end - s : (int)(n);
     char *newp = len < (int)(ASS_SIZE_MAX) ? malloc(len + 1) : NULL;
     if (newp) {
-        memcpy(newp, s, len);
+        vod_memcpy(newp, s, len);
         newp[len] = 0;
     }
     return newp;
@@ -651,9 +651,9 @@ typedef struct ass_style {
  */
 typedef struct ass_event {
     long long   Start;    // ms
-    long long   Duration; // ms
+    long long   End;      // ms
 
-    int         ReadOrder;
+    //int         ReadOrder;
     int         Layer;
     int         Style;
     char       *Name;
@@ -682,11 +682,11 @@ typedef struct ass_track {
     int             max_styles;         // amount allocated
     int             n_events;
     int             max_events;
-    ass_style_t    *styles;    // array of styles, max_styles length, n_styles used
-    ass_event_t    *events;    // the same as styles
+    ass_style_t    *styles;             // array of styles, max_styles length, n_styles used
+    ass_event_t    *events;             // the same as styles
 
-    char           *style_format;     // style format line (everything after "Format: ")
-    char           *event_format;     // event format line
+    char           *style_format;       // style format line (everything after "Format: ")
+    char           *event_format;       // event format line
 
     enum {
         TRACK_TYPE_UNKNOWN = 0,
@@ -727,7 +727,7 @@ int ass_alloc_style(ass_track_t *track)
     }
 
     sid = track->n_styles++;
-    memset(track->styles + sid, 0, sizeof(ass_style_t));
+    vod_memset(track->styles + sid, 0, sizeof(ass_style_t));
     return sid;
 }
 
@@ -746,7 +746,7 @@ int ass_alloc_event(ass_track_t *track)
     }
 
     eid = track->n_events++;
-    memset(track->events + eid, 0, sizeof(ass_event_t));
+    vod_memzero(track->events + eid, sizeof(ass_event_t));
     return eid;
 }
 void ass_free_event(ass_track_t *track, int eid)
@@ -960,16 +960,14 @@ static int process_event_tail(ass_track_t *track, ass_event_t *event, char *str)
                     *last = 0;
             }
             // need to track the largest end time in all events, since they are not in chronological order
-            if (track->maxDuration < event->Duration) {
-                track->maxDuration = event->Duration;
+            if (track->maxDuration < event->End) {
+                track->maxDuration = event->End;
             }
-            event->Duration -= event->Start;
             free(format);
             return 0;           // "Text" is always the last
         }
         NEXT(p, token);
 
-        ALIAS(End, Duration)    // temporarily store end timecode in event->Duration
         PARSE_START
             INTVAL(Layer)
             STYLEVAL(Style)
@@ -979,7 +977,7 @@ static int process_event_tail(ass_track_t *track, ass_event_t *event, char *str)
             INTVAL(MarginR)
             INTVAL(MarginV)
             TIMEVAL(Start)
-            TIMEVAL(Duration)
+            TIMEVAL(End)
         PARSE_END
     }
     free(format);
@@ -1131,13 +1129,13 @@ static int process_styles_line(ass_track_t *track, char *str, request_context_t*
         skip_spaces(&p);
         free(track->style_format);
         track->style_format = strdup(p);
-        vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-            "Styles Format: %s", track->style_format);
+        //vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+        //    "Styles Format: %s", track->style_format);
     } else if (!strncmp(str, "Style:", 6)) {
         char *p = str + 6;
         skip_spaces(&p);
-        vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-            "Styles: '%.30s'", str);
+        //vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+        //   "Styles: '%.30s'", str);
         process_style(track, p);
     }
     return 0;
@@ -1147,12 +1145,8 @@ static int process_info_line(ass_track_t *track, char *str, request_context_t* r
 {
     if (!strncmp(str, "PlayResX:", 9)) {
         track->PlayResX = atoi(str + 9);
-        //vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-         //   "track->PlayResX: %d", track->PlayResX);
     } else if (!strncmp(str, "PlayResY:", 9)) {
         track->PlayResY = atoi(str + 9);
-        //vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-        //    "track->PlayResY: %d", track->PlayResY);
     } else if (!strncmp(str, "Timer:", 6)) {
         track->Timer = ass_atof(str + 6);
     } else if (!strncmp(str, "WrapStyle:", 10)) {
@@ -1170,8 +1164,6 @@ static int process_info_line(ass_track_t *track, char *str, request_context_t* r
         while (*p && ass_isspace(*p)) p++;
         free(track->Language);
         track->Language = strndup(p, 2);
-        //vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-        //    "track->Language: %s", track->Language);
     }
     return 0;
 }
@@ -1196,8 +1188,8 @@ static int process_events_line(ass_track_t *track, char *str, request_context_t*
         skip_spaces(&p);
         free(track->event_format);
         track->event_format = strdup(p);
-        vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-            "Event format: %s", track->event_format);
+        //vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+        //    "Event format: %s", track->event_format);
 
     } else if (!strncmp(str, "Dialogue:", 9)) {
         // This should never be reached for embedded subtitles.
@@ -1219,7 +1211,7 @@ static int process_events_line(ass_track_t *track, char *str, request_context_t*
         process_event_tail(track, event, str);
 
         vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-            "Event line: %s", event->Text);
+            "Event line Start time: %D, End time: %D", event->Start, event->End);
 
     } else {
         vod_log_error(VOD_LOG_ERR, request_context->log, 0,
@@ -1309,12 +1301,12 @@ static int process_text(ass_track_t *track, char *str, request_context_t* reques
 static ass_track_t *parse_memory(char *buf, int len, request_context_t* request_context)
 {
     ass_track_t *track;
-    int bfailed, i;
+    int bfailed;
     // copy the input buffer, as the parsing is destructive.
     char *pcopy = vod_alloc(request_context->pool, len+1);
     if (pcopy == NULL)
     {
-        vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+        vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
             "ass_parse_frames: vod_alloc failed");
         return NULL;
     }
@@ -1324,7 +1316,7 @@ static ass_track_t *parse_memory(char *buf, int len, request_context_t* request_
     track = vod_calloc(request_context->pool, sizeof(ass_track_t));
     if (!track)
     {
-        vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+        vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
             "vod_calloc() failed");
         vod_free(request_context->pool, pcopy);
         return NULL;
@@ -1351,8 +1343,9 @@ static ass_track_t *parse_memory(char *buf, int len, request_context_t* request_
     }
 
     // external SSA/ASS subs does not have ReadOrder field
-    for (i = 0; i < track->n_events; ++i)
-        track->events[i].ReadOrder = i;
+    //for (i = 0; i < track->n_events; ++i)
+    //    track->events[i].ReadOrder = i;
+
     // call ass_free_track outside, after info has been used
     return track;
 }
@@ -1371,7 +1364,7 @@ ass_reader_init(
     // The line that says “[Script Info]” must be the first line in a v4/v4+ script.
     if (buffer->len > 0 && vod_strncmp(p, ASS_SCRIPT_INFO_HEADER, sizeof(ASS_SCRIPT_INFO_HEADER) - 1) != 0)
     {
-        vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+        vod_log_debug1(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
             "ass_reader_init failed, len=%d", buffer->len);
         return VOD_NOT_FOUND;
     }
@@ -1402,9 +1395,9 @@ ass_parse(
     if (assTrack == NULL)
     {
         // assTrack was de-allocated already inside the function, for failure cases
-        vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+        vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
             "ass_parse failed");
-        return VOD_BAD_MAPPING;
+        return VOD_BAD_DATA;
     }
 
     ret_status = subtitle_parse(
@@ -1416,9 +1409,9 @@ ass_parse(
         metadata_part_count,
         result);
 
-    vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-        "ass_parse(): parse_memory() succeeded, sub_parse succeeded, len of data = %d, maxDuration = %D, nEvents = %d, nStyles = %d",
-        source->len, assTrack->maxDuration, assTrack->n_events, assTrack->n_styles);
+    //vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+    //    "ass_parse(): parse_memory() succeeded, sub_parse succeeded, len of data = %d, maxDuration = %D, nEvents = %d, nStyles = %d",
+    //    source->len, assTrack->maxDuration, assTrack->n_events, assTrack->n_styles);
 
     // now that we used maxDuration, we need to free the memory used by the track
     ass_free_track(request_context->pool, assTrack);
@@ -1455,6 +1448,7 @@ ass_parse_frames(
                               = vod_container_of(base, subtitle_base_metadata_t, base);
     media_track_t* vttTrack   = base->tracks.elts;
     input_frame_t* cur_frame  = NULL;
+    ass_event_t*   cur_event  = NULL;
     vod_str_t* source         = &metadata->source;
 	vod_str_t* header         = &vttTrack->media_info.extra_data;
 
@@ -1463,6 +1457,8 @@ ass_parse_frames(
 	result->last_track        = vttTrack + 1;
 	result->track_count[MEDIA_TYPE_SUBTITLE] = 1;
 	result->total_track_count = 1;
+
+    vttTrack->first_frame_index = 0;
 
 	if ((parse_params->parse_type & (PARSE_FLAG_FRAMES_ALL | PARSE_FLAG_EXTRA_DATA | PARSE_FLAG_EXTRA_DATA_SIZE)) == 0)
 	{
@@ -1483,7 +1479,7 @@ ass_parse_frames(
     }
 
     // cues
-    if (vod_array_init(&frames, request_context->pool, 2, sizeof(*cur_frame)) != VOD_OK)
+    if (vod_array_init(&frames, request_context->pool, 5, sizeof(input_frame_t)) != VOD_OK)
     {
         vod_log_error(VOD_LOG_ERR, request_context->log, 0,
             "ass_parse_frames: vod_array_init failed");
@@ -1494,8 +1490,16 @@ ass_parse_frames(
     for (i = 0; i < assTrack->n_events; ++i)
     {
     	u_char* p;
-        ass_event_t * cur_event = assTrack->events + i;
+    	ass_event_t* prev_event = assTrack->events + i - 1;
+                      cur_event = assTrack->events + i;
         int eventlen = strlen(cur_event->Text);
+
+        if (i > 0)
+        {
+            cur_frame->duration = cur_event->Start - prev_event->Start;
+            //vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+            //    "ass_parse_frames: i-1 %d duration = %D", i, cur_frame->duration);
+        }
 
         // allocate the output frame
         cur_frame = vod_array_push(&frames);
@@ -1515,7 +1519,9 @@ ass_parse_frames(
             ass_free_track(request_context->pool, assTrack);
             return VOD_ALLOC_FAILED;
         }
-        vod_sprintf(p, FIXED_WEBVTT_CUE_FORMAT_STR, i);  // Cues are named "c<iteration_number_in_7_digits>" starting from c0000000
+
+        // Cues are named "c<iteration_number_in_7_digits>" starting from c0000000
+        vod_sprintf(p, FIXED_WEBVTT_CUE_FORMAT_STR, i);
         vod_memset(p+FIXED_WEBVTT_CUE_NAME_WIDTH            ,            '\r',        1);
         vod_memset(p+FIXED_WEBVTT_CUE_NAME_WIDTH+ 1         ,            '\n',        1);
         // timestamps will be inserted here
@@ -1533,30 +1539,41 @@ ass_parse_frames(
         //	- offset = pointer to buffer containing: cue id, cue settings list, cue payload
         //	- size = size of data pointed by offset
         //	- key_frame = cue id length
-        //	- duration = start time
-        //	- pts_delay = end time
+        //	- duration = start time of next event - start time of current event
+        //	- pts_delay = end time - start time = duration this subtitle event is on screen
 
         cur_frame->offset    = (uintptr_t)p;
         cur_frame->size      = FIXED_WEBVTT_CUE_NAME_WIDTH + 8 + eventlen;
         cur_frame->key_frame = FIXED_WEBVTT_CUE_NAME_WIDTH + 2; // cue name + \r\n
-        cur_frame->pts_delay = cur_event->Start + cur_event->Duration;
-        cur_frame->duration  = cur_event->Duration;
-        // TODO: We can insert a ::cue for each event
-
-        vttTrack->total_frames_size += cur_frame->size;
-        vttTrack->total_frames_duration = (uint64_t)(assTrack->maxDuration);
-        vttTrack->first_frame_index++;
+        cur_frame->pts_delay = cur_event->End - cur_event->Start;
         if (i == 0)
+        {
             vttTrack->first_frame_time_offset = cur_event->Start;
+        }
+
+        // TODO: We can insert a ::cue for each event
+        //vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+        //    "ass_parse_frames: i %d pts_delay = %D, prev duration = %D", i, cur_frame->pts_delay, cur_frame->duration);
+
+        vttTrack->total_frames_duration = cur_event->End - vttTrack->first_frame_time_offset;
+        vttTrack->total_frames_size += cur_frame->size;
 	}
+	if ((cur_frame != NULL) && (cur_event != NULL))
+	{
+        cur_frame->duration = cur_event->End - cur_event->Start; // correct last event's duration
+        //vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+        //    "ass_parse_frames: i %d duration = %D", i, cur_frame->duration);
+    }
+
     // now we got all the info from assTrack, deallocate its memory
     ass_free_track(request_context->pool, assTrack);
 
-    vttTrack->first_frame_index = 0;
+    //vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+    //    "ass_parse_frames: track frames duration = %D, frame_count = %d", vttTrack->total_frames_duration, frames.nelts);
+
     vttTrack->frame_count = frames.nelts;
     vttTrack->frames.first_frame = frames.elts;
     vttTrack->frames.last_frame = vttTrack->frames.first_frame + frames.nelts;
-
     header->len = sizeof(WEBVTT_HEADER_NEWLINES) - 1;
     header->data = (u_char*)WEBVTT_HEADER_NEWLINES;
 
