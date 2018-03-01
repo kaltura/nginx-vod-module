@@ -889,8 +889,6 @@ int lookup_style(ass_track_t *track, char *name)
             return i;
     }
     i = track->default_style;
-    vod_log_debug3(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
-       "[%p]: Warning: no style named '%s' found, using '%s'", track, name, track->styles[i].Name);
     return i;
 }
 
@@ -1168,13 +1166,9 @@ static int process_styles_line(ass_track_t *track, char *str, request_context_t*
         skip_spaces(&p);
         free(track->style_format);
         track->style_format = strdup(p);
-        //vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-        //    "Styles Format: %s", track->style_format);
     } else if (!strncmp(str, "Style:", 6)) {
         char *p = str + 6;
         skip_spaces(&p);
-        //vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-        //   "Styles: '%.30s'", str);
         process_style(track, p);
     }
     return 0;
@@ -1190,8 +1184,6 @@ static int process_info_line(ass_track_t *track, char *str, request_context_t* r
         track->Timer = ass_atof(str + 6);
     } else if (!strncmp(str, "WrapStyle:", 10)) {
         track->WrapStyle = atoi(str + 10);
-        //vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-        //   "track->WrapStyle: %d", track->WrapStyle);
     } else if (!strncmp(str, "ScaledBorderAndShadow:", 22)) {
         track->ScaledBorderAndShadow = parse_bool(str + 22);
     } else if (!strncmp(str, "Kerning:", 8)) {
@@ -1216,8 +1208,6 @@ static void event_format_fallback(ass_track_t *track)
     else
         track->event_format = strdup("Layer, Start, End, Style, "
             "Actor, MarginL, MarginR, MarginV, Effect, Text");
-    vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
-        "No event format found, using fallback");
 }
 
 static int process_events_line(ass_track_t *track, char *str, request_context_t* request_context)
@@ -1227,8 +1217,6 @@ static int process_events_line(ass_track_t *track, char *str, request_context_t*
         skip_spaces(&p);
         free(track->event_format);
         track->event_format = strdup(p);
-        //vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-        //    "Event format: %s", track->event_format);
 
     } else if (!strncmp(str, "Dialogue:", 9)) {
         // This should never be reached for embedded subtitles.
@@ -1248,10 +1236,6 @@ static int process_events_line(ass_track_t *track, char *str, request_context_t*
             event_format_fallback(track);
 
         process_event_tail(track, event, str);
-
-        //vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-        //    "Event line Start time: %D, End time: %D", event->Start, event->End);
-
     } else {
         vod_log_error(VOD_LOG_ERR, request_context->log, 0,
             "Event line not understood: %s", str);
@@ -1368,9 +1352,6 @@ static ass_track_t *parse_memory(char *buf, int len, request_context_t* request_
         vod_log_error(VOD_LOG_ERR, request_context->log, 0,
             "process_text failed, track_type = %d", track->track_type);
 
-    } else {
-        //vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-        //    "process_text passed fine, track_type = %d", track->track_type);
     }
     vod_free(request_context->pool, pcopy); // not needed anymore either way
 
@@ -1500,13 +1481,12 @@ ass_parse(
     size_t metadata_part_count,
     media_base_metadata_t** result)
 {
-#if 1
     ass_track_t *ass_track;
     vod_status_t ret_status;
-
-    //vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-    //    "ass_parse() first line size %d, text is: '%.30s'", source->len, (char *)(source->data));
-
+#ifdef  TEMP_VERBOSITY
+    vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+        "ass_parse() first line size %d, text is: '%.30s'", source->len, (char *)(source->data));
+#endif
     ass_track = parse_memory((char *)(source->data), source->len, request_context);
 
     if (ass_track == NULL)
@@ -1525,26 +1505,14 @@ ass_parse(
         (uint64_t)(ass_track->maxDuration),
         metadata_part_count,
         result);
-
-    //vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-    //    "ass_parse(): parse_memory() succeeded, sub_parse succeeded, len of data = %d, maxDuration = %D, nEvents = %d, nStyles = %d",
-    //    source->len, ass_track->maxDuration, ass_track->n_events, ass_track->n_styles);
-
+#ifdef  TEMP_VERBOSITY
+    vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+        "ass_parse(): parse_memory() succeeded, sub_parse succeeded, len of data = %d, maxDuration = %D, nEvents = %d, nStyles = %d",
+        source->len, ass_track->maxDuration, ass_track->n_events, ass_track->n_styles);
+#endif
     // now that we used maxDuration, we need to free the memory used by the track
     ass_free_track(request_context->pool, ass_track);
     return ret_status;
-#else
-    //vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-    //    "ass_parse() clip_from = %uz, clip_to = %uz", parse_params->clip_from, parse_params->clip_to);
-    return subtitle_parse(
-        request_context,
-        parse_params,
-        source,
-        NULL,
-        15850,
-        metadata_part_count,
-        result);
-#endif
 }
 
 static vod_status_t
@@ -1645,8 +1613,6 @@ ass_parse_frames(
         if (evntcounter > 0)
         {
             cur_frame->duration = cur_event->Start - prev_event->Start;
-            //vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-            //    "ass_parse_frames: evntcounter-1 %d duration = %D", evntcounter, cur_frame->duration);
         }
 
         // allocate the output frame
@@ -1720,15 +1686,10 @@ ass_parse_frames(
     if ((cur_frame != NULL) && (cur_event != NULL))
     {
         cur_frame->duration = cur_event->End - cur_event->Start; // correct last event's duration
-        //vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-        //    "ass_parse_frames: evntcounter %d duration = %D", evntcounter, cur_frame->duration);
     }
 
     // now we got all the info from ass_track, deallocate its memory
     ass_free_track(request_context->pool, ass_track);
-
-    //vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-    //    "ass_parse_frames: track frames duration = %D, frame_count = %d", vtt_track->total_frames_duration, frames.nelts);
 
     vtt_track->frame_count        = frames.nelts;
     vtt_track->frames.first_frame = frames.elts;
