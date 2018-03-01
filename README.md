@@ -29,6 +29,7 @@
   2. SRT
   3. DFXP/TTML
   4. CAP (Cheetah)
+  5. ASS/SSA (Advanced SubStation Alpha)
   
   Output:
   1. DASH - served as a single WebVTT
@@ -75,6 +76,16 @@ without the overhead of short segments for the whole duration of the video
 * I-frames playlist generation is not supported when encryption is enabled
 
 * Tested on Linux only
+
+#### Supported ASS/SSA subtitle files
+
+* support only for UTF-8 input scripts
+
+* SSA V4 / ASS V4+ styles only
+
+* No support for non-standard [Fonts] defined in script, nor to [Graphics], nor to [Pictures].
+
+*
 
 ### Compilation
 
