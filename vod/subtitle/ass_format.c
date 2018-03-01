@@ -29,6 +29,9 @@
 
 #define ASS_SCRIPT_INFO_HEADER ("[Script Info]")
 
+#define FIXED_WEBVTT_CUE_NAME_WIDTH 8
+#define FIXED_WEBVTT_CUE_FORMAT_STR "c%07d"
+
 #define VALIGN_SUB 0
 #define VALIGN_CENTER 8
 #define VALIGN_TOP 4
@@ -40,9 +43,6 @@
 #define ASS_JUSTIFY_CENTER 2
 #define ASS_JUSTIFY_RIGHT 3
 
-#define FIXED_WEBVTT_CUE_NAME_WIDTH 8
-#define FIXED_WEBVTT_CUE_FORMAT_STR "c%07d"
-
 #define ASS_STYLES_ALLOC 20
 #define ASS_SIZE_MAX ((size_t)-1)
 
@@ -52,21 +52,50 @@
 #define FFMIN(a,b) ((a) > (b) ? (b) : (a))
 #define FFMINMAX(c,a,b) FFMIN(FFMAX(c, a), b)
 
-#define NUM_OF_TAGS_ALLOWED_PER_LINE 6
+#define NUM_OF_TAGS_ALLOWED_PER_LINE 8
+#define NUM_OF_TAG_TYPES_RECOGNIZED  7
 static const char* const tag_strings[] = {
+// all starts should be in even index, all ends should be in odd index. This logic is assumed
     "\\n",
     "\\N",
     "{\\i1}",
     "{\\i0}",
-    0
+    "{\\b1}",
+    "{\\b0}",
+    "{\\"
+};
+static const int tag_string_len[] = {
+// all starts should be in even index, all ends should be in odd index. This logic is assumed
+    2,
+    2,
+    5,
+    5,
+    5,
+    5,
+    2
 };
 typedef enum {
-    TAG_TYPE_NEWLINE_SMALL = 0,
-    TAG_TYPE_NEWLINE_LARGE,
-    TAG_TYPE_ITALIC_START,
-    TAG_TYPE_ITALIC_END,
+// all starts should be in even index, all ends should be in odd index. This logic is assumed
+    TAG_TYPE_NEWLINE_SMALL  = 0,
+    TAG_TYPE_NEWLINE_LARGE  = 1,
+    TAG_TYPE_ITALIC_START   = 2,
+    TAG_TYPE_ITALIC_END     = 3,
+    TAG_TYPE_BOLD_START     = 4,
+    TAG_TYPE_BOLD_END       = 5,
+    TAG_TYPE_UNKNOWN_BRACES = 6, // has to be after all known braces types
     TAG_TYPE_NONE
-} ass_tag_type_t;
+} ass_tag_idx_t;
+
+static const int ass_tag_mask[] = {
+    1,
+    1,
+    8,
+    -8,  //unused
+    16,
+    -16, //unused
+    0,
+    0
+};
 
 static const unsigned char lowertab[] = {
     0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a,
@@ -866,8 +895,8 @@ int lookup_style(ass_track_t *track, char *name)
 }
 
 #define NEXT(str,token) \
-	token = next_token(&str); \
-	if (!token) break;
+    token = next_token(&str); \
+    if (!token) break;
 
 
 #define ALIAS(alias,name) \
@@ -887,13 +916,13 @@ int lookup_style(ass_track_t *track, char *name)
 #define PARSE_END   }
 
 #define ANYVAL(name,func) \
-	} else if (ass_strcasecmp(tname, #name) == 0) { \
-		target->name = func(token);
+    } else if (ass_strcasecmp(tname, #name) == 0) { \
+        target->name = func(token);
 
 #define STRVAL(name) \
-	} else if (ass_strcasecmp(tname, #name) == 0) { \
-		if (target->name != NULL) free(target->name); \
-		target->name = strdup(token);
+    } else if (ass_strcasecmp(tname, #name) == 0) { \
+        if (target->name != NULL) free(target->name); \
+        target->name = strdup(token);
 
 #define STARREDSTRVAL(name) \
     } else if (ass_strcasecmp(tname, #name) == 0) { \
@@ -905,12 +934,12 @@ int lookup_style(ass_track_t *track, char *name)
 #define INTVAL(name) ANYVAL(name,atoi)
 #define FPVAL(name) ANYVAL(name,ass_atof)
 #define TIMEVAL(name) \
-	} else if (ass_strcasecmp(tname, #name) == 0) { \
-		target->name = string2timecode(token);
+    } else if (ass_strcasecmp(tname, #name) == 0) { \
+        target->name = string2timecode(token);
 
 #define STYLEVAL(name) \
-	} else if (ass_strcasecmp(tname, #name) == 0) { \
-		target->name = lookup_style(track, token);
+    } else if (ass_strcasecmp(tname, #name) == 0) { \
+        target->name = lookup_style(track, token);
 
 static char *next_token(char **str)
 {
@@ -1220,8 +1249,8 @@ static int process_events_line(ass_track_t *track, char *str, request_context_t*
 
         process_event_tail(track, event, str);
 
-        vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-            "Event line Start time: %D, End time: %D", event->Start, event->End);
+        //vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+        //    "Event line Start time: %D, End time: %D", event->Start, event->End);
 
     } else {
         vod_log_error(VOD_LOG_ERR, request_context->log, 0,
@@ -1340,8 +1369,8 @@ static ass_track_t *parse_memory(char *buf, int len, request_context_t* request_
             "process_text failed, track_type = %d", track->track_type);
 
     } else {
-        vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-            "process_text passed fine, track_type = %d", track->track_type);
+        //vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+        //    "process_text passed fine, track_type = %d", track->track_type);
     }
     vod_free(request_context->pool, pcopy); // not needed anymore either way
 
@@ -1360,13 +1389,83 @@ static ass_track_t *parse_memory(char *buf, int len, request_context_t* request_
     return track;
 }
 
-static int split_text_to_chunks(char *buf, int len, char **textp, int *evlen, ass_tag_type_t *evtype)
+static int split_text_to_chunks(char *buf, int len, char **textp, int *evlen, int *evmask, request_context_t* request_context)
 {
-    int retval = 1;
+    // Each chunk is a string starting with a tag, or number of consecutive tags. It has a mask of flags associated with it
+    // Number of chunks is at least 1 if len is > 0
+    // If we have a tag on very first character, we don't assign empty chunk, just increment the pointer
+    int charidx = 0, tagidx = 0, chunkidx = 1;
+    int curMask = 0;
+
+    // Basic sanity checking for inputs
+    if ((buf == NULL) || (len < 1))
+    {
+        return 0;
+    }
     textp[0]   = buf;
+    evmask[0]  = curMask;
     evlen[0]   = len;
-    evtype[0]  = TAG_TYPE_NONE;
-    return retval;
+
+    while (charidx < len)
+    {
+        for (tagidx = 0; tagidx < NUM_OF_TAG_TYPES_RECOGNIZED; tagidx++)
+        {
+#ifdef  TEMP_VERBOSITY
+            vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+                "Start: charidx=%d, tagidx=%d, chunkidx=%d, curMask=%d", charidx, tagidx, chunkidx, curMask);
+#endif
+            if (vod_strncmp(buf+charidx, tag_strings[tagidx], tag_string_len[tagidx]) == 0)
+            {
+                int tagsize = tag_string_len[tagidx];
+                // for now, ignore all unknown {\xxx} tags, but still need to insert a new chunk
+                if (tagidx == TAG_TYPE_UNKNOWN_BRACES)
+                {
+                    char* endbraces = vod_strchr(buf+charidx, '}');
+                    tagsize = (int)(endbraces - (buf+charidx) + 1);
+#ifdef  TEMP_VERBOSITY
+                    vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+                        "UNKNOWN: charidx=%d, tagidx=%d, chunkidx=%d, curMask=%d, tagsize=%d",
+                        charidx, tagidx, chunkidx, curMask, tagsize);
+#endif
+                }
+
+                if (textp[chunkidx-1] == (buf + charidx) && (tagidx > 1))
+                {   //consecutive tag sequences, or one at the very start of the line text
+#ifdef  TEMP_VERBOSITY
+                    vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+                        "CONSEC: charidx=%d, tagidx=%d, chunkidx=%d, curMask=%d", charidx, tagidx, chunkidx, curMask);
+#endif
+                    charidx            += tagsize;
+                    textp[chunkidx-1]   = buf + charidx;
+                    curMask            += ass_tag_mask[tagidx];
+                    evmask[chunkidx-1]  = curMask;
+                    evlen[chunkidx-1]   = len - charidx;
+                }
+                else
+                {
+#ifdef  TEMP_VERBOSITY
+                    vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+                       "NEW: charidx=%d, tagidx=%d, chunkidx=%d, curMask=%d", charidx, tagidx, chunkidx, curMask);
+#endif
+                    evlen[chunkidx-1] -= (len - charidx);
+                    charidx           += tagsize;
+                    textp[chunkidx]    = buf + charidx;
+                    if (tagidx > 1)  // not a newline, reset the newline flag for coming chunk
+                        curMask      &= 0xFFFFFFFE;
+                    curMask           += ass_tag_mask[tagidx];
+                    evmask[chunkidx]   = curMask;
+                    evlen[chunkidx]    = len - charidx;
+                    chunkidx++;
+                }
+                tagidx              = -1; // one tage found, start scanning all tag types again
+            }
+
+        }
+        // none of the tags matched this character
+        charidx++;
+    }
+
+    return chunkidx;
 }
 
 static vod_status_t
@@ -1377,7 +1476,7 @@ ass_reader_init(
     size_t max_metadata_size,
     void** ctx)
 {
-	u_char* p = buffer->data;
+    u_char* p = buffer->data;
 
     // The line that says “[Script Info]” must be the first line in a v4/v4+ script.
     if (buffer->len > 0 && vod_strncmp(p, ASS_SCRIPT_INFO_HEADER, sizeof(ASS_SCRIPT_INFO_HEADER) - 1) != 0)
@@ -1389,8 +1488,8 @@ ass_reader_init(
 
     return subtitle_reader_init(
         request_context,
-		initial_read_size,
-		ctx);
+        initial_read_size,
+        ctx);
 }
 
 static vod_status_t
@@ -1402,13 +1501,13 @@ ass_parse(
     media_base_metadata_t** result)
 {
 #if 1
-	ass_track_t *ass_track;
-	vod_status_t ret_status;
+    ass_track_t *ass_track;
+    vod_status_t ret_status;
 
     //vod_log_error(VOD_LOG_ERR, request_context->log, 0,
     //    "ass_parse() first line size %d, text is: '%.30s'", source->len, (char *)(source->data));
 
-	ass_track = parse_memory((char *)(source->data), source->len, request_context);
+    ass_track = parse_memory((char *)(source->data), source->len, request_context);
 
     if (ass_track == NULL)
     {
@@ -1433,11 +1532,11 @@ ass_parse(
 
     // now that we used maxDuration, we need to free the memory used by the track
     ass_free_track(request_context->pool, ass_track);
-	return ret_status;
+    return ret_status;
 #else
     //vod_log_error(VOD_LOG_ERR, request_context->log, 0,
     //    "ass_parse() clip_from = %uz, clip_to = %uz", parse_params->clip_from, parse_params->clip_to);
-	return subtitle_parse(
+    return subtitle_parse(
         request_context,
         parse_params,
         source,
@@ -1460,8 +1559,8 @@ ass_parse_frames(
     media_track_array_t* result)
 {
     ass_track_t *ass_track;
-	vod_array_t frames;
-    int i;
+    vod_array_t frames;
+    int evntcounter, chunkcounter;
     subtitle_base_metadata_t* metadata
                               = vod_container_of(base, subtitle_base_metadata_t, base);
     vod_str_t*     source     = &metadata->source;
@@ -1470,22 +1569,22 @@ ass_parse_frames(
     ass_event_t*   cur_event  = NULL;
 
     //File header for webVTT. Insert Style cues after that as needed.
-	vod_str_t* header         = &vtt_track->media_info.extra_data;
+    vod_str_t* header         = &vtt_track->media_info.extra_data;
     header->len               = sizeof(WEBVTT_HEADER_NEWLINES) - 1;
     header->data              = (u_char*)WEBVTT_HEADER_NEWLINES;
 
-	vod_memzero(result, sizeof(*result));
-	result->first_track       = vtt_track;
-	result->last_track        = vtt_track + 1;
-	result->track_count[MEDIA_TYPE_SUBTITLE] = 1;
-	result->total_track_count = 1;
+    vod_memzero(result, sizeof(*result));
+    result->first_track       = vtt_track;
+    result->last_track        = vtt_track + 1;
+    result->track_count[MEDIA_TYPE_SUBTITLE] = 1;
+    result->total_track_count = 1;
 
     vtt_track->first_frame_index = 0;
 
-	if ((parse_params->parse_type & (PARSE_FLAG_FRAMES_ALL | PARSE_FLAG_EXTRA_DATA | PARSE_FLAG_EXTRA_DATA_SIZE)) == 0)
-	{
+    if ((parse_params->parse_type & (PARSE_FLAG_FRAMES_ALL | PARSE_FLAG_EXTRA_DATA | PARSE_FLAG_EXTRA_DATA_SIZE)) == 0)
+    {
         return VOD_OK;
-	}
+    }
 
     ass_track = parse_memory((char *)(source->data), source->len, request_context);
     if (ass_track == NULL)
@@ -1494,12 +1593,15 @@ ass_parse_frames(
         vod_log_error(VOD_LOG_ERR, request_context->log, 0,
             "ass_parse_frames: failed to parse memory into ass track");
         return VOD_BAD_MAPPING;
-    } else {
+    }
+#ifdef  TEMP_VERBOSITY
+    else
+    {
         vod_log_error(VOD_LOG_ERR, request_context->log, 0,
             "frames parse_memory() succeeded, len of data = %d, maxDuration = %D, nEvents = %d, nStyles = %d",
             source->len, ass_track->maxDuration, ass_track->n_events, ass_track->n_styles);
     }
-
+#endif
     // cues
     if (vod_array_init(&frames, request_context->pool, 5, sizeof(input_frame_t)) != VOD_OK)
     {
@@ -1509,90 +1611,117 @@ ass_parse_frames(
         return VOD_ALLOC_FAILED;
     }
 
-    for (i = 0; i < ass_track->n_events; ++i)
+    for (evntcounter = 0; evntcounter < ass_track->n_events; evntcounter++)
     {
-        char* p;
+        char *pfixed, *p;
         // Split the event text into multiple chunks so we can insert each chunk as a separate frame in webVTT, all under a single cue
-    	char*          event_textp[NUM_OF_TAGS_ALLOWED_PER_LINE];
-    	int            event_len[NUM_OF_TAGS_ALLOWED_PER_LINE];
-    	ass_tag_type_t event_type[NUM_OF_TAGS_ALLOWED_PER_LINE];
+        char*          event_textp[NUM_OF_TAGS_ALLOWED_PER_LINE];
+        int            event_len  [NUM_OF_TAGS_ALLOWED_PER_LINE];
+        int            event_mask [NUM_OF_TAGS_ALLOWED_PER_LINE];
+        int            tot_len_of_all_chunks = 0;
 
-    	ass_event_t* prev_event = ass_track->events + i - 1;
-                      cur_event = ass_track->events + i;
-    	int  num_chunks_in_text = split_text_to_chunks(cur_event->Text, vod_strlen(cur_event->Text), event_textp, event_len, event_type);
+        ass_event_t* prev_event = ass_track->events + evntcounter - 1;
+                      cur_event = ass_track->events + evntcounter;
+
+        for (chunkcounter = 0; chunkcounter<NUM_OF_TAGS_ALLOWED_PER_LINE; chunkcounter++)
+        {
+            event_textp[chunkcounter] = vod_alloc(request_context->pool, sizeof(char*));
+            if (event_textp[chunkcounter] == NULL)
+            {
+              vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+                  "ass_parse_frames: vod_alloc failed");
+              ass_free_track(request_context->pool, ass_track);
+              return VOD_ALLOC_FAILED;
+            }
+        }
+
+        int  num_chunks_in_text = split_text_to_chunks(cur_event->Text, vod_strlen(cur_event->Text),
+                                                       event_textp, event_len, event_mask, request_context);
+#ifdef  TEMP_VERBOSITY
         vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-            "ass_parse_frames: event=%d num_chunks=%d len0=%d type0=%d len1=%d type1=%d", i, num_chunks_in_text, event_len[0], event_type[0], event_len[1], event_type[1]);
-
-        if (i > 0)
+            "ass_parse_frames: event=%d num_chunks=%d len0=%d type0=%d len1=%d type1=%d len2=%d type2=%d",
+            evntcounter, num_chunks_in_text, event_len[0], event_mask[0], event_len[1], event_mask[1], event_len[2], event_mask[2]);
+#endif
+        if (evntcounter > 0)
         {
             cur_frame->duration = cur_event->Start - prev_event->Start;
             //vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-            //    "ass_parse_frames: i-1 %d duration = %D", i, cur_frame->duration);
+            //    "ass_parse_frames: evntcounter-1 %d duration = %D", evntcounter, cur_frame->duration);
         }
 
-            // allocate the output frame
-            cur_frame = vod_array_push(&frames);
-            if (cur_frame == NULL)
+        // allocate the output frame
+        cur_frame = vod_array_push(&frames);
+        if (cur_frame == NULL)
+        {
+            vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+                "ass_parse_frames: vod_array_push failed");
+            ass_free_track(request_context->pool, ass_track);
+            return VOD_ALLOC_FAILED;
+        }
+        for (chunkcounter = 0; chunkcounter < num_chunks_in_text; chunkcounter++)
+        {
+            tot_len_of_all_chunks += event_len[chunkcounter];
+            if (event_mask[chunkcounter] & 1)
+                tot_len_of_all_chunks += 2;
+        }
+        // allocate the text of output frame
+        p = pfixed = vod_alloc(request_context->pool, FIXED_WEBVTT_CUE_NAME_WIDTH + 8 + tot_len_of_all_chunks);
+        if (p == NULL)
+        {
+            vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+                "ass_parse_frames: vod_alloc failed");
+            ass_free_track(request_context->pool, ass_track);
+            return VOD_ALLOC_FAILED;
+        }
+
+        // Cues are named "c<iteration_number_in_7_digits>" starting from c0000000
+        vod_sprintf((u_char*)p, FIXED_WEBVTT_CUE_FORMAT_STR, evntcounter);      p+=FIXED_WEBVTT_CUE_NAME_WIDTH;
+        vod_memset(p, '\r', 1);                                                 p++;
+        vod_memset(p, '\n', 1);                                                 p++;
+        // timestamps will be inserted here
+        vod_memset(p, '\r', 1);                                                 p++;
+        vod_memset(p, '\n', 1);                                                 p++;
+        for (chunkcounter = 0; chunkcounter < num_chunks_in_text; chunkcounter++)
+        {
+            if (event_mask[chunkcounter] & 1)
             {
-                vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-                    "ass_parse_frames: vod_array_push failed");
-                ass_free_track(request_context->pool, ass_track);
-                return VOD_ALLOC_FAILED;
+                vod_memset(p, '\r', 1);                                         p++;
+                vod_memset(p, '\n', 1);                                         p++;
             }
-            // allocate the text of output frame
-
-            p = vod_alloc(request_context->pool, FIXED_WEBVTT_CUE_NAME_WIDTH + 8 + event_len[0]);
-            if (p == NULL)
-            {
-                vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-                    "ass_parse_frames: vod_alloc failed");
-                ass_free_track(request_context->pool, ass_track);
-                return VOD_ALLOC_FAILED;
-            }
-
-            // Cues are named "c<iteration_number_in_7_digits>" starting from c0000000
-            vod_sprintf((u_char*)p, FIXED_WEBVTT_CUE_FORMAT_STR, i);
-            vod_memset(p+FIXED_WEBVTT_CUE_NAME_WIDTH             ,           '\r',            1);
-            vod_memset(p+FIXED_WEBVTT_CUE_NAME_WIDTH+ 1          ,           '\n',            1);
-            // timestamps will be inserted here
-            vod_memset(p+FIXED_WEBVTT_CUE_NAME_WIDTH+ 2          ,           '\r',            1);
-            vod_memset(p+FIXED_WEBVTT_CUE_NAME_WIDTH+ 3          ,           '\n',            1);
-            vod_memcpy(p+FIXED_WEBVTT_CUE_NAME_WIDTH+ 4          , event_textp[0], event_len[0]);
-            vod_memset(p+FIXED_WEBVTT_CUE_NAME_WIDTH+ 4+event_len[0],        '\r',            1);
-            vod_memset(p+FIXED_WEBVTT_CUE_NAME_WIDTH+ 5+event_len[0],        '\n',            1);
-            // we still need an empty line after each event/cue
-            vod_memset(p+FIXED_WEBVTT_CUE_NAME_WIDTH+ 6+event_len[0],        '\r',            1);
-            vod_memset(p+FIXED_WEBVTT_CUE_NAME_WIDTH+ 7+event_len[0],        '\n',            1);
+            vod_memcpy(p, event_textp[chunkcounter], event_len[chunkcounter]);  p+=event_len[chunkcounter];
+        }
+        vod_memset(p, '\r', 1);                                                 p++;
+        vod_memset(p, '\n', 1);                                                 p++;
+        // we still need an empty line after each event/cue
+        vod_memset(p, '\r', 1);                                                 p++;
+        vod_memset(p, '\n', 1);                                                 p++;
 
 
-            // Note: mapping of cue into input_frame_t:
-            //	- offset = pointer to buffer containing: cue id, cue settings list, cue payload
-            //	- size = size of data pointed by offset
-            //	- key_frame = cue id length
-            //	- duration = start time of next event - start time of current event
-            //	- pts_delay = end time - start time = duration this subtitle event is on screen
+        // Note: mapping of cue into input_frame_t:
+        // - offset = pointer to buffer containing: cue id, cue settings list, cue payload
+        // - size = size of data pointed by offset
+        // - key_frame = cue id length
+        // - duration = start time of next event - start time of current event
+        // - pts_delay = end time - start time = duration this subtitle event is on screen
 
-            cur_frame->offset    = (uintptr_t)p;
-            cur_frame->size      = FIXED_WEBVTT_CUE_NAME_WIDTH + 8 + event_len[0];
-            cur_frame->key_frame = FIXED_WEBVTT_CUE_NAME_WIDTH + 2; // cue name + \r\n
-            cur_frame->pts_delay = cur_event->End - cur_event->Start;
-            if (i == 0)
-            {
-                vtt_track->first_frame_time_offset = cur_event->Start;
-            }
-
+        cur_frame->offset    = (uintptr_t)pfixed;
+        cur_frame->size      = FIXED_WEBVTT_CUE_NAME_WIDTH + 8 + tot_len_of_all_chunks;
+        cur_frame->key_frame = FIXED_WEBVTT_CUE_NAME_WIDTH + 2; // cue name + \r\n
+        cur_frame->pts_delay = cur_event->End - cur_event->Start;
+        if (evntcounter == 0)
+        {
+            vtt_track->first_frame_time_offset = cur_event->Start;
+        }
         // TODO: We can insert a ::cue for each event
-        //vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-        //    "ass_parse_frames: i %d pts_delay = %D, prev duration = %D", i, cur_frame->pts_delay, cur_frame->duration);
 
         vtt_track->total_frames_duration = cur_event->End - vtt_track->first_frame_time_offset;
         vtt_track->total_frames_size += cur_frame->size;
-	}
-	if ((cur_frame != NULL) && (cur_event != NULL))
-	{
+    }
+    if ((cur_frame != NULL) && (cur_event != NULL))
+    {
         cur_frame->duration = cur_event->End - cur_event->Start; // correct last event's duration
         //vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-        //    "ass_parse_frames: i %d duration = %D", i, cur_frame->duration);
+        //    "ass_parse_frames: evntcounter %d duration = %D", evntcounter, cur_frame->duration);
     }
 
     // now we got all the info from ass_track, deallocate its memory
@@ -1609,12 +1738,12 @@ ass_parse_frames(
 }
 
 media_format_t ass_format = {
-	FORMAT_ID_ASS,
-	vod_string("ass_or_ssa"),
-	ass_reader_init,
-	subtitle_reader_read,
-	NULL,
-	NULL,
-	ass_parse,
-	ass_parse_frames,
+    FORMAT_ID_ASS,
+    vod_string("ass_or_ssa"),
+    ass_reader_init,
+    subtitle_reader_read,
+    NULL,
+    NULL,
+    ass_parse,
+    ass_parse_frames,
 };
