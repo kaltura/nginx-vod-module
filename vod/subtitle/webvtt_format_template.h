@@ -5,6 +5,18 @@ METHOD(webvtt_read_timestamp)(CHAR_TYPE* cur_pos, CHAR_TYPE** end_pos)
 	int64_t minutes;
 	int64_t seconds;
 	int64_t millis;
+	int8_t sign;
+
+	// minus
+	if (*cur_pos == '-')
+	{
+		cur_pos++;
+		sign = 0;		// clamp the timestamp to zero (negative is interpreted as error)
+	}
+	else
+	{
+		sign = 1;
+	}
 
 	// hour digits
 	if (!isdigit(*cur_pos))
@@ -62,7 +74,7 @@ METHOD(webvtt_read_timestamp)(CHAR_TYPE* cur_pos, CHAR_TYPE** end_pos)
 			*end_pos = cur_pos;
 		}
 
-		return 1000 * (seconds + 60 * (minutes + 60 * hours));
+		return sign * 1000 * (seconds + 60 * (minutes + 60 * hours));
 	}
 	cur_pos++;
 
@@ -94,12 +106,14 @@ METHOD(webvtt_read_timestamp)(CHAR_TYPE* cur_pos, CHAR_TYPE** end_pos)
 		*end_pos = cur_pos;
 	}
 
-	return millis + 1000 * (seconds + 60 * (minutes + 60 * hours));
+	return sign * (millis + 1000 * (seconds + 60 * (minutes + 60 * hours)));
 }
 
 static bool_t
 METHOD(webvtt_identify_srt)(CHAR_TYPE* p)
 {
+	for (; isspace(*p); p++);
+
 	// n digits
 	if (!isdigit(*p))
 	{
