@@ -597,6 +597,58 @@ ngx_http_vod_set_notification_id_var(ngx_http_request_t *r, ngx_http_variable_va
 }
 
 static ngx_int_t
+ngx_http_vod_set_segment_duration_var(ngx_http_request_t *r, ngx_http_variable_value_t *v, uintptr_t data)
+{
+	ngx_http_vod_ctx_t *ctx;
+	media_track_t* last_track;
+	media_track_t* cur_track;
+	media_set_t* media_set;
+	uint32_t timescale;
+	uint64_t value;
+	u_char* p;
+
+	ctx = ngx_http_get_module_ctx(r, ngx_http_vod_module);
+	if (ctx == NULL)
+	{
+		v->not_found = 1;
+		return NGX_OK;
+	}
+
+	media_set = &ctx->submodule_context.media_set;
+	cur_track = media_set->filtered_tracks;
+	last_track = cur_track + media_set->total_track_count * media_set->clip_count;
+	if (cur_track >= last_track)
+	{
+		v->not_found = 1;
+		return NGX_OK;
+	}
+
+	p = ngx_pnalloc(r->pool, NGX_INT32_LEN);
+	if (p == NULL)
+	{
+		ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+			"ngx_http_vod_set_uint32_var: ngx_pnalloc failed");
+		return NGX_ERROR;
+	}
+
+	timescale = cur_track->media_info.timescale;
+
+	value = 0;
+	for (; cur_track < last_track; cur_track += media_set->total_track_count)
+	{
+		value += cur_track->total_frames_duration;
+	}
+
+	v->data = p;
+	v->len = ngx_sprintf(p, "%uD", (uint32_t)rescale_time(value, timescale, 1000)) - p;
+	v->valid = 1;
+	v->no_cacheable = 1;
+	v->not_found = 0;
+
+	return NGX_OK;
+}
+
+static ngx_int_t
 ngx_http_vod_set_uint32_var(ngx_http_request_t *r, ngx_http_variable_value_t *v, uintptr_t data)
 {
 	ngx_http_vod_ctx_t *ctx;
@@ -639,8 +691,8 @@ static ngx_http_vod_variable_t ngx_http_vod_variables[] = {
 	DEFINE_VAR(dynamic_mapping),
 	DEFINE_VAR(request_params),
 	DEFINE_VAR(notification_id),
+	DEFINE_VAR(segment_duration),
 	{ ngx_string("vod_frames_bytes_read"), ngx_http_vod_set_uint32_var, offsetof(ngx_http_vod_ctx_t, frames_bytes_read) },
-	{ ngx_string("vod_segment_duration"), ngx_http_vod_set_uint32_var, offsetof(ngx_http_vod_ctx_t, submodule_context.media_set.segment_duration) },
 };
 
 ngx_int_t
