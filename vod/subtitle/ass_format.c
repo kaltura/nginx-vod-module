@@ -31,6 +31,14 @@
 
 #define FIXED_WEBVTT_CUE_NAME_WIDTH 8
 #define FIXED_WEBVTT_CUE_FORMAT_STR "c%07d"
+#define FIXED_WEBVTT_STYLE_START_WIDTH 22
+#define FIXED_WEBVTT_STYLE_START_STR "STYLE\r\n::cue(v[voice=\""
+#define FIXED_WEBVTT_STYLE_END_WIDTH 4
+#define FIXED_WEBVTT_STYLE_END_STR "\"]) "
+#define FIXED_WEBVTT_BRACES_START_WIDTH 3
+#define FIXED_WEBVTT_BRACES_START_STR "{\r\n"
+#define FIXED_WEBVTT_BRACES_END_WIDTH 3
+#define FIXED_WEBVTT_BRACES_END_STR "}\r\n"
 
 #define VALIGN_SUB 0
 #define VALIGN_CENTER 8
@@ -45,6 +53,7 @@
 
 #define ASS_STYLES_ALLOC 20
 #define ASS_SIZE_MAX ((size_t)-1)
+#define MAX_STR_SIZE_ALL_WEBVTT_STYLES 10240
 
 #define ass_atof(STR) (ass_strtod((STR),NULL))
 
@@ -54,6 +63,11 @@
 
 #define NUM_OF_TAGS_ALLOWED_PER_LINE 8
 #define NUM_OF_TAG_TYPES_RECOGNIZED  7
+
+
+#define TEMP_VERBOSITY
+
+
 static const char* const tag_strings[] = {
 // all starts should be in even index, all ends should be in odd index. This logic is assumed
     "\\n",
@@ -1370,7 +1384,7 @@ static ass_track_t *parse_memory(char *buf, int len, request_context_t* request_
     return track;
 }
 
-static int split_text_to_chunks(char *buf, int len, char **textp, int *evlen, int *evmask, request_context_t* request_context)
+static int split_event_text_to_chunks(char *buf, int len, char **textp, int *evlen, int *evmask, request_context_t* request_context)
 {
     // Each chunk is a string starting with a tag, or number of consecutive tags. It has a mask of flags associated with it
     // Number of chunks is at least 1 if len is > 0
@@ -1515,6 +1529,29 @@ ass_parse(
     return ret_status;
 }
 
+/**
+ * \brief Parse the .ass/.ssa file, convert to webvtt, output all cues as frames
+ *
+ * common for all frames
+ * \output vtt_track->media_info.extra_data (WEBVTT header + all STYLE cues)
+ * \output vtt_track->total_frames_duration
+ * \output vtt_track->first_frame_time_offset
+ * \output vtt_track->total_frames_size
+ * \output vtt_track->frame_count
+ * \output vtt_track->frames.first_frame
+ * \output vtt_track->frames.last_frame
+ * \output vtt_track->first_frame_index
+ * \output result (media track in the track array)
+ *
+ * individual cues in the frames array
+ * \output cur_frame->duration
+ * \output cur_frame->offset
+ * \output cur_frame->size
+ * \output cur_frame->pts_delay
+ * \output cur_frame->key_frame
+ *
+ * \return int VOD_OK or any of the VOD_ error enums
+*/
 static vod_status_t
 ass_parse_frames(
     request_context_t* request_context,
@@ -1528,18 +1565,16 @@ ass_parse_frames(
 {
     ass_track_t *ass_track;
     vod_array_t frames;
-    int evntcounter, chunkcounter;
+    int stylecounter, evntcounter, chunkcounter;
     subtitle_base_metadata_t* metadata
                               = vod_container_of(base, subtitle_base_metadata_t, base);
     vod_str_t*     source     = &metadata->source;
     media_track_t* vtt_track  = base->tracks.elts;
     input_frame_t* cur_frame  = NULL;
     ass_event_t*   cur_event  = NULL;
-
-    //File header for webVTT. Insert Style cues after that as needed.
+    char *p, *pfixed;
     vod_str_t* header         = &vtt_track->media_info.extra_data;
-    header->len               = sizeof(WEBVTT_HEADER_NEWLINES) - 1;
-    header->data              = (u_char*)WEBVTT_HEADER_NEWLINES;
+    int len;
 
     vod_memzero(result, sizeof(*result));
     result->first_track       = vtt_track;
@@ -1570,7 +1605,7 @@ ass_parse_frames(
             source->len, ass_track->maxDuration, ass_track->n_events, ass_track->n_styles);
     }
 #endif
-    // cues
+    // allocate initial array of cues/styles, to be augmented as needed after the first 5
     if (vod_array_init(&frames, request_context->pool, 5, sizeof(input_frame_t)) != VOD_OK)
     {
         vod_log_error(VOD_LOG_ERR, request_context->log, 0,
@@ -1579,17 +1614,91 @@ ass_parse_frames(
         return VOD_ALLOC_FAILED;
     }
 
+
+
+
+
+    //allocate memory for the style's text string
+    p = pfixed = vod_alloc(request_context->pool, MAX_STR_SIZE_ALL_WEBVTT_STYLES);
+    if (p == NULL)
+    {
+        vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+            "ass_parse_frames: vod_alloc failed");
+        ass_free_track(request_context->pool, ass_track);
+        return VOD_ALLOC_FAILED;
+    }
+    header->data              = (u_char*)pfixed;
+    len = sizeof(WEBVTT_HEADER_NEWLINES) - 1; vod_memcpy(p, WEBVTT_HEADER_NEWLINES, len);  p+=len;
+/*typedef struct ass_style {
+    char       *Name;
+    char       *FontName;
+    double      FontSize;
+    uint32_t    PrimaryColour;
+    uint32_t    SecondaryColour;
+    uint32_t    OutlineColour;
+    uint32_t    BackColour;
+    int         Bold;
+    int         Italic;
+    int         Underline;
+    int         StrikeOut;
+    double      ScaleX;
+    double      ScaleY;
+    double      Spacing;
+    double      Angle;
+    int         BorderStyle;
+    double      Outline;
+    double      Shadow;
+    int         Alignment;
+    int         MarginL;
+    int         MarginR;
+    int         MarginV;
+    int         Encoding;
+    int         treat_fontname_as_pattern;
+    double      Blur;
+    int         Justify;
+} ass_style_t;*/
+
+    // ignore first style, as it is just the "Default" added here by libass
+    for (stylecounter = 1; stylecounter < ass_track->n_styles; stylecounter++)
+    {
+        ass_style_t* cur_style = ass_track->styles + stylecounter;
+
+        vod_memcpy(p, FIXED_WEBVTT_STYLE_START_STR, FIXED_WEBVTT_STYLE_START_WIDTH);           p+=FIXED_WEBVTT_STYLE_START_WIDTH;
+        len = vod_strlen(cur_style->Name); vod_sprintf((u_char*)p, cur_style->Name, len);      p+=len;
+        vod_memcpy(p, FIXED_WEBVTT_STYLE_END_STR, FIXED_WEBVTT_STYLE_END_WIDTH);               p+=FIXED_WEBVTT_STYLE_END_WIDTH;
+        vod_memcpy(p, FIXED_WEBVTT_BRACES_START_STR, FIXED_WEBVTT_BRACES_START_WIDTH);         p+=FIXED_WEBVTT_BRACES_START_WIDTH;
+
+        len = 8; vod_memcpy(p, "color: #", len);                                               p+=len;
+        vod_sprintf((u_char*)p, "%08uxD", cur_style->PrimaryColour);                           p+=8;
+        len = 3; vod_memcpy(p, ";\r\n", len);                                                  p+=len;
+
+        len = 19; vod_memcpy(p, "background-color: #", len);                                   p+=len;
+        vod_sprintf((u_char*)p, "%08uxD", cur_style->BackColour);                              p+=8;
+        len = 3; vod_memcpy(p, ";\r\n", len);                                                  p+=len;
+
+        vod_memcpy(p, FIXED_WEBVTT_BRACES_END_STR, FIXED_WEBVTT_BRACES_END_WIDTH);             p+=FIXED_WEBVTT_BRACES_END_WIDTH;
+        len = 2; vod_memcpy(p, "\r\n", len);                                                   p+=len;
+    }
+    header->len               = (size_t)(p - pfixed);
+#ifdef  TEMP_VERBOSITY
+        vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+            "ass_parse_frames: header len = %d, string = %.30s\n", header->len, header->data);
+#endif
+
+
+
+
+
     for (evntcounter = 0; evntcounter < ass_track->n_events; evntcounter++)
     {
-        char *pfixed, *p;
         // Split the event text into multiple chunks so we can insert each chunk as a separate frame in webVTT, all under a single cue
         char*          event_textp[NUM_OF_TAGS_ALLOWED_PER_LINE];
         int            event_len  [NUM_OF_TAGS_ALLOWED_PER_LINE];
         int            event_mask [NUM_OF_TAGS_ALLOWED_PER_LINE];
         int            tot_len_of_all_chunks = 0;
 
-        ass_event_t* prev_event = ass_track->events + evntcounter - 1;
-                      cur_event = ass_track->events + evntcounter;
+        ass_event_t*   prev_event = ass_track->events + evntcounter - 1;
+                       cur_event  = ass_track->events + evntcounter;
 
         for (chunkcounter = 0; chunkcounter<NUM_OF_TAGS_ALLOWED_PER_LINE; chunkcounter++)
         {
@@ -1603,14 +1712,15 @@ ass_parse_frames(
             }
         }
 
-        int  num_chunks_in_text = split_text_to_chunks(cur_event->Text, vod_strlen(cur_event->Text),
-                                                       event_textp, event_len, event_mask, request_context);
+        int  num_chunks_in_text = split_event_text_to_chunks(cur_event->Text, vod_strlen(cur_event->Text),
+                                      event_textp, event_len, event_mask, request_context);
+
 #ifdef  TEMP_VERBOSITY
         vod_log_error(VOD_LOG_ERR, request_context->log, 0,
             "ass_parse_frames: event=%d num_chunks=%d len0=%d type0=%d len1=%d type1=%d len2=%d type2=%d",
             evntcounter, num_chunks_in_text, event_len[0], event_mask[0], event_len[1], event_mask[1], event_len[2], event_mask[2]);
 #endif
-        if (evntcounter > 0)
+        if (evntcounter > 0 && cur_frame != NULL)
         {
             cur_frame->duration = cur_event->Start - prev_event->Start;
         }

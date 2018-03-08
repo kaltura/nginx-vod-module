@@ -81,11 +81,9 @@ without the overhead of short segments for the whole duration of the video
 
 * support only for UTF-8 input scripts
 
-* SSA V4 / ASS V4+ styles only
-
 * No support for non-standard [Fonts] defined in script, nor to [Graphics], nor to [Pictures].
 
-*
+* No support for Karoake features, moving or angular text.
 
 ### Compilation
 
