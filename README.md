@@ -857,7 +857,7 @@ If the value is set to zero, the live manifest will contain all the segments tha
 
 #### vod_force_playlist_type_vod
 * **syntax**: `vod_force_playlist_type_vod on/off`
-* **default**: `off
+* **default**: `off`
 * **context**: `http`, `server`, `location`
 
 Generate a vod stream even when the media set has `playlistType=live`. 
@@ -870,7 +870,7 @@ This can be useful for clipping vod sections out of a live stream.
 
 #### vod_force_continuous_timestamps
 * **syntax**: `vod_force_continuous_timestamps on/off`
-* **default**: `off
+* **default**: `off`
 * **context**: `http`, `server`, `location`
 
 Generate continuous timestamps even when the media set has gaps (gaps can created by the use of `clipTimes`)
