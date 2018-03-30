@@ -88,6 +88,10 @@ static const u_char pmt_entry_template_mp3[] = {
 	0x03, 0xe0, 0x00, 0xf0, 0x00,
 };
 
+static const u_char pmt_entry_template_dts[] = {
+	0x82, 0xe0, 0x00, 0xf0, 0x00,
+};
+
 static const u_char pmt_entry_template_ac3[] = {
 	0x81, 0xe0, 0x00, 0xf0, 0x00,
 };
@@ -586,6 +590,11 @@ mpegts_encoder_add_stream(
 			case VOD_CODEC_ID_MP3:
 				pmt_entry = pmt_entry_template_mp3;
 				pmt_entry_size = sizeof(pmt_entry_template_mp3);
+				break;
+
+			case VOD_CODEC_ID_DTS:
+				pmt_entry = pmt_entry_template_dts;
+				pmt_entry_size = sizeof(pmt_entry_template_dts);
 				break;
 
 			case VOD_CODEC_ID_AC3:
