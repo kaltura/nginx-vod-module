@@ -2224,7 +2224,7 @@ ngx_http_vod_state_machine_parse_metadata(ngx_http_vod_ctx_t *ctx)
 
 			// read completed synchronously
 			ngx_perf_counter_end(ctx->perf_counters, ctx->perf_counter_context, PC_READ_FILE);
-			// fallthrough
+			// fall through
 
 		case STATE_READ_METADATA_READ:
 			// read the metadata
@@ -2292,7 +2292,7 @@ ngx_http_vod_state_machine_parse_metadata(ngx_http_vod_ctx_t *ctx)
 				}
 				break;
 			}
-			// fallthrough
+			// fall through
 
 		case STATE_READ_FRAMES_OPEN_FILE:
 			ctx->state = STATE_READ_FRAMES_READ;
@@ -2303,7 +2303,7 @@ ngx_http_vod_state_machine_parse_metadata(ngx_http_vod_ctx_t *ctx)
 			{
 				return rc;
 			}
-			// fallthrough
+			// fall through
 
 		case STATE_READ_FRAMES_READ:
 			rc = ngx_http_vod_read_frames(ctx);
@@ -3356,7 +3356,7 @@ ngx_http_vod_run_state_machine(ngx_http_vod_ctx_t *ctx)
 
 		ctx->state = STATE_READ_METADATA_INITIAL;
 		ctx->cur_sequence = ctx->submodule_context.media_set.sequences;
-		// fallthrough
+		// fall through
 
 	case STATE_READ_METADATA_INITIAL:
 	case STATE_READ_METADATA_OPEN_FILE:
@@ -3428,7 +3428,7 @@ ngx_http_vod_run_state_machine(ngx_http_vod_ctx_t *ctx)
 
 		ctx->state = STATE_OPEN_FILE;
 		ctx->cur_source = ctx->submodule_context.media_set.sources_head;
-		// fallthrough
+		// fall through
 
 	case STATE_OPEN_FILE:
 		rc = ngx_http_vod_state_machine_open_files(ctx);
@@ -3516,7 +3516,7 @@ ngx_http_vod_run_state_machine(ngx_http_vod_ctx_t *ctx)
 			ctx->frame_processor = filter_run_state_machine;
 		}
 
-		// fallthrough
+		// fall through
 
 	case STATE_FILTER_FRAMES:
 		// if audio filtering already started, process frames
@@ -3552,7 +3552,7 @@ ngx_http_vod_run_state_machine(ngx_http_vod_ctx_t *ctx)
 
 		ctx->submodule_context.request_context.log->action = "processing frames";
 		ctx->state = STATE_PROCESS_FRAMES;
-		// fallthrough
+		// fall through
 
 	case STATE_PROCESS_FRAMES:
 		rc = ngx_http_vod_process_media_frames(ctx);
@@ -3647,7 +3647,7 @@ ngx_http_vod_handle_read_completed(void* context, ngx_int_t rc, ngx_buf_t* buf, 
 			{
 				break;
 			}
-			// fallthrough
+			// fall through
 
 		default:
 			ngx_log_error(NGX_LOG_ERR, ctx->submodule_context.request_context.log, 0,
@@ -4345,7 +4345,7 @@ ngx_http_vod_map_run_step(ngx_http_vod_ctx_t *ctx)
 			return rc;
 		}
 
-		// fallthrough
+		// fall through
 
 	case STATE_MAP_OPEN:
 
@@ -4394,7 +4394,7 @@ ngx_http_vod_map_run_step(ngx_http_vod_ctx_t *ctx)
 
 		ngx_perf_counter_end(ctx->perf_counters, ctx->perf_counter_context, PC_MAP_PATH);
 
-		// fallthrough
+		// fall through
 
 	case STATE_MAP_READ:
 

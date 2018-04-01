@@ -560,7 +560,7 @@ mp4_cbcs_encrypt_video_write_buffer(void* context, u_char* buffer, uint32_t size
 
 			stream_state->packet_size_left -= slice_header_buf_size - 1;
 			stream_state->cur_state = STATE_PACKET_ENCRYPT;
-			// fallthrough
+			// fall through
 
 		case STATE_PACKET_ENCRYPT:
 			if (stream_state->packet_size_left > 0 && 
@@ -598,7 +598,7 @@ mp4_cbcs_encrypt_video_write_buffer(void* context, u_char* buffer, uint32_t size
 					stream_state->next_block_size_left = 0;
 				}
 			}
-			// fallthrough
+			// fall through
 
 		case STATE_PACKET_COPY:
 			// write clear bytes

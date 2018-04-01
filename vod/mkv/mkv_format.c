@@ -1350,7 +1350,7 @@ mkv_parse_frame(
 			}
 
 			frame_parse_context->state = FRS_DONE;
-			// fallthrough
+			// fall through
 
 		case FRS_DONE:
 			track_context->done = TRUE;
