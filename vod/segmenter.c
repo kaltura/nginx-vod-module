@@ -1906,6 +1906,7 @@ segmenter_get_segment_durations_accurate(
 		{
 			break;
 		}
+		// fall through
 
 	default:
 		return segmenter_get_segment_durations_estimate(
