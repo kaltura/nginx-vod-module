@@ -2663,6 +2663,11 @@ mp4_parser_process_moov_atom_callback(void* ctx, atom_info_t* atom_info)
 				metadata_parse_context.media_info.codec_id = VOD_CODEC_ID_MP3;
 				extra_data_required = FALSE;
 				break;
+
+			case 0xa9:
+				metadata_parse_context.media_info.codec_id = VOD_CODEC_ID_DTS;
+				extra_data_required = FALSE;
+				break;
 			}
 			break;
 
@@ -2678,7 +2683,6 @@ mp4_parser_process_moov_atom_callback(void* ctx, atom_info_t* atom_info)
 
 		case FORMAT_OPUS:
 			metadata_parse_context.media_info.codec_id = VOD_CODEC_ID_OPUS;
-			extra_data_required = TRUE;
 			break;
 		}
 		break;
