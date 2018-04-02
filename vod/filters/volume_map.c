@@ -372,9 +372,9 @@ volume_map_writer_process(void* context)
 {
 	volume_map_writer_state_t* state = context;
 	volume_map_frame_t data_buf;
-	volume_map_frame_t* data;
+	volume_map_frame_t* data = NULL;
 	vod_status_t rc;
-	int64_t pts;
+	int64_t pts = 0;
 
 	for (;;)
 	{
