@@ -1177,7 +1177,7 @@ m3u8_builder_build_master_playlist(
 		return rc;
 	}
 
-	iframe_playlist = media_set->type == MEDIA_SET_VOD &&
+	iframe_playlist = !conf->iframes_disable && media_set->type == MEDIA_SET_VOD &&
 		media_set->timing.total_count <= 1 &&
 		encryption_method == HLS_ENC_NONE &&
 		conf->container_format != HLS_CONTAINER_FMP4 &&

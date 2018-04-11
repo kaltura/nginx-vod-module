@@ -11,6 +11,7 @@ typedef struct
 	ngx_flag_t absolute_master_urls;
 	ngx_flag_t absolute_index_urls;
 	ngx_flag_t absolute_iframe_urls;
+	ngx_flag_t iframes_disable;
 	ngx_str_t master_file_name_prefix;
 	hls_mpegts_muxer_conf_t mpegts_muxer_config;
 	vod_uint_t encryption_method;

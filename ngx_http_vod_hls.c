@@ -981,6 +981,7 @@ ngx_http_vod_hls_create_loc_conf(
 	conf->absolute_master_urls = NGX_CONF_UNSET;
 	conf->absolute_index_urls = NGX_CONF_UNSET;
 	conf->absolute_iframe_urls = NGX_CONF_UNSET;
+	conf->iframes_disable = NGX_CONF_UNSET;
 	conf->mpegts_muxer_config.interleave_frames = NGX_CONF_UNSET;
 	conf->mpegts_muxer_config.align_frames = NGX_CONF_UNSET;
 	conf->mpegts_muxer_config.output_id3_timestamps = NGX_CONF_UNSET;
@@ -999,9 +1000,10 @@ ngx_http_vod_hls_merge_loc_conf(
 	ngx_conf_merge_value(conf->absolute_master_urls, prev->absolute_master_urls, 1);
 	ngx_conf_merge_value(conf->absolute_index_urls, prev->absolute_index_urls, 1);
 	ngx_conf_merge_value(conf->absolute_iframe_urls, prev->absolute_iframe_urls, 0);
+    ngx_conf_merge_value(conf->iframes_disable, prev->iframes_disable, 0);
 
 	ngx_conf_merge_str_value(conf->master_file_name_prefix, prev->master_file_name_prefix, "master");
-	ngx_conf_merge_str_value(conf->m3u8_config.index_file_name_prefix, prev->m3u8_config.index_file_name_prefix, "index");	
+	ngx_conf_merge_str_value(conf->m3u8_config.index_file_name_prefix, prev->m3u8_config.index_file_name_prefix, "index");
 	ngx_conf_merge_str_value(conf->m3u8_config.iframes_file_name_prefix, prev->m3u8_config.iframes_file_name_prefix, "iframes");
 	ngx_conf_merge_str_value(conf->m3u8_config.segment_file_name_prefix, prev->m3u8_config.segment_file_name_prefix, "seg");
 	ngx_conf_merge_str_value(conf->m3u8_config.init_file_name_prefix, prev->m3u8_config.init_file_name_prefix, "init");
