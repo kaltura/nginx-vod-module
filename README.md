@@ -1514,15 +1514,15 @@ When enabled the server returns absolute playlist URLs in master playlist reques
 
 When enabled the server returns absolute segment URLs in media playlist requests
 
-#### vod_hls_iframes_disable
-* **syntax**: `vod_hls_iframes_disable on/off`
+#### vod_hls_absolute_iframe_urls
+* **syntax**: `vod_hls_absolute_iframe_urls on/off`
 * **default**: `off`
 * **context**: `http`, `server`, `location`
 
 When enabled the server returns absolute segment URLs in iframe playlist requests
 
-#### vod_hls_force_unmuxed_segments
-* **syntax**: `vod_disable_iframe on/off`
+#### vod_hls_iframes_disable
+* **syntax**: `vod_hls_iframes_disable on/off`
 * **default**: `off`
 * **context**: `http`, `server`, `location`
 
