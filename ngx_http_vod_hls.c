@@ -1000,7 +1000,7 @@ ngx_http_vod_hls_merge_loc_conf(
 	ngx_conf_merge_value(conf->absolute_master_urls, prev->absolute_master_urls, 1);
 	ngx_conf_merge_value(conf->absolute_index_urls, prev->absolute_index_urls, 1);
 	ngx_conf_merge_value(conf->absolute_iframe_urls, prev->absolute_iframe_urls, 0);
-    ngx_conf_merge_value(conf->output_iframes_playlist, prev->output_iframes_playlist, 1);
+	ngx_conf_merge_value(conf->output_iframes_playlist, prev->output_iframes_playlist, 1);
 
 	ngx_conf_merge_str_value(conf->master_file_name_prefix, prev->master_file_name_prefix, "master");
 	ngx_conf_merge_str_value(conf->m3u8_config.index_file_name_prefix, prev->m3u8_config.index_file_name_prefix, "index");
