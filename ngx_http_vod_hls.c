@@ -985,7 +985,7 @@ ngx_http_vod_hls_create_loc_conf(
 	conf->mpegts_muxer_config.align_frames = NGX_CONF_UNSET;
 	conf->mpegts_muxer_config.output_id3_timestamps = NGX_CONF_UNSET;
 	conf->encryption_method = NGX_CONF_UNSET_UINT;
-    conf->m3u8_config.output_iframes_playlist = NGX_CONF_UNSET;
+	conf->m3u8_config.output_iframes_playlist = NGX_CONF_UNSET;
 	conf->m3u8_config.force_unmuxed_segments = NGX_CONF_UNSET;
 	conf->m3u8_config.container_format = NGX_CONF_UNSET_UINT;
 }

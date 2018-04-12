@@ -1526,7 +1526,7 @@ When enabled the server returns absolute segment URLs in iframe playlist request
 * **default**: `on`
 * **context**: `http`, `server`, `location`
 
-When enabled iframe playlists are not returned as part of master playlists
+When disabled iframe playlists are not returned as part of master playlists
 
 #### vod_hls_master_file_name_prefix
 * **syntax**: `vod_hls_master_file_name_prefix name`
