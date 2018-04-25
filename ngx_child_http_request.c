@@ -139,10 +139,11 @@ ngx_child_request_wev_handler(ngx_http_request_t *r)
 		{
 		case NGX_HTTP_OK:
 		case NGX_HTTP_PARTIAL_CONTENT:
-			if (u->length != 0 && u->length != -1 && !u->headers_in.chunked)
+			if (u->headers_in.content_length_n > 0 && u->headers_in.content_length_n != u->buffer.last - u->buffer.pos)
 			{
 				ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
-					"ngx_child_request_wev_handler: upstream connection was closed with %O bytes left to read", u->length);
+					"ngx_child_request_wev_handler: upstream connection was closed with %O bytes left to read", 
+					u->headers_in.content_length_n - (u->buffer.last - u->buffer.pos));
 				rc = NGX_HTTP_BAD_GATEWAY;
 			}
 			break;
