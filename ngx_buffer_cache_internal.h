@@ -28,6 +28,7 @@ typedef struct {
 	u_char* start_offset;
 	size_t buffer_size;
 	ngx_atomic_t state;
+	ngx_atomic_t ref_count;
 	time_t access_time;
 	time_t write_time;
 	u_char key[BUFFER_CACHE_KEY_SIZE];
