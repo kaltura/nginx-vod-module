@@ -15,7 +15,7 @@
 
 // manifest constants
 #define VOD_EDASH_MANIFEST_CONTENT_PROTECTION_CENC									\
-	"        <ContentProtection schemeIdUri=\"urn:mpeg:dash:mp4protection:2011\" value=\"cenc\"/>\n"
+	"        <ContentProtection xmlns:cenc=\"urn:mpeg:cenc:2013\" schemeIdUri=\"urn:mpeg:dash:mp4protection:2011\" value=\"cenc\"/>\n"
 
 #define VOD_EDASH_MANIFEST_CONTENT_PROTECTION_CENC_PART1							\
 	"        <ContentProtection xmlns:cenc=\"urn:mpeg:cenc:2013\" schemeIdUri=\"urn:uuid:"
