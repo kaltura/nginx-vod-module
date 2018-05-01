@@ -32,10 +32,11 @@ typedef struct ass_style {
     uint32_t    SecondaryColour;
     uint32_t    OutlineColour;
     uint32_t    BackColour;
-    int         Bold;
-    int         Italic;
-    int         Underline;
-    int         StrikeOut;
+    bool_t      Bold;
+    bool_t      Italic;
+    bool_t      Underline;
+    bool_t      StrikeOut;
+    bool_t      bRightToLeftLanguage;
     double      ScaleX;
     double      ScaleY;
     double      Spacing;
@@ -48,7 +49,6 @@ typedef struct ass_style {
     int         MarginR;
     int         MarginV;
     int         Encoding;
-    int         treat_fontname_as_pattern;
     int         Justify;
 } ass_style_t;
 
@@ -69,6 +69,7 @@ typedef struct ass_event {
     int         MarginV;
     char       *Effect;
     char       *Text;
+    bool_t      bRightToLeftLanguage;
 } ass_event_t;
 
 /*
@@ -101,6 +102,8 @@ typedef struct ass_track {
     int             ScaledBorderAndShadow;
     int             Kerning;
     char           *Language;
+    char           *Title;
+    bool_t          bRightToLeftLanguage;
 
     int             default_style;    // index of default style, defaults to zero
     char           *name;             // file name in case of external subs, 0 for streams

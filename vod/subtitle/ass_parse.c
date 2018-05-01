@@ -637,6 +637,7 @@ void ass_free_track(vod_pool_t* pool, ass_track_t *track)
     free(track->style_format);
     free(track->event_format);
     free(track->Language);
+    free(track->Title);
     if (track->styles) {
         for (i = 0; i < track->n_styles; ++i)
             ass_free_style(track, i);
@@ -677,6 +678,7 @@ static void set_default_style(ass_style_t *style)
     style->Shadow           = 3;
     style->Alignment        = 2;
     style->MarginL = style->MarginR = style->MarginV = 20;
+    style->bRightToLeftLanguage = FALSE;
 }
 
 static long long string2timecode(char *p)
@@ -874,7 +876,7 @@ int numpad2align(int val)
  * \param str string to parse, zero-terminated
  * Allocates a new style struct.
 */
-static int process_style(ass_track_t *track, char *str)
+static int process_style(ass_track_t *track, char *str, request_context_t* request_context)
 {
 
     char *token;
@@ -981,6 +983,14 @@ static int process_style(ass_track_t *track, char *str)
         style->Name = strdup("Default");
     if (!style->FontName)
         style->FontName = strdup("Arial");
+
+    if ( !ass_strncasecmp(style->FontName, "Adobe Arabic", 12) ) {
+        //vod_log_error(VOD_LOG_ERR, request_context->log, 0, "Style font was Adobe Arabic");
+        style->bRightToLeftLanguage = TRUE;
+    } else {
+        //vod_log_error(VOD_LOG_ERR, request_context->log, 0, "Style font was: %s", style->FontName);
+        style->bRightToLeftLanguage = track->bRightToLeftLanguage;
+    }
     free(format);
     return 0;
 
@@ -996,7 +1006,7 @@ static int process_styles_line(ass_track_t *track, char *str, request_context_t*
     } else if (!strncmp(str, "Style:", 6)) {
         char *p = str + 6;
         skip_spaces(&p);
-        process_style(track, p);
+        process_style(track, p, request_context);
     }
     return 0;
 }
@@ -1017,11 +1027,20 @@ static int process_info_line(ass_track_t *track, char *str, request_context_t* r
         track->Kerning = parse_bool(str + 8);
     } else if (!strncmp(str, "YCbCr Matrix:", 13)) {
         // ignore for now
-    } else if (!strncmp(str, "Language:", 9)) {
+    } else if (!strncmp(str, "Language:", 9)) { // This field is not part of the ASS/SSA specs
         char *p = str + 9;
         while (*p && ass_isspace(*p)) p++;
         free(track->Language);
         track->Language = strndup(p, 2);
+    } else if (!strncmp(str, "Title:", 6)) {
+        char *p = str + 6;
+        char *strt, *end;
+        while (*p && ass_isspace(*p)) p++; strt = p;
+        while (*p && !ass_isspace(*p)) p++; end = p;
+        free(track->Title);
+        // Title: ﺎﻠﻋﺮﺒﻳﺓ
+        track->Title = strndup(p, FFMAX(14, (size_t)(end-strt)));
+        track->bRightToLeftLanguage = ((14 == (end-strt)) && (strt[0] == (char)0xD8) && (strt[13] == (char)0xA9));
     }
     return 0;
 }
