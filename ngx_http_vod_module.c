@@ -1460,14 +1460,17 @@ ngx_http_vod_init_parse_params_metadata(
 	uint32_t* request_tracks_mask;
 	uint32_t media_type;
 
-	parse_params->parse_type = request->parse_type;
-	if (request->request_class == REQUEST_CLASS_MANIFEST &&
-		ctx->submodule_context.media_set.timing.durations == NULL)
+	if (request != NULL)
 	{
-		parse_params->parse_type |= segmenter->parse_type;
+		parse_params->parse_type = request->parse_type;
+		if (request->request_class == REQUEST_CLASS_MANIFEST &&
+			ctx->submodule_context.media_set.timing.durations == NULL)
+		{
+			parse_params->parse_type |= segmenter->parse_type;
+		}
+		parse_params->parse_type |= ctx->submodule_context.conf->parse_flags;
+		parse_params->codecs_mask = request->codecs_mask;
 	}
-	parse_params->parse_type |= ctx->submodule_context.conf->parse_flags;
-	parse_params->codecs_mask = request->codecs_mask;
 
 	request_tracks_mask = ctx->submodule_context.request_params.tracks_mask;
 	if (ctx->submodule_context.request_params.sequence_tracks_mask != NULL)
@@ -1666,6 +1669,11 @@ ngx_http_vod_parse_metadata(
 	}
 	parse_params.clip_from = cur_source->clip_from;
 
+	ngx_http_vod_init_parse_params_metadata(
+		ctx,
+		tracks_mask,
+		&parse_params);
+
 	if (request == NULL)
 	{
 		// Note: the other fields in parse_params are not required here
@@ -1695,11 +1703,6 @@ ngx_http_vod_parse_metadata(
 	}
 
 	ngx_perf_counter_start(ctx->perf_counter_context);
-
-	ngx_http_vod_init_parse_params_metadata(
-		ctx,
-		tracks_mask,
-		&parse_params);
 
 	// parse the basic metadata
 	rc = ctx->format->parse_metadata(
@@ -3785,14 +3788,17 @@ ngx_http_vod_start_processing_media_file(ngx_http_vod_ctx_t *ctx)
 	ctx = ngx_http_get_module_ctx(r, ngx_http_vod_module);
 	ctx->state_machine = ngx_http_vod_run_state_machine;
 
+	cur_source = ctx->submodule_context.media_set.sources_head;
+
 	// handle serve requests
 	if (ctx->request == NULL &&
-		ctx->submodule_context.media_set.sources_head->clip_from == 0 &&
-		ctx->submodule_context.media_set.sources_head->clip_to == ULLONG_MAX)
+		cur_source->clip_from == 0 &&
+		cur_source->clip_to == ULLONG_MAX &&
+		cur_source->tracks_mask[MEDIA_TYPE_AUDIO] == 0xffffffff &&
+		cur_source->tracks_mask[MEDIA_TYPE_VIDEO] == 0xffffffff)
 	{
 		ctx->state = STATE_DUMP_OPEN_FILE;
 
-		cur_source = ctx->submodule_context.media_set.sources_head;
 		ctx->cur_source = cur_source;
 
 		rc = ctx->reader->open(r, &cur_source->mapped_uri, 0, &cur_source->reader_context);
@@ -3812,9 +3818,7 @@ ngx_http_vod_start_processing_media_file(ngx_http_vod_ctx_t *ctx)
 	// initialize the file keys
 	conf = ctx->submodule_context.conf;
 
-	for (cur_source = ctx->submodule_context.media_set.sources_head;
-		cur_source != NULL;
-		cur_source = cur_source->next)
+	for (; cur_source != NULL; cur_source = cur_source->next)
 	{
 		ngx_http_vod_init_file_key(cur_source, ctx->file_key_prefix);
 	}

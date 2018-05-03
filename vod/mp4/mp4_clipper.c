@@ -203,6 +203,7 @@ typedef struct {
 typedef struct {
 	request_context_t* request_context;
 	media_parse_params_t parse_params;
+	uint32_t track_indexes[MEDIA_TYPE_COUNT];
 	uint32_t mvhd_timescale;
 	mp4_clipper_parse_result_t result;
 } process_moov_context_t;
@@ -1408,6 +1409,41 @@ mp4_clipper_stco_write_atom(u_char* p, void* write_context, stco_clip_result_t* 
 }
 
 static vod_status_t
+mp4_clipper_get_media_type(
+	request_context_t* request_context, 
+	atom_info_t* hdlr_atom_info, 
+	uint32_t* media_type)
+{
+	const hdlr_atom_t* atom = (const hdlr_atom_t*)hdlr_atom_info->ptr;
+	uint32_t type;
+
+	if (hdlr_atom_info->size < sizeof(*atom))
+	{
+		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+			"mp4_clipper_get_media_type: hdlr atom size %uL too small", hdlr_atom_info->size);
+		return VOD_BAD_DATA;
+	}
+
+	type = parse_le32(atom->type);
+	switch (type)
+	{
+	case HDLR_TYPE_VIDE:
+		*media_type = MEDIA_TYPE_VIDEO;
+		break;
+
+	case HDLR_TYPE_SOUN:
+		*media_type = MEDIA_TYPE_AUDIO;
+		break;
+
+	default:
+		*media_type = MEDIA_TYPE_NONE;
+		break;
+	}
+
+	return VOD_OK;
+}
+
+static vod_status_t
 mp4_clipper_process_moov_atom_callback(void* ctx, atom_info_t* atom_info)
 {
 	process_moov_context_t* context = (process_moov_context_t*)ctx;
@@ -1417,6 +1453,8 @@ mp4_clipper_process_moov_atom_callback(void* ctx, atom_info_t* atom_info)
 	vod_status_t rc;
 	uint64_t first_offset = 0;
 	uint64_t last_offset = 0;
+	uint32_t track_index;
+	uint32_t media_type;
 
 	switch (atom_info->name)
 	{
@@ -1453,6 +1491,25 @@ mp4_clipper_process_moov_atom_callback(void* ctx, atom_info_t* atom_info)
 	if (rc != VOD_OK)
 	{
 		return rc;
+	}
+
+	// check whether we should include this track
+	rc = mp4_clipper_get_media_type(
+		context->request_context,
+		&parsed_trak->atoms[TRAK_ATOM_HDLR],
+		&media_type);
+	if (rc != VOD_OK)
+	{
+		return rc;
+	}
+
+	if (media_type != MEDIA_TYPE_NONE)
+	{
+		track_index = context->track_indexes[media_type]++;
+		if ((context->parse_params.required_tracks_mask[media_type] & (1 << track_index)) == 0)
+		{
+			return VOD_OK;
+		}
 	}
 
 	parse_trak_atom_context_t parse_context;
@@ -1680,6 +1737,7 @@ mp4_clipper_parse_moov(
 
 	process_moov_context.request_context = request_context;
 	process_moov_context.parse_params = *parse_params;
+	vod_memzero(process_moov_context.track_indexes, sizeof(process_moov_context.track_indexes));
 	process_moov_context.result.copy_data = copy_data;
 	process_moov_context.result.moov_atom_size = ATOM_HEADER_SIZE;
 	process_moov_context.result.alloc_size = ATOM_HEADER_SIZE;		// moov

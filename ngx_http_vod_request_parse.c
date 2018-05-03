@@ -753,6 +753,7 @@ static ngx_http_vod_uri_param_def_t uri_param_defs[] = {
 static ngx_http_vod_uri_param_def_t pd_uri_param_defs[] = {
 	{ offsetof(ngx_http_vod_loc_conf_t, clip_to_param_name), "clip to", ngx_http_vod_parse_uint64_param, offsetof(media_clip_source_t, clip_to) },
 	{ offsetof(ngx_http_vod_loc_conf_t, clip_from_param_name), "clip from", ngx_http_vod_parse_uint64_param, offsetof(media_clip_source_t, clip_from) },
+	{ offsetof(ngx_http_vod_loc_conf_t, tracks_param_name), "tracks", ngx_http_vod_parse_tracks_param, offsetof(media_clip_source_t, tracks_mask) },
 	{ -1, NULL, NULL, 0 }
 };
 
