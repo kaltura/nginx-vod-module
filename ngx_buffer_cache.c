@@ -387,7 +387,7 @@ ngx_buffer_cache_release(
 	if (!sh->reset)
 	{
 		entry = ngx_buffer_cache_rbtree_lookup(&sh->rbtree, key, hash);
-		if (entry != NULL && entry->state == CES_READY && entry->write_time == token)
+		if (entry != NULL && entry->state == CES_READY && (uint32_t)entry->write_time == token)
 		{
 			(void)ngx_atomic_fetch_add(&entry->ref_count, -1);
 		}
