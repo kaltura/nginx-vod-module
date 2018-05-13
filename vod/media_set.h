@@ -28,6 +28,12 @@ enum {
 	MEDIA_SET_LIVE,
 };
 
+typedef enum {
+	SEGMENT_TIME_ABSOLUTE,
+	SEGMENT_TIME_END_RELATIVE,
+	SEGMENT_TIME_START_RELATIVE,
+} segment_time_type_t;
+
 // typedefs
 struct segmenter_conf_s;
 struct audio_filter_s;
@@ -153,6 +159,7 @@ typedef struct {
 
 typedef struct {
 	int64_t segment_time;		// used in mss
+	segment_time_type_t segment_time_type;
 	uint32_t segment_index;
 	uint32_t clip_index;
 	uint32_t pts_delay;
