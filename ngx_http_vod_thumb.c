@@ -231,7 +231,7 @@ ngx_http_vod_thumb_parse_uri_file_name(
 	request_params_t* request_params,
 	const ngx_http_vod_request_t** request)
 {
-	bool_t negative;
+	segment_time_type_t time_type;
 	int64_t time;
 	ngx_int_t rc;
 
@@ -254,11 +254,21 @@ ngx_http_vod_thumb_parse_uri_file_name(
 		start_pos++;		// skip the -
 	}
 
-	negative = 0;
-	if (start_pos < end_pos && *start_pos == '-')
+	time_type = SEGMENT_TIME_ABSOLUTE;
+	if (start_pos < end_pos)
 	{
-		start_pos++;		// skip the -
-		negative = 1;
+		switch (*start_pos)
+		{
+		case '-':
+			start_pos++;		// skip the -
+			time_type = SEGMENT_TIME_END_RELATIVE;
+			break;
+
+		case '+':
+			start_pos++;		// skip the +
+			time_type = SEGMENT_TIME_START_RELATIVE;
+			break;
+		}
 	}
 
 	if (start_pos >= end_pos || *start_pos < '0' || *start_pos > '9')
@@ -273,11 +283,6 @@ ngx_http_vod_thumb_parse_uri_file_name(
 	{
 		time = time * 10 + *start_pos++ - '0';
 	} while (start_pos < end_pos && *start_pos >= '0' && *start_pos <= '9');
-
-	if (negative)
-	{
-		time = -time;
-	}
 
 	if (time == INVALID_SEGMENT_TIME)
 	{
@@ -306,6 +311,7 @@ ngx_http_vod_thumb_parse_uri_file_name(
 	}
 	
 	request_params->segment_time = time;
+	request_params->segment_time_type = time_type;
 	request_params->tracks_mask[MEDIA_TYPE_AUDIO] = 0;
 	request_params->tracks_mask[MEDIA_TYPE_SUBTITLE] = 0;
 
