@@ -336,6 +336,8 @@ dfxp_xml_sax_error(void *data, const char *msg, ...)
 	xmlParserCtxtPtr ctxt = data;
 	request_context_t* request_context;
 	va_list args;
+	u_char* end;
+	u_char* p;
 	u_char buf[VOD_MAX_ERROR_STR];
 	size_t n;
 
@@ -348,6 +350,16 @@ dfxp_xml_sax_error(void *data, const char *msg, ...)
 	va_end(args);
 
 	while (--n && (buf[n] == CR || buf[n] == LF)) { /* void */ }
+
+	end = buf + n;
+
+	for (p = buf; p < end; p++)
+	{
+		if (*p == CR || *p == LF)
+		{
+			*p = ' ';
+		}
+	}
 
 	vod_log_error(VOD_LOG_ERR, request_context->log, 0,
 		"dfxp_xml_sax_error: libxml2 error: %*s", n + 1, buf);
