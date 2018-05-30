@@ -159,6 +159,7 @@ ngx_buffer_cache_init(ngx_shm_zone_t *shm_zone, void *data)
 	p = ngx_sprintf(cache->shpool->log_ctx, " in buffer cache \"%V\"%Z", &shm_zone->shm.name);
 
 	// allocate the shared cache state
+	p = ngx_align_ptr(p, sizeof(void *));
 	sh = (ngx_buffer_cache_sh_t*)p;
 	p += sizeof(*sh);
 	cache->sh = sh;
@@ -166,6 +167,7 @@ ngx_buffer_cache_init(ngx_shm_zone_t *shm_zone, void *data)
 	cache->shpool->data = sh;
 
 	// initialize fixed cache fields
+	p = ngx_align_ptr(p, sizeof(void *));
 	sh->entries_start = (ngx_buffer_cache_entry_t*)p;
 	sh->buffers_end = shm_zone->shm.addr + shm_zone->shm.size;
 	sh->access_time = 0;
