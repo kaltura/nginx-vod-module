@@ -2427,7 +2427,8 @@ media_set_parse_json(
 			return rc;
 		}
 
-		last_clip_end = result->timing.first_time + result->timing.total_duration;
+		last_clip_end = result->timing.original_times[result->timing.total_count - 1] +
+			result->timing.durations[result->timing.total_count - 1];
 	}
 
 	// get the key frame durations
