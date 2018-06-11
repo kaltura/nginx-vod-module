@@ -144,23 +144,23 @@ static ebml_spec_t mkv_spec_index[] = {
 // cluster
 static ebml_spec_t mkv_spec_cluster_fields[] = {
 	{ MKV_ID_CLUSTERTIMECODE,		EBML_UINT,		offsetof(mkv_cluster_t, timecode),			NULL },
-	{ MKV_ID_SIMPLEBLOCK,			EBML_CUSTOM,	0,											mkv_parse_frame },
+	{ MKV_ID_SIMPLEBLOCK,			EBML_CUSTOM | EBML_TRUNCATE,	0,							mkv_parse_frame },
 	{ 0, EBML_NONE, 0, NULL }
 };
 
 static ebml_spec_t mkv_spec_cluster[] = {
-	{ MKV_ID_CLUSTER,				EBML_MASTER,	0,											mkv_spec_cluster_fields },
+	{ MKV_ID_CLUSTER,				EBML_MASTER | EBML_TRUNCATE,	0,							mkv_spec_cluster_fields },
 	{ 0, EBML_NONE, 0, NULL }
 };
 
 static ebml_spec_t mkv_spec_bitrate_estimate_cluster_fields[] = {
 	{ MKV_ID_CLUSTERTIMECODE,		EBML_UINT,		offsetof(mkv_cluster_t, timecode),			NULL },
-	{ MKV_ID_SIMPLEBLOCK,			EBML_CUSTOM,	0,											mkv_parse_frame_estimate_bitrate },
+	{ MKV_ID_SIMPLEBLOCK,			EBML_CUSTOM | EBML_TRUNCATE,	0,							mkv_parse_frame_estimate_bitrate },
 	{ 0, EBML_NONE, 0, NULL }
 };
 
 static ebml_spec_t mkv_spec_bitrate_estimate_cluster[] = {
-	{ MKV_ID_CLUSTER,				EBML_MASTER,	0,											mkv_spec_bitrate_estimate_cluster_fields },
+	{ MKV_ID_CLUSTER,				EBML_MASTER | EBML_TRUNCATE,	0,							mkv_spec_bitrate_estimate_cluster_fields },
 	{ 0, EBML_NONE, 0, NULL }
 };
 
