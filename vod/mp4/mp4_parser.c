@@ -168,7 +168,7 @@ static const relevant_atom_t relevant_atoms_stbl[] = {
 	{ ATOM_NAME_STSS, offsetof(trak_atom_infos_t, stss), NULL },
 	{ ATOM_NAME_STSD, offsetof(trak_atom_infos_t, stsd), NULL },
 	{ ATOM_NAME_SAIZ, offsetof(trak_atom_infos_t, saiz), NULL },
-	{ ATOM_NAME_SENC, offsetof(trak_atom_infos_t, senc), NULL },
+	{ ATOM_NAME_SENC, offsetof(trak_atom_infos_t, senc), NULL },		// senc should be under trak, maintained for backward compatibility
 	{ ATOM_NAME_NULL, 0, NULL }
 };
 
@@ -194,6 +194,7 @@ static const relevant_atom_t relevant_atoms_trak[] = {
 	{ ATOM_NAME_MDIA, 0, relevant_atoms_mdia },
 	{ ATOM_NAME_EDTS, 0, relevant_atoms_edts },
 	{ ATOM_NAME_TKHD, offsetof(trak_atom_infos_t, tkhd), NULL },
+	{ ATOM_NAME_SENC, offsetof(trak_atom_infos_t, senc), NULL },
 	{ ATOM_NAME_NULL, 0, NULL }
 };
 
