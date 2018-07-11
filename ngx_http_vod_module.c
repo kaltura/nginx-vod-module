@@ -3362,6 +3362,8 @@ ngx_http_vod_run_generators(ngx_http_vod_ctx_t *ctx)
 				"ngx_http_vod_run_generators: generator failed %i", rc);
 			return ngx_http_vod_status_to_ngx_error(ctx->submodule_context.r, rc);
 		}
+
+		ngx_http_vod_update_source_tracks(&ctx->submodule_context.request_context, ctx->cur_source);
 	}
 
 	ctx->cur_source = NULL;
