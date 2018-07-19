@@ -10,7 +10,7 @@ METHOD(webvtt_read_timestamp)(CHAR_TYPE* cur_pos, CHAR_TYPE** end_pos)
 	// minus
 	if (*cur_pos == '-')
 	{
-		cur_pos++;
+		cur_pos += CHAR_SIZE;
 		sign = 0;		// clamp the timestamp to zero (negative is interpreted as error)
 	}
 	else
@@ -25,7 +25,7 @@ METHOD(webvtt_read_timestamp)(CHAR_TYPE* cur_pos, CHAR_TYPE** end_pos)
 	}
 
 	hours = 0;
-	for (; isdigit(*cur_pos); cur_pos++)
+	for (; isdigit(*cur_pos); cur_pos += CHAR_SIZE)
 	{
 		hours = hours * 10 + (*cur_pos - '0');
 	}
@@ -35,28 +35,28 @@ METHOD(webvtt_read_timestamp)(CHAR_TYPE* cur_pos, CHAR_TYPE** end_pos)
 	{
 		return -1;
 	}
-	cur_pos++;
+	cur_pos += CHAR_SIZE;
 
 	// 2 minute digits
-	if (!isdigit(cur_pos[0]) || !isdigit(cur_pos[1]))
+	if (!isdigit(cur_pos[0]) || !isdigit(cur_pos[CHAR_SIZE]))
 	{
 		return -1;
 	}
-	minutes = (cur_pos[0] - '0') * 10 + (cur_pos[1] - '0');
-	cur_pos += 2;
+	minutes = (cur_pos[0] - '0') * 10 + (cur_pos[CHAR_SIZE] - '0');
+	cur_pos += 2 * CHAR_SIZE;
 
 	// colon
 	if (*cur_pos == ':')
 	{
-		cur_pos++;
+		cur_pos += CHAR_SIZE;
 
 		// 2 second digits
-		if (!isdigit(cur_pos[0]) || !isdigit(cur_pos[1]))
+		if (!isdigit(cur_pos[0]) || !isdigit(cur_pos[CHAR_SIZE]))
 		{
 			return -1;
 		}
-		seconds = (cur_pos[0] - '0') * 10 + (cur_pos[1] - '0');
-		cur_pos += 2;
+		seconds = (cur_pos[0] - '0') * 10 + (cur_pos[CHAR_SIZE] - '0');
+		cur_pos += 2 * CHAR_SIZE;
 	}
 	else
 	{
@@ -76,7 +76,7 @@ METHOD(webvtt_read_timestamp)(CHAR_TYPE* cur_pos, CHAR_TYPE** end_pos)
 
 		return sign * 1000 * (seconds + 60 * (minutes + 60 * hours));
 	}
-	cur_pos++;
+	cur_pos += CHAR_SIZE;
 
 	// 1-3 digit millis
 	if (!isdigit(cur_pos[0]))
@@ -84,19 +84,22 @@ METHOD(webvtt_read_timestamp)(CHAR_TYPE* cur_pos, CHAR_TYPE** end_pos)
 		return -1;
 	}
 
-	millis = (*cur_pos++ - '0') * 100;
+	millis = (*cur_pos - '0') * 100;
+	cur_pos += CHAR_SIZE;
 
 	if (isdigit(*cur_pos))
 	{
-		millis += (*cur_pos++ - '0') * 10;
+		millis += (*cur_pos - '0') * 10;
+		cur_pos += CHAR_SIZE;
 
 		if (isdigit(*cur_pos))
 		{
-			millis += (*cur_pos++ - '0');
+			millis += (*cur_pos - '0');
+			cur_pos += CHAR_SIZE;
 
 			while (isdigit(*cur_pos))
 			{
-				cur_pos++;
+				cur_pos += CHAR_SIZE;
 			}
 		}
 	}
@@ -112,7 +115,7 @@ METHOD(webvtt_read_timestamp)(CHAR_TYPE* cur_pos, CHAR_TYPE** end_pos)
 static bool_t
 METHOD(webvtt_identify_srt)(CHAR_TYPE* p)
 {
-	for (; isspace(*p); p++);
+	for (; isspace(*p); p += CHAR_SIZE);
 
 	// n digits
 	if (!isdigit(*p))
@@ -120,23 +123,23 @@ METHOD(webvtt_identify_srt)(CHAR_TYPE* p)
 		return FALSE;
 	}
 
-	for (; isdigit(*p); p++);
+	for (; isdigit(*p); p += CHAR_SIZE);
 
-	for (; *p == ' ' || *p == '\t'; p++);
+	for (; *p == ' ' || *p == '\t'; p += CHAR_SIZE);
 
 	// new line
 	switch (*p)
 	{
 	case '\r':
-		p++;
+		p += CHAR_SIZE;
 		if (*p == '\n')
 		{
-			p++;
+			p += CHAR_SIZE;
 		}
 		break;
 
 	case '\n':
-		p++;
+		p += CHAR_SIZE;
 		break;
 
 	default:
@@ -149,8 +152,8 @@ METHOD(webvtt_identify_srt)(CHAR_TYPE* p)
 		return FALSE;
 	}
 
-	for (; *p == ' ' || *p == '\t'; p++);
+	for (; *p == ' ' || *p == '\t'; p += CHAR_SIZE);
 
 	// cue marker
-	return p[0] == '-' && p[1] == '-' && p[2] == '>';
+	return p[0] == '-' && p[CHAR_SIZE] == '-' && p[2 * CHAR_SIZE] == '>';
 }
