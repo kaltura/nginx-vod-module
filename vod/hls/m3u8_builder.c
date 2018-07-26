@@ -27,6 +27,9 @@
 #define M3U8_STREAM_TAG_AUDIO ",AUDIO=\"" M3U8_EXT_MEDIA_GROUP_ID_AUDIO "%uD\""
 #define M3U8_STREAM_TAG_SUBTITLES ",SUBTITLES=\"" M3U8_EXT_MEDIA_GROUP_ID_SUBTITLES "%uD\""
 
+#define M3U8_VIDEO_RANGE_SDR ",VIDEO-RANGE=SDR"
+#define M3U8_VIDEO_RANGE_PQ ",VIDEO-RANGE=PQ"
+
 // constants
 static const u_char m3u8_header[] = "#EXTM3U\n";
 static const u_char m3u8_footer[] = "#EXT-X-ENDLIST\n";
@@ -957,6 +960,24 @@ m3u8_builder_ext_x_media_tags_write(
 }
 
 static u_char*
+m3u8_builder_write_video_range(u_char* p, uint8_t transfer_characteristics)
+{
+	switch (transfer_characteristics)
+	{
+	case 1:
+		p = vod_copy(p, M3U8_VIDEO_RANGE_SDR, sizeof(M3U8_VIDEO_RANGE_SDR) - 1);
+		break;
+
+	case 16:
+	case 18:
+		p = vod_copy(p, M3U8_VIDEO_RANGE_PQ, sizeof(M3U8_VIDEO_RANGE_PQ) - 1);
+		break;
+	}
+
+	return p;
+}
+
+static u_char*
 m3u8_builder_write_variants(
 	u_char* p,
 	adaptation_sets_t* adaptation_sets,
@@ -1038,6 +1059,12 @@ m3u8_builder_write_variants(
 		}
 
 		*p++ = '\"';
+
+		if (tracks[MEDIA_TYPE_VIDEO] != NULL)
+		{
+			p = m3u8_builder_write_video_range(p, video->u.video.transfer_characteristics);
+		}
+
 		if (adaptation_sets->count[ADAPTATION_TYPE_AUDIO] > 0 && adaptation_sets->total_count > 1)
 		{
 			p = vod_sprintf(p, M3U8_STREAM_TAG_AUDIO, group_audio_track->media_info.codec_id - VOD_CODEC_ID_AUDIO);
@@ -1128,6 +1155,9 @@ m3u8_builder_write_iframe_variants(
 			tracks,
 			base_url);
 		*p++ = '\"';
+
+		p = m3u8_builder_write_video_range(p, video->u.video.transfer_characteristics);
+
 		*p++ = '\n';
 	}
 
@@ -1193,6 +1223,7 @@ m3u8_builder_build_master_playlist(
 	max_video_stream_inf =
 		sizeof(m3u8_stream_inf_video) - 1 + 5 * VOD_INT32_LEN + MAX_CODEC_NAME_SIZE +
 		MAX_CODEC_NAME_SIZE + 1 +		// 1 = ,
+		sizeof(M3U8_VIDEO_RANGE_SDR) - 1 +
 		sizeof("\"\n\n") - 1;
 
 	alternative_audio = adaptation_sets.count[ADAPTATION_TYPE_AUDIO] > 0 && adaptation_sets.total_count > 1;
@@ -1264,7 +1295,8 @@ m3u8_builder_build_master_playlist(
 	{
 		result_size +=
 			(sizeof(m3u8_iframe_stream_inf) - 1 + 3 * VOD_INT32_LEN + MAX_CODEC_NAME_SIZE + sizeof("\"\n\n") - 1 +
-				base_url_len - conf->index_file_name_prefix.len + conf->iframes_file_name_prefix.len) * adaptation_sets.first->count;
+				base_url_len - conf->index_file_name_prefix.len + conf->iframes_file_name_prefix.len + 
+				sizeof(M3U8_VIDEO_RANGE_SDR) - 1) * adaptation_sets.first->count;
 	}
 
 	// allocate the buffer
