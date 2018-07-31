@@ -148,7 +148,7 @@ typedef struct {
 	uint32_t key_frame_bitrate;
 } video_media_info_t;
 
-typedef struct {
+typedef struct audio_media_info_s {
 	uint8_t object_type_id;
 	uint16_t channels;
 	uint16_t bits_per_sample;

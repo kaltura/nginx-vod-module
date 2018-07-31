@@ -10,6 +10,13 @@
 
 #define AOT_ESCAPE (31)
 
+static const uint32_t mp4a_sample_rates[] = {
+	96000, 88200, 64000, 48000,
+	44100, 32000, 24000, 22050,
+	16000, 12000, 11025, 8000,
+	7350, 
+};
+
 vod_status_t 
 codec_config_avcc_get_nal_units(
 	request_context_t* request_context,
@@ -484,23 +491,30 @@ vod_status_t
 codec_config_mp4a_config_parse(
 	request_context_t* request_context, 
 	vod_str_t* extra_data, 
-	mp4a_config_t* result)
+	audio_media_info_t* result)
 {
 	bit_reader_state_t reader;
+	mp4a_config_t* codec_config = &result->codec_config;
 
 	vod_log_buffer(VOD_LOG_DEBUG_LEVEL, request_context->log, 0, "codec_config_mp4a_config_parse: extra data ", extra_data->data, extra_data->len);
 
 	bit_read_stream_init(&reader, extra_data->data, extra_data->len);
 
-	result->object_type = bit_read_stream_get(&reader, 5);
-	if (result->object_type == AOT_ESCAPE)
-		result->object_type = 32 + bit_read_stream_get(&reader, 6);
+	codec_config->object_type = bit_read_stream_get(&reader, 5);
+	if (codec_config->object_type == AOT_ESCAPE)
+		codec_config->object_type = 32 + bit_read_stream_get(&reader, 6);
 
-	result->sample_rate_index = bit_read_stream_get(&reader, 4);
-	if (result->sample_rate_index == 0x0f)
-		bit_read_stream_get(&reader, 24);
+	codec_config->sample_rate_index = bit_read_stream_get(&reader, 4);
+	if (codec_config->sample_rate_index == 0x0f)
+	{
+		result->sample_rate = bit_read_stream_get(&reader, 24);
+	}
+	else if (codec_config->sample_rate_index < vod_array_entries(mp4a_sample_rates))
+	{
+		result->sample_rate = mp4a_sample_rates[codec_config->sample_rate_index];
+	}
 
-	result->channel_config = bit_read_stream_get(&reader, 4);
+	codec_config->channel_config = bit_read_stream_get(&reader, 4);
 
 	if (reader.stream.eof_reached)
 	{
@@ -508,6 +522,10 @@ codec_config_mp4a_config_parse(
 			"codec_config_mp4a_config_parse: failed to read all required audio extra data fields");
 		return VOD_BAD_DATA;
 	}
+
+	vod_log_debug3(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
+		"mp4_parser_read_config_descriptor: codec config: object_type=%d sample_rate_index=%d channel_config=%d",
+		codec_config->object_type, codec_config->sample_rate_index, codec_config->channel_config);
 
 	return VOD_OK;
 }

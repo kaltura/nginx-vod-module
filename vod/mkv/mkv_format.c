@@ -851,7 +851,7 @@ mkv_metadata_parse(
 				rc = codec_config_mp4a_config_parse(
 					request_context,
 					&track.codec_private,
-					&cur_track->media_info.u.audio.codec_config);
+					&cur_track->media_info.u.audio);
 				if (rc != VOD_OK)
 				{
 					return rc;
