@@ -138,7 +138,7 @@ hevc_parser_hrd_parameters(
 		}
 		else
 		{
-			fixed_pic_rate_within_cvs_flag = 0;
+			fixed_pic_rate_within_cvs_flag = 1;
 		}
 
 		low_delay_hrd_flag = 0;
@@ -1340,8 +1340,15 @@ hevc_parser_parse_extra_data(
 		return rc;
 	}
 
-	*nal_packet_size_length = cfg.nal_unit_size;
-	*min_packet_size = *nal_packet_size_length + HEVC_NAL_HEADER_SIZE;
+	if (nal_packet_size_length != NULL)
+	{
+		*nal_packet_size_length = cfg.nal_unit_size;
+	}
+
+	if (min_packet_size != NULL)
+	{
+		*min_packet_size = *nal_packet_size_length + HEVC_NAL_HEADER_SIZE;
+	}
 
 	end_pos = extra_data->data + extra_data->len;
 
