@@ -33,6 +33,7 @@ typedef struct {
 	uint32_t bit_depth_luma;
 	uint32_t bit_depth_chroma;
 	hevc_short_term_rps_t* st_rps;
+	uint8_t transfer_characteristics;
 
 	unsigned sps_max_sub_layers_minus1 : 3;
 	unsigned chroma_format_idc : 2;
@@ -137,7 +138,7 @@ hevc_parser_hrd_parameters(
 		}
 		else
 		{
-			fixed_pic_rate_within_cvs_flag = 0;
+			fixed_pic_rate_within_cvs_flag = 1;
 		}
 
 		low_delay_hrd_flag = 0;
@@ -205,7 +206,7 @@ hevc_parser_skip_vui_parameters(
 		if (colour_description_present_flag)
 		{
 			bit_read_stream_skip(reader, 8);			// colour_primaries
-			bit_read_stream_skip(reader, 8);			// transfer_characteristics 
+			sps->transfer_characteristics = bit_read_stream_get(reader, 8);
 			bit_read_stream_skip(reader, 8);			// matrix_coeffs 
 		}
 	}
@@ -1339,8 +1340,15 @@ hevc_parser_parse_extra_data(
 		return rc;
 	}
 
-	*nal_packet_size_length = cfg.nal_unit_size;
-	*min_packet_size = *nal_packet_size_length + HEVC_NAL_HEADER_SIZE;
+	if (nal_packet_size_length != NULL)
+	{
+		*nal_packet_size_length = cfg.nal_unit_size;
+	}
+
+	if (min_packet_size != NULL)
+	{
+		*min_packet_size = *nal_packet_size_length + HEVC_NAL_HEADER_SIZE;
+	}
 
 	end_pos = extra_data->data + extra_data->len;
 
@@ -1924,4 +1932,30 @@ hevc_parser_is_slice(void* context, uint8_t nal_type, bool_t* is_slice)
 	*is_slice = (nal_type <= HEVC_NAL_RASL_R) ||
 		(nal_type >= HEVC_NAL_BLA_W_LP && nal_type <= HEVC_NAL_CRA_NUT);
 	return VOD_OK;
+}
+
+uint8_t
+hevc_parser_get_transfer_characteristics(
+	void* context)
+{
+	avc_hevc_parse_ctx_t* ctx = context;
+	hevc_sps_t** cur = (hevc_sps_t**)ctx->sps.elts;
+	hevc_sps_t** end = cur + ctx->sps.nelts;
+	hevc_sps_t* sps;
+
+	for (; cur < end; cur++)
+	{
+		sps = *cur;
+		if (sps == NULL)
+		{
+			continue;
+		}
+
+		if (sps->transfer_characteristics != 0)
+		{
+			return sps->transfer_characteristics;
+		}
+	}
+
+	return 0;
 }

@@ -33,6 +33,7 @@
 #define PARSE_FLAG_SAVE_RAW_ATOMS		(0x00000010)		// mp4 only
 #define PARSE_FLAG_EDIT_LIST			(0x00000020)
 #define PARSE_FLAG_HDLR_NAME			(0x00000040)
+#define PARSE_FLAG_CODEC_TRANSFER_CHAR	(0x00000080)
 
 // frames
 #define PARSE_FLAG_FRAMES_DURATION		(0x00010000)
@@ -146,6 +147,7 @@ typedef struct {
 	uint32_t nal_packet_size_length;
 	uint32_t initial_pts_delay;
 	uint32_t key_frame_bitrate;
+	uint8_t transfer_characteristics;
 } video_media_info_t;
 
 typedef struct {

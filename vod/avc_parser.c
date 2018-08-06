@@ -10,6 +10,7 @@
 typedef struct {
 	int pic_height_in_map_units;
 	int pic_width_in_mbs;
+	uint8_t transfer_characteristics;
 	unsigned frame_mbs_only_flag : 1;
 	unsigned pic_order_cnt_type : 2;
 	unsigned delta_pic_order_always_zero_flag : 1;
@@ -66,7 +67,7 @@ avc_parser_skip_hrd_parameters(bit_reader_state_t* reader)
 }
 
 static void 
-avc_parser_skip_vui_parameters(bit_reader_state_t* reader)
+avc_parser_parse_vui_parameters(avc_sps_t* sps, bit_reader_state_t* reader)
 {
 	uint32_t aspect_ratio_info_present_flag;
 	uint32_t aspect_ratio_idc;
@@ -103,7 +104,7 @@ avc_parser_skip_vui_parameters(bit_reader_state_t* reader)
 		if (colour_description_present_flag)
 		{
 			bit_read_stream_skip(reader, 8); // colour_primaries
-			bit_read_stream_skip(reader, 8); // transfer_characteristics
+			sps->transfer_characteristics = bit_read_stream_get(reader, 8);
 			bit_read_stream_skip(reader, 8); // matrix_coefficients
 		}
 	}
@@ -300,7 +301,7 @@ avc_parser_seq_parameter_set_rbsp(avc_hevc_parse_ctx_t* ctx, bit_reader_state_t*
 	vui_parameters_present_flag = bit_read_stream_get_one(reader);	// vui_parameters_present_flag
 	if (vui_parameters_present_flag)
 	{
-		avc_parser_skip_vui_parameters(reader);
+		avc_parser_parse_vui_parameters(sps, reader);
 	}
 	if (!avc_hevc_parser_rbsp_trailing_bits(reader))
 	{
@@ -445,6 +446,8 @@ avc_parser_pic_parameter_set_rbsp(
 		}
 	}
 
+	bit_read_stream_skip_signed_exp(reader);	// second_chroma_qp_index_offset
+
 	if (!avc_hevc_parser_rbsp_trailing_bits(reader))
 	{
 		vod_log_error(VOD_LOG_ERR, ctx->request_context->log, 0,
@@ -480,8 +483,15 @@ avc_parser_parse_extra_data(
 		return VOD_BAD_DATA;
 	}
 
-	*nal_packet_size_length = (((avcc_config_t*)extra_data->data)->nula_length_size & 0x3) + 1;
-	*min_packet_size = *nal_packet_size_length + AVC_NAL_HEADER_SIZE;
+	if (nal_packet_size_length != NULL)
+	{
+		*nal_packet_size_length = (((avcc_config_t*)extra_data->data)->nula_length_size & 0x3) + 1;
+	}
+
+	if (min_packet_size != NULL)
+	{
+		*min_packet_size = *nal_packet_size_length + AVC_NAL_HEADER_SIZE;
+	}
 
 	cur_pos = extra_data->data + sizeof(avcc_config_t);
 	extra_data_end = extra_data->data + extra_data->len;
@@ -1008,4 +1018,30 @@ avc_parser_is_slice(void* context, uint8_t nal_type, bool_t* is_slice)
 	}
 
 	return VOD_OK;
+}
+
+uint8_t
+avc_parser_get_transfer_characteristics(
+	void* context)
+{
+	avc_hevc_parse_ctx_t* ctx = context;
+	avc_sps_t** cur = (avc_sps_t**)ctx->sps.elts;
+	avc_sps_t** end = cur + ctx->sps.nelts;
+	avc_sps_t* sps;
+
+	for (; cur < end; cur++)
+	{
+		sps = *cur;
+		if (sps == NULL)
+		{
+			continue;
+		}
+
+		if (sps->transfer_characteristics != 0)
+		{
+			return sps->transfer_characteristics;
+		}
+	}
+
+	return 0;
 }
