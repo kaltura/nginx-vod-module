@@ -1,6 +1,8 @@
 # NGINX-based VOD Packager
 ## nginx-vod-module [![Build Status](https://travis-ci.org/kaltura/nginx-vod-module.svg?branch=master)](https://travis-ci.org/kaltura/nginx-vod-module)
 
+[Join the list of organizations using this video packager project](https://github.com/kaltura/nginx-vod-module/issues/730/).
+
 ### Features
 
 * On-the-fly repackaging of MP4 files to DASH, HDS, HLS, MSS
