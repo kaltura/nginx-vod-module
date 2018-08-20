@@ -45,14 +45,14 @@ static iconv_t iconv_utf16be_to_utf8 = ICONV_INVALID_DESC;
 void
 webvtt_init_process(vod_log_t* log)
 {
-	iconv_utf16le_to_utf8 = iconv_open("UTF8", "UTF16LE");
+	iconv_utf16le_to_utf8 = iconv_open("UTF-8", "UTF-16LE");
 	if (iconv_utf16le_to_utf8 == ICONV_INVALID_DESC)
 	{
 		vod_log_error(VOD_LOG_WARN, log, vod_errno,
 			"webvtt_init_process: iconv_open failed, utf16le srt is not supported");
 	}
 
-	iconv_utf16be_to_utf8 = iconv_open("UTF8", "UTF16BE");
+	iconv_utf16be_to_utf8 = iconv_open("UTF-8", "UTF-16BE");
 	if (iconv_utf16be_to_utf8 == ICONV_INVALID_DESC)
 	{
 		vod_log_error(VOD_LOG_WARN, log, vod_errno,
