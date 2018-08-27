@@ -498,7 +498,7 @@ mss_packager_build_manifest(
 					MSS_STREAM_TYPE_AUDIO);
 				break;
 			}
-			// fallthrough
+			// fall through
 
 		case MEDIA_TYPE_VIDEO:
 			p = vod_sprintf(p,

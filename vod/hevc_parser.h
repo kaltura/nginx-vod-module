@@ -22,4 +22,7 @@ vod_status_t hevc_parser_is_slice(
 	uint8_t nal_type,
 	bool_t* is_slice);
 
+uint8_t hevc_parser_get_transfer_characteristics(
+	void* ctx);
+
 #endif // __HEVC_PARSER_H__

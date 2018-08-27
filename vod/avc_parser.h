@@ -22,4 +22,7 @@ vod_status_t avc_parser_is_slice(
 	uint8_t nal_type,
 	bool_t* is_slice);
 
+uint8_t avc_parser_get_transfer_characteristics(
+	void* ctx);
+
 #endif // __AVC_PARSER_H__

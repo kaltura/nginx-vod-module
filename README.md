@@ -1,6 +1,8 @@
 # NGINX-based VOD Packager
 ## nginx-vod-module [![Build Status](https://travis-ci.org/kaltura/nginx-vod-module.svg?branch=master)](https://travis-ci.org/kaltura/nginx-vod-module)
 
+[Join the list of organizations using this video packager project](https://github.com/kaltura/nginx-vod-module/issues/730/).
+
 ### Features
 
 * On-the-fly repackaging of MP4 files to DASH, HDS, HLS, MSS
@@ -139,13 +141,13 @@ Debug settings:
 For Debian Wheezy [7], Debian Jessie [8], Ubuntu 14.04 and 14.10, add this repo:
 ```
 # wget -O - http://installrepo.kaltura.org/repo/apt/debian/kaltura-deb.gpg.key|apt-key add -
-# echo "deb [arch=amd64] http://installrepo.kaltura.org/repo/apt/debian mercury main" > /etc/apt/sources.list.d/kaltura.list
+# echo "deb [arch=amd64] http://installrepo.kaltura.org/repo/apt/debian naos main" > /etc/apt/sources.list.d/kaltura.list
 ```
 
 For Ubuntu 16.04, 16.10 add this repo:
 ```
 # wget -O - http://installrepo.kaltura.org/repo/apt/xenial/kaltura-deb-256.gpg.key|apt-key add -
-# echo "deb [arch=amd64] http://installrepo.kaltura.org/repo/apt/xenial mercury main" > /etc/apt/sources.list.d/kaltura.list
+# echo "deb [arch=amd64] http://installrepo.kaltura.org/repo/apt/xenial naos main" > /etc/apt/sources.list.d/kaltura.list
 ```
 
 Then install the kaltura-nginx package:
@@ -866,7 +868,7 @@ If the value is set to zero, the live manifest will contain all the segments tha
 
 #### vod_force_playlist_type_vod
 * **syntax**: `vod_force_playlist_type_vod on/off`
-* **default**: `off
+* **default**: `off`
 * **context**: `http`, `server`, `location`
 
 Generate a vod stream even when the media set has `playlistType=live`. 
@@ -879,7 +881,7 @@ This can be useful for clipping vod sections out of a live stream.
 
 #### vod_force_continuous_timestamps
 * **syntax**: `vod_force_continuous_timestamps on/off`
-* **default**: `off
+* **default**: `off`
 * **context**: `http`, `server`, `location`
 
 Generate continuous timestamps even when the media set has gaps (gaps can created by the use of `clipTimes`)
@@ -1529,6 +1531,13 @@ When enabled the server returns absolute segment URLs in media playlist requests
 * **context**: `http`, `server`, `location`
 
 When enabled the server returns absolute segment URLs in iframe playlist requests
+
+#### vod_hls_output_iframes_playlist
+* **syntax**: `vod_hls_output_iframes_playlist on/off`
+* **default**: `on`
+* **context**: `http`, `server`, `location`
+
+When disabled iframe playlists are not returned as part of master playlists
 
 #### vod_hls_master_file_name_prefix
 * **syntax**: `vod_hls_master_file_name_prefix name`

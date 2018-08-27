@@ -1,7 +1,7 @@
 #!/bin/sh
 set -o nounset                              # Treat unset variables as an error
 
-NGINX_VERSION=1.12.2
+NGINX_VERSION=1.14.0
 NGINX_URI="http://nginx.org/download/nginx-$NGINX_VERSION.tar.gz"
 
 

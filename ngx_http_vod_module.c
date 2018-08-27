@@ -599,6 +599,58 @@ ngx_http_vod_set_notification_id_var(ngx_http_request_t *r, ngx_http_variable_va
 }
 
 static ngx_int_t
+ngx_http_vod_set_segment_duration_var(ngx_http_request_t *r, ngx_http_variable_value_t *v, uintptr_t data)
+{
+	ngx_http_vod_ctx_t *ctx;
+	media_track_t* last_track;
+	media_track_t* cur_track;
+	media_set_t* media_set;
+	uint32_t timescale;
+	uint64_t value;
+	u_char* p;
+
+	ctx = ngx_http_get_module_ctx(r, ngx_http_vod_module);
+	if (ctx == NULL)
+	{
+		v->not_found = 1;
+		return NGX_OK;
+	}
+
+	media_set = &ctx->submodule_context.media_set;
+	cur_track = media_set->filtered_tracks;
+	last_track = cur_track + media_set->total_track_count * media_set->clip_count;
+	if (cur_track >= last_track)
+	{
+		v->not_found = 1;
+		return NGX_OK;
+	}
+
+	p = ngx_pnalloc(r->pool, NGX_INT32_LEN);
+	if (p == NULL)
+	{
+		ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+			"ngx_http_vod_set_segment_duration_var: ngx_pnalloc failed");
+		return NGX_ERROR;
+	}
+
+	timescale = cur_track->media_info.timescale;
+
+	value = 0;
+	for (; cur_track < last_track; cur_track += media_set->total_track_count)
+	{
+		value += cur_track->total_frames_duration;
+	}
+
+	v->data = p;
+	v->len = ngx_sprintf(p, "%uD", (uint32_t)rescale_time(value, timescale, 1000)) - p;
+	v->valid = 1;
+	v->no_cacheable = 1;
+	v->not_found = 0;
+
+	return NGX_OK;
+}
+
+static ngx_int_t
 ngx_http_vod_set_uint32_var(ngx_http_request_t *r, ngx_http_variable_value_t *v, uintptr_t data)
 {
 	ngx_http_vod_ctx_t *ctx;
@@ -641,8 +693,8 @@ static ngx_http_vod_variable_t ngx_http_vod_variables[] = {
 	DEFINE_VAR(dynamic_mapping),
 	DEFINE_VAR(request_params),
 	DEFINE_VAR(notification_id),
+	DEFINE_VAR(segment_duration),
 	{ ngx_string("vod_frames_bytes_read"), ngx_http_vod_set_uint32_var, offsetof(ngx_http_vod_ctx_t, frames_bytes_read) },
-	{ ngx_string("vod_segment_duration"), ngx_http_vod_set_uint32_var, offsetof(ngx_http_vod_ctx_t, submodule_context.media_set.segment_duration) },
 };
 
 ngx_int_t
@@ -691,14 +743,15 @@ ngx_buffer_cache_fetch_perf(
 	ngx_perf_counters_t* perf_counters,
 	ngx_buffer_cache_t* cache,
 	u_char* key,
-	ngx_str_t* buffer)
+	ngx_str_t* buffer,
+	uint32_t* token)
 {
 	ngx_perf_counter_context(pcctx);
 	ngx_flag_t result;
 	
 	ngx_perf_counter_start(pcctx);
 
-	result = ngx_buffer_cache_fetch(cache, key, buffer);
+	result = ngx_buffer_cache_fetch(cache, key, buffer, token);
 
 	ngx_perf_counter_end(perf_counters, pcctx, PC_FETCH_CACHE);
 
@@ -711,7 +764,8 @@ ngx_buffer_cache_fetch_multi_perf(
 	ngx_buffer_cache_t** caches,
 	uint32_t cache_count,
 	u_char* key,
-	ngx_str_t* buffer)
+	ngx_str_t* buffer,
+	uint32_t* token)
 {
 	ngx_perf_counter_context(pcctx);
 	ngx_buffer_cache_t* cache;
@@ -728,7 +782,7 @@ ngx_buffer_cache_fetch_multi_perf(
 			continue;
 		}
 
-		result = ngx_buffer_cache_fetch(cache, key, buffer);
+		result = ngx_buffer_cache_fetch(cache, key, buffer, token);
 		if (!result)
 		{
 			continue;
@@ -754,6 +808,7 @@ ngx_buffer_cache_fetch_copy_perf(
 	ngx_str_t* buffer)
 {
 	ngx_str_t original_buffer;
+	uint32_t token;
 	u_char* buffer_copy;
 	int result;
 
@@ -762,7 +817,8 @@ ngx_buffer_cache_fetch_copy_perf(
 		caches,
 		cache_count,
 		key,
-		&original_buffer);
+		&original_buffer,
+		&token);
 	if (result < 0)
 	{
 		return result;
@@ -778,6 +834,8 @@ ngx_buffer_cache_fetch_copy_perf(
 
 	ngx_memcpy(buffer_copy, original_buffer.data, original_buffer.len);
 	buffer_copy[original_buffer.len] = '\0';
+
+	ngx_buffer_cache_release(caches[result], key, token);
 
 	buffer->data = buffer_copy;
 	buffer->len = original_buffer.len;
@@ -882,7 +940,8 @@ ngx_buffer_cache_fetch_multipart_perf(
 	ngx_buffer_cache_t* cache,
 	u_char* key,
 	multipart_cache_header_t* header,
-	ngx_str_t** out_parts)
+	ngx_str_t** out_parts,
+	uint32_t* token)
 {
 	vod_str_t* cur_part;
 	vod_str_t* parts;
@@ -897,7 +956,8 @@ ngx_buffer_cache_fetch_multipart_perf(
 		ctx->perf_counters,
 		cache,
 		key,
-		&cache_buffer))
+		&cache_buffer,
+		token))
 	{
 		return 0;
 	}
@@ -1213,6 +1273,7 @@ ngx_http_vod_state_machine_get_drm_info(ngx_http_vod_ctx_t *ctx)
 	ngx_str_t drm_info;
 	ngx_str_t base_uri;
 	ngx_md5_t md5;
+	uint32_t cache_token;
 
 	for (;
 		ctx->cur_sequence < ctx->submodule_context.media_set.sequences_end;
@@ -1249,7 +1310,8 @@ ngx_http_vod_state_machine_get_drm_info(ngx_http_vod_ctx_t *ctx)
 				ctx->perf_counters, 
 				conf->drm_info_cache, 
 				ctx->child_request_key,
-				&drm_info))
+				&drm_info, 
+				&cache_token))
 			{
 				ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
 					"ngx_http_vod_state_machine_get_drm_info: drm info cache hit, size is %uz", drm_info.len);
@@ -1261,6 +1323,11 @@ ngx_http_vod_state_machine_get_drm_info(ngx_http_vod_ctx_t *ctx)
 						"ngx_http_vod_state_machine_get_drm_info: invalid drm info in cache %V", &drm_info);
 					return rc;
 				}
+
+				ngx_buffer_cache_release(
+					conf->drm_info_cache,
+					ctx->child_request_key, 
+					cache_token);
 
 				if (conf->drm_single_key)
 				{
@@ -1395,14 +1462,17 @@ ngx_http_vod_init_parse_params_metadata(
 	uint32_t* request_tracks_mask;
 	uint32_t media_type;
 
-	parse_params->parse_type = request->parse_type;
-	if (request->request_class == REQUEST_CLASS_MANIFEST &&
-		ctx->submodule_context.media_set.timing.durations == NULL)
+	if (request != NULL)
 	{
-		parse_params->parse_type |= segmenter->parse_type;
+		parse_params->parse_type = request->parse_type;
+		if (request->request_class == REQUEST_CLASS_MANIFEST &&
+			ctx->submodule_context.media_set.timing.durations == NULL)
+		{
+			parse_params->parse_type |= segmenter->parse_type;
+		}
+		parse_params->parse_type |= ctx->submodule_context.conf->parse_flags;
+		parse_params->codecs_mask = request->codecs_mask;
 	}
-	parse_params->parse_type |= ctx->submodule_context.conf->parse_flags;
-	parse_params->codecs_mask = request->codecs_mask;
 
 	request_tracks_mask = ctx->submodule_context.request_params.tracks_mask;
 	if (ctx->submodule_context.request_params.sequence_tracks_mask != NULL)
@@ -1601,6 +1671,11 @@ ngx_http_vod_parse_metadata(
 	}
 	parse_params.clip_from = cur_source->clip_from;
 
+	ngx_http_vod_init_parse_params_metadata(
+		ctx,
+		tracks_mask,
+		&parse_params);
+
 	if (request == NULL)
 	{
 		// Note: the other fields in parse_params are not required here
@@ -1630,11 +1705,6 @@ ngx_http_vod_parse_metadata(
 	}
 
 	ngx_perf_counter_start(ctx->perf_counter_context);
-
-	ngx_http_vod_init_parse_params_metadata(
-		ctx,
-		tracks_mask,
-		&parse_params);
 
 	// parse the basic metadata
 	rc = ctx->format->parse_metadata(
@@ -2038,6 +2108,7 @@ ngx_http_vod_state_machine_parse_metadata(ngx_http_vod_ctx_t *ctx)
 	media_clip_source_t* cur_source;
 	ngx_http_request_t* r = ctx->submodule_context.r;
 	ngx_int_t rc;
+	uint32_t cache_token;
 	bool_t metadata_loaded;
 
 	if (ctx->cur_source == NULL)
@@ -2051,6 +2122,7 @@ ngx_http_vod_state_machine_parse_metadata(ngx_http_vod_ctx_t *ctx)
 		{
 		case STATE_READ_METADATA_INITIAL:
 			metadata_loaded = FALSE;
+			cache_token = 0;
 			cur_source = ctx->cur_source;
 
 			if (cur_source->mapped_uri.len == empty_file_string.len &&
@@ -2080,7 +2152,8 @@ ngx_http_vod_state_machine_parse_metadata(ngx_http_vod_ctx_t *ctx)
 					conf->metadata_cache,
 					cur_source->file_key,
 					&multipart_header,
-					&ctx->metadata_parts))
+					&ctx->metadata_parts,
+					&cache_token))
 				{
 					ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
 						"ngx_http_vod_state_machine_parse_metadata: metadata cache hit");
@@ -2103,6 +2176,16 @@ ngx_http_vod_state_machine_parse_metadata(ngx_http_vod_ctx_t *ctx)
 				}
 
 				rc = ngx_http_vod_parse_metadata(ctx, 1);
+
+				if (cache_token && 
+					ctx->request != NULL)		// in case of progressive, the metadata parts are used in clipper_build_header
+				{
+					ngx_buffer_cache_release(
+						conf->metadata_cache,
+						cur_source->file_key,
+						cache_token);
+				}
+
 				if (rc == NGX_OK)
 				{
 					ctx->cur_source = cur_source->next;
@@ -2174,7 +2257,7 @@ ngx_http_vod_state_machine_parse_metadata(ngx_http_vod_ctx_t *ctx)
 
 			// read completed synchronously
 			ngx_perf_counter_end(ctx->perf_counters, ctx->perf_counter_context, PC_READ_FILE);
-			// fallthrough
+			// fall through
 
 		case STATE_READ_METADATA_READ:
 			// read the metadata
@@ -2242,7 +2325,7 @@ ngx_http_vod_state_machine_parse_metadata(ngx_http_vod_ctx_t *ctx)
 				}
 				break;
 			}
-			// fallthrough
+			// fall through
 
 		case STATE_READ_FRAMES_OPEN_FILE:
 			ctx->state = STATE_READ_FRAMES_READ;
@@ -2253,7 +2336,7 @@ ngx_http_vod_state_machine_parse_metadata(ngx_http_vod_ctx_t *ctx)
 			{
 				return rc;
 			}
-			// fallthrough
+			// fall through
 
 		case STATE_READ_FRAMES_READ:
 			rc = ngx_http_vod_read_frames(ctx);
@@ -3281,6 +3364,8 @@ ngx_http_vod_run_generators(ngx_http_vod_ctx_t *ctx)
 				"ngx_http_vod_run_generators: generator failed %i", rc);
 			return ngx_http_vod_status_to_ngx_error(ctx->submodule_context.r, rc);
 		}
+
+		ngx_http_vod_update_source_tracks(&ctx->submodule_context.request_context, ctx->cur_source);
 	}
 
 	ctx->cur_source = NULL;
@@ -3306,7 +3391,7 @@ ngx_http_vod_run_state_machine(ngx_http_vod_ctx_t *ctx)
 
 		ctx->state = STATE_READ_METADATA_INITIAL;
 		ctx->cur_sequence = ctx->submodule_context.media_set.sequences;
-		// fallthrough
+		// fall through
 
 	case STATE_READ_METADATA_INITIAL:
 	case STATE_READ_METADATA_OPEN_FILE:
@@ -3378,7 +3463,7 @@ ngx_http_vod_run_state_machine(ngx_http_vod_ctx_t *ctx)
 
 		ctx->state = STATE_OPEN_FILE;
 		ctx->cur_source = ctx->submodule_context.media_set.sources_head;
-		// fallthrough
+		// fall through
 
 	case STATE_OPEN_FILE:
 		rc = ngx_http_vod_state_machine_open_files(ctx);
@@ -3466,7 +3551,7 @@ ngx_http_vod_run_state_machine(ngx_http_vod_ctx_t *ctx)
 			ctx->frame_processor = filter_run_state_machine;
 		}
 
-		// fallthrough
+		// fall through
 
 	case STATE_FILTER_FRAMES:
 		// if audio filtering already started, process frames
@@ -3502,7 +3587,7 @@ ngx_http_vod_run_state_machine(ngx_http_vod_ctx_t *ctx)
 
 		ctx->submodule_context.request_context.log->action = "processing frames";
 		ctx->state = STATE_PROCESS_FRAMES;
-		// fallthrough
+		// fall through
 
 	case STATE_PROCESS_FRAMES:
 		rc = ngx_http_vod_process_media_frames(ctx);
@@ -3597,7 +3682,7 @@ ngx_http_vod_handle_read_completed(void* context, ngx_int_t rc, ngx_buf_t* buf, 
 			{
 				break;
 			}
-			// fallthrough
+			// fall through
 
 		default:
 			ngx_log_error(NGX_LOG_ERR, ctx->submodule_context.request_context.log, 0,
@@ -3707,14 +3792,17 @@ ngx_http_vod_start_processing_media_file(ngx_http_vod_ctx_t *ctx)
 	ctx = ngx_http_get_module_ctx(r, ngx_http_vod_module);
 	ctx->state_machine = ngx_http_vod_run_state_machine;
 
+	cur_source = ctx->submodule_context.media_set.sources_head;
+
 	// handle serve requests
 	if (ctx->request == NULL &&
-		ctx->submodule_context.media_set.sources_head->clip_from == 0 &&
-		ctx->submodule_context.media_set.sources_head->clip_to == ULLONG_MAX)
+		cur_source->clip_from == 0 &&
+		cur_source->clip_to == ULLONG_MAX &&
+		cur_source->tracks_mask[MEDIA_TYPE_AUDIO] == 0xffffffff &&
+		cur_source->tracks_mask[MEDIA_TYPE_VIDEO] == 0xffffffff)
 	{
 		ctx->state = STATE_DUMP_OPEN_FILE;
 
-		cur_source = ctx->submodule_context.media_set.sources_head;
 		ctx->cur_source = cur_source;
 
 		rc = ctx->reader->open(r, &cur_source->mapped_uri, 0, &cur_source->reader_context);
@@ -3734,9 +3822,7 @@ ngx_http_vod_start_processing_media_file(ngx_http_vod_ctx_t *ctx)
 	// initialize the file keys
 	conf = ctx->submodule_context.conf;
 
-	for (cur_source = ctx->submodule_context.media_set.sources_head;
-		cur_source != NULL;
-		cur_source = cur_source->next)
+	for (; cur_source != NULL; cur_source = cur_source->next)
 	{
 		ngx_http_vod_init_file_key(cur_source, ctx->file_key_prefix);
 	}
@@ -3789,6 +3875,7 @@ ngx_http_vod_map_uris_to_paths(ngx_http_vod_ctx_t *ctx)
 		cur_source != NULL;
 		cur_source = cur_source->next)
 	{
+		ctx->cur_source = cur_source;
 		r->uri = cur_source->stripped_uri;
 		last = ngx_http_map_uri_to_path(r, &path, &root, 0);
 		r->uri = original_uri;
@@ -3803,6 +3890,8 @@ ngx_http_vod_map_uris_to_paths(ngx_http_vod_ctx_t *ctx)
 
 		cur_source->mapped_uri = path;
 	}
+
+	ctx->cur_source = ctx->submodule_context.media_set.sources_head;
 
 	return NGX_OK;
 }
@@ -4229,7 +4318,9 @@ ngx_http_vod_map_run_step(ngx_http_vod_ctx_t *ctx)
 	ngx_md5_t md5;
 	ngx_int_t rc;
 	size_t read_size;
-	int cache_index;
+	int store_cache_index;
+	int fetch_cache_index;
+	uint32_t cache_token;
 
 	switch (ctx->state)
 	{
@@ -4252,17 +4343,25 @@ ngx_http_vod_map_run_step(ngx_http_vod_ctx_t *ctx)
 		ngx_md5_final(ctx->mapping.cache_key, &md5);
 
 		// try getting the mapping from cache
-		if (ngx_buffer_cache_fetch_multi_perf(
+		fetch_cache_index = ngx_buffer_cache_fetch_multi_perf(
 			ctx->perf_counters,
 			ctx->mapping.caches,
 			ctx->mapping.cache_count,
 			ctx->mapping.cache_key,
-			&mapping) >= 0)
+			&mapping,
+			&cache_token);
+		if (fetch_cache_index >= 0)
 		{
 			ngx_log_debug1(NGX_LOG_DEBUG_HTTP, ctx->submodule_context.request_context.log, 0,
 				"ngx_http_vod_map_run_step: mapping cache hit %V", &mapping);
 
-			rc = ctx->mapping.apply(ctx, &mapping, &cache_index);
+			rc = ctx->mapping.apply(ctx, &mapping, &store_cache_index);
+
+			ngx_buffer_cache_release(
+				ctx->mapping.caches[fetch_cache_index], 
+				ctx->mapping.cache_key, 
+				cache_token);
+
 			if (rc != NGX_OK)
 			{
 				return rc;
@@ -4292,7 +4391,7 @@ ngx_http_vod_map_run_step(ngx_http_vod_ctx_t *ctx)
 			return rc;
 		}
 
-		// fallthrough
+		// fall through
 
 	case STATE_MAP_OPEN:
 
@@ -4341,7 +4440,7 @@ ngx_http_vod_map_run_step(ngx_http_vod_ctx_t *ctx)
 
 		ngx_perf_counter_end(ctx->perf_counters, ctx->perf_counter_context, PC_MAP_PATH);
 
-		// fallthrough
+		// fall through
 
 	case STATE_MAP_READ:
 
@@ -4369,14 +4468,14 @@ ngx_http_vod_map_run_step(ngx_http_vod_ctx_t *ctx)
 
 		mapping.data = response->pos;
 		mapping.len = response->last - response->pos;
-		rc = ctx->mapping.apply(ctx, &mapping, &cache_index);
+		rc = ctx->mapping.apply(ctx, &mapping, &store_cache_index);
 		if (rc != NGX_OK)
 		{
 			return rc;
 		}
 
 		// save to cache
-		cache = ctx->mapping.caches[cache_index];
+		cache = ctx->mapping.caches[store_cache_index];
 		if (cache != NULL)
 		{
 			if (ngx_buffer_cache_store_perf(

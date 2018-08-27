@@ -6,6 +6,7 @@
 
 // macros
 #define webvtt_is_utf16le_bom(p) (p[0] == 0xff && p[1] == 0xfe)
+#define webvtt_is_utf16be_bom(p) (p[0] == 0xfe && p[1] == 0xff)
 
 // constants
 #define WEBVTT_HEADER ("WEBVTT")
@@ -14,9 +15,11 @@
 
 // utf8 functions
 #define CHAR_TYPE u_char
+#define CHAR_SIZE 1
 #define METHOD(x) x
 #include "webvtt_format_template.h"
 #undef CHAR_TYPE
+#undef CHAR_SIZE
 #undef METHOD
 
 #if (VOD_HAVE_ICONV)
@@ -24,10 +27,12 @@
 #include <iconv.h>
 
 // utf16 functions
-#define CHAR_TYPE u_short
+#define CHAR_TYPE u_char
+#define CHAR_SIZE 2
 #define METHOD(x) x ## _utf16
 #include "webvtt_format_template.h"
 #undef CHAR_TYPE
+#undef CHAR_SIZE
 #undef METHOD
 
 #define ICONV_INVALID_DESC ((iconv_t)-1)
@@ -35,33 +40,46 @@
 #define ICONV_SIZE_INCREMENT (20)
 
 static iconv_t iconv_utf16le_to_utf8 = ICONV_INVALID_DESC;
+static iconv_t iconv_utf16be_to_utf8 = ICONV_INVALID_DESC;
 
 void
 webvtt_init_process(vod_log_t* log)
 {
-	iconv_utf16le_to_utf8 = iconv_open("UTF8", "UTF16LE");
+	iconv_utf16le_to_utf8 = iconv_open("UTF-8", "UTF-16LE");
 	if (iconv_utf16le_to_utf8 == ICONV_INVALID_DESC)
 	{
 		vod_log_error(VOD_LOG_WARN, log, vod_errno,
-			"webvtt_init_process: iconv_open failed, utf16 srt is not supported");
+			"webvtt_init_process: iconv_open failed, utf16le srt is not supported");
+	}
+
+	iconv_utf16be_to_utf8 = iconv_open("UTF-8", "UTF-16BE");
+	if (iconv_utf16be_to_utf8 == ICONV_INVALID_DESC)
+	{
+		vod_log_error(VOD_LOG_WARN, log, vod_errno,
+			"webvtt_init_process: iconv_open failed, utf16be srt is not supported");
 	}
 }
 
 void
 webvtt_exit_process()
 {
-	if (iconv_utf16le_to_utf8 == ICONV_INVALID_DESC)
+	if (iconv_utf16le_to_utf8 != ICONV_INVALID_DESC)
 	{
-		return;
+		iconv_close(iconv_utf16le_to_utf8);
+		iconv_utf16le_to_utf8 = ICONV_INVALID_DESC;
 	}
 
-	iconv_close(iconv_utf16le_to_utf8);
-	iconv_utf16le_to_utf8 = ICONV_INVALID_DESC;
+	if (iconv_utf16be_to_utf8 != ICONV_INVALID_DESC)
+	{
+		iconv_close(iconv_utf16be_to_utf8);
+		iconv_utf16be_to_utf8 = ICONV_INVALID_DESC;
+	}
 }
 
 static vod_status_t
-webvtt_utf16le_to_utf8(
+webvtt_utf16_to_utf8(
 	request_context_t* request_context,
+	iconv_t iconv_context,
 	vod_str_t* input,
 	vod_str_t* output)
 {
@@ -95,7 +113,7 @@ webvtt_utf16le_to_utf8(
 		output_left = output_arr.nalloc - output_arr.nelts;
 
 		if (iconv(
-			iconv_utf16le_to_utf8,
+			iconv_context,
 			&input_pos, &input_left,
 			&output_pos, &output_left) != (size_t)-1)
 		{
@@ -155,12 +173,12 @@ webvtt_reader_init(
 	u_char* p = buffer->data;
 
 #if (VOD_HAVE_ICONV)
+	u_short* end;
+	u_short last_char;
+	bool_t result;
+
 	if (webvtt_is_utf16le_bom(p) && buffer->len > 4)
 	{
-		u_short* end;
-		u_short last_char;
-		bool_t result;
-
 		if (iconv_utf16le_to_utf8 == ICONV_INVALID_DESC ||
 			(buffer->len & 1) != 0)
 		{
@@ -172,7 +190,32 @@ webvtt_reader_init(
 		end = (u_short*)(p + buffer->len) - 1;
 		last_char = *end;
 		*end = 0;
-		result = webvtt_identify_srt_utf16((u_short*)p + 1);
+
+		// Note: the utf16 identification ignores the top byte of each char - it may get
+		//		false positives, but the probability is very low. if this somehow happens,
+		//		the file will be identified, but will fail to parse
+		result = webvtt_identify_srt_utf16(p + 2);
+		*end = last_char;
+
+		if (!result)
+		{
+			return VOD_NOT_FOUND;
+		}
+	}
+	else if (webvtt_is_utf16be_bom(p) && buffer->len > 4)
+	{
+		if (iconv_utf16be_to_utf8 == ICONV_INVALID_DESC ||
+			(buffer->len & 1) != 0)
+		{
+			return VOD_NOT_FOUND;
+		}
+
+		// make the buffer utf-16 null terminated
+		// Note: it's ok to change the buffer since this function is never called on cache buffers
+		end = (u_short*)(p + buffer->len) - 1;
+		last_char = *end;
+		*end = 0;
+		result = webvtt_identify_srt_utf16(p + 3);
 		*end = last_char;
 
 		if (!result)
@@ -389,7 +432,20 @@ webvtt_parse(
 		source->len -= 2;
 
 		// Note: the decoded buffer will be saved to cache, since source is changed to point to it
-		rc = webvtt_utf16le_to_utf8(request_context, source, source);
+		rc = webvtt_utf16_to_utf8(request_context, iconv_utf16le_to_utf8, source, source);
+		if (rc != VOD_OK)
+		{
+			return rc;
+		}
+	}
+	else if (webvtt_is_utf16be_bom(p))
+	{
+		// skip the bom
+		source->data += 2;
+		source->len -= 2;
+
+		// Note: the decoded buffer will be saved to cache, since source is changed to point to it
+		rc = webvtt_utf16_to_utf8(request_context, iconv_utf16be_to_utf8, source, source);
 		if (rc != VOD_OK)
 		{
 			return rc;

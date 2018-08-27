@@ -22,10 +22,13 @@ typedef struct {
 
 	// deferred init
 	ngx_buf_t* response_buffer;
+#if defined(nginx_version) && nginx_version >= 1013010
+	ngx_chain_t* response_chain;
+#endif
 	ngx_list_t upstream_headers;
 
 	// temporary completion state
-	ngx_http_upstream_t *upstream;
+	ngx_http_request_t* sr;
 	ngx_int_t error_code;
 	ngx_http_event_handler_pt original_write_event_handler;
 	void *original_context;
@@ -90,6 +93,8 @@ ngx_child_request_wev_handler(ngx_http_request_t *r)
 {
 	ngx_child_request_context_t* ctx;
 	ngx_http_upstream_t *u;
+	ngx_http_request_t* sr;
+	ngx_buf_t* b;
 	ngx_int_t rc;
 	off_t content_length;
 
@@ -103,15 +108,44 @@ ngx_child_request_wev_handler(ngx_http_request_t *r)
 	ngx_http_set_ctx(r, ctx->original_context, ngx_http_vod_module);
 
 	// get the completed upstream
-	u = ctx->upstream;
-	ctx->upstream = NULL;
+	sr = ctx->sr;
+	ctx->sr = NULL;
 
+	if (sr == NULL)
+	{
+		ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
+			"ngx_child_request_wev_handler: unexpected, subrequest is null");
+		return;
+	}
+
+	u = sr->upstream;
+
+#if defined(nginx_version) && nginx_version >= 1013010
+	if (is_in_memory(ctx))
+	{
+		if (sr->out == NULL || sr->out->buf == NULL)
+		{
+			ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
+				"ngx_child_request_wev_handler: unexpected, output buffer is null");
+			return;
+		}
+
+		b = sr->out->buf;
+	}
+	else
+	{
+		b = NULL;
+	}
+#else
 	if (u == NULL)
 	{
 		ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
 			"ngx_child_request_wev_handler: unexpected, upstream is null");
 		return;
 	}
+
+	b = &u->buffer;
+#endif
 
 	// code taken from echo-nginx-module to work around nginx subrequest issues
 	if (r == r->connection->data && r->postponed) {
@@ -133,16 +167,17 @@ ngx_child_request_wev_handler(ngx_http_request_t *r)
 
 	// get the final error code
 	rc = ctx->error_code;
-	if (rc == NGX_OK && is_in_memory(ctx))
+	if (rc == NGX_OK && is_in_memory(ctx) && u != NULL)
 	{
 		switch (u->headers_in.status_n)
 		{
 		case NGX_HTTP_OK:
 		case NGX_HTTP_PARTIAL_CONTENT:
-			if (u->length != 0 && u->length != -1 && !u->headers_in.chunked)
+			if (u->headers_in.content_length_n > 0 && u->headers_in.content_length_n != b->last - b->pos)
 			{
 				ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
-					"ngx_child_request_wev_handler: upstream connection was closed with %O bytes left to read", u->length);
+					"ngx_child_request_wev_handler: upstream connection was closed with %O bytes left to read", 
+					u->headers_in.content_length_n - (b->last - b->pos));
 				rc = NGX_HTTP_BAD_GATEWAY;
 			}
 			break;
@@ -150,7 +185,7 @@ ngx_child_request_wev_handler(ngx_http_request_t *r)
 		case NGX_HTTP_RANGE_NOT_SATISFIABLE:
 			// ignore this error, treat it like a successful read with empty body
 			rc = NGX_OK;
-			u->buffer.last = u->buffer.pos;
+			b->last = b->pos;
 			break;
 
 		default:
@@ -183,9 +218,9 @@ ngx_child_request_wev_handler(ngx_http_request_t *r)
 	// get the content length
 	if (is_in_memory(ctx))
 	{
-		content_length = u->buffer.last - u->buffer.pos;
+		content_length = b->last - b->pos;
 	}
-	else if (u->state != NULL)
+	else if (u != NULL && u->state != NULL)
 	{
 		content_length = u->state->response_length;
 	}
@@ -197,7 +232,7 @@ ngx_child_request_wev_handler(ngx_http_request_t *r)
 	if (ctx->callback != NULL)
 	{
 		// notify the caller
-		ctx->callback(ctx->callback_context, rc, &u->buffer, content_length);
+		ctx->callback(ctx->callback_context, rc, b, content_length);
 	}
 	else
 	{
@@ -239,7 +274,7 @@ ngx_child_request_finished_handler(
 		return NGX_ERROR;
 	}
 
-	ctx->upstream = r->upstream;
+	ctx->sr = r;
 	ctx->error_code = rc;
 
 	if (ctx->original_write_event_handler != NULL)
@@ -320,7 +355,12 @@ ngx_child_request_initial_wev_handler(ngx_http_request_t *r)
 			"ngx_child_request_initial_wev_handler: context is null");
 		return;
 	}
+
+#if defined(nginx_version) && nginx_version >= 1013010
+	r->out = ctx->response_chain;
+#else
 	u->buffer = *ctx->response_buffer;
+#endif
 
 	// initialize the headers list
 	u->headers_in.headers = ctx->upstream_headers;
@@ -535,6 +575,21 @@ ngx_child_request_start(
 	child_ctx->callback_context = callback_context;
 	child_ctx->response_buffer = response_buffer;
 
+#if defined(nginx_version) && nginx_version >= 1013010
+	if (response_buffer != NULL)
+	{
+		child_ctx->response_chain = ngx_alloc_chain_link(r->pool);
+		if (child_ctx->response_chain == NULL)
+		{
+			ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+				"ngx_child_request_start: ngx_alloc_chain_link failed");
+			return NGX_ERROR;
+		}
+
+		child_ctx->response_chain->buf = response_buffer;
+	}
+#endif
+
 	// build the subrequest uri
 	uri.data = ngx_pnalloc(r->pool, internal_location->len + params->base_uri.len + 1);
 	if (uri.data == NULL)
@@ -629,8 +684,23 @@ ngx_child_request_header_filter(ngx_http_request_t *r)
 
 	// if the request is not a vod request or it's in memory, ignore
 	ctx = ngx_http_get_module_ctx(r, ngx_http_vod_module);
-	if (ctx == NULL || is_in_memory(ctx))
+	if (ctx == NULL)
 	{
+		return ngx_http_next_header_filter(r);
+	}
+
+	if (is_in_memory(ctx))
+	{
+		// check the returned content length, this is required only for nginx 1.13.10+
+		// in older versions, the validation will be performed by the upstream module
+		if (r->upstream != NULL &&
+			r->upstream->headers_in.content_length_n > ctx->response_buffer->end - ctx->response_buffer->last)
+		{
+			ngx_log_error(NGX_LOG_ALERT, r->connection->log, 0,
+				"ngx_child_request_header_filter: upstream buffer is too small to read response");
+			return NGX_ERROR;
+		}
+
 		return ngx_http_next_header_filter(r);
 	}
 

@@ -168,7 +168,7 @@ static const relevant_atom_t relevant_atoms_stbl[] = {
 	{ ATOM_NAME_STSS, offsetof(trak_atom_infos_t, stss), NULL },
 	{ ATOM_NAME_STSD, offsetof(trak_atom_infos_t, stsd), NULL },
 	{ ATOM_NAME_SAIZ, offsetof(trak_atom_infos_t, saiz), NULL },
-	{ ATOM_NAME_SENC, offsetof(trak_atom_infos_t, senc), NULL },
+	{ ATOM_NAME_SENC, offsetof(trak_atom_infos_t, senc), NULL },		// senc should be under trak, maintained for backward compatibility
 	{ ATOM_NAME_NULL, 0, NULL }
 };
 
@@ -194,6 +194,7 @@ static const relevant_atom_t relevant_atoms_trak[] = {
 	{ ATOM_NAME_MDIA, 0, relevant_atoms_mdia },
 	{ ATOM_NAME_EDTS, 0, relevant_atoms_edts },
 	{ ATOM_NAME_TKHD, offsetof(trak_atom_infos_t, tkhd), NULL },
+	{ ATOM_NAME_SENC, offsetof(trak_atom_infos_t, senc), NULL },
 	{ ATOM_NAME_NULL, 0, NULL }
 };
 
@@ -2663,6 +2664,11 @@ mp4_parser_process_moov_atom_callback(void* ctx, atom_info_t* atom_info)
 				metadata_parse_context.media_info.codec_id = VOD_CODEC_ID_MP3;
 				extra_data_required = FALSE;
 				break;
+
+			case 0xa9:
+				metadata_parse_context.media_info.codec_id = VOD_CODEC_ID_DTS;
+				extra_data_required = FALSE;
+				break;
 			}
 			break;
 
@@ -2678,7 +2684,6 @@ mp4_parser_process_moov_atom_callback(void* ctx, atom_info_t* atom_info)
 
 		case FORMAT_OPUS:
 			metadata_parse_context.media_info.codec_id = VOD_CODEC_ID_OPUS;
-			extra_data_required = TRUE;
 			break;
 		}
 		break;

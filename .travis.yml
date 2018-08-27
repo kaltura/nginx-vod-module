@@ -1,7 +1,7 @@
 before_install:
     - sudo add-apt-repository -y ppa:ubuntu-toolchain-r/test
     - sudo apt-get update -qq
-    - sudo apt-get install -y libssl-dev libpcre3-dev libxml2-dev wget unzip libopencore-amrwb0 libopencore-amrnb0 libass4 libgsm1 libmp3lame0 libopenjpeg2 libschroedinger-1.0-0 libspeex1 libtheora0  libva1  libvpx1 libxvidcore4 libnuma1 gcc-5 
+    - sudo apt-get install -y libssl-dev libpcre3-dev libxml2-dev wget unzip libopencore-amrwb0 libopencore-amrnb0 libass4 libgsm1 libmp3lame0 libopenjpeg2 libschroedinger-1.0-0 libspeex1 libtheora0  libva1  libvpx1 libxvidcore4 libnuma1 gcc-7
     - wget http://installrepo.origin.kaltura.org/releases/kaltura-ffmpeg_amd64.deb
     - wget http://installrepo.origin.kaltura.org/repo/apt/debian/pool/main/x/x264/libx264-148_0.148-1_amd64.deb
     - wget http://installrepo.origin.kaltura.org/repo/apt/debian/pool/main/x/x265/libx265-87_2.0-4_amd64.deb
@@ -12,7 +12,7 @@ before_install:
     - sudo dpkg -i libx265-87_2.0-4_amd64.deb 
     - sudo dpkg -i libvdpau1_0.4.1-3ubuntu1.2_amd64.deb
     - sudo dpkg -i kaltura-ffmpeg_amd64.deb
-    - sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-5 20
+    - sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-7 20
 language: c
 compiler:
     - clang

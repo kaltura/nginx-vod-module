@@ -22,7 +22,8 @@
 	VOD_CODEC_FLAG(AAC) | \
 	VOD_CODEC_FLAG(AC3) | \
 	VOD_CODEC_FLAG(EAC3) | \
-	VOD_CODEC_FLAG(MP3))
+	VOD_CODEC_FLAG(MP3) | \
+	VOD_CODEC_FLAG(DTS))
 
 // content types
 static u_char m3u8_content_type[] = "application/vnd.apple.mpegurl";
@@ -874,7 +875,7 @@ ngx_http_vod_hls_handle_vtt_segment(
 
 static const ngx_http_vod_request_t hls_master_request = {
 	0,
-	PARSE_FLAG_DURATION_LIMITS_AND_TOTAL_SIZE | PARSE_FLAG_KEY_FRAME_BITRATE | PARSE_FLAG_CODEC_NAME | PARSE_FLAG_PARSED_EXTRA_DATA_SIZE,
+	PARSE_FLAG_DURATION_LIMITS_AND_TOTAL_SIZE | PARSE_FLAG_KEY_FRAME_BITRATE | PARSE_FLAG_CODEC_NAME | PARSE_FLAG_PARSED_EXTRA_DATA_SIZE | PARSE_FLAG_CODEC_TRANSFER_CHAR,
 	REQUEST_CLASS_OTHER,
 	SUPPORTED_CODECS | VOD_CODEC_FLAG(WEBVTT),
 	HLS_TIMESCALE,
@@ -984,6 +985,7 @@ ngx_http_vod_hls_create_loc_conf(
 	conf->mpegts_muxer_config.align_frames = NGX_CONF_UNSET;
 	conf->mpegts_muxer_config.output_id3_timestamps = NGX_CONF_UNSET;
 	conf->encryption_method = NGX_CONF_UNSET_UINT;
+	conf->m3u8_config.output_iframes_playlist = NGX_CONF_UNSET;
 	conf->m3u8_config.force_unmuxed_segments = NGX_CONF_UNSET;
 	conf->m3u8_config.container_format = NGX_CONF_UNSET_UINT;
 }
@@ -998,9 +1000,10 @@ ngx_http_vod_hls_merge_loc_conf(
 	ngx_conf_merge_value(conf->absolute_master_urls, prev->absolute_master_urls, 1);
 	ngx_conf_merge_value(conf->absolute_index_urls, prev->absolute_index_urls, 1);
 	ngx_conf_merge_value(conf->absolute_iframe_urls, prev->absolute_iframe_urls, 0);
+	ngx_conf_merge_value(conf->m3u8_config.output_iframes_playlist, prev->m3u8_config.output_iframes_playlist, 1);
 
 	ngx_conf_merge_str_value(conf->master_file_name_prefix, prev->master_file_name_prefix, "master");
-	ngx_conf_merge_str_value(conf->m3u8_config.index_file_name_prefix, prev->m3u8_config.index_file_name_prefix, "index");	
+	ngx_conf_merge_str_value(conf->m3u8_config.index_file_name_prefix, prev->m3u8_config.index_file_name_prefix, "index");
 	ngx_conf_merge_str_value(conf->m3u8_config.iframes_file_name_prefix, prev->m3u8_config.iframes_file_name_prefix, "iframes");
 	ngx_conf_merge_str_value(conf->m3u8_config.segment_file_name_prefix, prev->m3u8_config.segment_file_name_prefix, "seg");
 	ngx_conf_merge_str_value(conf->m3u8_config.init_file_name_prefix, prev->m3u8_config.init_file_name_prefix, "init");

@@ -292,6 +292,7 @@ media_set_parse_encryption_key(
 {
 	media_filter_parse_context_t* context = ctx;
 #if (VOD_HAVE_OPENSSL_EVP)
+	vod_status_t rc;
 	u_char* result;
 
 	result = vod_alloc(context->request_context->pool, MP4_AES_CTR_KEY_SIZE);
@@ -304,7 +305,15 @@ media_set_parse_encryption_key(
 
 	*(u_char**)dest = result;
 
-	return parse_utils_parse_fixed_base64_string(&value->v.str, result, MP4_AES_CTR_KEY_SIZE);
+	rc = parse_utils_parse_fixed_base64_string(&value->v.str, result, MP4_AES_CTR_KEY_SIZE);
+	if (rc != VOD_OK)
+	{
+		vod_log_error(VOD_LOG_ERR, context->request_context->log, 0,
+			"media_set_parse_encryption_key: failed to parse encryptionKey %V", &value->v.str);
+		return VOD_BAD_MAPPING;
+	}
+
+	return VOD_OK;
 #else
 	vod_log_error(VOD_LOG_ERR, context->request_context->log, 0,
 		"media_set_parse_encryption_key: decryption not supported, recompile with openssl to enable it");
@@ -1806,6 +1815,34 @@ media_set_parse_key_frame_offsets(
 }
 
 static uint64_t
+media_set_start_relative_offset_to_absolute(
+	media_clip_timing_t* timing,
+	uint64_t time_left)
+{
+	uint32_t clip_duration;
+	uint32_t clip_index;
+
+	for (clip_index = 0;; clip_index++)
+	{
+		clip_duration = timing->durations[clip_index];
+		if (clip_duration >= time_left)
+		{
+			break;
+		}
+
+		if (clip_index >= timing->total_count - 1)
+		{
+			// Note: this is not supposed to happen since the relative offset was verified to be less than total duration
+			break;
+		}
+
+		time_left -= clip_duration;
+	}
+
+	return timing->times[clip_index] + time_left;
+}
+
+static uint64_t
 media_set_end_relative_offset_to_absolute(
 	media_clip_timing_t* timing, 
 	uint64_t time_left)
@@ -2399,7 +2436,8 @@ media_set_parse_json(
 			return rc;
 		}
 
-		last_clip_end = result->timing.first_time + result->timing.total_duration;
+		last_clip_end = result->timing.original_times[result->timing.total_count - 1] +
+			result->timing.durations[result->timing.total_count - 1];
 	}
 
 	// get the key frame durations
@@ -2529,9 +2567,9 @@ media_set_parse_json(
 		else
 		{
 			// thumb
-			if (request_params->segment_time < 0)
+			if (request_params->segment_time_type != SEGMENT_TIME_ABSOLUTE)
 			{
-				segment_time = -request_params->segment_time;
+				segment_time = request_params->segment_time;
 				if (segment_time > result->timing.total_duration)
 				{
 					vod_log_error(VOD_LOG_ERR, request_context->log, 0,
@@ -2540,9 +2578,18 @@ media_set_parse_json(
 					return VOD_BAD_REQUEST;
 				}
 
-				request_params->segment_time = media_set_end_relative_offset_to_absolute(
-					&result->timing,
-					segment_time);
+				if (request_params->segment_time_type == SEGMENT_TIME_END_RELATIVE)
+				{
+					request_params->segment_time = media_set_end_relative_offset_to_absolute(
+						&result->timing,
+						segment_time);
+				}
+				else
+				{
+					request_params->segment_time = media_set_start_relative_offset_to_absolute(
+						&result->timing,
+						segment_time);
+				}
 				return VOD_REDIRECT;
 			}
 

@@ -24,6 +24,7 @@ typedef struct {
 	u_char iframes_m3u8_header[MAX_IFRAMES_M3U8_HEADER_SIZE];
 	size_t iframes_m3u8_header_len;
 	bool_t force_unmuxed_segments;
+	bool_t output_iframes_playlist;
 	vod_str_t index_file_name_prefix;
 	vod_str_t iframes_file_name_prefix;
 	vod_str_t segment_file_name_prefix;

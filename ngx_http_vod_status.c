@@ -31,8 +31,7 @@ typedef struct {
 static const u_char status_prefix[] = 
 	"<?xml version=\"1.0\" encoding=\"utf-8\" ?>\r\n"
 	"<vod>\r\n"
-	"<version>" NGINX_VOD_VERSION "</version>\r\n"
-	"<built>" __DATE__ " " __TIME__ "</built>\r\n";
+	"<version>" NGINX_VOD_VERSION "</version>\r\n";
 static const u_char status_postfix[] = "</vod>\r\n";
 
 static ngx_str_t xml_content_type = ngx_string("text/xml");
