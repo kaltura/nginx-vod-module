@@ -148,6 +148,7 @@ typedef struct {
 	uint32_t nal_packet_size_length;
 	uint32_t initial_pts_delay;
 	uint32_t key_frame_bitrate;
+	uint8_t transfer_characteristics;
 } video_media_info_t;
 
 typedef struct {
