@@ -53,6 +53,7 @@ struct mp4_cenc_encrypt_video_state_s {
 	// fixed
 	mp4_cenc_encrypt_video_build_fragment_header_t build_fragment_header;
 	uint32_t nal_packet_size_length;
+	uint32_t codec_id;
 
 	// auxiliary data state
 	vod_dynamic_buf_t auxiliary_data;
