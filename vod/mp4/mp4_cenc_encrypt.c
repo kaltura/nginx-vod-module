@@ -632,7 +632,7 @@ mp4_cenc_encrypt_video_write_buffer(void* context, u_char* buffer, uint32_t size
 				break;
 
 			case VOD_CODEC_ID_HEVC:
-				nal_type = (nal_type >> 1) & 0x3F;
+				nal_type = (nal_type >> 1) & 0x3f;
 				if (nal_type >= HEVC_NAL_VPS_NUT)
 				{
 					state->cur_state = STATE_COPY_DATA;
