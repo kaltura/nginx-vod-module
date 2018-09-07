@@ -23,6 +23,8 @@
 #define FIXED_WEBVTT_VOICE_END_WIDTH  1
 #define FIXED_WEBVTT_VOICE_SPANEND_STR  "</v>"
 #define FIXED_WEBVTT_VOICE_SPANEND_WIDTH  4
+#define FIXED_WEBVTT_ESCAPE_FOR_RTL_STR "&lrm;"
+#define FIXED_WEBVTT_ESCAPE_FOR_RTL_WIDTH 5
 
 // ignore this set for now, till we see how to support inline tags for color/shadow/outline/background
 #define FIXED_WEBVTT_CLASS_NOITALIC  "STYLE\r\n::cue(.noitalic) {\r\nfont-style: normal;\r\n}\r\n\r\n"
@@ -143,22 +145,28 @@ inline uint32_t ass_rem_biu(uint32_t finalstring)
     return (finalstring >> 8);
 }
 
-static int split_event_text_to_chunks(char *src, int srclen, char **textp, int *evlen, uint32_t *evorder, bool_t *initneeded, request_context_t* request_context)
+static int split_event_text_to_chunks(char *src, int srclen, bool_t rtl, char **textp, int *evlen, uint32_t *evorder, bool_t *initneeded, uint32_t *max_run, request_context_t* request_context)
 {
     // a chunk is part of the text that will be added with a specific voice/style. So we increment chunk only when we need a different style applied
     // Number of chunks is at least 1 if len is > 0
-    int srcidx = 0, dstidx = 0, tagidx = 0, bBracesOpen = 0, chunkidx = 0, ibu_idx, byte_idx;
+    int srcidx = 0, dstidx = 0, tagidx, bBracesOpen = 0, chunkidx = 0, ibu_idx, byte_idx;
     // (x)openneeded and (x)closeneeded are used to store all tags within braces, so we can order them correctly at the closing of the tag
     bool_t openneeded[NUM_OF_INLINE_TAGS_SUPPORTED]  = {FALSE,FALSE,FALSE};
     bool_t closeneeded[NUM_OF_INLINE_TAGS_SUPPORTED] = {FALSE,FALSE,FALSE};
     bool_t opened[NUM_OF_INLINE_TAGS_SUPPORTED]      = {FALSE,FALSE,FALSE};
     // initial string can only hold starts, finalstring can only hold closures
-    uint32_t initialstring = 0, finalstring = 0;
+    uint32_t initialstring = 0, finalstring = 0, cur_run = 0;
 
     // Basic sanity checking for inputs
     if ((src == NULL) || (srclen < 1) || (srclen > MAX_STR_SIZE_EVNT_CHUNK))
     {
         return 0;
+    }
+
+    // if right to left language, insert marker before text
+    if (rtl == TRUE) {
+         vod_memcpy(textp[chunkidx], FIXED_WEBVTT_ESCAPE_FOR_RTL_STR, FIXED_WEBVTT_ESCAPE_FOR_RTL_WIDTH);
+         dstidx+=FIXED_WEBVTT_ESCAPE_FOR_RTL_WIDTH;
     }
 
     while (srcidx < srclen)
@@ -208,6 +216,30 @@ static int split_event_text_to_chunks(char *src, int srclen, char **textp, int *
                         {
                             openneeded[ibu_idx] = TRUE; //at the ending brace
                         }
+                    } break;
+
+                    case (TAG_TYPE_NEWLINE_LARGE):
+                    case (TAG_TYPE_NEWLINE_SMALL): {
+                        if (cur_run > *max_run) {
+                            *max_run = cur_run; // we don't add the size of \r\n since they are not visible on screen.
+                            cur_run = 0;        // max_run holds the longest run of visible characters on any line.
+                        }
+                        // replace the string with its equivalent in target string
+                        vod_memcpy(textp[chunkidx] + dstidx, tag_replacement_strings[tagidx], tag_string_len[tagidx][1]);
+                        dstidx += tag_string_len[tagidx][1]; //tag got written to output
+                        if (rtl == TRUE) {
+                             vod_memcpy(textp[chunkidx] + dstidx, FIXED_WEBVTT_ESCAPE_FOR_RTL_STR, FIXED_WEBVTT_ESCAPE_FOR_RTL_WIDTH);
+                             dstidx+=FIXED_WEBVTT_ESCAPE_FOR_RTL_WIDTH;
+                        }
+                    } break;
+
+                    case (TAG_TYPE_AMPERSANT):
+                    case (TAG_TYPE_BIGGERTHAN):
+                    case (TAG_TYPE_SMALLERTHAN): {
+                        cur_run++;  // just one single visible character out of this webvtt code word
+                        // replace the string with its equivalent in target string
+                        vod_memcpy(textp[chunkidx] + dstidx, tag_replacement_strings[tagidx], tag_string_len[tagidx][1]);
+                        dstidx += tag_string_len[tagidx][1]; //tag got written to output
                     } break;
 
                     default: {
@@ -272,10 +304,20 @@ static int split_event_text_to_chunks(char *src, int srclen, char **textp, int *
         // none of the tags matched this character
         if (tagidx == TAG_TYPE_NONE)
         {
+            // for Arabic language, we want to increment number of characters only once every 2 bytes
+            // Arabic utf8 chars all start with 0xD8 or 0xD9, different from all western languages
+            unsigned char cur_char = (unsigned char)(*(src + srcidx));
+            if (cur_char != 0xD8 && cur_char != 0xD9)
+                cur_run++;
+
             vod_memcpy(textp[chunkidx] + dstidx, src + srcidx, 1);
             srcidx++;
             dstidx++;
         }
+    }
+
+    if (cur_run > *max_run) {
+        *max_run = cur_run; // we don't add the size of \r\n since they are not visible on screen.
     }
 
     // We now close b/i/u where close is needed
@@ -604,8 +646,9 @@ ass_parse_frames(
         }
 
         bool_t  initneeded[NUM_OF_INLINE_TAGS_SUPPORTED] = {cur_style->Italic, cur_style->Bold, cur_style->Underline};
-        int  num_chunks_in_text = split_event_text_to_chunks(cur_event->Text, vod_strlen(cur_event->Text),
-                                      event_textp, event_len, eventprestring, initneeded, request_context);
+        uint32_t max_run = 0;
+        int  num_chunks_in_text = split_event_text_to_chunks(cur_event->Text, vod_strlen(cur_event->Text), cur_style->bRightToLeftLanguage,
+                                      event_textp, event_len, eventprestring, initneeded, &max_run, request_context);
 
 #ifdef  TEMP_VERBOSITY
         vod_log_error(VOD_LOG_ERR, request_context->log, 0,
@@ -655,28 +698,31 @@ ass_parse_frames(
             margL = ((cur_event->MarginL > 0) ? cur_event->MarginL : cur_style->MarginL) * 100 / ass_track->PlayResX;
             margR = (ass_track->PlayResX - ((cur_event->MarginR > 0) ? cur_event->MarginR : cur_style->MarginR)) * 100 / ass_track->PlayResX;
             margV = ((cur_event->MarginV > 0) ? cur_event->MarginV : cur_style->MarginV) * 100 / ass_track->PlayResY; // top assumed
-            // All the following variables are percentages in rounded integer values
+            // All the margX variables are percentages in rounded integer values.
+            // line is integer in range of [0 - 12] given 16 rows of lines in the frame.
             if (margL || margR || margV)
             {
                 // center/middle means we are giving the coordinate of the center/middle point
                 int line, sizeH, pos;
 
                 if (cur_style->Alignment >= VALIGN_CENTER) {   //middle Alignment  for values 9,10,11
-                    line = FFMINMAX(margV - 4, 8, 84);
+                    line = 7;
                 } else if (cur_style->Alignment < VALIGN_TOP) { //bottom Alignment  for values 1, 2, 3
                     margV = 100 - margV;
-                    line = FFMINMAX(margV - 8, 8, 84);
+                    line = FFMINMAX((margV+4) >> 3, 0, 12);
                 } else {                                        //top alignment is the default assumption
-                    line = FFMINMAX(margV, 8, 84);
+                    line = FFMINMAX((margV+4) >> 3, 0, 12);
                 }
 
-                sizeH = FFMINMAX(margR - margL, 30, 100 - margL);
+                // cap horizontal size to more than 2x to make sure we don't break lines with generic font
+                // cap horizontal size to no more than 3x to make sure we allow right and left aligned events on same line
+                sizeH = FFMINMAX(margR - margL, (int)(max_run*2), (int)(max_run*3));
                 if ((bleft == FALSE) && (bright == FALSE)) {        //center Alignment  2/6/10
                     pos = FFMINMAX((margR + margL + 1)/2, sizeH/2, 100 - sizeH/2);
                 } else if (bleft == TRUE) {                         //left   Alignment  1/5/9
-                    pos = FFMINMAX(margL, 3, 100 - sizeH);
+                    pos = FFMINMAX(margL, 0, 100 - sizeH);
                 } else {                                            //right  Alignment  3/7/11
-                    pos = FFMINMAX(margR, sizeH, 97);
+                    pos = FFMINMAX(margR, sizeH, 100);
                 }
 
                 len = 10; vod_memcpy(p, " position:", len);                     p+=len;
@@ -684,11 +730,11 @@ ass_parse_frames(
                 len =  7; vod_memcpy(p, "% size:", len);                        p+=len;
                 vod_sprintf((u_char*)p, "%03uD", sizeH);                        p+=3;
                 len =  7; vod_memcpy(p, "% line:", len);                        p+=len;
-                vod_sprintf((u_char*)p, "%03uD", line);                         p+=3;
+                vod_sprintf((u_char*)p, "%02uD", line);                         p+=2;
             }
             // We should only insert this if an alignment override tag {\a...}is in the text, otherwise follow the style's alignment
             // but for now, insert it all the time till all players can read styles
-            len =  8; vod_memcpy(p, "% align:", len);                           p+=len;
+            len =  7; vod_memcpy(p, " align:", len);                            p+=len;
             if ((bleft == FALSE) && (bright == FALSE)) {            //center Alignment  2/6/10
                 len =  6; vod_memcpy(p, "center", len);                         p+=len;
             } else if (bleft == TRUE) {                             //left   Alignment  1/5/9
