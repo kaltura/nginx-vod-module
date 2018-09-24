@@ -32,19 +32,19 @@ function getRequestParams()
 
 $params = getRequestParams();
 $discontinuity = (isset($params['disc']) && $params['disc']) ? true : false;
-$playlistType = isset($params['type']) ? $params['type'] : "live";
+$playlistType = isset($params['type']) ? $params['type'] : 'live';
 
 // input params
 $filePaths = array(
 	// clip 1
 	array(
-		"/path/to/video1.mp4",
-		"/path/to/subtitles1.srt",
+		'/path/to/video1.mp4',
+		'/path/to/subtitles1.srt',
 	),
 	// clip 2
 	array(
-		"/path/to/video2.mp4",
-		"/path/to/subtitles2.srt",
+		'/path/to/video2.mp4',
+		'/path/to/subtitles2.srt',
 	),
 );
 
@@ -67,8 +67,8 @@ $segmentCount = 10;
 function getSourceClip($filePath)
 {
 	return array(
-		"type" => "source",
-		"path" => $filePath
+		'type' => 'source',
+		'path' => $filePath
 	);
 }
 
@@ -83,12 +83,12 @@ function getDurationMillis($filePath)
 	{
 		return $duration;
 	}
-	
+
 	// execute ffprobe
 	$commandLine = "{$ffprobeBin} -i {$filePath} -show_streams -print_format json -v quiet";
 	$output = null;
 	exec($commandLine, $output);
-	
+
 	// parse the result - take the shortest duration
 	$ffmpegResult = json_decode(implode("\n", $output));
 	$duration = null;
@@ -100,10 +100,14 @@ function getDurationMillis($filePath)
 			$duration = $curDuration;
 		}
 	}
-	
+	if (!$duration)
+	{
+		die("Failed to get the duration of {$filePath}\n");
+	}
+
 	// store to cache
 	apc_store($cacheKey, $duration);
-	
+
 	return $duration;
 }
 
@@ -115,62 +119,79 @@ foreach ($filePaths as $curClip)
 
 $result = array();
 
-if ($playlistType == "live")
+if ($playlistType == 'live')
 {
-	// find the duration of each cycle
-	$cycleDuration = array_sum($durations);
-	
-	// if the cycle is too small to cover the DVR window, duplicate it
-	$dvrWindowSize = $segmentDuration * $segmentCount;
-	while ($cycleDuration <= $dvrWindowSize + $timeMargin)
+	// get cycle info
+	$cycleDurations = $durations;
+	$cycleFilePaths = $filePaths;
+	$cycleClipCount = count($cycleDurations);
+	$cycleDuration = array_sum($cycleDurations);
+	$cycleSegmentCount = 0;
+	foreach ($cycleDurations as $duration)
 	{
-		$filePaths = array_merge($filePaths, $filePaths);
-		$durations = array_merge($durations, $durations);
-		$cycleDuration *= 2;
+		$cycleSegmentCount += ceil($duration / $segmentDuration);
 	}
-	
-	// start the playlist from now() - <dvr window size>
-	$time = isset($params['time']) ? $params['time'] : time();
-	$currentTime = $time * 1000 - $timeMargin - $dvrWindowSize;
 
-	// get the reference time (the time of the first run)
+	// find the start / end time
+	$dvrWindowSize = $segmentDuration * $segmentCount;
+	$endTime = (isset($params['time']) ? $params['time'] : time()) * 1000;
+	$startTime = $endTime - $timeMargin - $dvrWindowSize;
+
+	// get the reference time (start time of the first run)
 	$referenceTime = apc_fetch('reference_time');
 	if (!$referenceTime)
 	{
-		$referenceTime = $currentTime;
+		$referenceTime = $startTime;
 		apc_store('reference_time', $referenceTime);
 	}
-	
-	// set the first clip time to now() rounded down to cycle duration
-	$cycleIndex = floor(($currentTime - $referenceTime) / $cycleDuration);
-	$result["firstClipTime"] = $referenceTime + $cycleIndex * $cycleDuration;
-	
-	if ($discontinuity)
+
+	// get the initial cycle info
+	$cycleIndex = floor(($startTime - $referenceTime) / $cycleDuration);
+	$clipIndex = $cycleIndex * $cycleClipCount;
+	$segmentIndex = $cycleIndex * $cycleSegmentCount;
+	$durations = array();
+	$filePaths = array();
+
+	$currentTime = $referenceTime + $cycleIndex * $cycleDuration;
+	while ($currentTime < $endTime)
 	{
-		// find the total number of segments in each cycle
-		$totalSegmentCount = 0;
-		foreach ($durations as $duration)
+		// get the current clip duration
+		$cycleClipIndex = $clipIndex % $cycleClipCount;
+		$duration = $cycleDurations[$cycleClipIndex];
+		if ($currentTime + $duration > $startTime)
 		{
-			$totalSegmentCount += ceil($duration / $segmentDuration);
+			if (!$durations)
+			{
+				// set first clip details
+				$result['firstClipTime'] = $currentTime;
+
+				if ($discontinuity)
+				{
+					$result['initialClipIndex'] = $clipIndex + 1;
+					$result['initialSegmentIndex'] = $segmentIndex + 1;
+				}
+			}
+
+			// add the current clip
+			$durations[] = $duration;
+			$filePaths[] = $cycleFilePaths[$cycleClipIndex];
 		}
 
-		// find the initial clip index and initial segment index
-		$result["initialClipIndex"] = $cycleIndex * count($durations) + 1;
-		$result["initialSegmentIndex"] = $cycleIndex * $totalSegmentCount + 1;
-	}
-	else
-	{
-		$result["segmentBaseTime"] = $referenceTime;
+		// move to the next clip
+		$clipIndex++;
+		$segmentIndex += ceil($duration / $segmentDuration);
+		$currentTime += $duration;
 	}
 
-	// duplicate the clips, this is required so that we won't run out of segments 
-	// close to the end of a cycle
-	$filePaths = array_merge($filePaths, $filePaths);
-	$durations = array_merge($durations, $durations);
+	if (!$discontinuity)
+	{
+		$result['segmentBaseTime'] = $referenceTime;
+	}
 }
 
 $sequences = array();
-foreach ($languages as $seqIndex => $language)
+$seqCount = count(reset($filePaths));
+for ($seqIndex = 0; $seqIndex < $seqCount; $seqIndex++)
 {
 	$clips = array();
 	foreach ($filePaths as $curClip)
@@ -179,22 +200,27 @@ foreach ($languages as $seqIndex => $language)
 	}
 
 	$sequence = array(
-		"clips" => $clips
+		'clips' => $clips
 	);
-	if ($language)
+
+	if (isset($languages[$seqIndex]))
 	{
-		$sequence['language'] = $language;
+		$language = $languages[$seqIndex];
+		if ($language)
+		{
+			$sequence['language'] = $language;
+		}
 	}
-	
+
 	$sequences[] = $sequence;
 }
 
 // generate the result object
 $result = array_merge($result, array(
-	"discontinuity" => $discontinuity,
-	"playlistType" => $playlistType,
-	"durations" => $durations,
-	"sequences" => $sequences,
+	'discontinuity' => $discontinuity,
+	'playlistType' => $playlistType,
+	'durations' => $durations,
+	'sequences' => $sequences,
 ));
 
 echo json_encode($result);
