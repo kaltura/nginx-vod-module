@@ -41,7 +41,7 @@ typedef struct ass_style {
     double      ScaleY;
     double      Spacing;
     double      Angle;
-    int         BorderStyle;
+    int         BorderStyle;  // 1 means Outline + Shadow, 3 means Opaque box
     int         Outline;
     int         Shadow;
     int         Alignment;
@@ -49,7 +49,6 @@ typedef struct ass_style {
     int         MarginR;
     int         MarginV;
     int         Encoding;
-    int         Justify;
 } ass_style_t;
 
 /*

@@ -660,25 +660,33 @@ void ass_free_track(vod_pool_t* pool, ass_track_t *track)
  * The parameters are mostly taken directly from VSFilter source for
  * best compatibility.
  */
-static void set_default_style(ass_style_t *style)
+static void set_default_style(ass_style_t *style, bool_t alloc_names)
 {
-    style->Name             = strdup("Default");
-    style->FontName         = strdup("Arial");
-    style->FontSize         = 18;
-    style->PrimaryColour    = 0xffffff00;
-    style->SecondaryColour  = 0x00ffff00;
-    style->OutlineColour    = 0x00000000;
-    style->BackColour       = 0x00000080;
-    style->Bold             = 200;
-    style->ScaleX           = 1.0;
-    style->ScaleY           = 1.0;
-    style->Spacing          = 0;
-    style->BorderStyle      = 1;
-    style->Outline          = 2;
-    style->Shadow           = 3;
-    style->Alignment        = 2;
-    style->MarginL = style->MarginR = style->MarginV = 20;
+    if (alloc_names == TRUE)
+    {
+        style->Name                 = strdup("Default");
+        style->FontName             = strdup("Arial");
+    }
+    style->FontSize             = 18;
+    style->PrimaryColour        = 0xffffff00;
+    style->SecondaryColour      = 0x00ffff00;
+    style->OutlineColour        = 0x00000000;
+    style->BackColour           = 0x00000080;
+    style->Bold                 = FALSE;
+    style->Italic               = FALSE;
+    style->Underline            = FALSE;
+    style->StrikeOut            = FALSE;
     style->bRightToLeftLanguage = FALSE;
+    style->ScaleX               = 100.0;
+    style->ScaleY               = 100.0;
+    style->Spacing              = 0.0;
+    style->Angle                = 0.0;
+    style->BorderStyle          = 1;
+    style->Outline              = 2;
+    style->Shadow               = 0;
+    style->Alignment            = 2;
+    style->MarginL = style->MarginR = style->MarginV = 20;
+    style->Encoding             = 0;
 }
 
 static long long string2timecode(char *p)
@@ -810,7 +818,7 @@ static int process_event_tail(ass_track_t *track, ass_event_t *event, char *str)
         // add "Default" style to the end
         // will be used if track does not contain a default style (or even does not contain styles at all)
         int sid = ass_alloc_style(track);
-        set_default_style(&track->styles[sid]);
+        set_default_style(&track->styles[sid], TRUE);
         track->default_style = sid;
     }
 
@@ -912,7 +920,7 @@ static int process_style(ass_track_t *track, char *str, request_context_t* reque
     if (track->n_styles == 0) {
         // will be used if track does not contain a default style (or even does not contain styles at all)
         int sid = ass_alloc_style(track);
-        set_default_style(&track->styles[sid]);
+        set_default_style(&track->styles[sid], TRUE);
         track->default_style = sid;
     }
 
@@ -921,9 +929,7 @@ static int process_style(ass_track_t *track, char *str, request_context_t* reque
     style = track->styles + sid;
     target = style;
 
-    // fill style with some default values
-    style->ScaleX = 100.;
-    style->ScaleY = 100.;
+    set_default_style(target, FALSE);
 
     while (1) {
         NEXT(q, tname);
@@ -970,13 +976,13 @@ static int process_style(ass_track_t *track, char *str, request_context_t* reque
             INTVAL(Shadow)
         PARSE_END
     }
-    style->ScaleX = FFMAX(style->ScaleX, 0.) / 100.;
-    style->ScaleY = FFMAX(style->ScaleY, 0.) / 100.;
-    style->Spacing = FFMAX(style->Spacing, 0.);
-    style->Outline = FFMAX(style->Outline, 0);
-    style->Shadow = FFMAX(style->Shadow, 0);
-    style->Bold = !!style->Bold;
-    style->Italic = !!style->Italic;
+    style->ScaleX    = FFMAX(style->ScaleX,  0.) / 100.;
+    style->ScaleY    = FFMAX(style->ScaleY,  0.) / 100.;
+    style->Spacing   = FFMAX(style->Spacing, 0.);
+    style->Outline   = FFMAX(style->Outline, 0);
+    style->Shadow    = FFMAX(style->Shadow,  0);
+    style->Bold      = !!style->Bold;
+    style->Italic    = !!style->Italic;
     style->Underline = !!style->Underline;
     style->StrikeOut = !!style->StrikeOut;
     if (!style->Name)
@@ -984,6 +990,7 @@ static int process_style(ass_track_t *track, char *str, request_context_t* reque
     if (!style->FontName)
         style->FontName = strdup("Arial");
 
+    // For now, bRightToLeftLanguage is TRUE only for Arabic language. In future, it will be enabled for many others.
     if ( !ass_strncasecmp(style->FontName, "Adobe Arabic", 12) ) {
         //vod_log_error(VOD_LOG_ERR, request_context->log, 0, "Style font was Adobe Arabic");
         style->bRightToLeftLanguage = TRUE;
