@@ -1612,7 +1612,7 @@ padding is added as needed.
 
 #### vod_hls_mpegts_output_id3_timestamps
 * **syntax**: `vod_hls_mpegts_output_id3_timestamps on/off`
-* **default**: `on`
+* **default**: `off`
 * **context**: `http`, `server`, `location`
 
 When enabled, an ID3 TEXT frame will be outputted in each TS segment, containing a JSON with the absolute segment timestamp.
