@@ -36,7 +36,8 @@ typedef struct ass_style {
     bool_t      Italic;
     bool_t      Underline;
     bool_t      StrikeOut;
-    bool_t      bRightToLeftLanguage;
+    bool_t      b_right_to_left_language;
+    bool_t      b_output_in_cur_segment;
     double      ScaleX;
     double      ScaleY;
     double      Spacing;
@@ -68,7 +69,7 @@ typedef struct ass_event {
     int         MarginV;
     char       *Effect;
     char       *Text;
-    bool_t      bRightToLeftLanguage;
+    bool_t      b_right_to_left_language;
 } ass_event_t;
 
 /*
@@ -102,7 +103,7 @@ typedef struct ass_track {
     int             Kerning;
     char           *Language;
     char           *Title;
-    bool_t          bRightToLeftLanguage;
+    bool_t          b_right_to_left_language;
 
     int             default_style;    // index of default style, defaults to zero
     char           *name;             // file name in case of external subs, 0 for streams

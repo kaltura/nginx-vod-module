@@ -676,7 +676,8 @@ static void set_default_style(ass_style_t *style, bool_t alloc_names)
     style->Italic               = FALSE;
     style->Underline            = FALSE;
     style->StrikeOut            = FALSE;
-    style->bRightToLeftLanguage = FALSE;
+    style->b_right_to_left_language = FALSE;
+    style->b_output_in_cur_segment  = FALSE;
     style->ScaleX               = 100.0;
     style->ScaleY               = 100.0;
     style->Spacing              = 0.0;
@@ -990,13 +991,13 @@ static int process_style(ass_track_t *track, char *str, request_context_t* reque
     if (!style->FontName)
         style->FontName = strdup("Arial");
 
-    // For now, bRightToLeftLanguage is TRUE only for Arabic language. In future, it will be enabled for many others.
+    // For now, b_right_to_left_language is TRUE only for Arabic language. In future, it will be enabled for many others.
     if ( !ass_strncasecmp(style->FontName, "Adobe Arabic", 12) ) {
         //vod_log_error(VOD_LOG_ERR, request_context->log, 0, "Style font was Adobe Arabic");
-        style->bRightToLeftLanguage = TRUE;
+        style->b_right_to_left_language = TRUE;
     } else {
         //vod_log_error(VOD_LOG_ERR, request_context->log, 0, "Style font was: %s", style->FontName);
-        style->bRightToLeftLanguage = track->bRightToLeftLanguage;
+        style->b_right_to_left_language = track->b_right_to_left_language;
     }
     free(format);
     return 0;
@@ -1047,7 +1048,7 @@ static int process_info_line(ass_track_t *track, char *str, request_context_t* r
         free(track->Title);
         // Title: ﺎﻠﻋﺮﺒﻳﺓ
         track->Title = strndup(p, FFMAX(14, (size_t)(end-strt)));
-        track->bRightToLeftLanguage = ((14 == (end-strt)) && (strt[0] == (char)0xD8) && (strt[13] == (char)0xA9));
+        track->b_right_to_left_language = ((14 == (end-strt)) && (strt[0] == (char)0xD8) && (strt[13] == (char)0xA9));
     }
     return 0;
 }
