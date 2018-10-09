@@ -321,6 +321,7 @@ static void ass_clean_known_mem(request_context_t* request_context, ass_track_t 
     return;
 }
 
+#ifdef ASSUME_STYLE_SUPPORT
 static char* output_one_style(ass_style_t* cur_style, char* p)
 {
         int len;
@@ -377,6 +378,7 @@ static char* output_one_style(ass_style_t* cur_style, char* p)
 
         return p;
 }
+#endif //ASSUME_STYLE_SUPPORT
 
 static vod_status_t
 ass_reader_init(
@@ -488,7 +490,7 @@ ass_parse_frames(
     ass_event_t*   cur_event  = NULL;
     vod_str_t* header         = &vtt_track->media_info.extra_data;
     char *p, *pfixed;
-    int len, evntcounter, chunkcounter, stylecounter;
+    int len, evntcounter, chunkcounter;
     uint64_t base_time, clip_to, start, end;
 
     vod_memzero(result, sizeof(*result));
@@ -769,6 +771,7 @@ ass_parse_frames(
     header->data              = (u_char*)pfixed;
     len = sizeof(WEBVTT_HEADER_NEWLINES) - 1; vod_memcpy(p, WEBVTT_HEADER_NEWLINES, len);  p+=len;
 #ifdef ASSUME_STYLE_SUPPORT
+    int stylecounter;
     for (stylecounter = (ass_track->default_style ? 1 : 0); (stylecounter < ass_track->n_styles); stylecounter++)
     {
         ass_style_t* cur_style = ass_track->styles + stylecounter;
