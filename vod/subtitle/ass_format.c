@@ -122,6 +122,14 @@ static const char* tag_replacement_strings[TAG_TYPE_NONE] = {
     ""
 };
 
+void swap_events(ass_event_t* nxt, ass_event_t* cur)
+{
+    ass_event_t tmp;
+    vod_memcpy(&tmp,  nxt, sizeof(ass_event_t));
+    vod_memcpy( nxt,  cur, sizeof(ass_event_t));
+    vod_memcpy( cur, &tmp, sizeof(ass_event_t));
+}
+
 static int split_event_text_to_chunks(char *src, int srclen, bool_t rtl, char **textp, int *evlen, bool_t *ibu_flags, uint32_t *max_run, request_context_t* request_context)
 {
     // a chunk is part of the text that will be added with a specific voice/style. So we increment chunk only when we need a different style applied
@@ -450,7 +458,7 @@ ass_parse(
  * In the following function event == frame == cue. All words point to the text in ASS/media-struct/WebVTT.
  *
  * \output vtt_track->media_info.extra_data   (WEBVTT header + all STYLE cues)
- * \output vtt_track->total_frames_duration   (end of last unclipped frame/cue - start of first clipped frame/cue)
+ * \output vtt_track->total_frames_duration   (sum of output frame durations)
  * \output vtt_track->first_frame_index       (event index for very first event output in this segment)
  * \output vtt_track->first_frame_time_offset (Start time of the very first event output in this segment)
  * \output vtt_track->total_frames_size       (Number of String Bytes used in all events that were output)
@@ -461,7 +469,9 @@ ass_parse(
  * \output result (media track in the track array)
  *
  * individual cues in the frames array
- * \output cur_frame->duration                (start time of current event - start time of previous event) except last event
+ * \output cur_frame->duration                      (start time of next  output event - start time of current event)
+ * if last event to be output but not last in file: (start time of next         event - start time of current event)
+ * if last event in whole file:                     (end time of current output event - start time of current event)
  * \output cur_frame->offset
  * \output cur_frame->size
  * \output cur_frame->pts_delay
@@ -491,7 +501,7 @@ ass_parse_frames(
     vod_str_t* header         = &vtt_track->media_info.extra_data;
     char *p, *pfixed;
     int len, evntcounter, chunkcounter;
-    uint64_t base_time, clip_to, start, end;
+    uint64_t base_time, clip_to, seg_start, seg_end, last_start_time;
 
     vod_memzero(result, sizeof(*result));
     result->first_track       = vtt_track;
@@ -499,8 +509,11 @@ ass_parse_frames(
     result->track_count[MEDIA_TYPE_SUBTITLE] = 1;
     result->total_track_count = 1;
 
-    vtt_track->first_frame_index = 0;
-    vtt_track->total_frames_size = 0;
+    vtt_track->first_frame_index       = 0;
+    vtt_track->first_frame_time_offset = -1;
+    vtt_track->total_frames_size       = 0;
+    vtt_track->total_frames_duration   = 0;
+    last_start_time = 0;
 
     if ((parse_params->parse_type & (PARSE_FLAG_FRAMES_ALL | PARSE_FLAG_EXTRA_DATA | PARSE_FLAG_EXTRA_DATA_SIZE)) == 0)
     {
@@ -523,6 +536,25 @@ ass_parse_frames(
             source->len, ass_track->maxDuration, ass_track->n_events, ass_track->n_styles);
     }
 #endif
+
+    // Re-order events so that each event has a starting time that is bigger than or equal than the one before it.
+    // This matches WebVTT expectations of cue order. And allows us to calculate frame duration correctly.
+    // We don't sort it inside parse_memory() because that function is called twice, and first time no sorting is needed.
+    // BUBBLE SORT was chosen to optimize the best-case scenario O(n), since most scripts are already ordered.
+    for (evntcounter = 0; evntcounter < ass_track->n_events - 1; evntcounter++)
+    {
+        // Last evntcounter elements are already in place
+        for (chunkcounter = 0; chunkcounter < ass_track->n_events - evntcounter - 1; chunkcounter++)
+        {
+            ass_event_t*   next_event = ass_track->events + chunkcounter + 1;
+                           cur_event  = ass_track->events + chunkcounter;
+            if (cur_event->Start > next_event->Start)
+            {
+                //  Swap the two events
+                swap_events(next_event, cur_event);
+            }
+        }
+    }
     // allocate initial array of cues/styles, to be augmented as needed after the first 5
     if (vod_array_init(&frames, request_context->pool, 5, sizeof(input_frame_t)) != VOD_OK)
     {
@@ -532,26 +564,26 @@ ass_parse_frames(
         return VOD_ALLOC_FAILED;
     }
 
-    start = parse_params->range->start + parse_params->clip_from;
+    seg_start = parse_params->range->start + parse_params->clip_from;
 
     if ((parse_params->parse_type & PARSE_FLAG_RELATIVE_TIMESTAMPS) != 0)
     {
-        base_time = start;
+        base_time = seg_start;
         clip_to = parse_params->range->end - parse_params->range->start;
-        end = clip_to;
+        seg_end = clip_to;
     }
     else
     {
         base_time = parse_params->clip_from;
         clip_to = parse_params->clip_to;
-        end = parse_params->range->end;		// Note: not adding clip_from, since end is checked after the clipping is applied to the timestamps
+        seg_end = parse_params->range->end;
     }
 
     // We now insert all cues that include their positioning info
+    // Events are assumed already ordered by their start time. As required for WebVTT output Cues.
     for (evntcounter = 0; evntcounter < ass_track->n_events; evntcounter++)
     {
-        ass_event_t*   prev_event = ass_track->events + evntcounter - 1;
-                       cur_event  = ass_track->events + evntcounter;
+        cur_event = ass_track->events + evntcounter;
         ass_style_t*   cur_style = ass_track->styles + cur_event->Style; //cur_event->Style will be zero for an unknown Style name
 
         // make all timing checks and clipping, before we decide to read the text or output it.
@@ -560,9 +592,8 @@ ass_parse_frames(
         {
             continue;
         }
-        if ((uint64_t)cur_event->End < start)
+        if ((uint64_t)cur_event->End < seg_start)
         {
-            vtt_track->first_frame_index++;
             continue;
         }
 
@@ -586,17 +617,24 @@ ass_parse_frames(
             cur_event->End = (long long)(clip_to);
         }
 
-        if (cur_frame == NULL)
+        if (cur_frame != NULL)
+        {
+            cur_frame->duration = cur_event->Start - last_start_time;
+            vtt_track->total_frames_duration += cur_frame->duration;
+        }
+        else
         {
             // if this is the very first event intersecting with segment, this is the first start in the segment
             vtt_track->first_frame_time_offset = cur_event->Start;
+            vtt_track->first_frame_index       = evntcounter;
         }
 
-        if ((uint64_t)cur_event->Start >= end)
+        if ((uint64_t)cur_event->Start >= seg_end)
         {
-            vtt_track->total_frames_duration = cur_event->Start - vtt_track->first_frame_time_offset;
+            // events are already ordered by start-time
             break;
         }
+
 
         ///// This EVENT is within the segment duration. Parse its text, and output it after conversion to WebVTT valid tags./////
 
@@ -651,12 +689,18 @@ ass_parse_frames(
             return VOD_ALLOC_FAILED;
         }
 
-        if (evntcounter > 0)
+        if (evntcounter == (ass_track->n_events - 1))
         {
-            // now that we have allocated cur_frame, we can start assigning
-            cur_frame->duration = cur_event->Start - prev_event->Start;
+            cur_frame->duration = cur_event->End - cur_event->Start;
+            vtt_track->total_frames_duration += cur_frame->duration;
         }
 
+#ifdef  TEMP_VERBOSITY
+            vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+                "UPDATEDURATION: evntCounter=%d, Start=%D, End=%D,duration=%D, total_frames_duration=%D, firstFrmIdx=%d, firstFrmOffset=%D",
+                evntcounter, cur_event->Start, cur_event->End, cur_frame->duration, vtt_track->total_frames_duration,
+                vtt_track->first_frame_index, vtt_track->first_frame_time_offset);
+#endif
         // Cues are named "c<iteration_number_in_7_digits>" starting from c0000000
         vod_sprintf((u_char*)p, FIXED_WEBVTT_CUE_FORMAT_STR, evntcounter);      p+=FIXED_WEBVTT_CUE_NAME_WIDTH;
         len = 2; vod_memcpy(p, "\r\n", len);                                    p+=len;
@@ -749,12 +793,8 @@ ass_parse_frames(
 
         vtt_track->total_frames_size += cur_frame->size;
         cur_style->b_output_in_cur_segment = TRUE; // output this style as part of this segment
-    }
 
-    if ((cur_frame != NULL) && (cur_event != NULL))
-    {
-        cur_frame->duration = cur_event->End - cur_event->Start; // correct last event's duration
-        vtt_track->total_frames_duration = cur_event->End - vtt_track->first_frame_time_offset;
+        last_start_time = cur_event->Start;
     }
 
     //allocate memory for the style's text string
