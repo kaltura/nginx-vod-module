@@ -231,13 +231,8 @@ typedef struct {
 } audio_filter_state_t;
 
 // globals
-#if LIBAVCODEC_VERSION_INT < AV_VERSION_INT(58, 18, 100)
-	static AVFilter *buffersrc_filter = NULL;
-	static AVFilter *buffersink_filter = NULL;
-#else
-	static const AVFilter *buffersrc_filter = NULL;
-	static const AVFilter *buffersink_filter = NULL;
-#endif
+static const AVFilter *buffersrc_filter = NULL;
+static const AVFilter *buffersink_filter = NULL;
 
 static bool_t initialized = FALSE;
 
