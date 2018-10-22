@@ -64,8 +64,9 @@ thumb_grabber_process_init(vod_log_t* log)
 	codec_id_mapping_t* mapping_cur;
 	codec_id_mapping_t* mapping_end;
 
-	avcodec_register_all();
-
+	#if LIBAVCODEC_VERSION_INT < AV_VERSION_INT(58, 18, 100)
+		avcodec_register_all();
+	#endif
 	vod_memzero(decoder_codec, sizeof(decoder_codec));
 
 	encoder_codec = avcodec_find_encoder(AV_CODEC_ID_MJPEG);

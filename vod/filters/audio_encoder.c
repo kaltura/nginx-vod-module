@@ -36,7 +36,9 @@ audio_encoder_is_format_supported(AVCodec *codec, enum AVSampleFormat sample_fmt
 void
 audio_encoder_process_init(vod_log_t* log)
 {
-	avcodec_register_all();
+	#if LIBAVCODEC_VERSION_INT < AV_VERSION_INT(58, 18, 100)
+		avcodec_register_all();
+	#endif
 
 	encoder_codec = avcodec_find_encoder_by_name(AAC_ENCODER_NAME);
 	if (encoder_codec == NULL)

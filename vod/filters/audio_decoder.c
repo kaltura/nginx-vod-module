@@ -19,7 +19,9 @@ static bool_t initialized = FALSE;
 void
 audio_decoder_process_init(vod_log_t* log)
 {
-	avcodec_register_all();
+	#if LIBAVCODEC_VERSION_INT < AV_VERSION_INT(58, 18, 100)
+		avcodec_register_all();
+	#endif
 
 	decoder_codec = avcodec_find_decoder(AV_CODEC_ID_AAC);
 	if (decoder_codec == NULL)
