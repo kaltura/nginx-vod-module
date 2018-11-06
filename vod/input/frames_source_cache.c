@@ -93,10 +93,17 @@ frames_source_cache_disable_buffer_reuse(void* ctx)
 	read_cache_disable_buffer_reuse(state->read_cache_state);
 }
 
+static vod_status_t
+frames_source_cache_skip_frames(void* ctx, uint32_t skip_count)
+{
+	return VOD_OK;
+}
+
 // globals
 frames_source_t frames_source_cache = {
 	frames_source_cache_set_cache_slot_id,
 	frames_source_cache_start_frame,
 	frames_source_cache_read,
 	frames_source_cache_disable_buffer_reuse,
+	frames_source_cache_skip_frames,
 };
