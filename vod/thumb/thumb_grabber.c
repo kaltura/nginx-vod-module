@@ -227,6 +227,7 @@ thumb_grabber_truncate_frames(
 	input_frame_t* last_key_frame = NULL;
 	input_frame_t* cur_frame;
 	input_frame_t* last_frame;
+	vod_status_t rc;
 	uint64_t dts = track->clip_start_time + track->first_frame_time_offset;
 	uint64_t pts;
 	uint64_t cur_diff;
@@ -279,6 +280,14 @@ thumb_grabber_truncate_frames(
 			min_index = index - last_key_frame_index;
 			min_diff = cur_diff;
 			min_part = last_key_frame_part;
+
+			rc = min_part->frames_source->skip_frames(
+				min_part->frames_source_context,
+				last_key_frame - min_part->first_frame);
+			if (rc != VOD_OK)
+			{
+				return rc;
+			}
 
 			// truncate any frames before the key frame of the closest frame
 			min_part->first_frame = last_key_frame;
