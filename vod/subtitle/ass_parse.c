@@ -1031,8 +1031,10 @@ static int process_info_line(ass_track_t *track, char *str, request_context_t* r
     } else if (!strncmp(str, "Title:", 6)) {
         char *p = str + 6;
         char *strt, *end;
-        while (*p && ass_isspace(*p)) p++; strt = p;
-        while (*p && !ass_isspace(*p)) p++; end = p;
+        while (*p && ass_isspace(*p)) {p++};
+        strt = p;
+        while (*p && !ass_isspace(*p)) {p++};
+        end = p;
         free(track->Title);
         // Title: ﺎﻠﻋﺮﺒﻳﺓ
         track->Title = strndup(p, FFMAX(14, (size_t)(end-strt)));
