@@ -79,13 +79,20 @@ without the overhead of short segments for the whole duration of the video
 
 * Tested on Linux only
 
-#### Supported ASS/SSA subtitle files
+#### Support for ASS/SSA captions/subtitle inputs
 
-* support only for UTF-8 input scripts
+* Tested only with HLS segmented output.
 
-* No support for non-standard [Fonts] defined in script, nor to [Graphics], nor to [Pictures].
+* Supports only UTF-8 input scripts. Limited error-handling, so it will fail on invalid scripts.
+
+* No support for non-standard `[Fonts]` defined in script, nor to `[Graphics]`, nor to `[Pictures]`.
 
 * No support for Karoake features, moving or angular text.
+
+* WebVTT Styles are currently disabled by a #define, till browsers catch up.
+When enabled, they are applied per cue using a voice span.
+Only Styles used by current segment duration are added to the segment.
+
 
 ### Compilation
 

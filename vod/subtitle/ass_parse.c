@@ -51,18 +51,6 @@ static const unsigned char lowertab[] = {
     0xfd, 0xfe, 0xff
 };
 
-char *ass_strndup(const char *s, size_t n)
-{
-    char *end = memchr(s, 0, n);
-    int len = end ? end - s : (int)(n);
-    char *newp = len < (int)(ASS_SIZE_MAX) ? malloc(len + 1) : NULL;
-    if (newp) {
-        vod_memcpy(newp, s, len);
-        newp[len] = 0;
-    }
-    return newp;
-}
-
 static int ass_strcasecmp(const char *s1, const char *s2)
 {
     unsigned char a, b;
@@ -1186,7 +1174,7 @@ ass_track_t *parse_memory(char *buf, int len, request_context_t* request_context
     if (pcopy == NULL)
     {
         vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
-            "ass_parse_frames: vod_alloc failed");
+            "parse_memory(): vod_alloc failed");
         return NULL;
     }
     vod_memcpy(pcopy, buf, len+1);
@@ -1196,7 +1184,7 @@ ass_track_t *parse_memory(char *buf, int len, request_context_t* request_context
     if (!track)
     {
         vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
-            "vod_calloc() failed");
+            "parse_memory(): vod_calloc() failed");
         vod_free(request_context->pool, pcopy);
         return NULL;
     }
@@ -1206,7 +1194,7 @@ ass_track_t *parse_memory(char *buf, int len, request_context_t* request_context
     if (bfailed == 1)
     {
         vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-            "process_text failed, track_type = %d", track->track_type);
+            "parse_memory(): process_text failed, track_type = %d", track->track_type);
 
     }
     vod_free(request_context->pool, pcopy); // not needed anymore either way
@@ -1214,7 +1202,7 @@ ass_track_t *parse_memory(char *buf, int len, request_context_t* request_context
     if (track->track_type == TRACK_TYPE_UNKNOWN) {
         ass_free_track(request_context->pool, track);
         vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-            "track_type unknown");
+            "parse_memory(): track_type unknown");
         return NULL;
     }
 
