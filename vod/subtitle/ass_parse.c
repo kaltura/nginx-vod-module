@@ -669,7 +669,7 @@ static void set_default_style(ass_style_t *style, bool_t alloc_names)
     style->scale_x              = 100.0;
     style->scale_y              = 100.0;
     style->spacing              = 0.0;
-    style->Angle                = 0.0;
+    style->angle                = 0.0;
     style->border_style         = 1;
     style->outline              = 2;
     style->shadow               = 0;
@@ -831,15 +831,15 @@ static int process_event_tail(ass_track_t *track, ass_event_t *event, char *str)
         NEXT(p, token);
 
         PARSE_START
-            INTVAL(Layer)
-            STYLEVAL(Style)
-            STRVAL(Name)
-            STRVAL(Effect)
-            INTVAL(MarginL)
-            INTVAL(MarginR)
-            INTVAL(MarginV)
-            TIMEVAL(Start)
-            TIMEVAL(End)
+            INTVAL(layer)
+            STYLEVAL(style)
+            STRVAL(name)
+            STRVAL(effect)
+            INTVAL(margin_l)
+            INTVAL(margin_r)
+            INTVAL(margin_v)
+            TIMEVAL(start)
+            TIMEVAL(end)
         PARSE_END
     }
     free(format);
@@ -925,27 +925,27 @@ static int process_style(ass_track_t *track, char *str, request_context_t* reque
         NEXT(p, token);
 
         PARSE_START
-            STARREDSTRVAL(Name)
+            STARREDSTRVAL(name)
             if (strcmp(target->name, "Default") == 0)
                 track->default_style = sid;
-            STRVAL(FontName)
-            COLORVAL(PrimaryColour)
-            COLORVAL(SecondaryColour)
-            COLORVAL(OutlineColour) // TertiaryColor
-            COLORVAL(BackColour)
+            STRVAL(font_name)
+            COLORVAL(primary_colour)
+            COLORVAL(secondary_colour)
+            COLORVAL(outline_colour) // TertiaryColor
+            COLORVAL(back_colour)
             // SSA uses BackColour for both outline and shadow
             // this will destroy SSA's TertiaryColour, but i'm not going to use it anyway
             if (track->track_type == TRACK_TYPE_SSA)
                 target->outline_colour = target->back_colour;
-            INTVAL(FontSize)
-            INTVAL(Bold)
-            INTVAL(Italic)
-            INTVAL(Underline)
-            INTVAL(StrikeOut)
-            FPVAL(Spacing)
-            FPVAL(Angle)
-            INTVAL(BorderStyle)
-            INTVAL(Alignment)
+            INTVAL(font_size)
+            INTVAL(bold)
+            INTVAL(italic)
+            INTVAL(underline)
+            INTVAL(strike_out)
+            FPVAL(spacing)
+            FPVAL(angle)
+            INTVAL(border_style)
+            INTVAL(alignment)
             if (track->track_type == TRACK_TYPE_ASS)
             {
                 target->alignment = numpad2align(target->alignment);
@@ -955,19 +955,20 @@ static int process_style(ass_track_t *track, char *str, request_context_t* reque
                 target->alignment = 3;
             else if (target->alignment == 4)
                 target->alignment = 11;
-            INTVAL(MarginL)
-            INTVAL(MarginR)
-            INTVAL(MarginV)
-            INTVAL(Encoding)
-            FPVAL(ScaleX)
-            FPVAL(ScaleY)
-            INTVAL(Outline)
-            INTVAL(Shadow)
+            INTVAL(margin_l)
+            INTVAL(margin_r)
+            INTVAL(margin_v)
+            INTVAL(encoding)
+            FPVAL(scale_x)
+            FPVAL(scale_y)
+            INTVAL(outline)
+            INTVAL(shadow)
         PARSE_END
     }
     style->scale_x    = FFMAX(style->scale_x, 0.) / 100.;
     style->scale_y    = FFMAX(style->scale_y, 0.) / 100.;
     style->spacing    = FFMAX(style->spacing, 0.);
+    style->angle      = FFMAX(style->spacing, 0.);
     style->outline    = FFMAX(style->outline, 0);
     style->shadow     = FFMAX(style->shadow,  0);
     style->bold       = !!style->bold;
