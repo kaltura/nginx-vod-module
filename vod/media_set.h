@@ -18,7 +18,7 @@
 #define MAX_CLIPS (128)
 #define MAX_CLIPS_PER_REQUEST (16)
 #define MAX_SEQUENCES (32)
-#define MAX_SEQUENCE_IDS (2)
+#define MAX_SEQUENCE_IDS (4)
 #define MAX_SEQUENCE_TRACKS_MASKS (2)
 #define MAX_SOURCES (32)
 
