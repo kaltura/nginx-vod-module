@@ -606,16 +606,16 @@ void ass_free_event(ass_track_t *track, int eid)
 {
     ass_event_t *event = track->events + eid;
 
-    free(event->Name);
-    free(event->Effect);
-    free(event->Text);
+    free(event->name);
+    free(event->effect);
+    free(event->text);
 }
 void ass_free_style(ass_track_t *track, int sid)
 {
     ass_style_t *style = track->styles + sid;
 
-    free(style->Name);
-    free(style->FontName);
+    free(style->name);
+    free(style->font_name);
 }
 
 void ass_free_track(vod_pool_t* pool, ass_track_t *track)
@@ -624,8 +624,8 @@ void ass_free_track(vod_pool_t* pool, ass_track_t *track)
 
     free(track->style_format);
     free(track->event_format);
-    free(track->Language);
-    free(track->Title);
+    free(track->language);
+    free(track->title);
     if (track->styles) {
         for (i = 0; i < track->n_styles; ++i)
             ass_free_style(track, i);
@@ -652,30 +652,30 @@ static void set_default_style(ass_style_t *style, bool_t alloc_names)
 {
     if (alloc_names == TRUE)
     {
-        style->Name                 = strdup("Default");
-        style->FontName             = strdup("Arial");
+        style->name                 = strdup("Default");
+        style->font_name             = strdup("Arial");
     }
-    style->FontSize             = 18;
-    style->PrimaryColour        = 0xffffff00;
-    style->SecondaryColour      = 0x00ffff00;
-    style->OutlineColour        = 0x00000000;
-    style->BackColour           = 0x00000080;
-    style->Bold                 = FALSE;
-    style->Italic               = FALSE;
-    style->Underline            = FALSE;
-    style->StrikeOut            = FALSE;
-    style->b_right_to_left_language = FALSE;
-    style->b_output_in_cur_segment  = FALSE;
-    style->ScaleX               = 100.0;
-    style->ScaleY               = 100.0;
-    style->Spacing              = 0.0;
+    style->font_size            = 18;
+    style->primary_colour       = 0xffffff00;
+    style->secondary_colour     = 0x00ffff00;
+    style->outline_colour       = 0x00000000;
+    style->back_colour          = 0x00000080;
+    style->bold                 = FALSE;
+    style->italic               = FALSE;
+    style->underline            = FALSE;
+    style->strike_out           = FALSE;
+    style->right_to_left_language = FALSE;
+    style->output_in_cur_segment  = FALSE;
+    style->scale_x              = 100.0;
+    style->scale_y              = 100.0;
+    style->spacing              = 0.0;
     style->Angle                = 0.0;
-    style->BorderStyle          = 1;
-    style->Outline              = 2;
-    style->Shadow               = 0;
-    style->Alignment            = 2;
-    style->MarginL = style->MarginR = style->MarginV = 20;
-    style->Encoding             = 0;
+    style->border_style         = 1;
+    style->outline              = 2;
+    style->shadow               = 0;
+    style->alignment            = 2;
+    style->margin_l = style->margin_r = style->margin_v = 20;
+    style->encoding             = 0;
 }
 
 static long long string2timecode(char *p)
@@ -710,7 +710,7 @@ int lookup_style(ass_track_t *track, char *name)
     if (ass_strcasecmp(name, "Default") == 0)
         name = "Default";
     for (i = track->n_styles - 1; i >= 0; --i) {
-        if (strcmp(track->styles[i].Name, name) == 0)
+        if (strcmp(track->styles[i].name, name) == 0)
             return i;
     }
     i = track->default_style;
@@ -815,15 +815,15 @@ static int process_event_tail(ass_track_t *track, ass_event_t *event, char *str)
         NEXT(q, tname);
         if (ass_strcasecmp(tname, "Text") == 0) {
             char *last;
-            event->Text = strdup(p);
-            if (*event->Text != 0) {
-                last = event->Text + strlen(event->Text) - 1;
-                if (last >= event->Text && *last == '\r')
+            event->text = strdup(p);
+            if (*event->text != 0) {
+                last = event->text + strlen(event->text) - 1;
+                if (last >= event->text && *last == '\r')
                     *last = 0;
             }
             // need to track the largest end time in all events, since they are not in chronological order
-            if (track->maxDuration < event->End) {
-                track->maxDuration = event->End;
+            if (track->max_duration < event->end) {
+                track->max_duration = event->end;
             }
             free(format);
             return 0;           // "Text" is always the last
@@ -868,7 +868,7 @@ int numpad2align(int val)
 }
 
 /**
- * \brief Parse the Style line
+ * \brief Parse the style line
  * \param track track
  * \param str string to parse, zero-terminated
  * Allocates a new style struct.
@@ -926,7 +926,7 @@ static int process_style(ass_track_t *track, char *str, request_context_t* reque
 
         PARSE_START
             STARREDSTRVAL(Name)
-            if (strcmp(target->Name, "Default") == 0)
+            if (strcmp(target->name, "Default") == 0)
                 track->default_style = sid;
             STRVAL(FontName)
             COLORVAL(PrimaryColour)
@@ -936,7 +936,7 @@ static int process_style(ass_track_t *track, char *str, request_context_t* reque
             // SSA uses BackColour for both outline and shadow
             // this will destroy SSA's TertiaryColour, but i'm not going to use it anyway
             if (track->track_type == TRACK_TYPE_SSA)
-                target->OutlineColour = target->BackColour;
+                target->outline_colour = target->back_colour;
             INTVAL(FontSize)
             INTVAL(Bold)
             INTVAL(Italic)
@@ -948,13 +948,13 @@ static int process_style(ass_track_t *track, char *str, request_context_t* reque
             INTVAL(Alignment)
             if (track->track_type == TRACK_TYPE_ASS)
             {
-                target->Alignment = numpad2align(target->Alignment);
+                target->alignment = numpad2align(target->alignment);
             }
             // VSFilter compatibility
-            else if (target->Alignment == 8)
-                target->Alignment = 3;
-            else if (target->Alignment == 4)
-                target->Alignment = 11;
+            else if (target->alignment == 8)
+                target->alignment = 3;
+            else if (target->alignment == 4)
+                target->alignment = 11;
             INTVAL(MarginL)
             INTVAL(MarginR)
             INTVAL(MarginV)
@@ -965,27 +965,25 @@ static int process_style(ass_track_t *track, char *str, request_context_t* reque
             INTVAL(Shadow)
         PARSE_END
     }
-    style->ScaleX    = FFMAX(style->ScaleX,  0.) / 100.;
-    style->ScaleY    = FFMAX(style->ScaleY,  0.) / 100.;
-    style->Spacing   = FFMAX(style->Spacing, 0.);
-    style->Outline   = FFMAX(style->Outline, 0);
-    style->Shadow    = FFMAX(style->Shadow,  0);
-    style->Bold      = !!style->Bold;
-    style->Italic    = !!style->Italic;
-    style->Underline = !!style->Underline;
-    style->StrikeOut = !!style->StrikeOut;
-    if (!style->Name)
-        style->Name = strdup("Default");
-    if (!style->FontName)
-        style->FontName = strdup("Arial");
+    style->scale_x    = FFMAX(style->scale_x, 0.) / 100.;
+    style->scale_y    = FFMAX(style->scale_y, 0.) / 100.;
+    style->spacing    = FFMAX(style->spacing, 0.);
+    style->outline    = FFMAX(style->outline, 0);
+    style->shadow     = FFMAX(style->shadow,  0);
+    style->bold       = !!style->bold;
+    style->italic     = !!style->italic;
+    style->underline  = !!style->underline;
+    style->strike_out = !!style->strike_out;
+    if (!style->name)
+        style->name = strdup("Default");
+    if (!style->font_name)
+        style->font_name = strdup("Arial");
 
-    // For now, b_right_to_left_language is TRUE only for Arabic language. In future, it will be enabled for many others.
-    if ( !ass_strncasecmp(style->FontName, "Adobe Arabic", 12) ) {
-        //vod_log_error(VOD_LOG_ERR, request_context->log, 0, "Style font was Adobe Arabic");
-        style->b_right_to_left_language = TRUE;
+    // For now, right_to_left_language is TRUE only for Arabic language. In future, it will be enabled for many others.
+    if ( !ass_strncasecmp(style->font_name, "Adobe Arabic", 12) ) {
+        style->right_to_left_language = TRUE;
     } else {
-        //vod_log_error(VOD_LOG_ERR, request_context->log, 0, "Style font was: %s", style->FontName);
-        style->b_right_to_left_language = track->b_right_to_left_language;
+        style->right_to_left_language = track->right_to_left_language;
     }
     free(format);
     return 0;
@@ -1010,24 +1008,24 @@ static int process_styles_line(ass_track_t *track, char *str, request_context_t*
 static int process_info_line(ass_track_t *track, char *str, request_context_t* request_context)
 {
     if (!strncmp(str, "PlayResX:", 9)) {
-        track->PlayResX = atoi(str + 9);
+        track->play_res_x = atoi(str + 9);
     } else if (!strncmp(str, "PlayResY:", 9)) {
-        track->PlayResY = atoi(str + 9);
+        track->play_res_y = atoi(str + 9);
     } else if (!strncmp(str, "Timer:", 6)) {
-        track->Timer = ass_atof(str + 6);
+        track->timer = ass_atof(str + 6);
     } else if (!strncmp(str, "WrapStyle:", 10)) {
-        track->WrapStyle = atoi(str + 10);
+        track->wrap_style = atoi(str + 10);
     } else if (!strncmp(str, "ScaledBorderAndShadow:", 22)) {
-        track->ScaledBorderAndShadow = parse_bool(str + 22);
+        track->scaled_border_and_shadow = parse_bool(str + 22);
     } else if (!strncmp(str, "Kerning:", 8)) {
-        track->Kerning = parse_bool(str + 8);
+        track->kerning = parse_bool(str + 8);
     } else if (!strncmp(str, "YCbCr Matrix:", 13)) {
         // ignore for now
     } else if (!strncmp(str, "Language:", 9)) { // This field is not part of the ASS/SSA specs
         char *p = str + 9;
         while (*p && ass_isspace(*p)) p++;
-        free(track->Language);
-        track->Language = strndup(p, 2);
+        free(track->language);
+        track->language = strndup(p, 2);
     } else if (!strncmp(str, "Title:", 6)) {
         char *p = str + 6;
         char *strt, *end;
@@ -1037,10 +1035,10 @@ static int process_info_line(ass_track_t *track, char *str, request_context_t* r
         while (*p && !ass_isspace(*p))
             p++;
         end = p;
-        free(track->Title);
+        free(track->title);
         // Title: ﺎﻠﻋﺮﺒﻳﺓ
-        track->Title = strndup(p, FFMAX(14, (size_t)(end-strt)));
-        track->b_right_to_left_language = ((14 == (end-strt)) && (strt[0] == (char)0xD8) && (strt[13] == (char)0xA9));
+        track->title = strndup(p, FFMAX(14, (size_t)(end-strt)));
+        track->right_to_left_language = ((14 == (end-strt)) && (strt[0] == (char)0xD8) && (strt[13] == (char)0xA9));
     }
     return 0;
 }
