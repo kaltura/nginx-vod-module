@@ -99,7 +99,7 @@ webvtt_utf16_to_utf8(
 		1) != VOD_OK)
 	{
 		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
-			"webvtt_utf16le_to_utf8: vod_array_init failed");
+			"webvtt_utf16_to_utf8: vod_array_init failed");
 		return VOD_ALLOC_FAILED;
 	}
 
@@ -124,7 +124,7 @@ webvtt_utf16_to_utf8(
 		if (err != E2BIG)
 		{
 			vod_log_error(VOD_LOG_WARN, request_context->log, err,
-				"webvtt_utf16le_to_utf8: iconv failed");
+				"webvtt_utf16_to_utf8: iconv failed");
 			return VOD_UNEXPECTED;
 		}
 
@@ -134,7 +134,7 @@ webvtt_utf16_to_utf8(
 		if (vod_array_push_n(&output_arr, ICONV_SIZE_INCREMENT) == NULL)
 		{
 			vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
-				"webvtt_utf16le_to_utf8: vod_array_push_n failed");
+				"webvtt_utf16_to_utf8: vod_array_push_n failed");
 			return VOD_ALLOC_FAILED;
 		}
 
@@ -148,7 +148,7 @@ webvtt_utf16_to_utf8(
 	if (end == NULL)
 	{
 		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
-			"webvtt_utf16le_to_utf8: vod_array_push failed");
+			"webvtt_utf16_to_utf8: vod_array_push failed");
 		return VOD_ALLOC_FAILED;
 	}
 
