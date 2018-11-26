@@ -11,10 +11,11 @@
 #define M3U8_HEADER_VOD "#EXT-X-PLAYLIST-TYPE:VOD\n"
 #define M3U8_HEADER_PART2 "#EXT-X-VERSION:%d\n#EXT-X-MEDIA-SEQUENCE:%uD\n"
 
-#define M3U8_EXT_MEDIA_PART1 "#EXT-X-MEDIA:TYPE=%s,GROUP-ID=\"%s%uD\",LANGUAGE=\"%s\",NAME=\"%V\","
-#define M3U8_EXT_MEDIA_PART2_DEFAULT "AUTOSELECT=YES,DEFAULT=YES,"
-#define M3U8_EXT_MEDIA_PART2_NON_DEFAULT "AUTOSELECT=NO,DEFAULT=NO,"
-#define M3U8_EXT_MEDIA_PART3 "URI=\""
+#define M3U8_EXT_MEDIA_BASE "#EXT-X-MEDIA:TYPE=%s,GROUP-ID=\"%s%uD\",NAME=\"%V\","
+#define M3U8_EXT_MEDIA_LANG "LANGUAGE=\"%s\","
+#define M3U8_EXT_MEDIA_DEFAULT "AUTOSELECT=YES,DEFAULT=YES,"
+#define M3U8_EXT_MEDIA_NON_DEFAULT "AUTOSELECT=NO,DEFAULT=NO,"
+#define M3U8_EXT_MEDIA_URI "URI=\""
 
 #define M3U8_EXT_MEDIA_CHANNELS "CHANNELS=\"%uD\","
 
@@ -824,13 +825,14 @@ m3u8_builder_ext_x_media_tags_get_size(
 
 	result =
 		sizeof("\n\n") - 1 +
-		(sizeof(M3U8_EXT_MEDIA_PART1) - 1 + VOD_INT32_LEN +
+		(sizeof(M3U8_EXT_MEDIA_BASE) - 1 + VOD_INT32_LEN +
 		sizeof(M3U8_EXT_MEDIA_TYPE_SUBTITLES) - 1 +
 		sizeof(M3U8_EXT_MEDIA_GROUP_ID_AUDIO) - 1 +
+		sizeof(M3U8_EXT_MEDIA_LANG) - 1 +
 		LANG_ISO639_3_LEN +
-		sizeof(M3U8_EXT_MEDIA_PART2_DEFAULT) - 1 +
+		sizeof(M3U8_EXT_MEDIA_DEFAULT) - 1 +
 		sizeof(M3U8_EXT_MEDIA_CHANNELS) - 1 + VOD_INT32_LEN +
-		sizeof(M3U8_EXT_MEDIA_PART3) - 1 +
+		sizeof(M3U8_EXT_MEDIA_URI) - 1 +
 		base_url_len +
 		sizeof("\"\n") - 1) * (adaptation_sets->count[media_type]);
 
@@ -841,14 +843,7 @@ m3u8_builder_ext_x_media_tags_get_size(
 		cur_track = adaptation_set->first[0];
 
 		label_len = cur_track->media_info.label.len;
-		if (label_len == 0)
-		{
-			result += default_label.len;
-		}
-		else
-		{
-			result += label_len;
-		}
+		result += vod_max(label_len, default_label.len);
 
 		if (base_url->len != 0)
 		{
@@ -915,24 +910,31 @@ m3u8_builder_ext_x_media_tags_write(
 		}
 
 		label = &tracks[media_type]->media_info.label;
-		if (label->len == 0)
+		if (label->len == 0 ||
+			(media_type == MEDIA_TYPE_AUDIO && !adaptation_sets->multi_audio))
 		{
 			label = &default_label;
 		}
 
-		p = vod_sprintf(p, M3U8_EXT_MEDIA_PART1,
+		p = vod_sprintf(p, M3U8_EXT_MEDIA_BASE,
 			type,
 			group_id,
 			group_index,
-			lang_get_rfc_5646_name(tracks[media_type]->media_info.language),
 			label);
+
+		if (media_type != MEDIA_TYPE_AUDIO || adaptation_sets->multi_audio)
+		{
+			p = vod_sprintf(p, M3U8_EXT_MEDIA_LANG,
+				lang_get_rfc_5646_name(tracks[media_type]->media_info.language));
+		}
+
 		if (adaptation_set == first_adaptation_set)
 		{
-			p = vod_copy(p, M3U8_EXT_MEDIA_PART2_DEFAULT, sizeof(M3U8_EXT_MEDIA_PART2_DEFAULT) - 1);
+			p = vod_copy(p, M3U8_EXT_MEDIA_DEFAULT, sizeof(M3U8_EXT_MEDIA_DEFAULT) - 1);
 		}
 		else
 		{
-			p = vod_copy(p, M3U8_EXT_MEDIA_PART2_NON_DEFAULT, sizeof(M3U8_EXT_MEDIA_PART2_NON_DEFAULT) - 1);
+			p = vod_copy(p, M3U8_EXT_MEDIA_NON_DEFAULT, sizeof(M3U8_EXT_MEDIA_NON_DEFAULT) - 1);
 		}
 
 		if (media_type == MEDIA_TYPE_AUDIO)
@@ -941,7 +943,7 @@ m3u8_builder_ext_x_media_tags_write(
 				(uint32_t)tracks[media_type]->media_info.u.audio.channels);
 		}
 
-		p = vod_copy(p, M3U8_EXT_MEDIA_PART3, sizeof(M3U8_EXT_MEDIA_PART3) - 1);
+		p = vod_copy(p, M3U8_EXT_MEDIA_URI, sizeof(M3U8_EXT_MEDIA_URI) - 1);
 
 		p = m3u8_builder_append_index_url(
 			p,
