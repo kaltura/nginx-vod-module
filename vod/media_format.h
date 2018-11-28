@@ -104,6 +104,7 @@ enum {
 	FORMAT_ID_CAP,
 	FORMAT_ID_DFXP,
 	FORMAT_ID_ASS,
+	FORMAT_ID_SCC,
 };
 
 enum {			// mp4 only
