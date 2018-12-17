@@ -2,6 +2,7 @@
 #include "mp4_cenc_decrypt.h"
 #include "mp4_write_stream.h"
 #include "../read_stream.h"
+#include "../avc_defs.h"
 #include "../udrm.h"
 
 #define MAX_FRAME_RATE (60)
@@ -13,7 +14,8 @@ enum {
 	// regular states
 	STATE_PACKET_SIZE,
 	STATE_NAL_TYPE,
-	STATE_PACKET_DATA,
+	STATE_ENCRYPT_DATA,
+	STATE_COPY_DATA,
 
 	// snpf states
 	STATE_CLEAR_BYTES = STATE_PACKET_SIZE,
@@ -169,6 +171,7 @@ mp4_cenc_encrypt_video_init_track(mp4_cenc_encrypt_video_state_t* state, media_t
 		return VOD_BAD_DATA;
 	}
 
+	state->codec_id = track->media_info.codec_id;
 	state->cur_state = STATE_PACKET_SIZE;
 	state->length_bytes_left = state->nal_packet_size_length;
 	state->packet_size_left = 0;
@@ -516,6 +519,7 @@ mp4_cenc_encrypt_video_write_buffer(void* context, u_char* buffer, uint32_t size
 	u_char* buffer_end = buffer + size;
 	u_char* cur_pos = buffer;
 	u_char* output;
+	u_char nal_type;
 	uint32_t write_size;
 	int32_t cur_shift;
 	size_t ignore;
@@ -539,7 +543,7 @@ mp4_cenc_encrypt_video_write_buffer(void* context, u_char* buffer, uint32_t size
 				{
 					if (state->base.frame_size_left <= 0)
 					{
-						state->cur_state = STATE_PACKET_DATA;
+						state->cur_state = STATE_ENCRYPT_DATA;
 						break;
 					}
 
@@ -603,7 +607,8 @@ mp4_cenc_encrypt_video_write_buffer(void* context, u_char* buffer, uint32_t size
 				*output++ = (state->packet_size_left >> cur_shift) & 0xff;
 			}
 
-			*output++ = *cur_pos++;		// nal type
+			nal_type = *cur_pos++;
+			*output++ = nal_type;
 
 			// update the packet size
 			if (state->packet_size_left <= 0)
@@ -614,21 +619,59 @@ mp4_cenc_encrypt_video_write_buffer(void* context, u_char* buffer, uint32_t size
 			}
 			state->packet_size_left--;
 
+			// decide whether to encrypt the nal unit
+			state->cur_state = STATE_ENCRYPT_DATA;
+			switch (state->codec_id)
+			{
+			case VOD_CODEC_ID_AVC:
+				nal_type &= 0x1f;
+				if (nal_type < AVC_NAL_SLICE || nal_type > AVC_NAL_IDR_SLICE)
+				{
+					state->cur_state = STATE_COPY_DATA;
+				}
+				break;
+
+			case VOD_CODEC_ID_HEVC:
+				nal_type = (nal_type >> 1) & 0x3f;
+				if (nal_type >= HEVC_NAL_VPS_NUT)
+				{
+					state->cur_state = STATE_COPY_DATA;
+				}
+				break;
+			}
+
 			// add the subsample
-			rc = mp4_cenc_encrypt_video_add_subsample(state, state->nal_packet_size_length + 1, state->packet_size_left);
+			if (state->cur_state == STATE_ENCRYPT_DATA)
+			{
+				rc = mp4_cenc_encrypt_video_add_subsample(state, state->nal_packet_size_length + 1, state->packet_size_left);
+			}
+			else
+			{
+
+				rc = mp4_cenc_encrypt_video_add_subsample(state, state->nal_packet_size_length + 1 + state->packet_size_left, 0);
+			}
+
 			if (rc != VOD_OK)
 			{
 				return rc;
 			}
 
-			state->cur_state++;
 			// fall through
 
-		case STATE_PACKET_DATA:
+		case STATE_COPY_DATA:
+		case STATE_ENCRYPT_DATA:
 			write_size = (uint32_t)(buffer_end - cur_pos);
 			write_size = vod_min(write_size, state->packet_size_left);
 			
-			rc = mp4_aes_ctr_write_encrypted(&state->base.cipher, &state->base.write_buffer, cur_pos, write_size);
+			if (state->cur_state == STATE_ENCRYPT_DATA)
+			{
+				rc = mp4_aes_ctr_write_encrypted(&state->base.cipher, &state->base.write_buffer, cur_pos, write_size);
+			}
+			else
+			{
+				rc = write_buffer_write(&state->base.write_buffer, cur_pos, write_size);
+			}
+
 			if (rc != VOD_OK)
 			{
 				return rc;

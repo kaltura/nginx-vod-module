@@ -15,6 +15,8 @@ typedef struct {
 	frames_source_t* frames_source;
 	void* frames_source_context;
 	bool_t reuse_buffers;
+	uint8_t default_auxiliary_sample_size;
+	u_char* auxiliary_sample_sizes;
 	bool_t use_subsamples;
 	u_char key[MP4_AES_CTR_KEY_SIZE];
 
@@ -73,6 +75,8 @@ mp4_cenc_decrypt_init(
 
 	state->auxiliary_info_pos = encryption->auxiliary_info;
 	state->auxiliary_info_end = encryption->auxiliary_info_end;
+	state->default_auxiliary_sample_size = encryption->default_auxiliary_sample_size;
+	state->auxiliary_sample_sizes = encryption->auxiliary_sample_sizes;
 	state->use_subsamples = encryption->use_subsamples;
 
 	*result = state;
@@ -268,6 +272,39 @@ mp4_cenc_decrypt_read(void* ctx, u_char** buffer, uint32_t* size, bool_t* frame_
 	return VOD_OK;
 }
 
+static vod_status_t
+mp4_cenc_decrypt_skip_frames(void* ctx, uint32_t skip_count)
+{
+	mp4_cenc_decrypt_state_t* state = ctx;
+	size_t skip_size;
+
+	if (state->default_auxiliary_sample_size != 0)
+	{
+		skip_size = state->default_auxiliary_sample_size * skip_count;
+	}
+	else
+	{
+		skip_size = 0;
+		for (; skip_count > 0; skip_count--)
+		{
+			skip_size += *state->auxiliary_sample_sizes++;
+		}
+	}
+
+	if (state->auxiliary_info_pos + skip_size > state->auxiliary_info_end)
+	{
+		vod_log_error(VOD_LOG_ERR, state->request_context->log, 0,
+			"mp4_cenc_decrypt_skip_frames: auxiliary info overflow");
+		return VOD_BAD_DATA;
+	}
+
+	state->auxiliary_info_pos += skip_size;
+
+	return state->frames_source->skip_frames(
+		state->frames_source_context,
+		skip_count);
+}
+
 static void
 mp4_cenc_decrypt_disable_buffer_reuse(void* ctx)
 {
@@ -302,4 +339,5 @@ frames_source_t mp4_cenc_decrypt_frames_source = {
 	mp4_cenc_decrypt_start_frame,
 	mp4_cenc_decrypt_read,
 	mp4_cenc_decrypt_disable_buffer_reuse,
+	mp4_cenc_decrypt_skip_frames,
 };

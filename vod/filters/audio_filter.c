@@ -231,8 +231,9 @@ typedef struct {
 } audio_filter_state_t;
 
 // globals
-static AVFilter *buffersrc_filter = NULL;
-static AVFilter *buffersink_filter = NULL;
+static const AVFilter *buffersrc_filter = NULL;
+static const AVFilter *buffersink_filter = NULL;
+
 static bool_t initialized = FALSE;
 
 static const uint64_t aac_channel_layout[] = {
@@ -249,7 +250,9 @@ static const uint64_t aac_channel_layout[] = {
 void 
 audio_filter_process_init(vod_log_t* log)
 {
-	avfilter_register_all();
+	#if LIBAVCODEC_VERSION_INT < AV_VERSION_INT(58, 18, 100)
+		avfilter_register_all();
+	#endif
 
 	buffersrc_filter = avfilter_get_by_name(BUFFERSRC_FILTER_NAME);
 	if (buffersrc_filter == NULL)

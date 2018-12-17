@@ -37,7 +37,6 @@
 #define NUM_OF_TAGS_ALLOWED_PER_LINE 1
 
 
-//#define TEMP_VERBOSITY
 //#define ASSUME_STYLE_SUPPORT
 
 
@@ -335,51 +334,51 @@ static char* output_one_style(ass_style_t* cur_style, char* p)
         int len;
 
         vod_memcpy(p, FIXED_WEBVTT_STYLE_START_STR, FIXED_WEBVTT_STYLE_START_WIDTH);           p+=FIXED_WEBVTT_STYLE_START_WIDTH;
-        len = vod_strlen(cur_style->Name); vod_memcpy(p, cur_style->Name, len);                p+=len;
+        len = vod_strlen(cur_style->name); vod_memcpy(p, cur_style->name, len);                p+=len;
         vod_memcpy(p, FIXED_WEBVTT_STYLE_END_STR, FIXED_WEBVTT_STYLE_END_WIDTH);               p+=FIXED_WEBVTT_STYLE_END_WIDTH;
         vod_memcpy(p, FIXED_WEBVTT_BRACES_START_STR, FIXED_WEBVTT_BRACES_START_WIDTH);         p+=FIXED_WEBVTT_BRACES_START_WIDTH;
 
         len = 8; vod_memcpy(p, "color: #", len);                                               p+=len;
-        vod_sprintf((u_char*)p, "%08uxD;\r\n", cur_style->PrimaryColour);                      p+=11;
+        vod_sprintf((u_char*)p, "%08uxD;\r\n", cur_style->primary_colour);                     p+=11;
 
 
         len = 14; vod_memcpy(p, "font-family: \"", len);                                       p+=len;
-        len = vod_strlen(cur_style->FontName); vod_memcpy(p, cur_style->FontName, len);        p+=len;
+        len = vod_strlen(cur_style->font_name); vod_memcpy(p, cur_style->font_name, len);      p+=len;
         len = 16; vod_memcpy(p, "\", sans-serif;\r\n", len);                                   p+=len;
-        vod_sprintf((u_char*)p, "font-size: %03uDpx;\r\n", cur_style->FontSize);               p+=19;
+        vod_sprintf((u_char*)p, "font-size: %03uDpx;\r\n", cur_style->font_size);              p+=19;
 
-        /*if (cur_style->Bold) {
+        /*if (cur_style->bold) {
             len = 20; vod_memcpy(p, "font-weight: bold;\r\n", len);                            p+=len;
         }
-        if (cur_style->Italic) {
+        if (cur_style->italic) {
             len = 21; vod_memcpy(p, "font-style: italic;\r\n", len);                           p+=len;
         }
-        // This will inherit the OutlineColour (and shadow) if BorderStyle==1, otherwise it inherits PrimaryColour
-        if (cur_style->Underline) {
+        // This will inherit the outline_colour (and shadow) if border_style==1, otherwise it inherits primary_colour
+        if (cur_style->underline) {
             // available styles are: solid | double | dotted | dashed | wavy
             // available lines are: underline || overline || line-through || blink
             len = 35; vod_memcpy(p, "text-decoration: solid underline;\r\n", len);             p+=len;
         }
-        else if (cur_style->StrikeOut) {
+        else if (cur_style->strike_out) {
             // available lines are: underline || overline || line-through || blink
             len = 38; vod_memcpy(p, "text-decoration: solid line-through;\r\n", len);          p+=len;
         }*/
 
-        if (cur_style->BorderStyle == 1 /*&& ass_track->type == TRACK_TYPE_ASS*/)
+        if (cur_style->border_style == 1 /*&& ass_track->type == TRACK_TYPE_ASS*/)
         {
             // webkit is not supported by all players, stick to adding outline using text-shadow
             len = 13; vod_memcpy(p, "text-shadow: ", len);                                     p+=len;
             // add outline in 4 directions with the outline color
             vod_sprintf((u_char*)p, "#%08uxD -%01uDpx 0px, #%08uxD 0px %01uDpx, #%08uxD 0px -%01uDpx, #%08uxD %01uDpx 0px, #%08uxD %01uDpx %01uDpx 0px;\r\n",
-                         cur_style->OutlineColour, cur_style->Outline,
-                         cur_style->OutlineColour, cur_style->Outline,
-                         cur_style->OutlineColour, cur_style->Outline,
-                         cur_style->OutlineColour, cur_style->Outline,
-                         cur_style->BackColour, cur_style->Shadow, cur_style->Shadow);         p+=102;
+                         cur_style->outline_colour, cur_style->outline,
+                         cur_style->outline_colour, cur_style->outline,
+                         cur_style->outline_colour, cur_style->outline,
+                         cur_style->outline_colour, cur_style->outline,
+                         cur_style->back_colour, cur_style->shadow, cur_style->shadow);        p+=102;
 
         } else {
             len = 19; vod_memcpy(p, "background-color: #", len);                               p+=len;
-            vod_sprintf((u_char*)p, "%08uxD;\r\n", cur_style->BackColour);                     p+=11;
+            vod_sprintf((u_char*)p, "%08uxD;\r\n", cur_style->back_colour);                    p+=11;
         }
         vod_memcpy(p, FIXED_WEBVTT_BRACES_END_STR, FIXED_WEBVTT_BRACES_END_WIDTH);             p+=FIXED_WEBVTT_BRACES_END_WIDTH;
         len = 2; vod_memcpy(p, "\r\n", len);                                                   p+=len;
@@ -440,15 +439,11 @@ ass_parse(
         parse_params,
         source,
         NULL,
-        (uint64_t)(ass_track->maxDuration),
+        (uint64_t)(ass_track->max_duration),
         metadata_part_count,
         result);
-#ifdef  TEMP_VERBOSITY
-    vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-        "ass_parse(): parse_memory() succeeded, sub_parse succeeded, len of data = %d, maxDuration = %D, nEvents = %d, nStyles = %d",
-        source->len, ass_track->maxDuration, ass_track->n_events, ass_track->n_styles);
-#endif
-    // now that we used maxDuration, we need to free the memory used by the track
+
+    // now that we used max_duration, we need to free the memory used by the track
     ass_free_track(request_context->pool, ass_track);
     return ret_status;
 }
@@ -528,14 +523,6 @@ ass_parse_frames(
             "ass_parse_frames: failed to parse memory into ass track");
         return VOD_BAD_MAPPING;
     }
-#ifdef  TEMP_VERBOSITY
-    else
-    {
-        vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-            "frames parse_memory() succeeded, len of data = %d, maxDuration = %D, nEvents = %d, nStyles = %d",
-            source->len, ass_track->maxDuration, ass_track->n_events, ass_track->n_styles);
-    }
-#endif
 
     // Re-order events so that each event has a starting time that is bigger than or equal than the one before it.
     // This matches WebVTT expectations of cue order. And allows us to calculate frame duration correctly.
@@ -548,7 +535,7 @@ ass_parse_frames(
         {
             ass_event_t*   next_event = ass_track->events + chunkcounter + 1;
                            cur_event  = ass_track->events + chunkcounter;
-            if (cur_event->Start > next_event->Start)
+            if (cur_event->start > next_event->start)
             {
                 //  Swap the two events
                 swap_events(next_event, cur_event);
@@ -584,52 +571,52 @@ ass_parse_frames(
     for (evntcounter = 0; evntcounter < ass_track->n_events; evntcounter++)
     {
         cur_event = ass_track->events + evntcounter;
-        ass_style_t*   cur_style = ass_track->styles + cur_event->Style; //cur_event->Style will be zero for an unknown Style name
+        ass_style_t*   cur_style = ass_track->styles + cur_event->style; //cur_event->style will be zero for an unknown style name
 
         // make all timing checks and clipping, before we decide to read the text or output it.
         // to make sure this event should be included in the segment.
-        if (cur_event->End < 0 || cur_event->Start < 0 || cur_event->Start >= cur_event->End)
+        if (cur_event->end < 0 || cur_event->start < 0 || cur_event->start >= cur_event->end)
         {
             continue;
         }
-        if ((uint64_t)cur_event->End < seg_start)
+        if ((uint64_t)cur_event->end < seg_start)
         {
             continue;
         }
 
         // apply clipping
-        if (cur_event->Start >= (int64_t)base_time)
+        if (cur_event->start >= (int64_t)base_time)
         {
-            cur_event->Start -= base_time;
-            if ((uint64_t)cur_event->Start > clip_to)
+            cur_event->start -= base_time;
+            if ((uint64_t)cur_event->start > clip_to)
             {
-                cur_event->Start = (long long)(clip_to);
+                cur_event->start = (long long)(clip_to);
             }
         }
         else
         {
-            cur_event->Start = 0;
+            cur_event->start = 0;
         }
 
-        cur_event->End -= base_time;
-        if ((uint64_t)cur_event->End > clip_to)
+        cur_event->end -= base_time;
+        if ((uint64_t)cur_event->end > clip_to)
         {
-            cur_event->End = (long long)(clip_to);
+            cur_event->end = (long long)(clip_to);
         }
 
         if (cur_frame != NULL)
         {
-            cur_frame->duration = cur_event->Start - last_start_time;
+            cur_frame->duration = cur_event->start - last_start_time;
             vtt_track->total_frames_duration += cur_frame->duration;
         }
         else
         {
             // if this is the very first event intersecting with segment, this is the first start in the segment
-            vtt_track->first_frame_time_offset = cur_event->Start;
+            vtt_track->first_frame_time_offset = cur_event->start;
             vtt_track->first_frame_index       = evntcounter;
         }
 
-        if ((uint64_t)cur_event->Start >= seg_end)
+        if ((uint64_t)cur_event->start >= seg_end)
         {
             // events are already ordered by start-time
             break;
@@ -658,17 +645,11 @@ ass_parse_frames(
             event_len[chunkcounter] = 0;
         }
 
-        bool_t  ibu_flags[NUM_OF_INLINE_TAGS_SUPPORTED] = {cur_style->Italic, cur_style->Bold, cur_style->Underline};
+        bool_t  ibu_flags[NUM_OF_INLINE_TAGS_SUPPORTED] = {cur_style->italic, cur_style->bold, cur_style->underline};
         uint32_t max_run = 0;
-        int  num_chunks_in_text = split_event_text_to_chunks(cur_event->Text, vod_strlen(cur_event->Text),
-                                  cur_style->b_right_to_left_language, event_textp, event_len,
+        int  num_chunks_in_text = split_event_text_to_chunks(cur_event->text, vod_strlen(cur_event->text),
+                                  cur_style->right_to_left_language, event_textp, event_len,
                                   ibu_flags, &max_run, request_context);
-
-#ifdef  TEMP_VERBOSITY
-        vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-            "ass_parse_frames: event=%d num_chunks=%d len0=%d",
-            evntcounter, num_chunks_in_text, event_len[0]);
-#endif
 
         // allocate the output frame
         cur_frame = vod_array_push(&frames);
@@ -691,33 +672,27 @@ ass_parse_frames(
 
         if (evntcounter == (ass_track->n_events - 1))
         {
-            cur_frame->duration = cur_event->End - cur_event->Start;
+            cur_frame->duration = cur_event->end - cur_event->start;
             vtt_track->total_frames_duration += cur_frame->duration;
         }
 
-#ifdef  TEMP_VERBOSITY
-            vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-                "UPDATEDURATION: evntCounter=%d, Start=%D, End=%D,duration=%D, total_frames_duration=%D, firstFrmIdx=%d, firstFrmOffset=%D",
-                evntcounter, cur_event->Start, cur_event->End, cur_frame->duration, vtt_track->total_frames_duration,
-                vtt_track->first_frame_index, vtt_track->first_frame_time_offset);
-#endif
         // Cues are named "c<iteration_number_in_7_digits>" starting from c0000000
         vod_sprintf((u_char*)p, FIXED_WEBVTT_CUE_FORMAT_STR, evntcounter);      p+=FIXED_WEBVTT_CUE_NAME_WIDTH;
         len = 2; vod_memcpy(p, "\r\n", len);                                    p+=len;
         // timestamps will be inserted here, we now insert positioning and alignment changes
         {
             bool_t    bleft = FALSE, bright = FALSE;
-            if ((cur_style->Alignment & 1) == 0) {              //center Alignment  2/6/10
+            if ((cur_style->alignment & 1) == 0) {              //center alignment  2/6/10
                 // do nothing
-            } else if (((cur_style->Alignment - 1) & 3) == 0) { //left   Alignment  1/5/9
+            } else if (((cur_style->alignment - 1) & 3) == 0) { //left   alignment  1/5/9
                  bleft  = TRUE;
-            } else {                                            //right  Alignment  3/7/11
+            } else {                                            //right  alignment  3/7/11
                  bright = TRUE;
             }
 
-            margL = ((cur_event->MarginL > 0) ? cur_event->MarginL : cur_style->MarginL) * 100 / ass_track->PlayResX;
-            margR = (ass_track->PlayResX - ((cur_event->MarginR > 0) ? cur_event->MarginR : cur_style->MarginR)) * 100 / ass_track->PlayResX;
-            margV = ((cur_event->MarginV > 0) ? cur_event->MarginV : cur_style->MarginV) * 100 / ass_track->PlayResY; // top assumed
+            margL = ((cur_event->margin_l > 0) ? cur_event->margin_l : cur_style->margin_l) * 100 / ass_track->play_res_x;
+            margR = (ass_track->play_res_x - ((cur_event->margin_r > 0) ? cur_event->margin_r : cur_style->margin_r)) * 100 / ass_track->play_res_x;
+            margV = ((cur_event->margin_v > 0) ? cur_event->margin_v : cur_style->margin_v) * 100 / ass_track->play_res_y; // top assumed
             // All the margX variables are percentages in rounded integer values.
             // line is integer in range of [0 - 12] given 16 rows of lines in the frame.
             if (margL || margR || margV)
@@ -725,9 +700,9 @@ ass_parse_frames(
                 // center/middle means we are giving the coordinate of the center/middle point
                 int line, sizeH, pos;
 
-                if (cur_style->Alignment >= VALIGN_CENTER) {   //middle Alignment  for values 9,10,11
+                if (cur_style->alignment >= VALIGN_CENTER) {   //middle alignment  for values 9,10,11
                     line = 7;
-                } else if (cur_style->Alignment < VALIGN_TOP) { //bottom Alignment  for values 1, 2, 3
+                } else if (cur_style->alignment < VALIGN_TOP) { //bottom alignment  for values 1, 2, 3
                     margV = 100 - margV;
                     line = FFMINMAX((margV+4) >> 3, 0, 12);
                 } else {                                        //top alignment is the default assumption
@@ -737,11 +712,11 @@ ass_parse_frames(
                 // cap horizontal size to more than 2x to make sure we don't break lines with generic font
                 // cap horizontal size to no more than 3x to make sure we allow right and left aligned events on same line
                 sizeH = FFMINMAX(margR - margL, (int)(max_run*2), (int)(max_run*3));
-                if ((bleft == FALSE) && (bright == FALSE)) {        //center Alignment  2/6/10
+                if ((bleft == FALSE) && (bright == FALSE)) {        //center alignment  2/6/10
                     pos = FFMINMAX((margR + margL + 1)/2, sizeH/2, 100 - sizeH/2);
-                } else if (bleft == TRUE) {                         //left   Alignment  1/5/9
+                } else if (bleft == TRUE) {                         //left   alignment  1/5/9
                     pos = FFMINMAX(margL, 0, 100 - sizeH);
-                } else {                                            //right  Alignment  3/7/11
+                } else {                                            //right  alignment  3/7/11
                     pos = FFMINMAX(margR, sizeH, 100);
                 }
 
@@ -755,18 +730,18 @@ ass_parse_frames(
             // We should only insert this if an alignment override tag {\a...}is in the text, otherwise follow the style's alignment
             // but for now, insert it all the time till all players can read styles
             len =  7; vod_memcpy(p, " align:", len);                            p+=len;
-            if ((bleft == FALSE) && (bright == FALSE)) {            //center Alignment  2/6/10
+            if ((bleft == FALSE) && (bright == FALSE)) {            //center alignment  2/6/10
                 len =  6; vod_memcpy(p, "center", len);                         p+=len;
-            } else if (bleft == TRUE) {                             //left   Alignment  1/5/9
+            } else if (bleft == TRUE) {                             //left   alignment  1/5/9
                 len =  4; vod_memcpy(p, "left", len);                           p+=len;
-            } else {                                                //right  Alignment  3/7/11
+            } else {                                                //right  alignment  3/7/11
                 len =  5; vod_memcpy(p, "right", len);                          p+=len;
             }
             len = 2; vod_memcpy(p, "\r\n", len);                                p+=len;
         }
 #ifdef ASSUME_STYLE_SUPPORT
         vod_memcpy(p, FIXED_WEBVTT_VOICE_START_STR, FIXED_WEBVTT_VOICE_START_WIDTH);       p+=FIXED_WEBVTT_VOICE_START_WIDTH;
-        len = vod_strlen(cur_style->Name); vod_sprintf((u_char*)p, cur_style->Name, len);  p+=len;
+        len = vod_strlen(cur_style->name); vod_sprintf((u_char*)p, cur_style->name, len);  p+=len;
         vod_memcpy(p, FIXED_WEBVTT_VOICE_END_STR, FIXED_WEBVTT_VOICE_END_WIDTH);           p+=FIXED_WEBVTT_VOICE_END_WIDTH;
 #endif //ASSUME_STYLE_SUPPORT
 
@@ -789,12 +764,12 @@ ass_parse_frames(
         cur_frame->offset    = (uintptr_t)pfixed;
         cur_frame->size      = (uint32_t)(p - pfixed);
         cur_frame->key_frame = FIXED_WEBVTT_CUE_NAME_WIDTH + 2; // cue name + \r\n
-        cur_frame->pts_delay = cur_event->End - cur_event->Start;
+        cur_frame->pts_delay = cur_event->end - cur_event->start;
 
         vtt_track->total_frames_size += cur_frame->size;
-        cur_style->b_output_in_cur_segment = TRUE; // output this style as part of this segment
+        cur_style->output_in_cur_segment = TRUE; // output this style as part of this segment
 
-        last_start_time = cur_event->Start;
+        last_start_time = cur_event->start;
     }
 
     //allocate memory for the style's text string
@@ -807,7 +782,7 @@ ass_parse_frames(
         return VOD_ALLOC_FAILED;
     }
 
-    // We now insert header and all Style definitions
+    // We now insert header and all style definitions
     header->data              = (u_char*)pfixed;
     len = sizeof(WEBVTT_HEADER_NEWLINES) - 1; vod_memcpy(p, WEBVTT_HEADER_NEWLINES, len);  p+=len;
 #ifdef ASSUME_STYLE_SUPPORT
@@ -815,7 +790,7 @@ ass_parse_frames(
     for (stylecounter = (ass_track->default_style ? 1 : 0); (stylecounter < ass_track->n_styles); stylecounter++)
     {
         ass_style_t* cur_style = ass_track->styles + stylecounter;
-        if (cur_style->b_output_in_cur_segment == TRUE)
+        if (cur_style->output_in_cur_segment == TRUE)
             p = output_one_style(cur_style, p);
 
     }
