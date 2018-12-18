@@ -80,7 +80,7 @@ static const char *command_type[] =
 	"FON - Flash turened ON"
 };
 
-static const char *font_text[]=
+static const char *font_text[] =
 {
 	"regular",
 	"italic",
@@ -93,7 +93,7 @@ static const char *font_text[]=
 };
 
 #define MAX_COLOR 10
-static const char *color_text[MAX_COLOR][2]=
+static const char *color_text[MAX_COLOR][2] =
 {
 	{"white",""},
 	{"green","<font color=\"#00ff00\">"},
@@ -107,7 +107,6 @@ static const char *color_text[MAX_COLOR][2]=
 	{"transparent",""}
 };
 #endif
-//====================================================================================
 
 scc_event_t *get_writing_buffer(scc_track_t *track, request_context_t* request_context)
 {
@@ -143,7 +142,7 @@ scc_event_t *new_event(scc_track_t *track, request_context_t* request_context)
     }
 
     int i;
-	for (i=0;i<15;i++)
+	for (i = 0;i < 15;i++)
 	{
 		memset(event->characters[i], 0, SCC_608_SCREEN_WIDTH+1);
 		memset(event->iub[i],        0, SCC_608_SCREEN_WIDTH+1);
@@ -161,17 +160,17 @@ scc_event_t *new_event(scc_track_t *track, request_context_t* request_context)
 /* Process PREAMBLE ACCESS CODES (PAC) */
 void handle_pac(unsigned char c1, unsigned char c2, scc_track_t *track, request_context_t* request_context)
 {
-    int row=rowdata[((c1<<1)&14)|((c2>>5)&1)];
+    int row = rowdata[((c1<<1)&14)|((c2>>5)&1)];
 
-    if (c2>=0x40 && c2<=0x5f)
+    if (c2 >= 0x40 && c2 <= 0x5f)
     {
-        c2=c2-0x40;
+        c2 = c2-0x40;
     }
     else
     {
-        if (c2>=0x60 && c2<=0x7f)
+        if (c2 >= 0x60 && c2 <= 0x7f)
         {
-            c2=c2-0x60;
+            c2 = c2-0x60;
         }
         else
         {
@@ -256,7 +255,7 @@ void write_char(const unsigned char c, scc_track_t *track, request_context_t* re
 /* Handle MID-ROW CODES. */
 void handle_text_attr(const unsigned char c1, const unsigned char c2, scc_track_t *track, request_context_t* request_context)
 {
-	if ((c1!=0x11 && c1!=0x19) || (c2<0x20 || c2>0x2f))
+	if ((c1 != 0x11 && c1 != 0x19) || (c2 < 0x20 || c2 > 0x2f))
 	{
 		vod_log_error(VOD_LOG_ERR, request_context->log, 0, "This is not a text attribute! c1=%d, c2=%d", c1, c2);
 	}
@@ -282,7 +281,7 @@ void handle_text_attr(const unsigned char c1, const unsigned char c2, scc_track_
 
 void handle_single(const unsigned char c1, scc_track_t *track, request_context_t* request_context)
 {
-	if (c1<0x20)
+	if (c1 < 0x20)
 		return; // We don't allow teleprinting stuff here
 	write_char (c1,track, request_context);
 }
@@ -291,9 +290,9 @@ void handle_single(const unsigned char c1, scc_track_t *track, request_context_t
 void handle_special_doublebytes(const unsigned char c1, const unsigned char c2, scc_track_t *track, request_context_t* request_context)
 {
 	unsigned char c;
-	if (c2>=0x30 && c2<=0x3f)
+	if (c2 >= 0x30 && c2 <= 0x3f)
 	{
-		c=c2 + 0x50; // So if c>=0x80 && c<=0x8f, it comes from here
+		c = c2 + 0x50; // So if c >= 0x80 && c <= 0x8f, it comes from here
 		write_char(c, track, request_context);
 	}
 }
@@ -301,17 +300,17 @@ void handle_special_doublebytes(const unsigned char c1, const unsigned char c2, 
 /* Process EXTENDED CHARACTERS */
 unsigned char handle_extended(unsigned char hi, unsigned char lo, scc_track_t *track, request_context_t* request_context)
 {
-	unsigned char c=0;
+	unsigned char c = 0;
 	// For lo values between 0x20-0x3f
-	if (lo>=0x20 && lo<=0x3f && (hi==0x12 || hi==0x13))
+	if (lo >= 0x20 && lo <= 0x3f && (hi == 0x12 || hi == 0x13))
 	{
 		switch (hi)
 		{
 			case 0x12:
-				c=lo+0x70; // So if c>=0x90 && c<=0xaf it comes from here
+				c = lo + 0x70; // So if c >= 0x90 && c <= 0xaf it comes from here
 				break;
 			case 0x13:
-				c=lo+0x90; // So if c>=0xb0 && c<=0xcf it comes from here
+				c = lo + 0x90; // So if c >= 0xb0 && c <= 0xcf it comes from here
 				break;
 		}
 		// This column change is because extended characters replace
@@ -330,43 +329,43 @@ void handle_command(unsigned char c1, const unsigned char c2, scc_track_t *track
 {
 	enum command_code command = COM_UNKNOWN;
 
-	if (c1==0x15)
-		c1=0x14;
-	if ((c1==0x14 || c1==0x1C) && c2==0x2C)
+	if (c1 == 0x15)
+		c1 = 0x14;
+	if ((c1 == 0x14 || c1 == 0x1C) && c2 == 0x2C)
 		command = COM_ERASEDISPLAYEDMEMORY;
-	if ((c1==0x14 || c1==0x1C) && c2==0x20)
+	if ((c1 == 0x14 || c1 == 0x1C) && c2 == 0x20)
 		command = COM_RESUMECAPTIONLOADING;
-	if ((c1==0x14 || c1==0x1C) && c2==0x2F)
+	if ((c1 == 0x14 || c1 == 0x1C) && c2 == 0x2F)
 		command = COM_ENDOFCAPTION;
-	if ((c1==0x14 || c1==0x1C) && c2==0x22)
+	if ((c1 == 0x14 || c1 == 0x1C) && c2 == 0x22)
 		command = COM_ALARMOFF;
-	if ((c1==0x14 || c1==0x1C) && c2==0x23)
+	if ((c1 == 0x14 || c1 == 0x1C) && c2 == 0x23)
 		command = COM_ALARMON;
-	if ((c1==0x14 || c1==0x1C) && c2==0x24)
+	if ((c1 == 0x14 || c1 == 0x1C) && c2 == 0x24)
 		command = COM_DELETETOENDOFROW;
-	if ((c1==0x17 || c1==0x1F) && c2==0x21)
+	if ((c1 == 0x17 || c1 == 0x1F) && c2 == 0x21)
 		command = COM_TABOFFSET1;
-	if ((c1==0x17 || c1==0x1F) && c2==0x22)
+	if ((c1 == 0x17 || c1 == 0x1F) && c2 == 0x22)
 		command = COM_TABOFFSET2;
-	if ((c1==0x17 || c1==0x1F) && c2==0x23)
+	if ((c1 == 0x17 || c1 == 0x1F) && c2 == 0x23)
 		command = COM_TABOFFSET3;
-	if ((c1==0x14 || c1==0x1C) && c2==0x25)
+	if ((c1 == 0x14 || c1 == 0x1C) && c2 == 0x25)
 		command = COM_ROLLUP2;
-	if ((c1==0x14 || c1==0x1C) && c2==0x26)
+	if ((c1 == 0x14 || c1 == 0x1C) && c2 == 0x26)
 		command = COM_ROLLUP3;
-	if ((c1==0x14 || c1==0x1C) && c2==0x27)
+	if ((c1 == 0x14 || c1 == 0x1C) && c2 == 0x27)
 		command = COM_ROLLUP4;
-	if ((c1==0x14 || c1==0x1C) && c2==0x28)
+	if ((c1 == 0x14 || c1 == 0x1C) && c2 == 0x28)
 		command = COM_FLASHON;
-	if ((c1==0x14 || c1==0x1C) && c2==0x29)
+	if ((c1 == 0x14 || c1 == 0x1C) && c2 == 0x29)
 		command = COM_RESUMEDIRECTCAPTIONING;
-	if ((c1==0x14 || c1==0x1C) && c2==0x2D)
+	if ((c1 == 0x14 || c1 == 0x1C) && c2 == 0x2D)
 		command = COM_CARRIAGERETURN;
-	if ((c1==0x14 || c1==0x1C) && c2==0x2E)
+	if ((c1 == 0x14 || c1 == 0x1C) && c2 == 0x2E)
 		command = COM_ERASENONDISPLAYEDMEMORY;
-	if ((c1==0x14 || c1==0x1C) && c2==0x21)
+	if ((c1 == 0x14 || c1 == 0x1C) && c2 == 0x21)
 		command = COM_BACKSPACE;
-	if ((c1==0x14 || c1==0x1C) && c2==0x2b)
+	if ((c1 == 0x14 || c1 == 0x1C) && c2 == 0x2b)
 		command = COM_RESUMETEXTDISPLAY;
 
 #ifdef SCC_TEMP_VERBOSITY
@@ -465,54 +464,54 @@ void disCommand(unsigned char hi, unsigned char lo, scc_track_t *track, request_
 #endif
 
         // Treat Ch 2,4 as Ch 1,3 respectively
-	if (hi>=0x18 && hi<=0x1f)
+	if (hi >= 0x18 && hi <= 0x1f)
             hi=hi-8;
 	// Treat Ch 3 as Ch 1 in Global codes and {BS, DER, CR}.
-        if (hi==0x15 && lo>=0x20 && lo<=0x2f)
+        if (hi == 0x15 && lo >= 0x20 && lo <= 0x2f)
             hi--;
 
 	switch (hi)
 	{
 		case 0x10:
-			if (lo>=0x40 && lo<=0x5f)                                // row 11 PAC (ch 1&3)
+			if (lo >= 0x40 && lo <= 0x5f)                                // row 11 PAC (ch 1&3)
 				handle_pac(hi, lo, track, request_context);
 			break;
 		case 0x11:
-			if (lo>=0x20 && lo<=0x2f)                                // mid-row color/underline PAC (ch 1&3)
+			if (lo >= 0x20 && lo <= 0x2f)                                // mid-row color/underline PAC (ch 1&3)
 				handle_text_attr(hi, lo, track, request_context);
-			if (lo>=0x30 && lo<=0x3f)                                // Special Characters
+			if (lo >= 0x30 && lo <= 0x3f)                                // Special Characters
 			{
 				handle_special_doublebytes(hi, lo, track, request_context);
 			}
-			if (lo>=0x40 && lo<=0x7f)                                // rows 01/02 PAC (ch 1&3)
+			if (lo >= 0x40 && lo <= 0x7f)                                // rows 01/02 PAC (ch 1&3)
 				handle_pac(hi, lo, track, request_context);
 			break;
 		case 0x12:
 		case 0x13:
-			if (lo>=0x20 && lo<=0x3f)                                // Extended Characters
+			if (lo >= 0x20 && lo <= 0x3f)                                // Extended Characters
 			{
 				handle_extended(hi, lo, track, request_context);
 			}
-			if (lo>=0x40 && lo<=0x7f)                                // rows 03/04 PAC (ch 1&3)
+			if (lo >= 0x40 && lo <= 0x7f)                                // rows 03/04 PAC (ch 1&3)
 				handle_pac(hi, lo, track, request_context);
 			break;
 		case 0x14:
 		case 0x15:
-			if (lo>=0x20 && lo<=0x2f)                                // Global Codes PAC (ch 1&3)
+			if (lo >= 0x20 && lo <= 0x2f)                                // Global Codes PAC (ch 1&3)
 				handle_command(hi, lo, track, request_context);
-			if (lo>=0x40 && lo<=0x7f)                                // rows 05/06 and 14/15 PAC (ch 1&3)
+			if (lo >= 0x40 && lo <= 0x7f)                                // rows 05/06 and 14/15 PAC (ch 1&3)
 				handle_pac(hi, lo, track, request_context);
 			break;
 		case 0x16:
-			if (lo>=0x40 && lo<=0x7f)                                // rows 07/08 PAC (ch 1&3)
+			if (lo >= 0x40 && lo <= 0x7f)                                // rows 07/08 PAC (ch 1&3)
 				handle_pac(hi, lo, track, request_context);
 			break;
 		case 0x17:
-			if (lo>=0x21 && lo<=0x23)                                // Tab Offsets 1,2,3 (ch 1&3)
+			if (lo >= 0x21 && lo <= 0x23)                                // Tab Offsets 1,2,3 (ch 1&3)
 				handle_command(hi, lo, track, request_context);
-			if (lo>=0x2e && lo<=0x2f)                                // mid-row Black and BlackUnderline PAC (ch 1&3)
+			if (lo >= 0x2e && lo <= 0x2f)                                // mid-row Black and BlackUnderline PAC (ch 1&3)
 				handle_text_attr(hi, lo, track, request_context);
-			if (lo>=0x40 && lo<=0x7f)                                // rows 09/10 PAC (ch 1&3)
+			if (lo >= 0x40 && lo <= 0x7f)                                // rows 09/10 PAC (ch 1&3)
 				handle_pac(hi, lo, track, request_context);
 			break;
 	}
@@ -560,7 +559,7 @@ static int scc_process_line(scc_track_t *track, const char *str, request_context
 #endif
 
 
-    for (i=0; i < length; i+=4)
+    for (i = 0; i < length; i += 4)
     {
         // code is still in ASCII text, need to convert every 2 consecutive chars to their equivalent hexadecimal digit
         unsigned char hi, lo;
@@ -576,10 +575,10 @@ static int scc_process_line(scc_track_t *track, const char *str, request_context
             //vod_log_error(VOD_LOG_ERR, request_context->log, 0,
             //" FULLWORD:%d, hi=%d lo=%d", fullword, hi, lo);
 
-        if (hi==0 && lo==0) // Just padding
+        if (hi == 0 && lo == 0) // Just padding
             continue;
 
-        if (hi>=0x10 && hi<=0x1F) // Non-character code or special/extended char
+        if (hi >= 0x10 && hi <= 0x1F) // Non-character code or special/extended char
         // http://www.theneitherworld.com/mcpoodle/SCC_TOOLS/DOCS/CC_CODES.HTML
         // http://www.theneitherworld.com/mcpoodle/SCC_TOOLS/DOCS/CC_CHARS.HTML
         {
@@ -602,7 +601,7 @@ static int scc_process_line(scc_track_t *track, const char *str, request_context
             track->last_c1 = -1;
             track->last_c2 = -1;
 
-            if (hi>=0x20) // Standard characters (always in pairs)
+            if (hi >= 0x20) // Standard characters (always in pairs)
             {
                 handle_single(hi, track, request_context);
                 handle_single(lo, track, request_context);
@@ -627,9 +626,11 @@ static int scc_process_text(scc_track_t *track, char *str, request_context_t* re
     int retval = 0;
     char *p = str;
 
-    while (1) {
+    while (1)
+    {
         char *q;
-        while (1) {
+        while (1)
+        {
             if ((*p == '\r') || (*p == '\n'))
                 ++p;
             else if (p[0] == '\xef' && p[1] == '\xbb' && p[2] == '\xbf')
@@ -637,7 +638,8 @@ static int scc_process_text(scc_track_t *track, char *str, request_context_t* re
             else
                 break;
         }
-        for (q = p; ((*q != '\0') && (*q != '\r') && (*q != '\n')); ++q) {
+        for (q = p; ((*q != '\0') && (*q != '\r') && (*q != '\n')); ++q)
+        {
         };
         if (q == p)
             break;

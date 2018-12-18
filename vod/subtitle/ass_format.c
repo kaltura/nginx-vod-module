@@ -36,11 +36,10 @@
 #define NUM_OF_INLINE_TAGS_SUPPORTED 3     //ibu
 #define NUM_OF_TAGS_ALLOWED_PER_LINE 1
 
-
 //#define ASSUME_STYLE_SUPPORT
 
-
-typedef enum {
+typedef enum
+{
     TAG_TYPE_NEWLINE_SMALL  = 0,
     TAG_TYPE_NEWLINE_LARGE  = 1,
     TAG_TYPE_AMPERSANT      = 2,
@@ -62,7 +61,9 @@ typedef enum {
     TAG_TYPE_UNKNOWN_TAG    = 13, // has to be after all known braces types
     TAG_TYPE_NONE           = 14
 } ass_tag_idx_t;
-static const char* const tag_strings[TAG_TYPE_NONE] = {
+
+static const char* const tag_strings[TAG_TYPE_NONE] =
+{
     "\\n",
     "\\N",
     "&",
@@ -81,7 +82,8 @@ static const char* const tag_strings[TAG_TYPE_NONE] = {
 
     "\\"
 };
-static const int tag_string_len[TAG_TYPE_NONE][2] = {
+static const int tag_string_len[TAG_TYPE_NONE][2] =
+{
     // index 0 is size of ASS tag, index 1 is size of replacement webVTT tag
     {2,2},
     {2,2},
@@ -101,7 +103,8 @@ static const int tag_string_len[TAG_TYPE_NONE][2] = {
 
     {1,0}
 };
-static const char* tag_replacement_strings[TAG_TYPE_NONE] = {
+static const char* tag_replacement_strings[TAG_TYPE_NONE] =
+{
     "\r\n",
     "\r\n",
     "&amp;",
@@ -143,21 +146,25 @@ static int split_event_text_to_chunks(char *src, int srclen, bool_t rtl, char **
     }
 
     // if right to left language, insert marker before text
-    if (rtl == TRUE) {
+    if (rtl)
+    {
          vod_memcpy(textp[chunkidx], FIXED_WEBVTT_ESCAPE_FOR_RTL_STR, FIXED_WEBVTT_ESCAPE_FOR_RTL_WIDTH);
          dstidx+=FIXED_WEBVTT_ESCAPE_FOR_RTL_WIDTH;
     }
 
     // insert openers to currently open modes, ordered as <i><b><u>
-    if (ibu_flags[0] == TRUE) {
+    if (ibu_flags[0])
+    {
         vod_memcpy(textp[chunkidx] + dstidx, tag_replacement_strings[TAG_TYPE_ITALIC_START], tag_string_len[TAG_TYPE_ITALIC_START][1]);
         dstidx += tag_string_len[TAG_TYPE_ITALIC_START][1];
     }
-    if (ibu_flags[1] == TRUE) {
+    if (ibu_flags[1])
+    {
          vod_memcpy(textp[chunkidx] + dstidx, tag_replacement_strings[TAG_TYPE_BOLD_START], tag_string_len[TAG_TYPE_BOLD_START][1]);
          dstidx += tag_string_len[TAG_TYPE_BOLD_START][1];
     }
-    if (ibu_flags[2] == TRUE) {
+    if (ibu_flags[2])
+    {
         vod_memcpy(textp[chunkidx] + dstidx, tag_replacement_strings[TAG_TYPE_UNDER_START], tag_string_len[TAG_TYPE_UNDER_START][1]);
         dstidx += tag_string_len[TAG_TYPE_UNDER_START][1];
     }
@@ -186,30 +193,36 @@ static int split_event_text_to_chunks(char *src, int srclen, bool_t rtl, char **
                         if (ibu_flags[ibu_idx] == opposite)
                         {
                             // insert closures to open spans, ordered as </u></b></i>
-                            if (ibu_flags[2] == TRUE) {
+                            if (ibu_flags[2])
+                            {
                                 vod_memcpy(textp[chunkidx] + dstidx, tag_replacement_strings[TAG_TYPE_UNDER_END], tag_string_len[TAG_TYPE_UNDER_END][1]);
                                 dstidx += tag_string_len[TAG_TYPE_UNDER_END][1];
                             }
-                            if (ibu_flags[1] == TRUE) {
+                            if (ibu_flags[1])
+                            {
                                  vod_memcpy(textp[chunkidx] + dstidx, tag_replacement_strings[TAG_TYPE_BOLD_END], tag_string_len[TAG_TYPE_BOLD_END][1]);
                                  dstidx += tag_string_len[TAG_TYPE_BOLD_END][1];
                             }
-                            if (ibu_flags[0] == TRUE) {
+                            if (ibu_flags[0])
+                            {
                                 vod_memcpy(textp[chunkidx] + dstidx, tag_replacement_strings[TAG_TYPE_ITALIC_END], tag_string_len[TAG_TYPE_ITALIC_END][1]);
                                 dstidx += tag_string_len[TAG_TYPE_ITALIC_END][1];
                             }
                             // toggle the flag
                             ibu_flags[ibu_idx] = !ibu_flags[ibu_idx];
                             // insert openers to currently open modes, ordered as <i><b><u>
-                            if (ibu_flags[0] == TRUE) {
+                            if (ibu_flags[0])
+                            {
                                 vod_memcpy(textp[chunkidx] + dstidx, tag_replacement_strings[TAG_TYPE_ITALIC_START], tag_string_len[TAG_TYPE_ITALIC_START][1]);
                                 dstidx += tag_string_len[TAG_TYPE_ITALIC_START][1];
                             }
-                            if (ibu_flags[1] == TRUE) {
+                            if (ibu_flags[1])
+                            {
                                  vod_memcpy(textp[chunkidx] + dstidx, tag_replacement_strings[TAG_TYPE_BOLD_START], tag_string_len[TAG_TYPE_BOLD_START][1]);
                                  dstidx += tag_string_len[TAG_TYPE_BOLD_START][1];
                             }
-                            if (ibu_flags[2] == TRUE) {
+                            if (ibu_flags[2])
+                            {
                                 vod_memcpy(textp[chunkidx] + dstidx, tag_replacement_strings[TAG_TYPE_UNDER_START], tag_string_len[TAG_TYPE_UNDER_START][1]);
                                 dstidx += tag_string_len[TAG_TYPE_UNDER_START][1];
                             }
@@ -217,23 +230,27 @@ static int split_event_text_to_chunks(char *src, int srclen, bool_t rtl, char **
                     } break;
 
                     case (TAG_TYPE_NEWLINE_LARGE):
-                    case (TAG_TYPE_NEWLINE_SMALL): {
-                        if (cur_run > *max_run) {
+                    case (TAG_TYPE_NEWLINE_SMALL):
+                    {
+                        if (cur_run > *max_run)
+                        {
                             *max_run = cur_run; // we don't add the size of \r\n since they are not visible on screen.
                             cur_run = 0;        // max_run holds the longest run of visible characters on any line.
                         }
                         // replace the string with its equivalent in target string
                         vod_memcpy(textp[chunkidx] + dstidx, tag_replacement_strings[tagidx], tag_string_len[tagidx][1]);
                         dstidx += tag_string_len[tagidx][1]; //tag got written to output
-                        if (rtl == TRUE) {
+                        if (rtl)
+                        {
                              vod_memcpy(textp[chunkidx] + dstidx, FIXED_WEBVTT_ESCAPE_FOR_RTL_STR, FIXED_WEBVTT_ESCAPE_FOR_RTL_WIDTH);
-                             dstidx+=FIXED_WEBVTT_ESCAPE_FOR_RTL_WIDTH;
+                             dstidx += FIXED_WEBVTT_ESCAPE_FOR_RTL_WIDTH;
                         }
                     } break;
 
                     case (TAG_TYPE_AMPERSANT):
                     case (TAG_TYPE_BIGGERTHAN):
-                    case (TAG_TYPE_SMALLERTHAN): {
+                    case (TAG_TYPE_SMALLERTHAN):
+                    {
                         cur_run++;  // just one single visible character out of this webvtt code word
                         // replace the string with its equivalent in target string
                         vod_memcpy(textp[chunkidx] + dstidx, tag_replacement_strings[tagidx], tag_string_len[tagidx][1]);
@@ -241,14 +258,16 @@ static int split_event_text_to_chunks(char *src, int srclen, bool_t rtl, char **
                     } break;
 
                     case (TAG_TYPE_OPEN_BRACES):
-                    case (TAG_TYPE_CLOSE_BRACES): {
+                    case (TAG_TYPE_CLOSE_BRACES):
+                    {
                         bBracesOpen = (tagidx & 1);
                         // replace the string with its equivalent in target string
                         vod_memcpy(textp[chunkidx] + dstidx, tag_replacement_strings[tagidx], tag_string_len[tagidx][1]);
                         dstidx += tag_string_len[tagidx][1]; //tag got written to output
                     } break;
 
-                    default: {
+                    default:
+                    {
                         // replace the string with its equivalent in target string
                         vod_memcpy(textp[chunkidx] + dstidx, tag_replacement_strings[tagidx], tag_string_len[tagidx][1]);
                         dstidx += tag_string_len[tagidx][1]; //tag got written to output
@@ -288,24 +307,28 @@ static int split_event_text_to_chunks(char *src, int srclen, bool_t rtl, char **
     }
 
     // insert closures to open spans, ordered as </u></b></i>
-    if (ibu_flags[2] == TRUE) {
+    if (ibu_flags[2])
+    {
         vod_memcpy(textp[chunkidx] + dstidx, tag_replacement_strings[TAG_TYPE_UNDER_END], tag_string_len[TAG_TYPE_UNDER_END][1]);
         dstidx += tag_string_len[TAG_TYPE_UNDER_END][1];
     }
-    if (ibu_flags[1] == TRUE) {
+    if (ibu_flags[1])
+    {
          vod_memcpy(textp[chunkidx] + dstidx, tag_replacement_strings[TAG_TYPE_BOLD_END], tag_string_len[TAG_TYPE_BOLD_END][1]);
          dstidx += tag_string_len[TAG_TYPE_BOLD_END][1];
     }
-    if (ibu_flags[0] == TRUE) {
+    if (ibu_flags[0])
+    {
         vod_memcpy(textp[chunkidx] + dstidx, tag_replacement_strings[TAG_TYPE_ITALIC_END], tag_string_len[TAG_TYPE_ITALIC_END][1]);
         dstidx += tag_string_len[TAG_TYPE_ITALIC_END][1];
     }
 
-    if (cur_run > *max_run) {
+    if (cur_run > *max_run)
+    {
         *max_run = cur_run; // we don't add the size of \r\n since they are not visible on screen.
     }
 
-    evlen[chunkidx]   = dstidx;
+    evlen[chunkidx] = dstidx;
 
     return chunkidx + 1;
 }
@@ -333,55 +356,61 @@ static char* output_one_style(ass_style_t* cur_style, char* p)
 {
         int len;
 
-        vod_memcpy(p, FIXED_WEBVTT_STYLE_START_STR, FIXED_WEBVTT_STYLE_START_WIDTH);           p+=FIXED_WEBVTT_STYLE_START_WIDTH;
-        len = vod_strlen(cur_style->name); vod_memcpy(p, cur_style->name, len);                p+=len;
-        vod_memcpy(p, FIXED_WEBVTT_STYLE_END_STR, FIXED_WEBVTT_STYLE_END_WIDTH);               p+=FIXED_WEBVTT_STYLE_END_WIDTH;
-        vod_memcpy(p, FIXED_WEBVTT_BRACES_START_STR, FIXED_WEBVTT_BRACES_START_WIDTH);         p+=FIXED_WEBVTT_BRACES_START_WIDTH;
+        vod_memcpy(p, FIXED_WEBVTT_STYLE_START_STR, FIXED_WEBVTT_STYLE_START_WIDTH);           p += FIXED_WEBVTT_STYLE_START_WIDTH;
+        len = vod_strlen(cur_style->name); vod_memcpy(p, cur_style->name, len);                p += len;
+        vod_memcpy(p, FIXED_WEBVTT_STYLE_END_STR, FIXED_WEBVTT_STYLE_END_WIDTH);               p += FIXED_WEBVTT_STYLE_END_WIDTH;
+        vod_memcpy(p, FIXED_WEBVTT_BRACES_START_STR, FIXED_WEBVTT_BRACES_START_WIDTH);         p += FIXED_WEBVTT_BRACES_START_WIDTH;
 
-        len = 8; vod_memcpy(p, "color: #", len);                                               p+=len;
-        vod_sprintf((u_char*)p, "%08uxD;\r\n", cur_style->primary_colour);                     p+=11;
+        len = 8; vod_memcpy(p, "color: #", len);                                               p += len;
+        vod_sprintf((u_char*)p, "%08uxD;\r\n", cur_style->primary_colour);                     p += 11;
 
 
-        len = 14; vod_memcpy(p, "font-family: \"", len);                                       p+=len;
-        len = vod_strlen(cur_style->font_name); vod_memcpy(p, cur_style->font_name, len);      p+=len;
-        len = 16; vod_memcpy(p, "\", sans-serif;\r\n", len);                                   p+=len;
-        vod_sprintf((u_char*)p, "font-size: %03uDpx;\r\n", cur_style->font_size);              p+=19;
+        len = 14; vod_memcpy(p, "font-family: \"", len);                                       p += len;
+        len = vod_strlen(cur_style->font_name); vod_memcpy(p, cur_style->font_name, len);      p += len;
+        len = 16; vod_memcpy(p, "\", sans-serif;\r\n", len);                                   p += len;
+        vod_sprintf((u_char*)p, "font-size: %03uDpx;\r\n", cur_style->font_size);              p += 19;
 
-        /*if (cur_style->bold) {
-            len = 20; vod_memcpy(p, "font-weight: bold;\r\n", len);                            p+=len;
+        /*if (cur_style->bold)
+        {
+            len = 20; vod_memcpy(p, "font-weight: bold;\r\n", len);                            p += len;
         }
-        if (cur_style->italic) {
-            len = 21; vod_memcpy(p, "font-style: italic;\r\n", len);                           p+=len;
+        if (cur_style->italic)
+        {
+            len = 21; vod_memcpy(p, "font-style: italic;\r\n", len);                           p += len;
         }
         // This will inherit the outline_colour (and shadow) if border_style==1, otherwise it inherits primary_colour
-        if (cur_style->underline) {
+        if (cur_style->underline)
+        {
             // available styles are: solid | double | dotted | dashed | wavy
             // available lines are: underline || overline || line-through || blink
-            len = 35; vod_memcpy(p, "text-decoration: solid underline;\r\n", len);             p+=len;
+            len = 35; vod_memcpy(p, "text-decoration: solid underline;\r\n", len);             p += len;
         }
-        else if (cur_style->strike_out) {
+        else if (cur_style->strike_out)
+        {
             // available lines are: underline || overline || line-through || blink
-            len = 38; vod_memcpy(p, "text-decoration: solid line-through;\r\n", len);          p+=len;
+            len = 38; vod_memcpy(p, "text-decoration: solid line-through;\r\n", len);          p += len;
         }*/
 
         if (cur_style->border_style == 1 /*&& ass_track->type == TRACK_TYPE_ASS*/)
         {
             // webkit is not supported by all players, stick to adding outline using text-shadow
-            len = 13; vod_memcpy(p, "text-shadow: ", len);                                     p+=len;
+            len = 13; vod_memcpy(p, "text-shadow: ", len);                                     p += len;
             // add outline in 4 directions with the outline color
             vod_sprintf((u_char*)p, "#%08uxD -%01uDpx 0px, #%08uxD 0px %01uDpx, #%08uxD 0px -%01uDpx, #%08uxD %01uDpx 0px, #%08uxD %01uDpx %01uDpx 0px;\r\n",
                          cur_style->outline_colour, cur_style->outline,
                          cur_style->outline_colour, cur_style->outline,
                          cur_style->outline_colour, cur_style->outline,
                          cur_style->outline_colour, cur_style->outline,
-                         cur_style->back_colour, cur_style->shadow, cur_style->shadow);        p+=102;
+                         cur_style->back_colour, cur_style->shadow, cur_style->shadow);        p += 102;
 
-        } else {
-            len = 19; vod_memcpy(p, "background-color: #", len);                               p+=len;
-            vod_sprintf((u_char*)p, "%08uxD;\r\n", cur_style->back_colour);                    p+=11;
         }
-        vod_memcpy(p, FIXED_WEBVTT_BRACES_END_STR, FIXED_WEBVTT_BRACES_END_WIDTH);             p+=FIXED_WEBVTT_BRACES_END_WIDTH;
-        len = 2; vod_memcpy(p, "\r\n", len);                                                   p+=len;
+        else
+        {
+            len = 19; vod_memcpy(p, "background-color: #", len);                               p += len;
+            vod_sprintf((u_char*)p, "%08uxD;\r\n", cur_style->back_colour);                    p += 11;
+        }
+        vod_memcpy(p, FIXED_WEBVTT_BRACES_END_STR, FIXED_WEBVTT_BRACES_END_WIDTH);             p += FIXED_WEBVTT_BRACES_END_WIDTH;
+        len = 2; vod_memcpy(p, "\r\n", len);                                                   p += len;
 
         return p;
 }
@@ -631,7 +660,7 @@ ass_parse_frames(
         int            margL, margR, margV; // all of these are integer percentage values
 
         // allocate memory for the chunk pointer itself first
-        for (chunkcounter = 0; chunkcounter<NUM_OF_TAGS_ALLOWED_PER_LINE; chunkcounter++)
+        for (chunkcounter = 0; chunkcounter < NUM_OF_TAGS_ALLOWED_PER_LINE; chunkcounter++)
         {
             // now allocate string memory for each chunk
             event_textp[chunkcounter] = vod_alloc(request_context->pool, MAX_STR_SIZE_EVNT_CHUNK);
@@ -677,16 +706,21 @@ ass_parse_frames(
         }
 
         // Cues are named "c<iteration_number_in_7_digits>" starting from c0000000
-        vod_sprintf((u_char*)p, FIXED_WEBVTT_CUE_FORMAT_STR, evntcounter);      p+=FIXED_WEBVTT_CUE_NAME_WIDTH;
-        len = 2; vod_memcpy(p, "\r\n", len);                                    p+=len;
+        vod_sprintf((u_char*)p, FIXED_WEBVTT_CUE_FORMAT_STR, evntcounter);      p += FIXED_WEBVTT_CUE_NAME_WIDTH;
+        len = 2; vod_memcpy(p, "\r\n", len);                                    p += len;
         // timestamps will be inserted here, we now insert positioning and alignment changes
         {
             bool_t    bleft = FALSE, bright = FALSE;
-            if ((cur_style->alignment & 1) == 0) {              //center alignment  2/6/10
+            if ((cur_style->alignment & 1) == 0)              //center alignment  2/6/10
+            {
                 // do nothing
-            } else if (((cur_style->alignment - 1) & 3) == 0) { //left   alignment  1/5/9
+            }
+            else if (((cur_style->alignment - 1) & 3) == 0)  //left   alignment  1/5/9
+            {
                  bleft  = TRUE;
-            } else {                                            //right  alignment  3/7/11
+            }
+            else
+            {                                                //right  alignment  3/7/11
                  bright = TRUE;
             }
 
@@ -700,59 +734,73 @@ ass_parse_frames(
                 // center/middle means we are giving the coordinate of the center/middle point
                 int line, sizeH, pos;
 
-                if (cur_style->alignment >= VALIGN_CENTER) {   //middle alignment  for values 9,10,11
+                if (cur_style->alignment >= VALIGN_CENTER)    //middle alignment  for values 9,10,11
+                {
                     line = 7;
-                } else if (cur_style->alignment < VALIGN_TOP) { //bottom alignment  for values 1, 2, 3
+                } else if (cur_style->alignment < VALIGN_TOP) //bottom alignment  for values 1, 2, 3
+                {
                     margV = 100 - margV;
                     line = FFMINMAX((margV+4) >> 3, 0, 12);
-                } else {                                        //top alignment is the default assumption
+                }
+                else                                          //top alignment is the default assumption
+                {
                     line = FFMINMAX((margV+4) >> 3, 0, 12);
                 }
 
                 // cap horizontal size to more than 2x to make sure we don't break lines with generic font
                 // cap horizontal size to no more than 3x to make sure we allow right and left aligned events on same line
                 sizeH = FFMINMAX(margR - margL, (int)(max_run*2), (int)(max_run*3));
-                if ((bleft == FALSE) && (bright == FALSE)) {        //center alignment  2/6/10
+                if ((!bleft) && (!bright))                        //center alignment  2/6/10
+                {
                     pos = FFMINMAX((margR + margL + 1)/2, sizeH/2, 100 - sizeH/2);
-                } else if (bleft == TRUE) {                         //left   alignment  1/5/9
+                }
+                else if (bleft)                                   //left   alignment  1/5/9
+                {
                     pos = FFMINMAX(margL, 0, 100 - sizeH);
-                } else {                                            //right  alignment  3/7/11
+                }
+                else                                              //right  alignment  3/7/11
+                {
                     pos = FFMINMAX(margR, sizeH, 100);
                 }
 
-                len = 10; vod_memcpy(p, " position:", len);                     p+=len;
-                vod_sprintf((u_char*)p, "%03uD", pos);                          p+=3;
-                len =  7; vod_memcpy(p, "% size:", len);                        p+=len;
-                vod_sprintf((u_char*)p, "%03uD", sizeH);                        p+=3;
-                len =  7; vod_memcpy(p, "% line:", len);                        p+=len;
-                vod_sprintf((u_char*)p, "%02uD", line);                         p+=2;
+                len = 10; vod_memcpy(p, " position:", len);                     p += len;
+                vod_sprintf((u_char*)p, "%03uD", pos);                          p += 3;
+                len =  7; vod_memcpy(p, "% size:", len);                        p += len;
+                vod_sprintf((u_char*)p, "%03uD", sizeH);                        p += 3;
+                len =  7; vod_memcpy(p, "% line:", len);                        p += len;
+                vod_sprintf((u_char*)p, "%02uD", line);                         p += 2;
             }
             // We should only insert this if an alignment override tag {\a...}is in the text, otherwise follow the style's alignment
             // but for now, insert it all the time till all players can read styles
-            len =  7; vod_memcpy(p, " align:", len);                            p+=len;
-            if ((bleft == FALSE) && (bright == FALSE)) {            //center alignment  2/6/10
-                len =  6; vod_memcpy(p, "center", len);                         p+=len;
-            } else if (bleft == TRUE) {                             //left   alignment  1/5/9
-                len =  4; vod_memcpy(p, "left", len);                           p+=len;
-            } else {                                                //right  alignment  3/7/11
-                len =  5; vod_memcpy(p, "right", len);                          p+=len;
+            len =  7; vod_memcpy(p, " align:", len);                            p += len;
+            if ((!bleft) && (!bright))                               //center alignment  2/6/10
+            {
+                len =  6; vod_memcpy(p, "center", len);                         p += len;
             }
-            len = 2; vod_memcpy(p, "\r\n", len);                                p+=len;
+            else if (bleft)                                          //left   alignment  1/5/9
+            {
+                len =  4; vod_memcpy(p, "left", len);                           p += len;
+            }
+            else                                                     //right  alignment  3/7/11
+            {
+                len =  5; vod_memcpy(p, "right", len);                          p += len;
+            }
+            len = 2; vod_memcpy(p, "\r\n", len);                                p += len;
         }
 #ifdef ASSUME_STYLE_SUPPORT
-        vod_memcpy(p, FIXED_WEBVTT_VOICE_START_STR, FIXED_WEBVTT_VOICE_START_WIDTH);       p+=FIXED_WEBVTT_VOICE_START_WIDTH;
-        len = vod_strlen(cur_style->name); vod_sprintf((u_char*)p, cur_style->name, len);  p+=len;
-        vod_memcpy(p, FIXED_WEBVTT_VOICE_END_STR, FIXED_WEBVTT_VOICE_END_WIDTH);           p+=FIXED_WEBVTT_VOICE_END_WIDTH;
+        vod_memcpy(p, FIXED_WEBVTT_VOICE_START_STR, FIXED_WEBVTT_VOICE_START_WIDTH);       p += FIXED_WEBVTT_VOICE_START_WIDTH;
+        len = vod_strlen(cur_style->name); vod_sprintf((u_char*)p, cur_style->name, len);  p += len;
+        vod_memcpy(p, FIXED_WEBVTT_VOICE_END_STR, FIXED_WEBVTT_VOICE_END_WIDTH);           p += FIXED_WEBVTT_VOICE_END_WIDTH;
 #endif //ASSUME_STYLE_SUPPORT
 
         for (chunkcounter = 0; chunkcounter < num_chunks_in_text; chunkcounter++)
         {
-             vod_memcpy(p, event_textp[chunkcounter], event_len[chunkcounter]);  p+=event_len[chunkcounter];
+             vod_memcpy(p, event_textp[chunkcounter], event_len[chunkcounter]); p += event_len[chunkcounter];
         }
 
-        len = 2; vod_memcpy(p, "\r\n", len);                                    p+=len;
+        len = 2; vod_memcpy(p, "\r\n", len);                                    p += len;
         // we still need an empty line after each event/cue
-        len = 2; vod_memcpy(p, "\r\n", len);                                    p+=len;
+        len = 2; vod_memcpy(p, "\r\n", len);                                    p += len;
 
         // Note: mapping of cue into input_frame_t:
         // - offset = pointer to buffer containing: cue id, cue settings list, cue payload
@@ -790,7 +838,7 @@ ass_parse_frames(
     for (stylecounter = (ass_track->default_style ? 1 : 0); (stylecounter < ass_track->n_styles); stylecounter++)
     {
         ass_style_t* cur_style = ass_track->styles + stylecounter;
-        if (cur_style->output_in_cur_segment == TRUE)
+        if (cur_style->output_in_cur_segment)
             p = output_one_style(cur_style, p);
 
     }

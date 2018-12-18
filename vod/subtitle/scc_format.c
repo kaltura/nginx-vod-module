@@ -33,7 +33,8 @@
 
 //#define ASSUME_STYLE_SUPPORT
 
-static const int utf8_len[80] = {
+static const int utf8_len[80] =
+{
     2,   // Registered
     2,   // Ring / Angestrom
     2,   // Fraction Half
@@ -120,7 +121,8 @@ static const int utf8_len[80] = {
     3    // Box bot right
 };
 
-static const char* utf8_code[80] = {
+static const char* utf8_code[80] =
+{
     "\xc2\xae",     // Registered sign
     "\xc2\xb0",     // Ring / Angestrom
     "\xc2\xbd",     // Fraction Half
@@ -222,17 +224,20 @@ static int convert_event_text(scc_event_t *event, char *textp, request_context_t
 
     for (rowidx = 0; rowidx < 15; rowidx++)
     {
-        if (event->row_used[rowidx] == 1) {
+        if (event->row_used[rowidx] == 1)
+        {
             for (colidx = 0; colidx < SCC_608_SCREEN_WIDTH+1; colidx++)
             {
                 bool_t printable = (event->characters[rowidx][colidx] != 0) ? TRUE : FALSE;
 #ifdef SCC_TEMP_VERBOSITY
                 vod_log_error(VOD_LOG_ERR, request_context->log, 0,
                 "convert_event_text(): rowidx=%d, colidx=%d, char=%c, iub=%d, printable=%d",
-                rowidx, colidx, event->characters[rowidx][colidx], event->iub[rowidx][colidx], printable==TRUE);
+                rowidx, colidx, event->characters[rowidx][colidx], event->iub[rowidx][colidx], printable);
 #endif
-                if (printable == TRUE) {
-                    if (iub_flags != event->iub[rowidx][colidx]) {
+                if (printable)
+                {
+                    if (iub_flags != event->iub[rowidx][colidx])
+                    {
                         // close b u i in order (if open)
                         if (iub_flags & 4)
                         {
@@ -392,40 +397,28 @@ static void scc_clean_known_mem(request_context_t* request_context, scc_track_t 
 
 #ifdef ASSUME_STYLE_SUPPORT
 static char* output_one_style(char* p)
-{//TODO: using style index, output name an modify the rest of this function
+{//TODO: using style index, output name and modify the rest of this function
         int len;
 
-        vod_memcpy(p, FIXED_WEBVTT_STYLE_START_STR, FIXED_WEBVTT_STYLE_START_WIDTH);           p+=FIXED_WEBVTT_STYLE_START_WIDTH;
-        len = 28; vod_memcpy(p, "RAFIK INSERT STYLE NAME HERE", len);                          p+=len;
-        vod_memcpy(p, FIXED_WEBVTT_STYLE_END_STR, FIXED_WEBVTT_STYLE_END_WIDTH);               p+=FIXED_WEBVTT_STYLE_END_WIDTH;
-        vod_memcpy(p, FIXED_WEBVTT_BRACES_START_STR, FIXED_WEBVTT_BRACES_START_WIDTH);         p+=FIXED_WEBVTT_BRACES_START_WIDTH;
+        vod_memcpy(p, FIXED_WEBVTT_STYLE_START_STR, FIXED_WEBVTT_STYLE_START_WIDTH);           p += FIXED_WEBVTT_STYLE_START_WIDTH;
+        len = 28; vod_memcpy(p, "RAFIK INSERT STYLE NAME HERE", len);                          p += len;
+        vod_memcpy(p, FIXED_WEBVTT_STYLE_END_STR, FIXED_WEBVTT_STYLE_END_WIDTH);               p += FIXED_WEBVTT_STYLE_END_WIDTH;
+        vod_memcpy(p, FIXED_WEBVTT_BRACES_START_STR, FIXED_WEBVTT_BRACES_START_WIDTH);         p += FIXED_WEBVTT_BRACES_START_WIDTH;
 
-        len = 8; vod_memcpy(p, "color: #", len);                                               p+=len;
-        vod_sprintf((u_char*)p, "%08uxD;\r\n", 0xaabbccdd);                                      p+=11;
+        len = 8; vod_memcpy(p, "color: #", len);                                               p += len;
+        vod_sprintf((u_char*)p, "%08uxD;\r\n", 0xaabbccdd);                                    p += 11;
 
 
-        len = 14; vod_memcpy(p, "font-family: \"", len);                                       p+=len;
-        len = 27; vod_memcpy(p, "RAFIK INSERT FONT NAME HERE", len);                           p+=len;
-        len = 16; vod_memcpy(p, "\", sans-serif;\r\n", len);                                   p+=len;
-        vod_sprintf((u_char*)p, "font-size: %03uDpx;\r\n", 24);                                p+=19;
+        len = 14; vod_memcpy(p, "font-family: \"", len);                                       p += len;
+        len = 27; vod_memcpy(p, "RAFIK INSERT FONT NAME HERE", len);                           p += len;
+        len = 16; vod_memcpy(p, "\", sans-serif;\r\n", len);                                   p += len;
+        vod_sprintf((u_char*)p, "font-size: %03uDpx;\r\n", 24);                                p += 19;
 
-        {
-            // webkit is not supported by all players, stick to adding outline using text-shadow
-            len = 13; vod_memcpy(p, "text-shadow: ", len);                                     p+=len;
-            // add outline in 4 directions with the outline color
-            vod_sprintf((u_char*)p, "#%08uxD -%01uDpx 0px, #%08uxD 0px %01uDpx, #%08uxD 0px -%01uDpx, #%08uxD %01uDpx 0px, #%08uxD %01uDpx %01uDpx 0px;\r\n",
-                         0xaabbccdd, 2,
-                         0xaabbccdd, 2,
-                         0xaabbccdd, 2,
-                         0xaabbccdd, 2,
-                         0x00bbcc00, 2, 2);         p+=102;
+        len = 19; vod_memcpy(p, "background-color: #", len);                                   p += len;
+        vod_sprintf((u_char*)p, "%08uxD;\r\n", 0xaabbccdd);                                    p += 11;
 
-        } else {
-            len = 19; vod_memcpy(p, "background-color: #", len);                               p+=len;
-            vod_sprintf((u_char*)p, "%08uxD;\r\n", 0xaabbccdd);                                p+=11;
-        }
-        vod_memcpy(p, FIXED_WEBVTT_BRACES_END_STR, FIXED_WEBVTT_BRACES_END_WIDTH);             p+=FIXED_WEBVTT_BRACES_END_WIDTH;
-        len = 2; vod_memcpy(p, "\r\n", len);                                                   p+=len;
+        vod_memcpy(p, FIXED_WEBVTT_BRACES_END_STR, FIXED_WEBVTT_BRACES_END_WIDTH);             p += FIXED_WEBVTT_BRACES_END_WIDTH;
+        len = 2; vod_memcpy(p, "\r\n", len);                                                   p += len;
 
         return p;
 }
@@ -793,16 +786,18 @@ scc_parse_frames(
             vtt_track->first_frame_index, vtt_track->first_frame_time_offset);
 #endif
         // Cues are named "c<iteration_number_in_7_digits>" starting from c0000000
-        vod_sprintf((u_char*)p, FIXED_WEBVTT_CUE_FORMAT_STR, evntcounter);      p+=FIXED_WEBVTT_CUE_NAME_WIDTH;
-        len = 2; vod_memcpy(p, "\r\n", len);                                    p+=len;
+        vod_sprintf((u_char*)p, FIXED_WEBVTT_CUE_FORMAT_STR, evntcounter);      p += FIXED_WEBVTT_CUE_NAME_WIDTH;
+        len = 2; vod_memcpy(p, "\r\n", len);                                    p += len;
         // timestamps will be inserted here, we now insert positioning and alignment changes
         {
             unsigned char align;
-            int kk, ll, pos, sizeH=0, line=14;
-            int max_num_of_chars_per_line = 0,                    lineidx_max_num_of_chars=line;
-            int min_num_of_chars_per_line = SCC_608_SCREEN_WIDTH, lineidx_min_num_of_chars=line;
+            int kk, ll, pos, sizeH = 0, line = 14;
+            int max_num_of_chars_per_line = 0;
+            int lineidx_max_num_of_chars  = line;
+            int min_num_of_chars_per_line = SCC_608_SCREEN_WIDTH;
+            int lineidx_min_num_of_chars  = line;
             int slots_before_min_chars = 0, slots_after_min_chars = 0, slots_before_max_chars = 0, slots_after_max_chars = 0;
-            for (kk=0; kk<15; kk++)
+            for (kk = 0; kk < 15; kk++)
             {
                 if (cur_event->row_used[kk] == 1)
                 {
@@ -811,12 +806,12 @@ scc_parse_frames(
                 }
             }
 
-            for (kk=line; kk<15; kk++)
+            for (kk = line; kk < 15; kk++)
             {
                 if (cur_event->row_used[kk] == 1)
                 {
                     int num_of_chars = 32;
-                    for (ll=0; ll<SCC_608_SCREEN_WIDTH; ll++)
+                    for (ll = 0; ll < SCC_608_SCREEN_WIDTH; ll++)
                     {
                         if (cur_event->characters[kk][ll] == SCC_UNUSED_CHAR)
                             num_of_chars--;
@@ -833,14 +828,14 @@ scc_parse_frames(
                     }
                 }
             }
-            for (ll=0; ll<(SCC_608_SCREEN_WIDTH-1); ll++)
+            for (ll = 0; ll < (SCC_608_SCREEN_WIDTH-1); ll++)
             {
                 if (cur_event->characters[lineidx_min_num_of_chars][ll] == SCC_UNUSED_CHAR)
                     slots_before_min_chars++;
                 else
                     break;
             }
-            for (ll=0; ll<(SCC_608_SCREEN_WIDTH-1); ll++)
+            for (ll = 0; ll < (SCC_608_SCREEN_WIDTH-1); ll++)
             {
                 if (cur_event->characters[lineidx_max_num_of_chars][ll] == SCC_UNUSED_CHAR)
                     slots_before_max_chars++;
@@ -873,37 +868,40 @@ scc_parse_frames(
                 pos = 98 - (3 * slots_after_max_chars);
             }
 
-            len = 10; vod_memcpy(p, " position:", len);                     p+=len;
-            vod_sprintf((u_char*)p, "%03uD", pos);                          p+=3;
-            len =  7; vod_memcpy(p, "% size:", len);                        p+=len;
-            vod_sprintf((u_char*)p, "%03uD", sizeH);                        p+=3;
-            len =  7; vod_memcpy(p, "% line:", len);                        p+=len;
-            vod_sprintf((u_char*)p, "%02uD", line);                         p+=2;
+            len = 10; vod_memcpy(p, " position:", len);                     p += len;
+            vod_sprintf((u_char*)p, "%03uD", pos);                          p += 3;
+            len =  7; vod_memcpy(p, "% size:", len);                        p += len;
+            vod_sprintf((u_char*)p, "%03uD", sizeH);                        p += 3;
+            len =  7; vod_memcpy(p, "% line:", len);                        p += len;
+            vod_sprintf((u_char*)p, "%02uD", line);                         p += 2;
 
 
-            len =  7; vod_memcpy(p, " align:", len);                            p+=len;
-            if (align == SCC_ALIGN_CENTER) {
-                len =  6; vod_memcpy(p, "center", len);                         p+=len;
+            len =  7; vod_memcpy(p, " align:", len);                        p += len;
+            if (align == SCC_ALIGN_CENTER)
+            {
+                len =  6; vod_memcpy(p, "center", len);                     p += len;
             }
-            else if (align == SCC_ALIGN_LEFT) {
-                len =  4; vod_memcpy(p, "left", len);                           p+=len;
+            else if (align == SCC_ALIGN_LEFT)
+            {
+                len =  4; vod_memcpy(p, "left", len);                       p += len;
             }
-            else {
-                len =  5; vod_memcpy(p, "right", len);                          p+=len;
+            else
+            {
+                len =  5; vod_memcpy(p, "right", len);                      p += len;
             }
-            len = 2; vod_memcpy(p, "\r\n", len);                                p+=len;
+            len = 2; vod_memcpy(p, "\r\n", len);                            p += len;
         }
 #ifdef ASSUME_STYLE_SUPPORT
-        vod_memcpy(p, FIXED_WEBVTT_VOICE_START_STR, FIXED_WEBVTT_VOICE_START_WIDTH);       p+=FIXED_WEBVTT_VOICE_START_WIDTH;
-        len = 28; vod_sprintf((u_char*)p, "RAFIK INSERT STYLE NAME HERE", len);            p+=len;
-        vod_memcpy(p, FIXED_WEBVTT_VOICE_END_STR, FIXED_WEBVTT_VOICE_END_WIDTH);           p+=FIXED_WEBVTT_VOICE_END_WIDTH;
+        vod_memcpy(p, FIXED_WEBVTT_VOICE_START_STR, FIXED_WEBVTT_VOICE_START_WIDTH);       p += FIXED_WEBVTT_VOICE_START_WIDTH;
+        len = 28; vod_sprintf((u_char*)p, "RAFIK INSERT STYLE NAME HERE", len);            p += len;
+        vod_memcpy(p, FIXED_WEBVTT_VOICE_END_STR, FIXED_WEBVTT_VOICE_END_WIDTH);           p += FIXED_WEBVTT_VOICE_END_WIDTH;
 #endif //ASSUME_STYLE_SUPPORT
 
-        vod_memcpy(p, event_textp, event_len);  p+=event_len;
+        vod_memcpy(p, event_textp, event_len);                              p += event_len;
 
-        len = 2; vod_memcpy(p, "\r\n", len);                                    p+=len;
+        len = 2; vod_memcpy(p, "\r\n", len);                                p += len;
         // we still need an empty line after each event/cue
-        len = 2; vod_memcpy(p, "\r\n", len);                                    p+=len;
+        len = 2; vod_memcpy(p, "\r\n", len);                                p += len;
 
         // Note: mapping of cue into input_frame_t:
         // - offset = pointer to buffer containing: cue id, cue settings list, cue payload
@@ -940,7 +938,7 @@ scc_parse_frames(
     /*for (stylecounter = 0; (stylecounter < SCC_NUM_OF_STYLES_INSERTED); stylecounter++)
     {
         scc_style_t* cur_style = scc_track->styles + stylecounter;
-        if (cur_style->b_output_in_cur_segment == TRUE)
+        if (cur_style->b_output_in_cur_segment)
             p = output_one_style(p);
 
     }*/

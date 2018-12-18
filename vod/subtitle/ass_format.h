@@ -12,7 +12,8 @@
 #define FFMIN(a,b) ((a) > (b) ? (b) : (a))
 #define FFMINMAX(c,a,b) FFMIN(FFMAX(c, a), b)
 
-typedef enum {
+typedef enum
+{
     PST_UNKNOWN = 0,
     PST_INFO,
     PST_STYLES,
@@ -24,7 +25,8 @@ typedef enum {
 extern media_format_t ass_format;
 
 /* ASS Style: line */
-typedef struct ass_style {
+typedef struct ass_style
+{
     char       *name;
     char       *font_name;
     int         font_size;
@@ -56,7 +58,8 @@ typedef struct ass_style {
  * ass_event corresponds to a single Dialogue line;
  * text is stored as-is, style overrides will be parsed later.
  */
-typedef struct ass_event {
+typedef struct ass_event
+{
     long long   start;    // ms
     long long   end;      // ms
 
@@ -76,7 +79,8 @@ typedef struct ass_event {
  * (no real difference between them); it can be used in rendering after the
  * headers are parsed (i.e. events format line read).
  */
-typedef struct ass_track {
+typedef struct ass_track
+{
     int             n_styles;           // amount used
     int             max_styles;         // amount allocated
     int             n_events;

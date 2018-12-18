@@ -35,7 +35,8 @@ enum cc_text_done
  * scc_event corresponds to a single Dialogue line;
  * text is stored as-is, style overrides gets applied later.
  */
-typedef struct scc_event {
+typedef struct scc_event
+{
     unsigned char      characters[15][33]; // Extra char at the end for potential '\n'
     unsigned char      iub       [15][33]; // Right-most bit is Italic flag, bit 1 is Underline, bit 2 is Flash/Bold
              char      row_used  [15];     // Any data in row?
@@ -52,7 +53,8 @@ typedef struct scc_event {
  * scc_track represents a fully parsed SCC file.
  * It is entirely parsed before events are rendered into WebVTT cues.
  */
-typedef struct scc_track {
+typedef struct scc_track
+{
     long long       max_duration;          // ms, added for needs of the vod-module
     long long       initial_offset;        // ms, sometimes Broadcast shift the cues by some 59 minutes relative to video
     int             max_frame_count;       // to identify FPS without external information

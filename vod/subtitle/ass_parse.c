@@ -24,7 +24,8 @@
 #define ASS_SIZE_MAX ((size_t)-1)
 #define ass_atof(STR) (ass_strtod((STR),NULL))
 
-static const unsigned char lowertab[] = {
+static const unsigned char lowertab[] =
+{
     0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a,
     0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15,
     0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f, 0x20,
@@ -55,7 +56,8 @@ static int ass_strcasecmp(const char *s1, const char *s2)
 {
     unsigned char a, b;
 
-    do {
+    do
+    {
         a = lowertab[(unsigned char)*s1++];
         b = lowertab[(unsigned char)*s2++];
     } while (a && a == b);
@@ -69,7 +71,8 @@ static int ass_strncasecmp(const char *s1, const char *s2, size_t n)
     unsigned char a, b;
     const char *last = s1 + n;
 
-    do {
+    do
+    {
         a = lowertab[(unsigned char)*s1++];
         b = lowertab[(unsigned char)*s2++];
     } while (s1 < last && a && a == b);
@@ -123,9 +126,10 @@ const size_t maxExponent = 511; /* Largest possible base 10 exponent.  Any
                                  */
 
 static
-const double powersOf10[] = {   /* Table giving binary powers of 10.  Entry */
-    10.,                        /* is 10^2^i.  Used to convert decimal */
-    100.,                       /* exponents into floating-point numbers. */
+const double powersOf10[] =     /* Table giving binary powers of 10.  Entry */
+{                               /* is 10^2^i.  Used to convert decimal */
+    10.,                        /* exponents into floating-point numbers. */
+    100.,
     1.0e4,
     1.0e8,
     1.0e16,
@@ -136,10 +140,11 @@ const double powersOf10[] = {   /* Table giving binary powers of 10.  Entry */
 };
 
 static
-const double negPowOf10[] = {   /* Table giving negative binary powers */
-    0.1,                        /* of 10.  Entry is 10^-2^i. */
-    0.01,                       /* Used to convert decimal exponents */
-    1.0e-4,                     /* into floating-point numbers. */
+const double negPowOf10[] =     /* Table giving negative binary powers */
+{                               /* of 10.  Entry is 10^-2^i. */
+    0.1,                        /* Used to convert decimal exponents */
+    0.01,                       /* into floating-point numbers. */
+    1.0e-4,
     1.0e-8,
     1.0e-16,
     1.0e-32,
@@ -158,8 +163,8 @@ const double negPowOf10[] = {   /* Table giving negative binary powers */
  *
  * Results:
  * The return value is the double-precision floating-point
- * representation of the characters in string.  If endPtr isn't
- * NULL, then *endPtr is filled in with the address of the
+ * representation of the characters in string.  If end_ptr isn't
+ * NULL, then *end_ptr is filled in with the address of the
  * next character after the last one that was part of the
  * floating-point number.
  *
@@ -183,7 +188,7 @@ ass_strtod(
                              * The "E" may actually be an "e".  E and X
                              * may both be omitted (but not just one).
                              */
-    char **endPtr           /* If non-NULL, store terminating character's
+    char **end_ptr           /* If non-NULL, store terminating character's
                              * address here. */
     )
 {
@@ -214,14 +219,19 @@ ass_strtod(
      */
 
     p = string;
-    while (ass_isspace(*p)) {
+    while (ass_isspace(*p))
+    {
         p += 1;
     }
-    if (*p == '-') {
+    if (*p == '-')
+    {
         sign = 1;
         p += 1;
-    } else {
-        if (*p == '+') {
+    }
+    else
+    {
+        if (*p == '+')
+        {
             p += 1;
         }
         sign = 0;
@@ -238,11 +248,13 @@ ass_strtod(
     {
         c = *p;
         if (!ass_isdigit(c)) {
-            if ((c != '.') || (decPt != (size_t) -1)) {
+            if ((c != '.') || (decPt != (size_t) -1))
+            {
                 break;
             }
             decPt = mantSize;
-        } else if ((c != '0') && (leadZeros == (size_t) -1)) {
+        } else if ((c != '0') && (leadZeros == (size_t) -1))
+        {
             leadZeros = mantSize;
         }
         p += 1;
@@ -255,34 +267,44 @@ ass_strtod(
      * they can't affect the value anyway.
      */
 
-    if (leadZeros == (size_t) -1) {
+    if (leadZeros == (size_t) -1)
+    {
         leadZeros = mantSize;
     }
     pExp  = p;
     p -= mantSize - leadZeros;
-    if (decPt == (size_t) -1) {
+    if (decPt == (size_t) -1)
+    {
         decPt = mantSize;
     } else {
         mantSize -= 1;      /* One of the digits was the point. */
-        if (decPt < leadZeros) {
+        if (decPt < leadZeros)
+        {
             leadZeros -= 1;
         }
     }
-    if (mantSize - leadZeros > 18) {
+    if (mantSize - leadZeros > 18)
+    {
         mantSize = leadZeros + 18;
     }
-    if (decPt < mantSize) {
+    if (decPt < mantSize)
+    {
         fracExpSign = 1;
         fracExp = mantSize - decPt;
-    } else {
+    }
+    else
+    {
         fracExpSign = 0;
         fracExp = decPt - mantSize;
     }
-    if (mantSize == 0) {
+    if (mantSize == 0)
+    {
         fraction = 0.0;
         p = string;
         goto done;
-    } else {
+    }
+    else
+    {
         int frac1, frac2, m;
         mantSize -= leadZeros;
         m = mantSize;
@@ -316,7 +338,8 @@ ass_strtod(
      */
 
     p = pExp;
-    if ((*p == 'E') || (*p == 'e')) {
+    if ((*p == 'E') || (*p == 'e'))
+    {
         size_t expLimit;    /* If exp > expLimit, appending another digit
                              * to exp is guaranteed to make it too large.
                              * If exp == expLimit, this may depend on
@@ -326,45 +349,64 @@ ass_strtod(
                              * exceed maxExponent. */
         int expWraparound = 0;
         p += 1;
-        if (*p == '-') {
+        if (*p == '-')
+        {
             expSign = 1;
             p += 1;
         } else {
-            if (*p == '+') {
+            if (*p == '+')
+            {
                 p += 1;
             }
             expSign = 0;
         }
-        if (expSign == fracExpSign) {
-            if (maxExponent < fracExp) {
+        if (expSign == fracExpSign)
+        {
+            if (maxExponent < fracExp)
+            {
                 expLimit = 0;
-            } else {
+            }
+            else
+            {
                 expLimit = (maxExponent - fracExp) / 10;
             }
-        } else {
+        }
+        else
+        {
             expLimit = fracExp / 10 + (fracExp % 10 + maxExponent) / 10;
         }
-        while (ass_isdigit(*p)) {
-            if ((exp > expLimit) || expWraparound) {
-                do {
+        while (ass_isdigit(*p))
+        {
+            if ((exp > expLimit) || expWraparound)
+            {
+                do
+                {
                     p += 1;
                 } while (ass_isdigit(*p));
                 goto expOverflow;
-            } else if (exp > ((size_t) -1 - (*p - '0')) / 10) {
+            } else if (exp > ((size_t) -1 - (*p - '0')) / 10)
+            {
                 expWraparound = 1;
             }
             exp = exp * 10 + (*p - '0');
             p += 1;
         }
-        if (expSign == fracExpSign) {
+        if (expSign == fracExpSign)
+        {
             exp = fracExp + exp;
-        } else if ((fracExp <= exp) || expWraparound) {
+        }
+        else if ((fracExp <= exp) || expWraparound)
+        {
             exp = exp - fracExp;
-        } else {
+        }
+        else
+        {
             exp = fracExp - exp;
             expSign = fracExpSign;
         }
-    } else {
+    }
+    else
+    {
         exp = fracExp;
         expSign = fracExpSign;
     }
@@ -376,21 +418,27 @@ ass_strtod(
      * fraction.
      */
 
-    if (exp > maxExponent) {
+    if (exp > maxExponent)
+    {
 expOverflow:
         exp = maxExponent;
-        if (fraction != 0.0) {
+        if (fraction != 0.0)
+        {
             errno = ERANGE;
         }
     }
     /* Prefer positive powers of 10 for increased precision, especially
      * for small powers that are represented exactly in floating-point. */
-    if ((exp <= DBL_MAX_10_EXP) || !expSign) {
+    if ((exp <= DBL_MAX_10_EXP) || !expSign)
+    {
         d = powersOf10;
-    } else {
+    }
+    else
+    {
         /* The floating-point format supports more negative exponents
          * than positive, or perhaps the result is a subnormal number. */
-        if (exp > -DBL_MIN_10_EXP) {
+        if (exp > -DBL_MIN_10_EXP)
+        {
             /* The result might be a valid subnormal number, but the
              * exponent underflows.  Tweak fraction so that it is below
              * 1.0 first, so that if the exponent still underflows after
@@ -409,22 +457,28 @@ expOverflow:
     }
     dblExp = 1.0;
     for (; exp != 0; exp >>= 1, d += 1) {
-        if (exp & 01) {
+        if (exp & 01)
+        {
             dblExp *= *d;
         }
     }
-    if (expSign) {
+    if (expSign)
+    {
         fraction /= dblExp;
-    } else {
+    }
+    else
+    {
         fraction *= dblExp;
     }
 
 done:
-    if (endPtr != NULL) {
-        *endPtr = (char *) p;
+    if (end_ptr != NULL)
+    {
+        *end_ptr = (char *) p;
     }
 
-    if (sign) {
+    if (sign)
+    {
         return -fraction;
     }
     return fraction;
@@ -516,7 +570,9 @@ static int mystrtou32_modulo(char **p, int base, uint32_t *res)
     if (read_digits(p, base, res)) {
         *res *= sign;
         return 1;
-    } else {
+    }
+    else
+    {
         *p = start;
         return 0;
     }
@@ -548,10 +604,12 @@ uint32_t parse_color_header(char *str)
     uint32_t color = 0;
     int base;
 
-    if (!ass_strncasecmp(str, "&h", 2) || !ass_strncasecmp(str, "0x", 2)) {
+    if (!ass_strncasecmp(str, "&h", 2) || !ass_strncasecmp(str, "0x", 2))
+    {
         str += 2;
         base = 16;
-    } else
+    }
+    else
         base = 10;
 
     mystrtou32_modulo(&str, base, &color);
@@ -626,12 +684,14 @@ void ass_free_track(vod_pool_t* pool, ass_track_t *track)
     free(track->event_format);
     free(track->language);
     free(track->title);
-    if (track->styles) {
+    if (track->styles)
+    {
         for (i = 0; i < track->n_styles; ++i)
             ass_free_style(track, i);
     }
     free(track->styles);
-    if (track->events) {
+    if (track->events)
+    {
         for (i = 0; i < track->n_events; ++i)
             ass_free_event(track, i);
     }
@@ -650,10 +710,10 @@ void ass_free_track(vod_pool_t* pool, ass_track_t *track)
  */
 static void set_default_style(ass_style_t *style, bool_t alloc_names)
 {
-    if (alloc_names == TRUE)
+    if (alloc_names)
     {
-        style->name                 = strdup("Default");
-        style->font_name             = strdup("Arial");
+        style->name             = strdup("Default");
+        style->font_name        = strdup("Arial");
     }
     style->font_size            = 18;
     style->primary_colour       = 0xffffff00;
@@ -683,7 +743,8 @@ static long long string2timecode(char *p)
     int h, m, s, ms;
     long long tm;
     int res = sscanf(p, "%d:%d:%d.%d", &h, &m, &s, &ms);
-    if (res < 4) {
+    if (res < 4)
+    {
         // error msg "Bad timestamp";
         return 0;
     }
@@ -695,7 +756,7 @@ static long long string2timecode(char *p)
  * \param track track
  * \param name style name
  * \return index in track->styles
- * Returns 0 if no styles found => expects at least 1 style.
+ * Returns 0 if no styles found -> expects at least 1 style.
  * Parsing code always adds "Default" style in the beginning.
  */
 int lookup_style(ass_track_t *track, char *name)
@@ -709,7 +770,8 @@ int lookup_style(ass_track_t *track, char *name)
     // (only in contexts where this function is called)
     if (ass_strcasecmp(name, "Default") == 0)
         name = "Default";
-    for (i = track->n_styles - 1; i >= 0; --i) {
+    for (i = track->n_styles - 1; i >= 0; --i)
+    {
         if (strcmp(track->styles[i].name, name) == 0)
             return i;
     }
@@ -778,7 +840,9 @@ static char *next_token(char **str)
     }
     if (*p == '\0') {
         *str = p;               // eos found, str will point to '\0' at exit
-    } else {
+    }
+    else
+    {
         *p = '\0';
         *str = p + 1;           // ',' found, str will point to the next char (beginning of the next token)
     }
@@ -803,7 +867,8 @@ static int process_event_tail(ass_track_t *track, ass_event_t *event, char *str)
     char *format = strdup(track->event_format);
     char *q = format;           // format scanning pointer
 
-    if (track->n_styles == 0) {
+    if (track->n_styles == 0)
+    {
         // add "Default" style to the end
         // will be used if track does not contain a default style (or even does not contain styles at all)
         int sid = ass_alloc_style(track);
@@ -811,9 +876,11 @@ static int process_event_tail(ass_track_t *track, ass_event_t *event, char *str)
         track->default_style = sid;
     }
 
-    while (1) {
+    while (1)
+    {
         NEXT(q, tname);
-        if (ass_strcasecmp(tname, "Text") == 0) {
+        if (ass_strcasecmp(tname, "Text") == 0)
+        {
             char *last;
             event->text = strdup(p);
             if (*event->text != 0) {
@@ -822,7 +889,8 @@ static int process_event_tail(ass_track_t *track, ass_event_t *event, char *str)
                     *last = 0;
             }
             // need to track the largest end time in all events, since they are not in chronological order
-            if (track->max_duration < event->end) {
+            if (track->max_duration < event->end)
+            {
                 track->max_duration = event->end;
             }
             free(format);
@@ -885,7 +953,8 @@ static int process_style(ass_track_t *track, char *str, request_context_t* reque
     ass_style_t *style;
     ass_style_t *target;
 
-    if (!track->style_format) {
+    if (!track->style_format)
+    {
         // no style format header
         // probably an ancient script version
         if (track->track_type == TRACK_TYPE_SSA)
@@ -906,7 +975,8 @@ static int process_style(ass_track_t *track, char *str, request_context_t* reque
     q = format = strdup(track->style_format);
 
     // Add default style first
-    if (track->n_styles == 0) {
+    if (track->n_styles == 0)
+    {
         // will be used if track does not contain a default style (or even does not contain styles at all)
         int sid = ass_alloc_style(track);
         set_default_style(&track->styles[sid], TRUE);
@@ -920,7 +990,8 @@ static int process_style(ass_track_t *track, char *str, request_context_t* reque
 
     set_default_style(target, FALSE);
 
-    while (1) {
+    while (1)
+    {
         NEXT(q, tname);
         NEXT(p, token);
 
@@ -981,9 +1052,12 @@ static int process_style(ass_track_t *track, char *str, request_context_t* reque
         style->font_name = strdup("Arial");
 
     // For now, right_to_left_language is TRUE only for Arabic language. In future, it will be enabled for many others.
-    if ( !ass_strncasecmp(style->font_name, "Adobe Arabic", 12) ) {
+    if ( !ass_strncasecmp(style->font_name, "Adobe Arabic", 12) )
+    {
         style->right_to_left_language = TRUE;
-    } else {
+    }
+    else
+    {
         style->right_to_left_language = track->right_to_left_language;
     }
     free(format);
@@ -993,12 +1067,14 @@ static int process_style(ass_track_t *track, char *str, request_context_t* reque
 
 static int process_styles_line(ass_track_t *track, char *str, request_context_t* request_context)
 {
-    if (!strncmp(str, "Format:", 7)) {
+    if (!strncmp(str, "Format:", 7))
+    {
         char *p = str + 7;
         skip_spaces(&p);
         free(track->style_format);
         track->style_format = strdup(p);
-    } else if (!strncmp(str, "Style:", 6)) {
+    } else if (!strncmp(str, "Style:", 6))
+    {
         char *p = str + 6;
         skip_spaces(&p);
         process_style(track, p, request_context);
@@ -1008,26 +1084,42 @@ static int process_styles_line(ass_track_t *track, char *str, request_context_t*
 
 static int process_info_line(ass_track_t *track, char *str, request_context_t* request_context)
 {
-    if (!strncmp(str, "PlayResX:", 9)) {
+    if (!strncmp(str, "PlayResX:", 9))
+    {
         track->play_res_x = atoi(str + 9);
-    } else if (!strncmp(str, "PlayResY:", 9)) {
+    }
+    else if (!strncmp(str, "PlayResY:", 9))
+    {
         track->play_res_y = atoi(str + 9);
-    } else if (!strncmp(str, "Timer:", 6)) {
+    }
+    else if (!strncmp(str, "Timer:", 6))
+    {
         track->timer = ass_atof(str + 6);
-    } else if (!strncmp(str, "WrapStyle:", 10)) {
+    }
+    else if (!strncmp(str, "WrapStyle:", 10))
+    {
         track->wrap_style = atoi(str + 10);
-    } else if (!strncmp(str, "ScaledBorderAndShadow:", 22)) {
+    }
+    else if (!strncmp(str, "ScaledBorderAndShadow:", 22))
+    {
         track->scaled_border_and_shadow = parse_bool(str + 22);
-    } else if (!strncmp(str, "Kerning:", 8)) {
+    }
+    else if (!strncmp(str, "Kerning:", 8))
+    {
         track->kerning = parse_bool(str + 8);
-    } else if (!strncmp(str, "YCbCr Matrix:", 13)) {
+    }
+    else if (!strncmp(str, "YCbCr Matrix:", 13))
+    {
         // ignore for now
-    } else if (!strncmp(str, "Language:", 9)) { // This field is not part of the ASS/SSA specs
+    }
+    else if (!strncmp(str, "Language:", 9))
+    { // This field is not part of the ASS/SSA specs
         char *p = str + 9;
         while (*p && ass_isspace(*p)) p++;
         free(track->language);
         track->language = strndup(p, 2);
-    } else if (!strncmp(str, "Title:", 6)) {
+    } else if (!strncmp(str, "Title:", 6))
+    {
         char *p = str + 6;
         char *strt, *end;
         while (*p && ass_isspace(*p))
@@ -1057,13 +1149,16 @@ static void event_format_fallback(ass_track_t *track)
 
 static int process_events_line(ass_track_t *track, char *str, request_context_t* request_context)
 {
-    if (!strncmp(str, "Format:", 7)) {
+    if (!strncmp(str, "Format:", 7))
+    {
         char *p = str + 7;
         skip_spaces(&p);
         free(track->event_format);
         track->event_format = strdup(p);
 
-    } else if (!strncmp(str, "Dialogue:", 9)) {
+    }
+    else if (!strncmp(str, "Dialogue:", 9))
+    {
         // This should never be reached for embedded subtitles.
         // They have slightly different format and are parsed in ass_process_chunk,
         // called directly from demuxer
@@ -1081,9 +1176,13 @@ static int process_events_line(ass_track_t *track, char *str, request_context_t*
             event_format_fallback(track);
 
         process_event_tail(track, event, str);
-    } else if (!strncmp(str, "Comment:", 8)) {
+    }
+    else if (!strncmp(str, "Comment:", 8))
+    {
         // Ignore and do nothing, this is just a comment line
-    } else {
+    }
+    else
+    {
         vod_log_error(VOD_LOG_ERR, request_context->log, 0,
             "Event line not understood: %s", str);
     }
@@ -1098,20 +1197,32 @@ static int process_events_line(ass_track_t *track, char *str, request_context_t*
 static int process_line(ass_track_t *track, char *str, request_context_t* request_context)
 {
     int retval = 0;
-    if (!ass_strncasecmp(str, "[Script Info]", 13)) {
+    if (!ass_strncasecmp(str, "[Script Info]", 13))
+    {
         track->state = PST_INFO;
-    } else if (!ass_strncasecmp(str, "[V4 Styles]", 11)) {
+    }
+    else if (!ass_strncasecmp(str, "[V4 Styles]", 11))
+    {
         track->state = PST_STYLES;
         track->track_type = TRACK_TYPE_SSA;
-    } else if (!ass_strncasecmp(str, "[V4+ Styles]", 12)) {
+    }
+    else if (!ass_strncasecmp(str, "[V4+ Styles]", 12))
+    {
         track->state = PST_STYLES;
         track->track_type = TRACK_TYPE_ASS;
-    } else if (!ass_strncasecmp(str, "[Events]", 8)) {
+    }
+    else if (!ass_strncasecmp(str, "[Events]", 8))
+    {
         track->state = PST_EVENTS;
-    } else if (!ass_strncasecmp(str, "[Fonts]", 7)) {
+    }
+    else if (!ass_strncasecmp(str, "[Fonts]", 7))
+    {
         track->state = PST_FONTS;
-    } else {
-        switch (track->state) {
+    }
+    else
+    {
+        switch (track->state)
+        {
         case PST_INFO:
             retval |= process_info_line(track, str, request_context);
             break;
@@ -1141,9 +1252,11 @@ static int process_text(ass_track_t *track, char *str, request_context_t* reques
     int retval = 0;
     char *p = str;
 
-    while (1) {
+    while (1)
+    {
         char *q;
-        while (1) {
+        while (1)
+        {
             if ((*p == '\r') || (*p == '\n'))
                 ++p;
             else if (p[0] == '\xef' && p[1] == '\xbb' && p[2] == '\xbf')
@@ -1151,7 +1264,8 @@ static int process_text(ass_track_t *track, char *str, request_context_t* reques
             else
                 break;
         }
-        for (q = p; ((*q != '\0') && (*q != '\r') && (*q != '\n')); ++q) {
+        for (q = p; ((*q != '\0') && (*q != '\r') && (*q != '\n')); ++q)
+        {
         };
         if (q == p)
             break;
