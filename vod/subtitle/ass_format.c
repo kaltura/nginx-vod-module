@@ -21,6 +21,7 @@ static const char*    FIXED_WEBVTT_ ## type ## _ ## name ## _STR   = str;
 
 PAIROF(CUE, 	NAME, 		8,	"c%07d");
 PAIROF(ESCAPE,	FOR_RTL,	5,	"&lrm;")
+PAIROF(HEADER,	NEWLINES,	10,	WEBVTT_HEADER_NEWLINES)
 
 #ifdef ASSUME_STYLE_SUPPORT
 PAIROF(STYLE, 	START, 		22,	"STYLE\r\n::cue(v[voice=\"")
@@ -340,64 +341,63 @@ static void ass_clean_known_mem(request_context_t* request_context, ass_track_t 
 }
 
 #ifdef ASSUME_STYLE_SUPPORT
-static char* output_one_style(ass_style_t* cur_style, char* p)
+static u_char* output_one_style(ass_style_t* cur_style, u_char* p)
 {
-		int len;
+		p = vod_copy(p, FIXED_WEBVTT_STYLE_START_STR, FIXED_WEBVTT_STYLE_START_WIDTH);
+		p = vod_copy(p, cur_style->name, vod_strlen(cur_style->name));
+		p = vod_copy(p, FIXED_WEBVTT_STYLE_END_STR, FIXED_WEBVTT_STYLE_END_WIDTH);
+		p = vod_copy(p, FIXED_WEBVTT_BRACES_START_STR, FIXED_WEBVTT_BRACES_START_WIDTH);
 
-		vod_memcpy(p, FIXED_WEBVTT_STYLE_START_STR, FIXED_WEBVTT_STYLE_START_WIDTH);		p += FIXED_WEBVTT_STYLE_START_WIDTH;
-		len = vod_strlen(cur_style->name); vod_memcpy(p, cur_style->name, len);				p += len;
-		vod_memcpy(p, FIXED_WEBVTT_STYLE_END_STR, FIXED_WEBVTT_STYLE_END_WIDTH);			p += FIXED_WEBVTT_STYLE_END_WIDTH;
-		vod_memcpy(p, FIXED_WEBVTT_BRACES_START_STR, FIXED_WEBVTT_BRACES_START_WIDTH);		p += FIXED_WEBVTT_BRACES_START_WIDTH;
-
-		len = 8; vod_memcpy(p, "color: #", len);											p += len;
-		vod_sprintf((u_char*)p, "%08uxD;\r\n", cur_style->primary_colour);					p += 11;
+		p = vod_copy(p, "color: #", 8);
+		p = vod_sprintf((u_char*)p, "%08uxD;\r\n", cur_style->primary_colour);
 
 
-		len = 14; vod_memcpy(p, "font-family: \"", len);									p += len;
-		len = vod_strlen(cur_style->font_name); vod_memcpy(p, cur_style->font_name, len);	p += len;
-		len = 16; vod_memcpy(p, "\", sans-serif;\r\n", len);								p += len;
-		vod_sprintf((u_char*)p, "font-size: %03uDpx;\r\n", cur_style->font_size);			p += 19;
+		p = vod_copy(p, "font-family: \"", 14);
+		p = vod_copy(p, cur_style->font_name, vod_strlen(cur_style->font_name));
+		p = vod_copy(p, "\", sans-serif;\r\n", 16);
+		p = vod_sprintf((u_char*)p, "font-size: %03uDpx;\r\n", cur_style->font_size);
 
 		/*if (cur_style->bold)
 		{
-			len = 20; vod_memcpy(p, "font-weight: bold;\r\n", len);							p += len;
+			p = vod_copy(p, "font-weight: bold;\r\n", 20);
 		}
 		if (cur_style->italic)
 		{
-			len = 21; vod_memcpy(p, "font-style: italic;\r\n", len);						p += len;
+			p = vod_copy(p, "font-style: italic;\r\n", 21);
 		}
 		// This will inherit the outline_colour (and shadow) if border_style==1, otherwise it inherits primary_colour
 		if (cur_style->underline)
 		{
 			// available styles are: solid | double | dotted | dashed | wavy
 			// available lines are: underline || overline || line-through || blink
-			len = 35; vod_memcpy(p, "text-decoration: solid underline;\r\n", len);			p += len;
+			p = vod_copy(p, "text-decoration: solid underline;\r\n", 35);
 		}
 		else if (cur_style->strike_out)
 		{
 			// available lines are: underline || overline || line-through || blink
-			len = 38; vod_memcpy(p, "text-decoration: solid line-through;\r\n", len);		p += len;
+			p = vod_copy(p, "text-decoration: solid line-through;\r\n", 38);
 		}*/
 
 		if (cur_style->border_style == 1 /*&& ass_track->type == TRACK_TYPE_ASS*/)
 		{
 			// webkit is not supported by all players, stick to adding outline using text-shadow
-			len = 13; vod_memcpy(p, "text-shadow: ", len);									p += len;
+			p = vod_copy(p, "text-shadow: ", 13);
 			// add outline in 4 directions with the outline color
-			vod_sprintf((u_char*)p, "#%08uxD -%01uDpx 0px, #%08uxD 0px %01uDpx, #%08uxD 0px -%01uDpx, #%08uxD %01uDpx 0px, #%08uxD %01uDpx %01uDpx 0px;\r\n",
+			p = vod_sprintf((u_char*)p,
+				"#%08uxD -%01uDpx 0px, #%08uxD 0px %01uDpx, #%08uxD 0px -%01uDpx, #%08uxD %01uDpx 0px, #%08uxD %01uDpx %01uDpx 0px;\r\n",
 				cur_style->outline_colour, cur_style->outline,
 				cur_style->outline_colour, cur_style->outline,
 				cur_style->outline_colour, cur_style->outline,
 				cur_style->outline_colour, cur_style->outline,
-				cur_style->back_colour, cur_style->shadow, cur_style->shadow);				p += 102;
+				cur_style->back_colour, cur_style->shadow, cur_style->shadow);
 		}
 		else
 		{
-			len = 19; vod_memcpy(p, "background-color: #", len);							p += len;
-			vod_sprintf((u_char*)p, "%08uxD;\r\n", cur_style->back_colour);					p += 11;
+			p = vod_copy(p, "background-color: #", 19);
+			p = vod_sprintf((u_char*)p, "%08uxD;\r\n", cur_style->back_colour);
 		}
-		vod_memcpy(p, FIXED_WEBVTT_BRACES_END_STR, FIXED_WEBVTT_BRACES_END_WIDTH);			p += FIXED_WEBVTT_BRACES_END_WIDTH;
-		len = 2; vod_memcpy(p, "\r\n", len);												p += len;
+		p = vod_copy(p, FIXED_WEBVTT_BRACES_END_STR, FIXED_WEBVTT_BRACES_END_WIDTH);
+		p = vod_copy(p, "\r\n", 2);
 
 		return p;
 }
@@ -510,8 +510,8 @@ ass_parse_frames(
 	input_frame_t* cur_frame	= NULL;
 	ass_event_t*   cur_event	= NULL;
 	vod_str_t* header			= &vtt_track->media_info.extra_data;
-	char *p, *pfixed;
-	int len, evntcounter, chunkcounter;
+	u_char *p, *pfixed;
+	int evntcounter, chunkcounter;
 	uint64_t base_time, clip_to, seg_start, seg_end, last_start_time;
 
 	vod_memzero(result, sizeof(*result));
@@ -677,7 +677,7 @@ ass_parse_frames(
 			return VOD_ALLOC_FAILED;
 		}
 		// allocate the text of output frame
-		p = pfixed = vod_alloc(request_context->pool, MAX_STR_SIZE_EVNT_CHUNK);
+		p = pfixed = (u_char *)vod_alloc(request_context->pool, MAX_STR_SIZE_EVNT_CHUNK);
 		if (p == NULL)
 		{
 			vod_log_error(VOD_LOG_ERR, request_context->log, 0,
@@ -693,8 +693,8 @@ ass_parse_frames(
 		}
 
 		// Cues are named "c<iteration_number_in_7_digits>" starting from c0000000
-		vod_sprintf((u_char*)p, FIXED_WEBVTT_CUE_NAME_STR, evntcounter);		p += FIXED_WEBVTT_CUE_NAME_WIDTH;
-		len = 2; vod_memcpy(p, "\r\n", len);									p += len;
+		p = vod_sprintf(p, FIXED_WEBVTT_CUE_NAME_STR, evntcounter);
+		p = vod_copy(p, "\r\n", 2);
 		// timestamps will be inserted here, we now insert positioning and alignment changes
 		{
 			bool_t	bleft = FALSE, bright = FALSE;
@@ -750,44 +750,44 @@ ass_parse_frames(
 					pos = FFMINMAX(marg_r, sizeH, 100);
 				}
 
-				len = 10; vod_memcpy(p, " position:", len);	p += len;
-				vod_sprintf((u_char*)p, "%03uD", pos);		p += 3;
-				len =  7; vod_memcpy(p, "% size:", len);	p += len;
-				vod_sprintf((u_char*)p, "%03uD", sizeH);	p += 3;
-				len =  7; vod_memcpy(p, "% line:", len);	p += len;
-				vod_sprintf((u_char*)p, "%02uD", line);		p += 2;
+				p = vod_copy(p, " position:", 10);
+				p = vod_sprintf(p, "%03uD", pos);
+				p = vod_copy(p, "% size:", 7);
+				p = vod_sprintf(p, "%03uD", sizeH);
+				p = vod_copy(p, "% line:", 7);
+				p = vod_sprintf(p, "%02uD", line);
 			}
 			// We should only insert this if an alignment override tag {\a...}is in the text, otherwise follow the style's alignment
 			// but for now, insert it all the time till all players can read styles
-			len =  7; vod_memcpy(p, " align:", len);		p += len;
+			p = vod_copy(p, " align:", 7);
 			if ((!bleft) && (!bright))							//center alignment  2/6/10
 			{
-				len =  6; vod_memcpy(p, "center", len);		p += len;
+				p = vod_copy(p, "center", 6);
 			}
 			else if (bleft)										//left	 alignment  1/5/9
 			{
-				len =  4; vod_memcpy(p, "left", len);		p += len;
+				p = vod_copy(p, "left", 4);
 			}
 			else												//right  alignment  3/7/11
 			{
-				len =  5; vod_memcpy(p, "right", len);		p += len;
+				p = vod_copy(p, "right", 5);
 			}
-			len = 2; vod_memcpy(p, "\r\n", len);			p += len;
+			p = vod_copy(p, "\r\n", 2);
 		}
 #ifdef ASSUME_STYLE_SUPPORT
-		vod_memcpy(p, FIXED_WEBVTT_VOICE_START_STR, FIXED_WEBVTT_VOICE_START_WIDTH);		p += FIXED_WEBVTT_VOICE_START_WIDTH;
-		len = vod_strlen(cur_style->name); vod_sprintf((u_char*)p, cur_style->name, len);	p += len;
-		vod_memcpy(p, FIXED_WEBVTT_VOICE_END_STR, FIXED_WEBVTT_VOICE_END_WIDTH);			p += FIXED_WEBVTT_VOICE_END_WIDTH;
+		p = vod_copy(p, FIXED_WEBVTT_VOICE_START_STR, FIXED_WEBVTT_VOICE_START_WIDTH);
+		p = vod_sprintf((u_char*)p, cur_style->name, vod_strlen(cur_style->name));
+		p = vod_copy(p, FIXED_WEBVTT_VOICE_END_STR, FIXED_WEBVTT_VOICE_END_WIDTH);
 #endif //ASSUME_STYLE_SUPPORT
 
 		for (chunkcounter = 0; chunkcounter < num_chunks_in_text; chunkcounter++)
 		{
-			 vod_memcpy(p, event_textp[chunkcounter], event_len[chunkcounter]); p += event_len[chunkcounter];
+			 p = vod_copy(p, event_textp[chunkcounter], event_len[chunkcounter]);
 		}
 
-		len = 2; vod_memcpy(p, "\r\n", len);				p += len;
+		p = vod_copy(p, "\r\n", 2);
 		// we still need an empty line after each event/cue
-		len = 2; vod_memcpy(p, "\r\n", len);				p += len;
+		p = vod_copy(p, "\r\n", 2);
 
 		// Note: mapping of cue into input_frame_t:
 		// - offset = pointer to buffer containing: cue id, cue settings list, cue payload
@@ -808,7 +808,7 @@ ass_parse_frames(
 	}
 
 	//allocate memory for the style's text string
-	p = pfixed = vod_alloc(request_context->pool, MAX_STR_SIZE_ALL_WEBVTT_STYLES);
+	p = pfixed = (u_char *)vod_alloc(request_context->pool, MAX_STR_SIZE_ALL_WEBVTT_STYLES);
 	if (p == NULL)
 	{
 		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
@@ -818,8 +818,8 @@ ass_parse_frames(
 	}
 
 	// We now insert header and all style definitions
-	header->data			  = (u_char*)pfixed;
-	len = sizeof(WEBVTT_HEADER_NEWLINES) - 1; vod_memcpy(p, WEBVTT_HEADER_NEWLINES, len);  p+=len;
+	header->data = pfixed;
+	p = vod_copy(p, FIXED_WEBVTT_HEADER_NEWLINES_STR, FIXED_WEBVTT_HEADER_NEWLINES_WIDTH);
 #ifdef ASSUME_STYLE_SUPPORT
 	int stylecounter;
 	for (stylecounter = (ass_track->default_style ? 1 : 0); (stylecounter < ass_track->n_styles); stylecounter++)
