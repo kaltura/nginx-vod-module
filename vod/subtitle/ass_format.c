@@ -21,6 +21,7 @@ static const char*    FIXED_WEBVTT_ ## type ## _ ## name ## _STR   = str;
 
 PAIROF(CUE, 	NAME, 		8,	"c%07d");
 PAIROF(ESCAPE,	FOR_RTL,	5,	"&lrm;")
+
 #ifdef ASSUME_STYLE_SUPPORT
 PAIROF(STYLE, 	START, 		22,	"STYLE\r\n::cue(v[voice=\"")
 PAIROF(STYLE, 	END,		4,	"\"]) ")
@@ -28,30 +29,9 @@ PAIROF(BRACES,	START,		3,	"{\r\n")
 PAIROF(BRACES,	END,		3,	"}\r\n")
 PAIROF(VOICE,	START,		3,	"<v ")
 PAIROF(VOICE,	END,		1,	">")
-PAIROF(VOICE,	SPANEND,	4,	"</v>")
 // ignore this set for now, later we will use <v.strike StyleName>  for lines that are strikethrough
 //PAIROF(CLASS,	STRIKE, 	68,	"STYLE\r\n::cue(.strike) {\r\ntext-decoration: solid line-through;\r\n}\r\n\r\n")
 #endif
-//#define FIXED_WEBVTT_CUE_NAME_WIDTH 8
-//#define FIXED_WEBVTT_CUE_NAME_STR "c%07d"
-//#define FIXED_WEBVTT_STYLE_START_WIDTH 22
-//#define FIXED_WEBVTT_STYLE_START_STR "STYLE\r\n::cue(v[voice=\""
-//#define FIXED_WEBVTT_STYLE_END_WIDTH 4
-//#define FIXED_WEBVTT_STYLE_END_STR "\"]) "
-//#define FIXED_WEBVTT_BRACES_START_WIDTH 3
-//#define FIXED_WEBVTT_BRACES_START_STR "{\r\n"
-//#define FIXED_WEBVTT_BRACES_END_WIDTH 3
-//#define FIXED_WEBVTT_BRACES_END_STR "}\r\n"
-//#define FIXED_WEBVTT_VOICE_START_WIDTH  3
-//#define FIXED_WEBVTT_VOICE_START_STR  "<v "
-//#define FIXED_WEBVTT_VOICE_END_STR  ">"
-//#define FIXED_WEBVTT_VOICE_END_WIDTH  1
-//#define FIXED_WEBVTT_VOICE_SPANEND_STR  "</v>"
-//#define FIXED_WEBVTT_VOICE_SPANEND_WIDTH  4
-//#define FIXED_WEBVTT_ESCAPE_FOR_RTL_STR "&lrm;"
-//#define FIXED_WEBVTT_ESCAPE_FOR_RTL_WIDTH 5
-//#define FIXED_WEBVTT_CLASS_STRIKE_STR  "STYLE\r\n::cue(.strike) {\r\ntext-decoration: solid line-through;\r\n}\r\n\r\n"
-//#define FIXED_WEBVTT_CLASS_STRIKE_WIDTH  68
 
 typedef enum
 {
