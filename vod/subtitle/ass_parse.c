@@ -623,13 +623,24 @@ char parse_bool(char *str)
 	return !ass_strncasecmp(str, "yes", 3) || strtol(str, NULL, 10) > 0;
 }
 
+ass_track_t * ass_alloc_track(request_context_t *request_context)
+{
+	ass_track_t *track = vod_calloc(request_context->pool, sizeof(ass_track_t));
+	if (!track)
+		return NULL;
+
+	track->play_res_x = 1920;
+	track->play_res_y = 1080;
+
+	return track;
+}
+
 int ass_alloc_style(ass_track_t *track)
 {
 	int sid;
 
-	//assert(track->n_styles <= track->max_styles);
-
-	if (track->n_styles == track->max_styles) {
+	if (track->n_styles == track->max_styles)
+	{
 		track->max_styles += ASS_STYLES_ALLOC;
 		track->styles =
 			(ass_style_t *) realloc(track->styles,
@@ -638,7 +649,7 @@ int ass_alloc_style(ass_track_t *track)
 	}
 
 	sid = track->n_styles++;
-	vod_memset(track->styles + sid, 0, sizeof(ass_style_t));
+	vod_memzero(track->styles + sid, sizeof(ass_style_t));
 	return sid;
 }
 
@@ -646,9 +657,8 @@ int ass_alloc_event(ass_track_t *track)
 {
 	int eid;
 
-	//assert(track->n_events <= track->max_events);
-
-	if (track->n_events == track->max_events) {
+	if (track->n_events == track->max_events)
+	{
 		track->max_events = track->max_events * 2 + 1;
 		track->events =
 			(ass_event_t *) realloc(track->events,
@@ -1113,7 +1123,8 @@ static int process_info_line(ass_track_t *track, char *str, request_context_t* r
 		// ignore for now
 	}
 	else if (!strncmp(str, "Language:", 9))
-	{ // This field is not part of the ASS/SSA specs
+	{
+		// This field is not part of the ASS/SSA specs
 		char *p = str + 9;
 		while (*p && ass_isspace(*p)) p++;
 		free(track->language);
@@ -1296,8 +1307,7 @@ ass_track_t *parse_memory(char *buf, int len, request_context_t* request_context
 	}
 	vod_memcpy(pcopy, buf, len+1);
 
-	// initializes all fields to zero. If that doesn't suit your need, use another track_init function.
-	track = vod_calloc(request_context->pool, sizeof(ass_track_t));
+	track = ass_alloc_track(request_context);
 	if (!track)
 	{
 		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
