@@ -128,12 +128,16 @@ void swap_events(ass_event_t* nxt, ass_event_t* cur)
 	vod_memcpy( cur, &tmp, sizeof(ass_event_t));
 }
 
-static int split_event_text_to_chunks(char *src, int srclen, bool_t rtl, char **textp, int *evlen, bool_t *ibu_flags, uint32_t *max_run, request_context_t* request_context)
+static int split_event_text_to_chunks(char *src, int srclen, bool_t rtl, u_char **textp, int *evlen, bool_t *ibu_flags, uint32_t *max_run, request_context_t* request_context)
 {
 	// a chunk is part of the text that will be added with a specific voice/style. So we increment chunk only when we need a different style applied
 	// Number of chunks is at least 1 if len is > 0
-	int srcidx = 0, dstidx = 0, tagidx, bBracesOpen = 0, chunkidx = 0;
-	uint32_t cur_run = 0;
+	int tagidx;
+	int srcidx 			= 0;
+	int bBracesOpen		= 0;
+	int chunkidx 		= 0;
+	uint32_t cur_run	= 0;
+	u_char *text_start	= textp[chunkidx];
 
 	if ((src == NULL) || (srclen < 1) || (srclen > MAX_STR_SIZE_EVNT_CHUNK))
 	{
@@ -142,27 +146,22 @@ static int split_event_text_to_chunks(char *src, int srclen, bool_t rtl, char **
 
 	if (rtl)
 	{
-		 vod_memcpy(textp[chunkidx], FIXED_WEBVTT_ESCAPE_FOR_RTL_STR, FIXED_WEBVTT_ESCAPE_FOR_RTL_WIDTH);
-		 dstidx+=FIXED_WEBVTT_ESCAPE_FOR_RTL_WIDTH;
+		 textp[chunkidx] = vod_copy(textp[chunkidx], FIXED_WEBVTT_ESCAPE_FOR_RTL_STR, FIXED_WEBVTT_ESCAPE_FOR_RTL_WIDTH);
 	}
 
 	// insert openers to currently open modes, ordered as <i><b><u>
 	if (ibu_flags[0])
 	{
-		vod_memcpy(textp[chunkidx] + dstidx, tag_replacement_strings[TAG_TYPE_ITALIC_START], tag_string_len[TAG_TYPE_ITALIC_START][1]);
-		dstidx += tag_string_len[TAG_TYPE_ITALIC_START][1];
+		textp[chunkidx] = vod_copy(textp[chunkidx], tag_replacement_strings[TAG_TYPE_ITALIC_START], tag_string_len[TAG_TYPE_ITALIC_START][1]);
 	}
 	if (ibu_flags[1])
 	{
-		 vod_memcpy(textp[chunkidx] + dstidx, tag_replacement_strings[TAG_TYPE_BOLD_START], tag_string_len[TAG_TYPE_BOLD_START][1]);
-		 dstidx += tag_string_len[TAG_TYPE_BOLD_START][1];
+		textp[chunkidx] = vod_copy(textp[chunkidx], tag_replacement_strings[TAG_TYPE_BOLD_START], tag_string_len[TAG_TYPE_BOLD_START][1]);
 	}
 	if (ibu_flags[2])
 	{
-		vod_memcpy(textp[chunkidx] + dstidx, tag_replacement_strings[TAG_TYPE_UNDER_START], tag_string_len[TAG_TYPE_UNDER_START][1]);
-		dstidx += tag_string_len[TAG_TYPE_UNDER_START][1];
+		textp[chunkidx] = vod_copy(textp[chunkidx], tag_replacement_strings[TAG_TYPE_UNDER_START], tag_string_len[TAG_TYPE_UNDER_START][1]);
 	}
-
 
 	while (srcidx < srclen)
 	{
@@ -189,36 +188,30 @@ static int split_event_text_to_chunks(char *src, int srclen, bool_t rtl, char **
 							// insert closures to open spans, ordered as </u></b></i>
 							if (ibu_flags[2])
 							{
-								vod_memcpy(textp[chunkidx] + dstidx, tag_replacement_strings[TAG_TYPE_UNDER_END], tag_string_len[TAG_TYPE_UNDER_END][1]);
-								dstidx += tag_string_len[TAG_TYPE_UNDER_END][1];
+								textp[chunkidx] = vod_copy(textp[chunkidx], tag_replacement_strings[TAG_TYPE_UNDER_END], tag_string_len[TAG_TYPE_UNDER_END][1]);
 							}
 							if (ibu_flags[1])
 							{
-								 vod_memcpy(textp[chunkidx] + dstidx, tag_replacement_strings[TAG_TYPE_BOLD_END], tag_string_len[TAG_TYPE_BOLD_END][1]);
-								 dstidx += tag_string_len[TAG_TYPE_BOLD_END][1];
+								textp[chunkidx] = vod_copy(textp[chunkidx], tag_replacement_strings[TAG_TYPE_BOLD_END], tag_string_len[TAG_TYPE_BOLD_END][1]);
 							}
 							if (ibu_flags[0])
 							{
-								vod_memcpy(textp[chunkidx] + dstidx, tag_replacement_strings[TAG_TYPE_ITALIC_END], tag_string_len[TAG_TYPE_ITALIC_END][1]);
-								dstidx += tag_string_len[TAG_TYPE_ITALIC_END][1];
+								textp[chunkidx] = vod_copy(textp[chunkidx], tag_replacement_strings[TAG_TYPE_ITALIC_END], tag_string_len[TAG_TYPE_ITALIC_END][1]);
 							}
 
 							ibu_flags[ibu_idx] = !ibu_flags[ibu_idx];
 
 							if (ibu_flags[0])
 							{
-								vod_memcpy(textp[chunkidx] + dstidx, tag_replacement_strings[TAG_TYPE_ITALIC_START], tag_string_len[TAG_TYPE_ITALIC_START][1]);
-								dstidx += tag_string_len[TAG_TYPE_ITALIC_START][1];
+								textp[chunkidx] = vod_copy(textp[chunkidx], tag_replacement_strings[TAG_TYPE_ITALIC_START], tag_string_len[TAG_TYPE_ITALIC_START][1]);
 							}
 							if (ibu_flags[1])
 							{
-								 vod_memcpy(textp[chunkidx] + dstidx, tag_replacement_strings[TAG_TYPE_BOLD_START], tag_string_len[TAG_TYPE_BOLD_START][1]);
-								 dstidx += tag_string_len[TAG_TYPE_BOLD_START][1];
+								textp[chunkidx] = vod_copy(textp[chunkidx], tag_replacement_strings[TAG_TYPE_BOLD_START], tag_string_len[TAG_TYPE_BOLD_START][1]);
 							}
 							if (ibu_flags[2])
 							{
-								vod_memcpy(textp[chunkidx] + dstidx, tag_replacement_strings[TAG_TYPE_UNDER_START], tag_string_len[TAG_TYPE_UNDER_START][1]);
-								dstidx += tag_string_len[TAG_TYPE_UNDER_START][1];
+								textp[chunkidx] = vod_copy(textp[chunkidx], tag_replacement_strings[TAG_TYPE_UNDER_START], tag_string_len[TAG_TYPE_UNDER_START][1]);
 							}
 						}
 					} break;
@@ -232,12 +225,10 @@ static int split_event_text_to_chunks(char *src, int srclen, bool_t rtl, char **
 							cur_run = 0;		// max_run holds the longest run of visible characters on any line.
 						}
 
-						vod_memcpy(textp[chunkidx] + dstidx, tag_replacement_strings[tagidx], tag_string_len[tagidx][1]);
-						dstidx += tag_string_len[tagidx][1];
+						textp[chunkidx] = vod_copy(textp[chunkidx], tag_replacement_strings[tagidx], tag_string_len[tagidx][1]);
 						if (rtl)
 						{
-							 vod_memcpy(textp[chunkidx] + dstidx, FIXED_WEBVTT_ESCAPE_FOR_RTL_STR, FIXED_WEBVTT_ESCAPE_FOR_RTL_WIDTH);
-							 dstidx += FIXED_WEBVTT_ESCAPE_FOR_RTL_WIDTH;
+							 textp[chunkidx] = vod_copy(textp[chunkidx], FIXED_WEBVTT_ESCAPE_FOR_RTL_STR, FIXED_WEBVTT_ESCAPE_FOR_RTL_WIDTH);
 						}
 					} break;
 
@@ -246,22 +237,19 @@ static int split_event_text_to_chunks(char *src, int srclen, bool_t rtl, char **
 					case (TAG_TYPE_SMALLERTHAN):
 					{
 						cur_run++;
-						vod_memcpy(textp[chunkidx] + dstidx, tag_replacement_strings[tagidx], tag_string_len[tagidx][1]);
-						dstidx += tag_string_len[tagidx][1];
+						textp[chunkidx] = vod_copy(textp[chunkidx], tag_replacement_strings[tagidx], tag_string_len[tagidx][1]);
 					} break;
 
 					case (TAG_TYPE_OPEN_BRACES):
 					case (TAG_TYPE_CLOSE_BRACES):
 					{
 						bBracesOpen = (tagidx & 1);
-						vod_memcpy(textp[chunkidx] + dstidx, tag_replacement_strings[tagidx], tag_string_len[tagidx][1]);
-						dstidx += tag_string_len[tagidx][1];
+						textp[chunkidx] = vod_copy(textp[chunkidx], tag_replacement_strings[tagidx], tag_string_len[tagidx][1]);
 					} break;
 
 					default:
 					{
-						vod_memcpy(textp[chunkidx] + dstidx, tag_replacement_strings[tagidx], tag_string_len[tagidx][1]);
-						dstidx += tag_string_len[tagidx][1];
+						textp[chunkidx] = vod_copy(textp[chunkidx], tag_replacement_strings[tagidx], tag_string_len[tagidx][1]);
 					}
 				}
 
@@ -290,26 +278,22 @@ static int split_event_text_to_chunks(char *src, int srclen, bool_t rtl, char **
 			if (cur_char != 0xD8 && cur_char != 0xD9)
 				cur_run++;
 
-			vod_memcpy(textp[chunkidx] + dstidx, src + srcidx, 1);
+			textp[chunkidx] = vod_copy(textp[chunkidx], src + srcidx, 1);
 			srcidx++;
-			dstidx++;
 		}
 	}
 
 	if (ibu_flags[2])
 	{
-		vod_memcpy(textp[chunkidx] + dstidx, tag_replacement_strings[TAG_TYPE_UNDER_END], tag_string_len[TAG_TYPE_UNDER_END][1]);
-		dstidx += tag_string_len[TAG_TYPE_UNDER_END][1];
+		textp[chunkidx] = vod_copy(textp[chunkidx], tag_replacement_strings[TAG_TYPE_UNDER_END], tag_string_len[TAG_TYPE_UNDER_END][1]);
 	}
 	if (ibu_flags[1])
 	{
-		 vod_memcpy(textp[chunkidx] + dstidx, tag_replacement_strings[TAG_TYPE_BOLD_END], tag_string_len[TAG_TYPE_BOLD_END][1]);
-		 dstidx += tag_string_len[TAG_TYPE_BOLD_END][1];
+		 textp[chunkidx] = vod_copy(textp[chunkidx], tag_replacement_strings[TAG_TYPE_BOLD_END], tag_string_len[TAG_TYPE_BOLD_END][1]);
 	}
 	if (ibu_flags[0])
 	{
-		vod_memcpy(textp[chunkidx] + dstidx, tag_replacement_strings[TAG_TYPE_ITALIC_END], tag_string_len[TAG_TYPE_ITALIC_END][1]);
-		dstidx += tag_string_len[TAG_TYPE_ITALIC_END][1];
+		textp[chunkidx] = vod_copy(textp[chunkidx], tag_replacement_strings[TAG_TYPE_ITALIC_END], tag_string_len[TAG_TYPE_ITALIC_END][1]);
 	}
 
 	if (cur_run > *max_run)
@@ -317,12 +301,13 @@ static int split_event_text_to_chunks(char *src, int srclen, bool_t rtl, char **
 		*max_run = cur_run;
 	}
 
-	evlen[chunkidx] = dstidx;
+	evlen[chunkidx] = textp[chunkidx] - text_start;
+	textp[chunkidx] = text_start;
 
 	return chunkidx + 1;
 }
 
-static void ass_clean_known_mem(request_context_t* request_context, ass_track_t *ass_track, char** event_textp)
+static void ass_clean_known_mem(request_context_t* request_context, ass_track_t *ass_track, u_char** event_textp)
 {
 	int chunkidx;
 	if (ass_track != NULL)
@@ -505,14 +490,19 @@ ass_parse_frames(
 	vod_array_t frames;
 	subtitle_base_metadata_t* metadata
 								= vod_container_of(base, subtitle_base_metadata_t, base);
-	vod_str_t*	 source	 = &metadata->source;
-	media_track_t* vtt_track	= base->tracks.elts;
-	input_frame_t* cur_frame	= NULL;
-	ass_event_t*   cur_event	= NULL;
+	vod_str_t* 		source		= &metadata->source;
+	media_track_t*	vtt_track	= base->tracks.elts;
+	input_frame_t*	cur_frame	= NULL;
+	ass_event_t*	cur_event	= NULL;
 	vod_str_t* header			= &vtt_track->media_info.extra_data;
 	u_char *p, *pfixed;
-	int evntcounter, chunkcounter;
-	uint64_t base_time, clip_to, seg_start, seg_end, last_start_time;
+	int evntcounter;
+	int chunkcounter;
+	uint64_t base_time;
+	uint64_t clip_to;
+	uint64_t seg_start;
+	uint64_t seg_end;
+	uint64_t last_start_time;
 
 	vod_memzero(result, sizeof(*result));
 	result->first_track			= vtt_track;
@@ -642,7 +632,7 @@ ass_parse_frames(
 		///// This EVENT is within the segment duration. Parse its text, and output it after conversion to WebVTT valid tags./////
 
 		// Split the event text into multiple chunks so we can insert each chunk as a separate frame in webVTT, all under a single cue
-		char*	event_textp[NUM_OF_TAGS_ALLOWED_PER_LINE];
+		u_char*	event_textp[NUM_OF_TAGS_ALLOWED_PER_LINE];
 		int		event_len  [NUM_OF_TAGS_ALLOWED_PER_LINE];
 		int		marg_l, marg_r, marg_v; // all of these are integer percentage values
 
