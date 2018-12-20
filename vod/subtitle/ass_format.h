@@ -61,7 +61,7 @@ typedef struct ass_style
 typedef struct ass_event
 {
 	long long	start;	// ms
-	long long	end;	  // ms
+	long long	end;	// ms
 
 	int			layer;
 	int			style;
