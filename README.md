@@ -1628,7 +1628,7 @@ padding is added as needed.
 
 #### vod_hls_mpegts_output_id3_timestamps
 * **syntax**: `vod_hls_mpegts_output_id3_timestamps on/off`
-* **default**: `on`
+* **default**: `off`
 * **context**: `http`, `server`, `location`
 
 When enabled, an ID3 TEXT frame will be outputted in each TS segment, containing a JSON with the absolute segment timestamp.
@@ -1865,6 +1865,75 @@ Note: Configuration directives that can accept variables are explicitly marked a
 			}
 		}
 	}
+
+#### Mapped + Remote configuration
+
+	http {
+		upstream jsonupstream {
+			server jsonserver:80;
+		}
+
+		server {
+			# vod settings
+			vod_mode mapped;
+			vod_upstream_location /json;
+			vod_remote_upstream_location /proxy;
+			vod_upstream_extra_args "pathOnly=1";
+			vod_last_modified 'Sun, 19 Nov 2000 08:52:00 GMT';
+			vod_last_modified_types *;
+
+			# vod caches
+			vod_metadata_cache metadata_cache 512m;
+			vod_response_cache response_cache 128m;
+			vod_mapping_cache mapping_cache 5m;
+
+			# gzip manifests
+			gzip on;
+			gzip_types application/vnd.apple.mpegurl;
+
+			# file handle caching / aio
+			open_file_cache	  max=1000 inactive=5m;
+			open_file_cache_valid    2m;
+			open_file_cache_min_uses 1;
+			open_file_cache_errors   on;
+			aio on;
+
+			location ^~ /json/hls/ {
+				internal;
+				proxy_pass http://jsonupstream/;
+				proxy_set_header Host $http_host;
+			}
+
+			location ~ /proxy/([^/]+)/(.*) {
+				internal;
+				proxy_pass $1://$2;
+				resolver 8.8.8.8;
+			}
+
+			location ~ ^/hls/ {
+				vod hls;
+
+				add_header Access-Control-Allow-Headers '*';
+				add_header Access-Control-Expose-Headers 'Server,range,Content-Length,Content-Range';
+				add_header Access-Control-Allow-Methods 'GET, HEAD, OPTIONS';
+				add_header Access-Control-Allow-Origin '*';
+				expires 100d;
+			}
+		}
+	}
+
+Set it up so that http://jsonserver:80/test.json returns the following JSON:
+
+	{
+		"sequences": [{
+			"clips": [{
+				"type": "source",
+				"path": "/http/commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4"
+			}]
+		}]
+	}
+
+And use this stream URL - http://nginx-vod-server/hls/test.json/master.m3u8
 
 #### Remote configuration
 

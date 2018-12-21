@@ -12,64 +12,66 @@
 #define FFMIN(a,b) ((a) > (b) ? (b) : (a))
 #define FFMINMAX(c,a,b) FFMIN(FFMAX(c, a), b)
 
-typedef enum {
-    PST_UNKNOWN = 0,
-    PST_INFO,
-    PST_STYLES,
-    PST_EVENTS,
-    PST_FONTS
+typedef enum
+{
+	PST_UNKNOWN = 0,
+	PST_INFO,
+	PST_STYLES,
+	PST_EVENTS,
+	PST_FONTS
 } ParserState;
 
 // globals
 extern media_format_t ass_format;
 
 /* ASS Style: line */
-typedef struct ass_style {
-    char       *Name;
-    char       *FontName;
-    int         FontSize;
-    uint32_t    PrimaryColour;
-    uint32_t    SecondaryColour;
-    uint32_t    OutlineColour;
-    uint32_t    BackColour;
-    bool_t      Bold;
-    bool_t      Italic;
-    bool_t      Underline;
-    bool_t      StrikeOut;
-    bool_t      b_right_to_left_language;
-    bool_t      b_output_in_cur_segment;
-    double      ScaleX;
-    double      ScaleY;
-    double      Spacing;
-    double      Angle;
-    int         BorderStyle;  // 1 means Outline + Shadow, 3 means Opaque box
-    int         Outline;
-    int         Shadow;
-    int         Alignment;
-    int         MarginL;
-    int         MarginR;
-    int         MarginV;
-    int         Encoding;
+typedef struct ass_style
+{
+	char		*name;
+	char		*font_name;
+	int			font_size;
+	uint32_t	primary_colour;
+	uint32_t	secondary_colour;
+	uint32_t	outline_colour;
+	uint32_t	back_colour;
+	bool_t		bold;
+	bool_t		italic;
+	bool_t		underline;
+	bool_t		strike_out;
+	bool_t		right_to_left_language;
+	bool_t		output_in_cur_segment;
+	double		scale_x;
+	double		scale_y;
+	double		spacing;
+	double		angle;
+	int			border_style;  // 1 means Outline + Shadow, 3 means Opaque box
+	int			outline;
+	int			shadow;
+	int			alignment;
+	int			margin_l;
+	int			margin_r;
+	int			margin_v;
+	int			encoding;
 } ass_style_t;
 
 /*
  * ass_event corresponds to a single Dialogue line;
  * text is stored as-is, style overrides will be parsed later.
  */
-typedef struct ass_event {
-    long long   Start;    // ms
-    long long   End;      // ms
+typedef struct ass_event
+{
+	long long	start;	// ms
+	long long	end;	// ms
 
-    //int         ReadOrder;
-    int         Layer;
-    int         Style;
-    char       *Name;
-    int         MarginL;
-    int         MarginR;
-    int         MarginV;
-    char       *Effect;
-    char       *Text;
-    bool_t      b_right_to_left_language;
+	int			layer;
+	int			style;
+	char		*name;
+	int			margin_l;
+	int			margin_r;
+	int			margin_v;
+	char		*effect;
+	char		*text;
+	bool_t		right_to_left_language;
 } ass_event_t;
 
 /*
@@ -77,40 +79,40 @@ typedef struct ass_event {
  * (no real difference between them); it can be used in rendering after the
  * headers are parsed (i.e. events format line read).
  */
-typedef struct ass_track {
-    int             n_styles;           // amount used
-    int             max_styles;         // amount allocated
-    int             n_events;
-    int             max_events;
-    ass_style_t    *styles;             // array of styles, max_styles length, n_styles used
-    ass_event_t    *events;             // the same as styles
+typedef struct ass_track
+{
+	int			n_styles;			// amount used
+	int			max_styles;			// amount allocated
+	int			n_events;
+	int			max_events;
+	ass_style_t	*styles;			// array of styles, max_styles length, n_styles used
+	ass_event_t	*events;			// the same as styles
 
-    char           *style_format;       // style format line (everything after "Format: ")
-    char           *event_format;       // event format line
+	char		*style_format;		// style format line (everything after "Format: ")
+	char		*event_format;		// event format line
 
-    enum {
-        TRACK_TYPE_UNKNOWN = 0,
-        TRACK_TYPE_ASS,
-        TRACK_TYPE_SSA
-    } track_type;
+	enum {
+		TRACK_TYPE_UNKNOWN = 0,
+		TRACK_TYPE_ASS,
+		TRACK_TYPE_SSA
+	} track_type;
 
-    // Script header fields
-    int             PlayResX;
-    int             PlayResY;
-    double          Timer;
-    int             WrapStyle;
-    int             ScaledBorderAndShadow;
-    int             Kerning;
-    char           *Language;
-    char           *Title;
-    bool_t          b_right_to_left_language;
+	// Script header fields
+	int			play_res_x;
+	int			play_res_y;
+	double		timer;
+	int			wrap_style;
+	int			scaled_border_and_shadow;
+	int			kerning;
+	char		*language;
+	char		*title;
+	bool_t		right_to_left_language;
 
-    int             default_style;    // index of default style, defaults to zero
-    char           *name;             // file name in case of external subs, 0 for streams
-    ParserState     state;
+	int			default_style;		// index of default style, defaults to zero
+	char		*name;				// file name in case of external subs, 0 for streams
+	ParserState	state;
 
-    long long       maxDuration;      // ms, added for needs of the vod-module
-
+	long long	max_duration;		// ms, added for needs of the vod-module
 } ass_track_t;
 
 

@@ -64,8 +64,9 @@ thumb_grabber_process_init(vod_log_t* log)
 	codec_id_mapping_t* mapping_cur;
 	codec_id_mapping_t* mapping_end;
 
-	avcodec_register_all();
-
+	#if LIBAVCODEC_VERSION_INT < AV_VERSION_INT(58, 18, 100)
+		avcodec_register_all();
+	#endif
 	vod_memzero(decoder_codec, sizeof(decoder_codec));
 
 	encoder_codec = avcodec_find_encoder(AV_CODEC_ID_MJPEG);
@@ -226,6 +227,7 @@ thumb_grabber_truncate_frames(
 	input_frame_t* last_key_frame = NULL;
 	input_frame_t* cur_frame;
 	input_frame_t* last_frame;
+	vod_status_t rc;
 	uint64_t dts = track->clip_start_time + track->first_frame_time_offset;
 	uint64_t pts;
 	uint64_t cur_diff;
@@ -278,6 +280,14 @@ thumb_grabber_truncate_frames(
 			min_index = index - last_key_frame_index;
 			min_diff = cur_diff;
 			min_part = last_key_frame_part;
+
+			rc = min_part->frames_source->skip_frames(
+				min_part->frames_source_context,
+				last_key_frame - min_part->first_frame);
+			if (rc != VOD_OK)
+			{
+				return rc;
+			}
 
 			// truncate any frames before the key frame of the closest frame
 			min_part->first_frame = last_key_frame;
