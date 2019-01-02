@@ -1,7 +1,6 @@
 #ifndef __SCC_FORMAT_H__
 #define __SCC_FORMAT_H__
 
-// includes
 #include "../media_format.h"
 
 //#define SCC_TEMP_VERBOSITY
@@ -22,7 +21,6 @@
 #define SCC_OFFSET_FOR_SHORTER_LEAD		1000
 
 
-// globals
 extern media_format_t scc_format;
 
 enum cc_text_done

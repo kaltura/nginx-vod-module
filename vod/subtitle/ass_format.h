@@ -1,7 +1,6 @@
 #ifndef __ASS_FORMAT_H__
 #define __ASS_FORMAT_H__
 
-// includes
 #include "../media_format.h"
 
 #define VALIGN_SUB 0
@@ -21,7 +20,6 @@ typedef enum
 	PST_FONTS
 } ParserState;
 
-// globals
 extern media_format_t ass_format;
 
 /* ASS Style: line */
@@ -74,22 +72,18 @@ typedef struct ass_event
 	bool_t		right_to_left_language;
 } ass_event_t;
 
-/*
- * ass_track represent either an external script or a matroska subtitle stream
- * (no real difference between them); it can be used in rendering after the
- * headers are parsed (i.e. events format line read).
- */
+
 typedef struct ass_track
 {
-	int			n_styles;			// amount used
-	int			max_styles;			// amount allocated
+	int			n_styles;
+	int			max_styles;
 	int			n_events;
 	int			max_events;
 	ass_style_t	*styles;			// array of styles, max_styles length, n_styles used
 	ass_event_t	*events;			// the same as styles
 
-	char		*style_format;		// style format line (everything after "Format: ")
-	char		*event_format;		// event format line
+	char		*style_format;
+	char		*event_format;
 
 	enum {
 		TRACK_TYPE_UNKNOWN = 0,
@@ -97,7 +91,6 @@ typedef struct ass_track
 		TRACK_TYPE_SSA
 	} track_type;
 
-	// Script header fields
 	int			play_res_x;
 	int			play_res_y;
 	double		timer;
@@ -108,11 +101,11 @@ typedef struct ass_track
 	char		*title;
 	bool_t		right_to_left_language;
 
-	int			default_style;		// index of default style, defaults to zero
-	char		*name;				// file name in case of external subs, 0 for streams
+	int			default_style;
+	char		*name;
 	ParserState	state;
 
-	long long	max_duration;		// ms, added for needs of the vod-module
+	long long	max_duration;
 } ass_track_t;
 
 
