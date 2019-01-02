@@ -83,8 +83,6 @@ without the overhead of short segments for the whole duration of the video
 
 * Tested only with HLS segmented output.
 
-* Supports only UTF-8 input scripts. Limited error-handling, so it will fail on invalid scripts.
-
 * No support for non-standard `[Fonts]` defined in script, nor to `[Graphics]`, nor to `[Pictures]`.
 
 * No support for Karoake features, moving or angular text.

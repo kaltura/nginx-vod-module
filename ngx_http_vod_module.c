@@ -19,7 +19,6 @@
 #include "vod/subtitle/webvtt_format.h"
 #include "vod/subtitle/cap_format.h"
 #include "vod/subtitle/ass_format.h"
-#include "vod/subtitle/scc_format.h"
 #include "vod/input/read_cache.h"
 #include "vod/filters/audio_filter.h"
 #include "vod/filters/dynamic_clip.h"
@@ -265,7 +264,6 @@ static media_format_t* media_formats[] = {
 #endif // NGX_HAVE_LIBXML2
 	&cap_format,
 	&ass_format,
-	&scc_format,
 	NULL
 };
 
