@@ -55,7 +55,9 @@ static const char encryption_type_aes_128[] = "AES-128";
 static const char encryption_type_sample_aes[] = "SAMPLE-AES";
 static const char encryption_type_sample_aes_cenc[] = "SAMPLE-AES-CENC";
 
+#if (NGX_HAVE_OPENSSL_EVP)
 static const char sample_aes_cenc_uri_prefix[] = "data:text/plain;base64,";
+#endif // NGX_HAVE_OPENSSL_EVP
 
 static vod_str_t m3u8_ts_suffix = vod_string(".ts\n");
 static vod_str_t m3u8_m4s_suffix = vod_string(".m4s\n");
