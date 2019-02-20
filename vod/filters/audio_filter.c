@@ -208,6 +208,40 @@ audio_filter_walk_filters_prepare_init(
 	return VOD_OK;
 }
 
+vod_status_t
+audio_filter_alloc_memory_frame(
+	request_context_t* request_context,
+	vod_array_t* frames_array,
+	size_t size,
+	input_frame_t** result)
+{
+	input_frame_t* cur_frame;
+	u_char* new_data;
+
+	cur_frame = vod_array_push(frames_array);
+	if (cur_frame == NULL)
+	{
+		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
+			"audio_filter_alloc_memory_frame: vod_array_push failed");
+		return VOD_ALLOC_FAILED;
+	}
+
+	new_data = vod_alloc(request_context->pool, size);
+	if (new_data == NULL)
+	{
+		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
+			"audio_filter_alloc_memory_frame: vod_alloc failed");
+		return VOD_ALLOC_FAILED;
+	}
+
+	cur_frame->offset = (uintptr_t)new_data;
+	cur_frame->size = size;
+	cur_frame->key_frame = 0;
+
+	*result = cur_frame;
+	return VOD_OK;
+}
+
 #if (VOD_HAVE_LIB_AV_CODEC && VOD_HAVE_LIB_AV_FILTER)
 
 typedef struct {
@@ -329,40 +363,6 @@ audio_filter_init_source(
 		return VOD_ALLOC_FAILED;
 	}
 
-	return VOD_OK;
-}
-
-vod_status_t
-audio_filter_alloc_memory_frame(
-	request_context_t* request_context,
-	vod_array_t* frames_array,
-	size_t size,
-	input_frame_t** result)
-{
-	input_frame_t* cur_frame;
-	u_char* new_data;
-
-	cur_frame = vod_array_push(frames_array);
-	if (cur_frame == NULL)
-	{
-		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
-			"audio_filter_alloc_memory_frame: vod_array_push failed");
-		return VOD_ALLOC_FAILED;
-	}
-
-	new_data = vod_alloc(request_context->pool, size);
-	if (new_data == NULL)
-	{
-		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
-			"audio_filter_alloc_memory_frame: vod_alloc failed");
-		return VOD_ALLOC_FAILED;
-	}
-
-	cur_frame->offset = (uintptr_t)new_data;
-	cur_frame->size = size;
-	cur_frame->key_frame = 0;
-
-	*result = cur_frame;
 	return VOD_OK;
 }
 
