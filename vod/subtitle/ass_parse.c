@@ -51,7 +51,6 @@ static const unsigned char lowertab[] =
 	0xf2, 0xf3, 0xf4, 0xf5, 0xf6, 0xf7, 0xf8, 0xf9, 0xfa, 0xfb, 0xfc,
 	0xfd, 0xfe, 0xff
 };
-
 static int ass_strcasecmp(const char *s1, const char *s2)
 {
 	unsigned char a, b;
@@ -64,8 +63,6 @@ static int ass_strcasecmp(const char *s1, const char *s2)
 
 	return a - b;
 }
-
-
 static int ass_strncasecmp(const char *s1, const char *s2, size_t n)
 {
 	unsigned char a, b;
@@ -94,16 +91,6 @@ void rskip_spaces(char **str, char *limit)
 	while ((p > limit) && ((p[-1] == ' ') || (p[-1] == '\t')))
 		--p;
 	*str = p;
-}
-
-static inline uint32_t ass_bswap32(uint32_t x)
-{
-#ifdef _MSC_VER
-	return _byteswap_ulong(x);
-#else
-	return	(x & 0x000000FF) << 24 | (x & 0x0000FF00) <<  8 |
-			(x & 0x00FF0000) >>  8 | (x & 0xFF000000) >> 24;
-#endif
 }
 
 static inline int ass_isspace(int c)
@@ -484,136 +471,21 @@ done:
 	return fraction;
 }
 
-int mystrtoi(char **p, int *res)
+void mystrtoi32(char **p, uint32_t *res)
 {
-	char *start = *p;
-	double temp_res = ass_strtod(*p, p);
-	*res = (int) (temp_res + (temp_res > 0 ? 0.5 : -0.5));
-	return *p != start;
-}
-
-int mystrtoll(char **p, long long *res)
-{
-	char *start = *p;
-	double temp_res = ass_strtod(*p, p);
-	*res = (long long) (temp_res + (temp_res > 0 ? 0.5 : -0.5));
-	return *p != start;
-}
-
-int mystrtod(char **p, double *res)
-{
-	char *start = *p;
-	*res = ass_strtod(*p, p);
-	return *p != start;
-}
-
-int mystrtoi32(char **p, int base, int32_t *res)
-{
-	char *start = *p;
-	long long temp_res = strtoll(*p, p, base);
-	*res = FFMINMAX(temp_res, INT32_MIN, INT32_MAX);
-	return *p != start;
-}
-
-static int read_digits(char **str, int base, uint32_t *res)
-{
-	char *p = *str;
-	char *start = p;
-	uint32_t val = 0;
-
-	while (1) {
-		int digit;
-		if (*p >= '0' && *p < FFMIN(base, 10) + '0')
-			digit = *p - '0';
-		else if (*p >= 'a' && *p < base - 10 + 'a')
-			digit = *p - 'a' + 10;
-		else if (*p >= 'A' && *p < base - 10 + 'A')
-			digit = *p - 'A' + 10;
-		else
-			break;
-		val = val * base + digit;
-		++p;
-	}
-
-	*res = val;
-	*str = p;
-	return p != start;
-}
-
-/*
- * \brief Convert a string to an integer reduced modulo 2**32
- * Follows the rules for strtoul but reduces the number modulo 2**32
- * instead of saturating it to 2**32 - 1.
- */
-static int mystrtou32_modulo(char **p, int base, uint32_t *res)
-{
-	// This emulates scanf with %d or %x format as it works on
-	// Windows, because that's what is used by VSFilter. In practice,
-	// scanf works the same way on other platforms too, but
-	// the standard leaves its behavior on overflow undefined.
-
-	// Unlike scanf and like strtoul, produce 0 for invalid inputs.
-
-	char *start = *p;
-	int sign = 1;
-
-	skip_spaces(p);
-
-	if (**p == '+')
-		++*p;
-	else if (**p == '-')
-		sign = -1, ++*p;
-
-	if (base == 16 && !ass_strncasecmp(*p, "0x", 2))
-		*p += 2;
-
-	if (read_digits(p, base, res)) {
-		*res *= sign;
-		return 1;
-	}
-	else
-	{
-		*p = start;
-		return 0;
-	}
-}
-int32_t parse_alpha_tag(char *str)
-{
-	int32_t alpha = 0;
-
-	while (*str == '&' || *str == 'H')
-		++str;
-
-	mystrtoi32(&str, 16, &alpha);
-	return alpha;
+	unsigned long temp_res = strtoul(*p, p, 16);
+	*res = FFMINMAX(temp_res, 0, 0xFFFFFFFF);
 }
 
 uint32_t parse_color_tag(char *str)
 {
-	int32_t color = 0;
+	uint32_t color = 0;
 
-	while (*str == '&' || *str == 'H')
+	while (*str == '&' || *str == 'H' || *str == 'h')
 		++str;
 
-	mystrtoi32(&str, 16, &color);
-	return ass_bswap32((uint32_t) color);
-}
-
-uint32_t parse_color_header(char *str)
-{
-	uint32_t color = 0;
-	int base;
-
-	if (!ass_strncasecmp(str, "&h", 2) || !ass_strncasecmp(str, "0x", 2))
-	{
-		str += 2;
-		base = 16;
-	}
-	else
-		base = 10;
-
-	mystrtou32_modulo(&str, base, &color);
-	return ass_bswap32(color);
+	mystrtoi32(&str, &color);
+	return color;
 }
 
 // Return a boolean value for a string
@@ -631,6 +503,8 @@ ass_track_t * ass_alloc_track(request_context_t *request_context)
 
 	track->play_res_x = 1920;
 	track->play_res_y = 1080;
+	track->language = strdup("English (US)");
+	track->title = strdup("English (US)");
 
 	return track;
 }
@@ -726,10 +600,10 @@ static void set_default_style(ass_style_t *style, bool_t alloc_names)
 		style->font_name		= strdup("Arial");
 	}
 	style->font_size			= 18;
-	style->primary_colour		= 0xffffff00;
+	style->primary_colour		= 0x00ffffff;
 	style->secondary_colour		= 0x00ffff00;
 	style->outline_colour		= 0x00000000;
-	style->back_colour			= 0x00000080;
+	style->back_colour			= 0x80000000;
 	style->bold					= FALSE;
 	style->italic				= FALSE;
 	style->underline			= FALSE;
@@ -778,7 +652,7 @@ int lookup_style(ass_track_t *track, char *name)
 		++name;
 	// VSFilter then normalizes the case of "Default"
 	// (only in contexts where this function is called)
-	if (ass_strcasecmp(name, "Default") == 0)
+	if (!ass_strncasecmp(name, "Default", 7))
 		name = "Default";
 	for (i = track->n_styles - 1; i >= 0; --i)
 	{
@@ -792,49 +666,6 @@ int lookup_style(ass_track_t *track, char *name)
 #define NEXT(str,token) \
 	token = next_token(&str); \
 	if (!token) break;
-
-
-#define ALIAS(alias,name) \
-		if (ass_strcasecmp(tname, #alias) == 0) {tname = #name;}
-
-/* One section started with PARSE_START and PARSE_END parses a single token
- * (contained in the variable named token) for the header indicated by the
- * variable tname. It does so by chaining a number of else-if statements, each
- * of which checks if the tname variable indicates that this header should be
- * parsed. The first parameter of the macro gives the name of the header.
- *
- * The string that is passed is in str. str is advanced to the next token if
- * a header could be parsed. The parsed results are stored in the variable
- * target, which has the type ass_style_t* or ass_event_t*.
- */
-#define PARSE_START	if (0) {
-#define PARSE_END	}
-
-#define ANYVAL(name,func) \
-	} else if (ass_strcasecmp(tname, #name) == 0) { \
-		target->name = func(token);
-
-#define STRVAL(name) \
-	} else if (ass_strcasecmp(tname, #name) == 0) { \
-		if (target->name != NULL) free(target->name); \
-		target->name = strdup(token);
-
-#define STARREDSTRVAL(name) \
-	} else if (ass_strcasecmp(tname, #name) == 0) { \
-		if (target->name != NULL) free(target->name); \
-		while (*token == '*') ++token; \
-		target->name = strdup(token);
-
-#define COLORVAL(name) ANYVAL(name,parse_color_header)
-#define INTVAL(name) ANYVAL(name,atoi)
-#define FPVAL(name) ANYVAL(name,ass_atof)
-#define TIMEVAL(name) \
-	} else if (ass_strcasecmp(tname, #name) == 0) { \
-		target->name = string2timecode(token);
-
-#define STYLEVAL(name) \
-	} else if (ass_strcasecmp(tname, #name) == 0) { \
-		target->name = lookup_style(track, token);
 
 static char *next_token(char **str)
 {
@@ -889,7 +720,7 @@ static int process_event_tail(ass_track_t *track, ass_event_t *event, char *str)
 	while (1)
 	{
 		NEXT(q, tname);
-		if (ass_strcasecmp(tname, "Text") == 0)
+		if (!ass_strcasecmp(tname, "Text"))
 		{
 			char *last;
 			event->text = strdup(p);
@@ -908,17 +739,19 @@ static int process_event_tail(ass_track_t *track, ass_event_t *event, char *str)
 		}
 		NEXT(p, token);
 
-		PARSE_START
-			INTVAL(layer)
-			STYLEVAL(style)
-			STRVAL(name)
-			STRVAL(effect)
-			INTVAL(margin_l)
-			INTVAL(margin_r)
-			INTVAL(margin_v)
-			TIMEVAL(start)
-			TIMEVAL(end)
-		PARSE_END
+		if (!ass_strcasecmp(tname, "Start")) {
+			target->start = string2timecode(token);
+		} else if (!ass_strcasecmp(tname, "End")) {
+			target->end = string2timecode(token);
+		} else if (!ass_strcasecmp(tname, "MarginL")) {
+			target->margin_l	= atoi(token);
+		} else if (!ass_strcasecmp(tname, "MarginR")) {
+			target->margin_r	= atoi(token);
+		} else if (!ass_strcasecmp(tname, "MarginV")) {
+			target->margin_v	= atoi(token);
+		} else if (!ass_strcasecmp(tname, "Style")) {
+			target->style		= lookup_style(track, token);
+		}
 	}
 	free(format);
 	return 1;
@@ -970,16 +803,11 @@ static int process_style(ass_track_t *track, char *str, request_context_t* reque
 		if (track->track_type == TRACK_TYPE_SSA)
 			track->style_format =
 				strdup
-				("Name, Fontname, Fontsize, PrimaryColour, SecondaryColour,"
-				 "TertiaryColour, BackColour, Bold, Italic, BorderStyle, Outline,"
-				 "Shadow, Alignment, MarginL, MarginR, MarginV, AlphaLevel, Encoding");
+				("Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, TertiaryColour, BackColour, Bold, Italic, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, AlphaLevel, Encoding");
 		else
 			track->style_format =
 				strdup
-				("Name, Fontname, Fontsize, PrimaryColour, SecondaryColour,"
-				 "OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut,"
-				 "ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow,"
-				 "Alignment, MarginL, MarginR, MarginV, Encoding");
+				("Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding");
 	}
 
 	q = format = strdup(track->style_format);
@@ -1005,47 +833,75 @@ static int process_style(ass_track_t *track, char *str, request_context_t* reque
 		NEXT(q, tname);
 		NEXT(p, token);
 
-		PARSE_START
-			STARREDSTRVAL(name)
-			if (strcmp(target->name, "Default") == 0)
-				track->default_style = sid;
-			STRVAL(font_name)
-			COLORVAL(primary_colour)
-			COLORVAL(secondary_colour)
-			COLORVAL(outline_colour) // TertiaryColor
-			COLORVAL(back_colour)
-			// SSA uses BackColour for both outline and shadow
-			// this will destroy SSA's TertiaryColour, but i'm not going to use it anyway
-			if (track->track_type == TRACK_TYPE_SSA)
-				target->outline_colour = target->back_colour;
-			INTVAL(font_size)
-			INTVAL(bold)
-			INTVAL(italic)
-			INTVAL(underline)
-			INTVAL(strike_out)
-			FPVAL(spacing)
-			FPVAL(angle)
-			INTVAL(border_style)
-			INTVAL(alignment)
-			if (track->track_type == TRACK_TYPE_ASS)
-			{
-				target->alignment = numpad2align(target->alignment);
-			}
-			// VSFilter compatibility
-			else if (target->alignment == 8)
-				target->alignment = 3;
-			else if (target->alignment == 4)
-				target->alignment = 11;
-			INTVAL(margin_l)
-			INTVAL(margin_r)
-			INTVAL(margin_v)
-			INTVAL(encoding)
-			FPVAL(scale_x)
-			FPVAL(scale_y)
-			INTVAL(outline)
-			INTVAL(shadow)
-		PARSE_END
+		if (!ass_strcasecmp(tname, "Name")) {
+			if (target->name != NULL) free(target->name);
+			target->name = strdup(token);
+		} else if (!ass_strcasecmp(tname, "Fontname")) {
+			if (target->font_name != NULL) free(target->font_name);
+			target->font_name = strdup(token);
+		} else if (!ass_strcasecmp(tname, "Fontsize")) {
+			target->font_size			= atoi(token);
+		} else if (!ass_strcasecmp(tname, "PrimaryColour")) {
+			target->primary_colour		= parse_color_tag(token);
+		} else if (!ass_strcasecmp(tname, "OutlineColour")) {
+			target->outline_colour 		= parse_color_tag(token);
+		} else if (!ass_strcasecmp(tname, "BackColour")) {
+			target->back_colour			= parse_color_tag(token);
+
+		} else if (!ass_strcasecmp(tname, "Bold")) {
+			target->bold				= atoi(token);
+		} else if (!ass_strcasecmp(tname, "Italic")) {
+			target->italic				= atoi(token);
+		} else if (!ass_strcasecmp(tname, "Underline")) {
+			target->underline			= atoi(token);
+		} else if (!ass_strcasecmp(tname, "StrikeOut")) {
+			target->strike_out			= atoi(token);
+		} else if (!ass_strcasecmp(tname, "BorderStyle")) {
+			target->border_style		= atoi(token);
+		} else if (!ass_strcasecmp(tname, "Alignment")) {
+			target->alignment			= atoi(token);
+		} else if (!ass_strcasecmp(tname, "MarginL")) {
+			target->margin_l			= atoi(token);
+		} else if (!ass_strcasecmp(tname, "MarginR")) {
+			target->margin_r			= atoi(token);
+		} else if (!ass_strcasecmp(tname, "MarginV")) {
+			target->margin_v			= atoi(token);
+		} else if (!ass_strcasecmp(tname, "Outline")) {
+			target->outline				= atoi(token);
+
+		/*
+		} else if (!ass_strcasecmp(tname, "SecondaryColour")) {
+			target->secondary_colour	= parse_color_tag(token);
+		} else if (!ass_strcasecmp(tname, "Shadow")) {
+			target->shadow				= atoi(token);
+		} else if (!ass_strcasecmp(tname, "Spacing")) {
+				target->spacing			= ass_atof(token);
+		} else if (!ass_strcasecmp(tname, "Angle")) {
+				target->angle			= ass_atof(token);
+		} else if (!ass_strcasecmp(tname, "ScaleX")) {
+				target->scale_x			= ass_atof(token);
+		} else if (!ass_strcasecmp(tname, "ScaleY")) {
+				target->scale_y			= ass_atof(token);
+		*/
+		}
 	}
+
+	if (strcmp(style->name, "Default") == 0)
+		track->default_style = sid;
+	// SSA uses BackColour for both outline and shadow
+	// this will destroy SSA's TertiaryColour, but i'm not going to use it anyway
+	if (track->track_type == TRACK_TYPE_SSA)
+		style->outline_colour = style->back_colour;
+	if (track->track_type == TRACK_TYPE_ASS)
+	{
+		style->alignment = numpad2align(style->alignment);
+	}
+	// VSFilter compatibility
+	else if (style->alignment == 8)
+		style->alignment = 3;
+	else if (style->alignment == 4)
+		style->alignment = 11;
+
 	style->scale_x		= FFMAX(style->scale_x, 0.) / 100.;
 	style->scale_y		= FFMAX(style->scale_y, 0.) / 100.;
 	style->spacing		= FFMAX(style->spacing, 0.);
@@ -1060,6 +916,7 @@ static int process_style(ass_track_t *track, char *str, request_context_t* reque
 		style->name		= strdup("Default");
 	if (!style->font_name)
 		style->font_name = strdup("Arial");
+
 
 	// For now, right_to_left_language is TRUE only for Arabic language. In future, it will be enabled for many others.
 	if ( !ass_strncasecmp(style->font_name, "Adobe Arabic", 12) )
@@ -1083,7 +940,8 @@ static int process_styles_line(ass_track_t *track, char *str, request_context_t*
 		skip_spaces(&p);
 		free(track->style_format);
 		track->style_format = strdup(p);
-	} else if (!strncmp(str, "Style:", 6))
+	}
+	else if (!strncmp(str, "Style:", 6))
 	{
 		char *p = str + 6;
 		skip_spaces(&p);
@@ -1126,23 +984,25 @@ static int process_info_line(ass_track_t *track, char *str, request_context_t* r
 	{
 		// This field is not part of the ASS/SSA specs
 		char *p = str + 9;
+		char *strt, *end;
 		while (*p && ass_isspace(*p)) p++;
+		strt = p;
+		while (*p && !ass_isspace(*p)) p++;
+		end = p;
 		free(track->language);
-		track->language = strndup(p, 2);
+		track->language = strndup(strt, FFMAX(TITLE_BYTES_CONSIDERED, (size_t)(end-strt)));
 	} else if (!strncmp(str, "Title:", 6))
 	{
 		char *p = str + 6;
 		char *strt, *end;
-		while (*p && ass_isspace(*p))
-			p++;
+		while (*p && ass_isspace(*p)) p++;
 		strt = p;
-		while (*p && !ass_isspace(*p))
-			p++;
+		while (*p && !ass_isspace(*p)) p++;
 		end = p;
 		free(track->title);
+		track->title = strndup(strt, FFMAX(TITLE_BYTES_CONSIDERED, (size_t)(end-strt)));
 		// Title: ﺎﻠﻋﺮﺒﻳﺓ
-		track->title = strndup(p, FFMAX(14, (size_t)(end-strt)));
-		track->right_to_left_language = ((14 == (end-strt)) && (strt[0] == (char)0xD8) && (strt[13] == (char)0xA9));
+		track->right_to_left_language = ((TITLE_BYTES_CONSIDERED == (end-strt)) && (strt[0] == (char)0xD8) && (strt[13] == (char)0xA9));
 	}
 	return 0;
 }
@@ -1151,11 +1011,9 @@ static void event_format_fallback(ass_track_t *track)
 {
 	track->state = PST_EVENTS;
 	if (track->track_type == TRACK_TYPE_SSA)
-		track->event_format = strdup("Marked, Start, End, Style, "
-			"Name, MarginL, MarginR, MarginV, Effect, Text");
+		track->event_format = strdup("Marked, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text");
 	else
-		track->event_format = strdup("Layer, Start, End, Style, "
-			"Actor, MarginL, MarginR, MarginV, Effect, Text");
+		track->event_format = strdup("Layer, Start, End, Style, Actor, MarginL, MarginR, MarginV, Effect, Text");
 }
 
 static int process_events_line(ass_track_t *track, char *str, request_context_t* request_context)

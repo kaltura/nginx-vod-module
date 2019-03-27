@@ -12,6 +12,8 @@
 #define FFMIN(a,b) ((a) > (b) ? (b) : (a))
 #define FFMINMAX(c,a,b) FFMIN(FFMAX(c, a), b)
 
+#define TITLE_BYTES_CONSIDERED 14
+
 typedef enum
 {
 	PST_UNKNOWN = 0,

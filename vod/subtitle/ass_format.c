@@ -14,6 +14,10 @@
 #define NUM_OF_TAGS_ALLOWED_PER_LINE 1
 
 //#define ASSUME_STYLE_SUPPORT
+//#define ASSUME_CSS_SUPPORT
+#ifdef ASSUME_STYLE_SUPPORT
+#undef ASSUME_CSS_SUPPORT
+#endif
 
 #define PAIROF(type, name, w, str)											\
 static const int      FIXED_WEBVTT_ ## type ## _ ## name ## _WIDTH = w;		\
@@ -23,6 +27,10 @@ PAIROF(CUE, 	NAME, 		8,	"c%07d");
 PAIROF(ESCAPE,	FOR_RTL,	5,	"&lrm;")
 PAIROF(HEADER,	NEWLINES,	10,	WEBVTT_HEADER_NEWLINES)
 
+
+// STYLE_SUPPORT will insert dynamic styles with the names used in the ASS/SSA file
+// CSS_SUPPORT will use static style classes defined in ./css/crstyles.css
+// They are mutually exclusive
 #ifdef ASSUME_STYLE_SUPPORT
 PAIROF(STYLE, 	START, 		22,	"STYLE\r\n::cue(v[voice=\"")
 PAIROF(STYLE, 	END,		4,	"\"]) ")
@@ -30,9 +38,29 @@ PAIROF(BRACES,	START,		3,	"{\r\n")
 PAIROF(BRACES,	END,		3,	"}\r\n")
 PAIROF(VOICE,	START,		3,	"<v ")
 PAIROF(VOICE,	END,		1,	">")
-// ignore this set for now, later we will use <v.strike StyleName>  for lines that are strikethrough
-//PAIROF(CLASS,	STRIKE, 	68,	"STYLE\r\n::cue(.strike) {\r\ntext-decoration: solid line-through;\r\n}\r\n\r\n")
 #endif
+#ifdef ASSUME_CSS_SUPPORT
+PAIROF(CLASSOPEN,	START,	2,	"<c")
+PAIROF(CLASSOPEN,	END,	1,	">")
+PAIROF(CLASSCLOSE,	FULL,	4,	"</c>")
+PAIROF(COLOR,		FULL,	7,	".color_")
+PAIROF(BACKGROUND,	FULL,	9,	".bkcolor_")
+PAIROF(OUTLINE,		FULL,	8,	".outline")
+PAIROF(STRIKE,		THRU,	14,	".strikethrough")
+PAIROF(FONT,		FAM,	8,	".fontfam")
+PAIROF(FONT,		SIZE,	9,	".fontsize")
+PAIROF(ALPHA,		FULL,	5,	"_full")
+PAIROF(ALPHA,		HALF,	5,	"_half")
+PAIROF(TIMES,		FONT,	5,	"times")
+PAIROF(ARIAL,		FONT,	5,	"arial")
+PAIROF(COMIC,		FONT,	5,	"comic")
+PAIROF(LUCIDA,		FONT,	6,	"lucida")
+PAIROF(COURIER,		FONT,	7,	"courier")
+PAIROF(ARABIC,		FONT,	6,	"arabic")
+PAIROF(RUSSIAN,		FONT,	7,	"russian")
+PAIROF(TREBUCHET,	FONT,	9,	"trebuchet")
+#endif
+
 
 typedef enum
 {
@@ -119,6 +147,94 @@ static const char* tag_replacement_strings[TAG_TYPE_NONE] =
 
 	""
 };
+
+#ifdef ASSUME_CSS_SUPPORT
+static const char*  palette[/*Red*/ 5][/*Green*/ 5][/*Blue*/ 5] =
+{
+	{
+		{"black",			"stratos",			"navy",				"mediumblue",		"blue"			},
+		{"deepfir",			"cyprus",			"congressblue",		"cobalt",			"blueribbon"	},
+		{"japlaurel",		"fungreen",			"teal",				"lochmara",			"azure"			},
+		{"forest",			"malachite",		"caribbean",		"eggblue",			"cerulean"		},
+		{"green",			"lime",				"springgreen",		"brightturq",		"cyan"			}
+	},
+	{
+		{"temptress",		"blackberry",		"indigo",			"purpleblue",		"redblue"		},
+		{"verdun",			"tundora",			"eastbay",			"governor",			"royalblue"		},
+		{"limeade",			"goblin",			"fadedjade",		"steelblue",		"dodger"		},
+		{"harlequin",		"emerald",			"shamrock",			"pelorous",			"dodgerblue"	},
+		{"brightgreen",		"pastelgreen",		"screaminggreen",	"aquamarine",		"aqua"			}
+	},
+	{
+		{"maroon",			"siren",			"eggplant",			"purple",			"electric"		},
+		{"cinnamon",		"lotus",			"cannonpink",		"fuchsiablue",		"heliotrope"	},
+		{"olive",			"yellowmetal",		"gray",				"yonder",			"malibu"		},
+		{"pistachio",		"wasabi",			"deyork",			"neptune",			"anakiwa"		},
+		{"chartreuse",		"greenyellow",		"mintgreen",		"magicmint",		"turquoise"		}
+	},
+	{
+		{"guardsman",		"monza",			"flirt",			"cerise",			"purpleheart"	},
+		{"sharonrose",		"crail",			"mulberry",			"amethyst",			"violet"		},
+		{"pirategold",		"tussock",			"voldrose",			"viola",			"orchid"		},
+		{"buddhagold",		"turmeric",			"pineglade",		"silver",			"melrose"		},
+		{"laspalmas",		"starship",			"reef",				"snowymint",		"onahau"		}
+	},
+	{
+		{"red",				"torchred",			"rose",				"pizzazz",			"magenta"		},
+		{"vermilion",		"coral",			"strawberry",		"razzledazzle",		"flamingo"		},
+		{"flushorange",		"crusta",			"vividtangerine",	"hotpink",			"blushpink"		},
+		{"amber",			"yelloworange",		"macncheese",		"yourpink",			"pinklace"		},
+		{"yellow",			"goldenfizz",		"dolly",			"shalimar",			"white"			}
+	}
+};
+static const int color_name_size[/*Red*/ 5][/*Green*/ 5][/*Blue*/ 5] =
+{
+	{
+		{5,					7,					4,					10,					4				},
+		{7,					6,					12,					6,					10				},
+		{9,					8,					4,					8,					5				},
+		{6,					9,					9,					7,					8				},
+		{5,					4,					11,					10,					4				}
+	},
+	{
+		{9,					10,					6,					10,					7				},
+		{6,					7,					7,					8,					9				},
+		{7,					6,					9,					9,					6				},
+		{9,					7,					8,					8,					10				},
+		{11,				11,					14,					10,					4				}
+	},
+	{
+		{6,					5,					8,					6,					8				},
+		{8,					5,					10,					11,					10				},
+		{5,					11,					4,					6,					6				},
+		{9,					6,					6,					7,					7				},
+		{10,				11,					9,					9,					9				}
+	},
+	{
+		{9,					5,					5,					6,					11				},
+		{10,				5,					8,					8,					6				},
+		{10,				7,					8,					5,					6				},
+		{10,				8,					9,					6,					7				},
+		{9,					8,					4,					9,					6				}
+	},
+	{
+		{3,					8,					4,					7,					7				},
+		{9,					5,					10,					12,					8				},
+		{11,				6,					14,					7,					9				},
+		{5,					12,					10,					8,					8				},
+		{6,					10,					5,					8,					5				}
+	}
+};
+
+static u_char* insert_color_string(u_char *p, uint32_t abgr_word, request_context_t* request_context)
+{
+	uint32_t red, green, blue;
+	blue	= (((abgr_word >> 16) & 0xFF) + 32) >> 6;
+	green	= (((abgr_word >>  8) & 0xFF) + 32) >> 6;
+	red		= (((abgr_word      ) & 0xFF) + 32) >> 6;
+	return vod_sprintf(p, palette[red][green][blue], color_name_size[red][green][blue]);
+}
+#endif   //ASSUME_CSS_SUPPORT
 
 void swap_events(ass_event_t* nxt, ass_event_t* cur)
 {
@@ -334,13 +450,13 @@ static u_char* output_one_style(ass_style_t* cur_style, u_char* p)
 		p = vod_copy(p, FIXED_WEBVTT_BRACES_START_STR, FIXED_WEBVTT_BRACES_START_WIDTH);
 
 		p = vod_copy(p, "color: #", 8);
-		p = vod_sprintf((u_char*)p, "%08uxD;\r\n", cur_style->primary_colour);
+		p = vod_sprintf(p, "%08uxD;\r\n", cur_style->primary_colour);
 
 
 		p = vod_copy(p, "font-family: \"", 14);
 		p = vod_copy(p, cur_style->font_name, vod_strlen(cur_style->font_name));
 		p = vod_copy(p, "\", sans-serif;\r\n", 16);
-		p = vod_sprintf((u_char*)p, "font-size: %03uDpx;\r\n", cur_style->font_size);
+		p = vod_sprintf(p, "font-size: %03uDpx;\r\n", cur_style->font_size);
 
 		/*if (cur_style->bold)
 		{
@@ -368,7 +484,7 @@ static u_char* output_one_style(ass_style_t* cur_style, u_char* p)
 			// webkit is not supported by all players, stick to adding outline using text-shadow
 			p = vod_copy(p, "text-shadow: ", 13);
 			// add outline in 4 directions with the outline color
-			p = vod_sprintf((u_char*)p,
+			p = vod_sprintf(p,
 				"#%08uxD -%01uDpx 0px, #%08uxD 0px %01uDpx, #%08uxD 0px -%01uDpx, #%08uxD %01uDpx 0px, #%08uxD %01uDpx %01uDpx 0px;\r\n",
 				cur_style->outline_colour, cur_style->outline,
 				cur_style->outline_colour, cur_style->outline,
@@ -379,7 +495,7 @@ static u_char* output_one_style(ass_style_t* cur_style, u_char* p)
 		else
 		{
 			p = vod_copy(p, "background-color: #", 19);
-			p = vod_sprintf((u_char*)p, "%08uxD;\r\n", cur_style->back_colour);
+			p = vod_sprintf(p, "%08uxD;\r\n", cur_style->back_colour);
 		}
 		p = vod_copy(p, FIXED_WEBVTT_BRACES_END_STR, FIXED_WEBVTT_BRACES_END_WIDTH);
 		p = vod_copy(p, "\r\n", 2);
@@ -766,15 +882,95 @@ ass_parse_frames(
 		}
 #ifdef ASSUME_STYLE_SUPPORT
 		p = vod_copy(p, FIXED_WEBVTT_VOICE_START_STR, FIXED_WEBVTT_VOICE_START_WIDTH);
-		p = vod_sprintf((u_char*)p, cur_style->name, vod_strlen(cur_style->name));
+		p = vod_sprintf(p, cur_style->name, vod_strlen(cur_style->name));
 		p = vod_copy(p, FIXED_WEBVTT_VOICE_END_STR, FIXED_WEBVTT_VOICE_END_WIDTH);
 #endif //ASSUME_STYLE_SUPPORT
+
+#ifdef ASSUME_CSS_SUPPORT
+		p = vod_copy(p, FIXED_WEBVTT_CLASSOPEN_START_STR, FIXED_WEBVTT_CLASSOPEN_START_WIDTH);
+		// insert primary color class
+		{
+			uint32_t alpha = ((cur_style->primary_colour >> 24) & 0xFF);
+			p = vod_copy(p, FIXED_WEBVTT_COLOR_FULL_STR, FIXED_WEBVTT_COLOR_FULL_WIDTH);
+			p = insert_color_string(p, cur_style->primary_colour, request_context);
+			if (alpha <= 64)
+				p = vod_copy(p, FIXED_WEBVTT_ALPHA_FULL_STR, FIXED_WEBVTT_ALPHA_FULL_WIDTH);
+			else
+				p = vod_copy(p, FIXED_WEBVTT_ALPHA_HALF_STR, FIXED_WEBVTT_ALPHA_HALF_WIDTH);
+		}
+		// insert outline or background color
+		if (cur_style->border_style == 3)
+		{
+			// Opaque box with background color
+			uint32_t alpha = ((cur_style->back_colour >> 24) & 0xFF);
+			p = vod_copy(p, FIXED_WEBVTT_BACKGROUND_FULL_STR, FIXED_WEBVTT_BACKGROUND_FULL_WIDTH);
+			p = insert_color_string(p, cur_style->back_colour, request_context);
+			if (alpha <= 64)
+				p = vod_copy(p, FIXED_WEBVTT_ALPHA_FULL_STR, FIXED_WEBVTT_ALPHA_FULL_WIDTH);
+			else
+				p = vod_copy(p, FIXED_WEBVTT_ALPHA_HALF_STR, FIXED_WEBVTT_ALPHA_HALF_WIDTH);
+		}
+		else if (cur_style->outline > 0 && cur_style->outline <= 4)
+		{
+			// Outline color as dictated, with size in pixels as dictated
+			p = vod_copy(p, FIXED_WEBVTT_OUTLINE_FULL_STR, FIXED_WEBVTT_OUTLINE_FULL_WIDTH);
+			if (cur_style->outline == 1)
+				p 	= vod_copy(p, "1", 1);
+			else if (cur_style->outline == 2)
+				p 	= vod_copy(p, "2", 1);
+			else
+				p 	= vod_copy(p, "3", 1);
+			p = insert_color_string(p, cur_style->outline_colour, request_context);
+		}
+
+		// insert strikethrough
+		if (cur_style->strike_out)
+			p = vod_copy(p, FIXED_WEBVTT_STRIKE_THRU_STR, FIXED_WEBVTT_STRIKE_THRU_WIDTH);
+
+		// insert font-family
+		p = vod_copy(p, FIXED_WEBVTT_FONT_FAM_STR, FIXED_WEBVTT_FONT_FAM_WIDTH);
+
+		if (cur_style->right_to_left_language)
+			p = vod_copy(p, FIXED_WEBVTT_ARABIC_FONT_STR, FIXED_WEBVTT_ARABIC_FONT_WIDTH);
+		else if ( !vod_strncmp(ass_track->title,	"Русский", TITLE_BYTES_CONSIDERED) ||
+				  !vod_strncmp(ass_track->language,	"Русский", TITLE_BYTES_CONSIDERED) )
+			p = vod_copy(p, FIXED_WEBVTT_RUSSIAN_FONT_STR, FIXED_WEBVTT_RUSSIAN_FONT_WIDTH);
+		else if ( !vod_strncmp(cur_style->font_name, "Times New Roman", 15) )
+			p = vod_copy(p, FIXED_WEBVTT_TIMES_FONT_STR, FIXED_WEBVTT_TIMES_FONT_WIDTH);
+		else if ( !vod_strncmp(cur_style->font_name, "Trebuchet MS", 12) )
+			p = vod_copy(p, FIXED_WEBVTT_TREBUCHET_FONT_STR, FIXED_WEBVTT_TREBUCHET_FONT_WIDTH);
+		else if ( !vod_strncmp(cur_style->font_name, "Comic Sans MS", 13) )
+			p = vod_copy(p, FIXED_WEBVTT_COMIC_FONT_STR, FIXED_WEBVTT_COMIC_FONT_WIDTH);
+		else if ( !vod_strncmp(cur_style->font_name, "Lucida Console", 14) )
+			p = vod_copy(p, FIXED_WEBVTT_LUCIDA_FONT_STR, FIXED_WEBVTT_LUCIDA_FONT_WIDTH);
+		else if ( !vod_strncmp(cur_style->font_name, "Courier New", 11) )
+			p = vod_copy(p, FIXED_WEBVTT_COURIER_FONT_STR, FIXED_WEBVTT_COURIER_FONT_WIDTH);
+		else if ( !vod_strncmp(cur_style->font_name, "Times New Roman", 15) )
+			p = vod_copy(p, FIXED_WEBVTT_TIMES_FONT_STR, FIXED_WEBVTT_TIMES_FONT_WIDTH);
+		else
+			p = vod_copy(p, FIXED_WEBVTT_ARIAL_FONT_STR, FIXED_WEBVTT_ARIAL_FONT_WIDTH);
+
+				vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+        			"title=%s, language=%s", ass_track->title, ass_track->language);
+		// insert font-size
+		p = vod_copy(p, FIXED_WEBVTT_FONT_SIZE_STR, FIXED_WEBVTT_FONT_SIZE_WIDTH);
+		if (cur_style->font_size < 16)
+			p = vod_snprintf(p, 2, "%d", 16);
+		else if (cur_style->font_size > 45)
+			p = vod_snprintf(p, 2, "%d", 45);
+		else
+			p = vod_snprintf(p, 2, "%d", cur_style->font_size);
+
+		p = vod_copy(p, FIXED_WEBVTT_CLASSOPEN_END_STR, FIXED_WEBVTT_CLASSOPEN_END_WIDTH);
+#endif
 
 		for (chunkcounter = 0; chunkcounter < num_chunks_in_text; chunkcounter++)
 		{
 			 p = vod_copy(p, event_textp[chunkcounter], event_len[chunkcounter]);
 		}
-
+#ifdef ASSUME_CSS_SUPPORT
+		p = vod_copy(p, FIXED_WEBVTT_CLASSCLOSE_FULL_STR, FIXED_WEBVTT_CLASSCLOSE_FULL_WIDTH);
+#endif
 		p = vod_copy(p, "\r\n", 2);
 		// we still need an empty line after each event/cue
 		p = vod_copy(p, "\r\n", 2);
@@ -786,10 +982,10 @@ ass_parse_frames(
 		// - duration = start time of next event - start time of current event
 		// - pts_delay = end time - start time = duration this subtitle event is on screen
 
-		cur_frame->offset	= (uintptr_t)pfixed;
-		cur_frame->size	  = (uint32_t)(p - pfixed);
-		cur_frame->key_frame = FIXED_WEBVTT_CUE_NAME_WIDTH + 2; // cue name + \r\n
-		cur_frame->pts_delay = cur_event->end - cur_event->start;
+		cur_frame->offset		= (uintptr_t)pfixed;
+		cur_frame->size			= (uint32_t)(p - pfixed);
+		cur_frame->key_frame	= FIXED_WEBVTT_CUE_NAME_WIDTH + 2; // cue name + \r\n
+		cur_frame->pts_delay	= cur_event->end - cur_event->start;
 
 		vtt_track->total_frames_size += cur_frame->size;
 		cur_style->output_in_cur_segment = TRUE; // output this style as part of this segment
