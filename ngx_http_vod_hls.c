@@ -987,6 +987,7 @@ ngx_http_vod_hls_create_loc_conf(
 	conf->encryption_method = NGX_CONF_UNSET_UINT;
 	conf->m3u8_config.output_iframes_playlist = NGX_CONF_UNSET;
 	conf->m3u8_config.force_unmuxed_segments = NGX_CONF_UNSET;
+	conf->m3u8_config.force_sequence_index = NGX_CONF_UNSET;
 	conf->m3u8_config.container_format = NGX_CONF_UNSET_UINT;
 }
 
@@ -1016,6 +1017,7 @@ ngx_http_vod_hls_merge_loc_conf(
 		conf->encryption_key_uri = prev->encryption_key_uri;
 	}
 	ngx_conf_merge_value(conf->m3u8_config.force_unmuxed_segments, prev->m3u8_config.force_unmuxed_segments, 0);
+	ngx_conf_merge_value(conf->m3u8_config.force_sequence_index, prev->m3u8_config.force_sequence_index, 0);
 	ngx_conf_merge_uint_value(conf->m3u8_config.container_format, prev->m3u8_config.container_format, HLS_CONTAINER_AUTO);
 
 	ngx_conf_merge_value(conf->mpegts_muxer_config.interleave_frames, prev->mpegts_muxer_config.interleave_frames, 0);
