@@ -149,7 +149,6 @@ m3u8_builder_append_iframe_string(void* context, uint32_t segment_index, uint32_
 
 static vod_status_t
 m3u8_builder_build_tracks_spec(
-	m3u8_config_t* conf,
 	request_context_t* request_context,
 	media_set_t* media_set, 
 	vod_str_t* suffix, 
@@ -195,7 +194,7 @@ m3u8_builder_build_tracks_spec(
 		p,
 		tracks,
 		media_set->total_track_count,
-		media_set->has_multi_sequences || conf->force_sequence_index);
+		media_set->has_multi_sequences);
 
 	p = vod_copy(p, suffix->data, suffix->len);
 
@@ -240,7 +239,6 @@ m3u8_builder_build_iframe_playlist(
 
 	// build the required tracks string
 	rc = m3u8_builder_build_tracks_spec(
-		conf,
 		request_context,
 		media_set,
 		&m3u8_ts_suffix,
@@ -436,7 +434,6 @@ m3u8_builder_build_index_playlist(
 	}
 
 	rc = m3u8_builder_build_tracks_spec(
-		conf,
 		request_context,
 		media_set,
 		suffix,
@@ -770,8 +767,7 @@ m3u8_builder_append_index_url(
 	vod_str_t* prefix,
 	media_set_t* media_set,
 	media_track_t** tracks,
-	vod_str_t* base_url,
-	m3u8_config_t* conf)
+	vod_str_t* base_url)
 {
 	media_track_t* main_track;
 	media_track_t* sub_track;
@@ -789,7 +785,7 @@ m3u8_builder_append_index_url(
 	main_track = tracks[media_type];
 	sub_track = media_type == MEDIA_TYPE_VIDEO ? tracks[MEDIA_TYPE_AUDIO] : NULL;
 
-	write_sequence_index = media_set->has_multi_sequences || conf->force_sequence_index;
+	write_sequence_index = media_set->has_multi_sequences;
 	if (base_url->len != 0)
 	{
 		// absolute url only
@@ -808,7 +804,7 @@ m3u8_builder_append_index_url(
 	}
 
 	p = vod_copy(p, prefix->data, prefix->len);
-	p = manifest_utils_append_tracks_spec(p, tracks, MEDIA_TYPE_COUNT, write_sequence_index || conf->force_sequence_index);
+	p = manifest_utils_append_tracks_spec(p, tracks, MEDIA_TYPE_COUNT, write_sequence_index);
 	p = vod_copy(p, m3u8_url_suffix, sizeof(m3u8_url_suffix) - 1);
 
 	return p;
@@ -956,8 +952,7 @@ m3u8_builder_ext_x_media_tags_write(
 			&conf->index_file_name_prefix,
 			media_set,
 			tracks,
-			base_url,
-			conf);
+			base_url);
 
 		*p++ = '"';
 		*p++ = '\n';
@@ -1090,8 +1085,7 @@ m3u8_builder_write_variants(
 			&conf->index_file_name_prefix,
 			media_set,
 			tracks,
-			base_url,
-			conf);
+			base_url);
 
 		*p++ = '\n';
 	}
@@ -1163,8 +1157,7 @@ m3u8_builder_write_iframe_variants(
 			&conf->iframes_file_name_prefix,
 			media_set,
 			tracks,
-			base_url,
-			conf);
+			base_url);
 		*p++ = '\"';
 
 		p = m3u8_builder_write_video_range(p, video->u.video.transfer_characteristics);

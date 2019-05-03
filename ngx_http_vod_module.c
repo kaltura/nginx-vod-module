@@ -5035,6 +5035,10 @@ ngx_http_vod_map_media_set_apply(ngx_http_vod_ctx_t *ctx, ngx_str_t* mapping, in
 		cur_source,
 		request_flags,
 		&mapped_media_set);
+	if(conf->force_sequence_index)
+	{
+		mapped_media_set.has_multi_sequences = TRUE;
+	}
 
 	switch (rc)
 	{
@@ -5319,6 +5323,10 @@ ngx_http_vod_parse_uri(
 			return ngx_http_vod_status_to_ngx_error(r, VOD_BAD_REQUEST);
 		}
 	}
+	if(conf->force_sequence_index)
+	{
+		media_set->has_multi_sequences = TRUE;
+	}
 
 	return NGX_OK;
 }
@@ -5426,6 +5434,10 @@ ngx_http_vod_handler(ngx_http_request_t *r)
 				"ngx_http_vod_handler: request has more than one sub uri while only one is supported");
 			rc = ngx_http_vod_status_to_ngx_error(r, VOD_BAD_REQUEST);
 			goto done;
+		}
+		if(conf->force_sequence_index)
+		{
+			media_set.has_multi_sequences = TRUE;
 		}
 	}
 

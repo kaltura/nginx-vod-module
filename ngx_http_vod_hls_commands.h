@@ -135,11 +135,4 @@
 	BASE_OFFSET + offsetof(ngx_http_vod_hls_loc_conf_t, m3u8_config.force_unmuxed_segments),
 	NULL },
 	
-	{ ngx_string("vod_hls_force_sequence_index"),
-	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1,
-	ngx_conf_set_flag_slot,
-	NGX_HTTP_LOC_CONF_OFFSET,
-	BASE_OFFSET + offsetof(ngx_http_vod_hls_loc_conf_t, m3u8_config.force_sequence_index),
-	NULL },
-	
 #undef BASE_OFFSET
