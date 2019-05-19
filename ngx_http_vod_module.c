@@ -2616,7 +2616,7 @@ ngx_http_vod_update_timescale(ngx_http_vod_ctx_t *ctx)
 static ngx_int_t
 ngx_http_vod_handle_metadata_request(ngx_http_vod_ctx_t *ctx)
 {
-	ngx_http_vod_loc_conf_t* conf;
+	ngx_http_vod_loc_conf_t* conf = ctx->submodule_context.conf;
 	response_cache_header_t cache_header;
 	ngx_buffer_cache_t* cache;
 	ngx_str_t cache_buffers[3];
@@ -2632,7 +2632,12 @@ ngx_http_vod_handle_metadata_request(ngx_http_vod_ctx_t *ctx)
 	}
 
 	ngx_perf_counter_start(ctx->perf_counter_context);
-
+	
+	if(conf->force_sequence_index)
+	{
+		ctx->submodule_context.media_set.has_multi_sequences = TRUE;
+	}
+	
 	rc = ctx->request->handle_metadata_request(
 		&ctx->submodule_context,
 		&response,
@@ -2646,7 +2651,6 @@ ngx_http_vod_handle_metadata_request(ngx_http_vod_ctx_t *ctx)
 
 	ngx_perf_counter_end(ctx->perf_counters, ctx->perf_counter_context, PC_BUILD_MANIFEST);
 
-	conf = ctx->submodule_context.conf;
 	if (ctx->submodule_context.media_set.original_type != MEDIA_SET_LIVE ||
 		(ctx->request->flags & REQUEST_FLAG_TIME_DEPENDENT_ON_LIVE) == 0)
 	{

@@ -1188,6 +1188,13 @@ The name of the speed request parameter.
 
 The name of the language request parameter.
 
+#### vod_force_sequence_index
+* **syntax**: `vod_force_sequence_index on/off`
+* **default**: `off`
+* **context**: `http`, `server`, `location`
+
+Use sequence index in segment uris even if there is only one sequence
+
 ### Configuration directives - response headers
 
 #### vod_expires
