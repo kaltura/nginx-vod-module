@@ -188,7 +188,7 @@ hls_muxer_init_id3_stream(
 	sequence_id = &media_set->sequences[0].id;
 	if (sequence_id->len != 0)
 	{
-		sequence_id_escape = ngx_escape_json(NULL, sequence_id->data, sequence_id->len);
+		sequence_id_escape = vod_escape_json(NULL, sequence_id->data, sequence_id->len);
 		data_size = sizeof(ID3_TEXT_JSON_SEQUENCE_ID_PREFIX_FORMAT) + VOD_INT64_LEN + 
 			sequence_id->len + sequence_id_escape +
 			sizeof(ID3_TEXT_JSON_SEQUENCE_ID_SUFFIX);
@@ -255,7 +255,7 @@ hls_muxer_init_id3_stream(
 			p = vod_sprintf(p, ID3_TEXT_JSON_SEQUENCE_ID_PREFIX_FORMAT, timestamp);
 			if (sequence_id_escape)
 			{
-				p = (u_char*)ngx_escape_json(p, sequence_id->data, sequence_id->len);
+				p = (u_char*)vod_escape_json(p, sequence_id->data, sequence_id->len);
 			}
 			else
 			{
