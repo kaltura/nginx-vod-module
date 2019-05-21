@@ -158,6 +158,7 @@ void vod_log_error(vod_uint_t level, vod_log_t *log, int err,
 #define vod_strncasecmp(s1, s2, n) ngx_strncasecmp(s1, s2, n)
 #define vod_pstrdup(pool, src) ngx_pstrdup(pool, src)
 #define vod_hextoi(line, n) ngx_hextoi(line, n)
+#define vod_escape_json(dst, src, size) ngx_escape_json(dst, src, size)
 
 // array functions
 #define vod_array_init(array, pool, n, size) ngx_array_init(array, pool, n, size)
