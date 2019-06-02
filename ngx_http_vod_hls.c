@@ -366,7 +366,6 @@ ngx_http_vod_hls_handle_index_playlist(
 		&conf->hls.m3u8_config,
 		&base_url,
 		&segments_base_url,
-		&submodule_context->request_params,
 		&encryption_params,
 		container_format,
 		&submodule_context->media_set,
@@ -431,7 +430,6 @@ ngx_http_vod_hls_handle_iframe_playlist(
 		&conf->hls.m3u8_config,
 		&conf->hls.mpegts_muxer_config,
 		&base_url,
-		&submodule_context->request_params,
 		&submodule_context->media_set,
 		response);
 	if (rc != VOD_OK)
