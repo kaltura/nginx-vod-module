@@ -48,7 +48,6 @@ vod_status_t m3u8_builder_build_index_playlist(
 	m3u8_config_t* conf,
 	vod_str_t* base_url,
 	vod_str_t* segments_base_url,
-	request_params_t* request_params,
 	hls_encryption_params_t* encryption_params,
 	vod_uint_t container_format,
 	media_set_t* media_set,
@@ -59,7 +58,6 @@ vod_status_t m3u8_builder_build_iframe_playlist(
 	m3u8_config_t* conf,
 	hls_mpegts_muxer_conf_t* muxer_conf,
 	vod_str_t* base_url,
-	request_params_t* request_params,
 	media_set_t* media_set,
 	vod_str_t* result);
 
