@@ -1193,7 +1193,7 @@ m3u8_builder_build_master_playlist(
 	bool_t alternative_audio;
 
 	// get the adaptations sets
-	flags = ADAPTATION_SETS_FLAG_SINGLE_LANG_TRACK | ADAPTATION_SETS_FLAG_MULTI_CODEC;
+	flags = ADAPTATION_SETS_FLAG_SINGLE_LANG_TRACK | ADAPTATION_SETS_FLAG_MULTI_AUDIO_CODEC;
 	if (!conf->force_unmuxed_segments && encryption_method != HLS_ENC_SAMPLE_AES_CENC)
 	{
 		flags |= ADAPTATION_SETS_FLAG_MUXED;
