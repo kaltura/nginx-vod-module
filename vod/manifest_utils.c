@@ -389,14 +389,31 @@ track_group_key_init(
 {
 	uint32_t media_type = track->media_info.media_type;
 
-	// label
 	switch (media_type)
 	{
 	case MEDIA_TYPE_VIDEO:
+		if ((flags & ADAPTATION_SETS_FLAG_MULTI_VIDEO_CODEC) != 0)
+		{
+			key->codec_id = track->media_info.codec_id;
+		}
+		else
+		{
+			key->codec_id = 0;
+		}
+
 		key->label.len = 0;
 		break;
 
 	case MEDIA_TYPE_AUDIO:
+		if ((flags & ADAPTATION_SETS_FLAG_MULTI_AUDIO_CODEC) != 0)
+		{
+			key->codec_id = track->media_info.codec_id;
+		}
+		else
+		{
+			key->codec_id = 0;
+		}
+
 		if ((flags & ADAPTATION_SETS_FLAG_MULTI_AUDIO) == 0)
 		{
 			key->label.len = 0;
@@ -411,6 +428,8 @@ track_group_key_init(
 		break;
 
 	case MEDIA_TYPE_SUBTITLE:
+		key->codec_id = 0;
+
 		if (track->media_info.label.len == 0 ||
 			(flags & ADAPTATION_SETS_FLAG_IGNORE_SUBTITLES) != 0)
 		{
@@ -421,17 +440,6 @@ track_group_key_init(
 
 	default:		// MEDIA_TYPE_NONE
 		return FALSE;
-	}
-
-	// codec id
-	if ((flags & ADAPTATION_SETS_FLAG_MULTI_CODEC) != 0 &&
-		media_type != MEDIA_TYPE_SUBTITLE)
-	{
-		key->codec_id = track->media_info.codec_id;
-	}
-	else
-	{
-		key->codec_id = 0;
 	}
 
 	return TRUE;
