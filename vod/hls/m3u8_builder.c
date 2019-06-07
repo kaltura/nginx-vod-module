@@ -648,7 +648,9 @@ m3u8_builder_build_index_playlist(
 	p = vod_sprintf(
 		p,
 		M3U8_HEADER_PART2,
-		container_format == HLS_CONTAINER_FMP4 ? 6 : conf->m3u8_version, 
+		container_format == HLS_CONTAINER_FMP4 ? 6 : vod_max(
+				vod_max(conf->m3u8_version, (encryption_type != HLS_ENC_NONE && encryption_params->return_iv) ? 2 : 1),
+				(segmenter_conf->get_segment_durations == segmenter_get_segment_durations_accurate) ? 3 : 1),
 		segment_durations.items[0].segment_index + 1);
 
 	if (container_format == HLS_CONTAINER_FMP4)
@@ -1402,9 +1404,13 @@ m3u8_builder_init_config(
 	{
 		conf->m3u8_version = 5;
 	}
-	else
+	else if (conf->output_iframes_playlist)
 	{
-		conf->m3u8_version = 3;
+		conf->m3u8_version = 4;
+	}
+	else // m3u8 version 2 and 3 show up on the fly
+	{
+		conf->m3u8_version = 1;
 	}
 
 	conf->iframes_m3u8_header_len = vod_snprintf(
