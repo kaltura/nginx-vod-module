@@ -1,5 +1,5 @@
 // The table below is based on data from http://www-01.sil.org/iso639-3/download.asp
-LANG(XXX, "xx", "xxx", "xxx", "", "")
+LANG(UND, "un", "und", "und", "", "")
 
 LANG(AA , "aa", "aar", "aar", "Afar", "Afaraf")
 LANG(AAL, NULL, NULL , "aal", "Afade", "Afa\xc3\xab")
@@ -570,7 +570,6 @@ LANG(UDI, NULL, NULL , "udi", "Udi", "\xd1\x83\xd0\xb4\xd0\xb8\xd0\xbd")
 LANG(UDM, NULL, "udm", "udm", "Udmurt", "\xd1\x83\xd0\xb4\xd0\xbc\xd1\x83\xd1\x80\xd1\x82")
 LANG(UG , "ug", "uig", "uig", "Uighur", "\xd8\xa6\xdb\x87\xd9\x8a\xd8\xba\xdb\x87\xd8\xb1\xda\x86\xdb\x95")
 LANG(UK , "uk", "ukr", "ukr", "Ukrainian", "\xd1\x83\xd0\xba\xd1\x80\xd0\xb0\xd1\x97\xd0\xbd\xd1\x81\xd1\x8c\xd0\xba\xd0\xb0")
-LANG(UND, NULL, "und", "und", "Undefined", "Undefined")
 LANG(UR , "ur", "urd", "urd", "Urdu", "\xd8\xa7\xd8\xb1\xd8\xaf\xd9\x88")
 LANG(UUM, NULL, NULL , "uum", "Urum", "\xd0\xa3\xd1\x80\xd1\x83\xd0\xbc")
 LANG(UZ , "uz", "uzb", "uzb", "Uzbek", "\xd0\x8e\xd0\xb7\xd0\xb1\xd0\xb5\xd0\xba")
