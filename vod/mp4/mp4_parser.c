@@ -3111,7 +3111,8 @@ mp4_parser_parse_frames(
 		context.media_info = &cur_track->media_info;
 
 		// reset the output part of the context
-		vod_memzero(&context.stss_start_pos, sizeof(context) - offsetof(frames_parse_context_t, stss_start_pos));
+		vod_memzero((u_char*)&context + offsetof(frames_parse_context_t, stss_start_pos),
+			sizeof(context) - offsetof(frames_parse_context_t, stss_start_pos));
 
 		if (cur_track == first_track &&
 			media_type == MEDIA_TYPE_VIDEO &&
