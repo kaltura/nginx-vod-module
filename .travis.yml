@@ -17,7 +17,7 @@ language: c
 compiler:
     - clang
     - gcc
-dist: trusty
+dist: xenial
 env:
   - NGX_VOD_MODULE=--add-module=./nginx-vod-module
   - NGX_VOD_MODULE=--add-dynamic-module=./nginx-vod-module
