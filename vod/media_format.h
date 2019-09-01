@@ -173,6 +173,7 @@ typedef struct media_info_s {
 	uint32_t codec_id;
 	vod_str_t codec_name;
 	vod_str_t extra_data;
+	vod_str_t dovi_data;
 	int64_t empty_duration;		// temporary during parsing
 	int64_t start_time;			// temporary during parsing
 	uint64_t codec_delay;

@@ -1,6 +1,7 @@
 #include "codec_config.h"
 #include "media_format.h"
 #include "bit_read_stream.h"
+#include "./mp4/mp4_defs.h"
 
 #define codec_config_copy_string(target, str)	\
 	{											\
@@ -123,10 +124,11 @@ vod_status_t
 codec_config_hevc_config_parse(
 	request_context_t* request_context, 
 	vod_str_t* extra_data, 
+	vod_str_t* dovi_data, 
 	hevc_config_t* cfg, 
 	const u_char** end_pos)
 {
-	bit_reader_state_t reader;
+	bit_reader_state_t reader, dovi_reader;
 
 	bit_read_stream_init(&reader, extra_data->data, extra_data->len);
 
@@ -171,6 +173,20 @@ codec_config_hevc_config_parse(
 		cfg->scalability_mask = bit_read_stream_get(&reader, 16);
 	}*/
 
+	if (dovi_data != NULL) {
+		bit_read_stream_init(&dovi_reader, dovi_data->data, dovi_data->len);
+		cfg->dovi_config.dv_version_major = bit_read_stream_get(&dovi_reader, 8);
+		cfg->dovi_config.dv_version_minor = bit_read_stream_get(&dovi_reader, 8);
+		cfg->dovi_config.dv_profile = bit_read_stream_get(&dovi_reader, 7);
+		cfg->dovi_config.dv_level = bit_read_stream_get(&dovi_reader, 6);
+		cfg->dovi_config.rpu_present_flag = bit_read_stream_get_one(&dovi_reader);
+		cfg->dovi_config.el_present_flag = bit_read_stream_get_one(&dovi_reader);
+		cfg->dovi_config.bl_present_flag = bit_read_stream_get_one(&dovi_reader);
+		cfg->dovi_config.dv_bl_signal_compatibility_id = bit_read_stream_get(&dovi_reader, 4);
+		vod_log_debug2(VOD_LOG_DEBUG_LEVEL, request_context->log, 0, 
+			"DoVi Profile/Level: %02d.%02d", cfg->dovi_config.dv_profile, cfg->dovi_config.dv_level);
+	}
+
 	if (reader.stream.eof_reached)
 	{
 		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
@@ -205,7 +221,7 @@ codec_config_hevc_get_nal_units(
 	uint8_t type_count;
 	u_char* p;
 
-	rc = codec_config_hevc_config_parse(request_context, extra_data, &cfg, &start_pos);
+	rc = codec_config_hevc_config_parse(request_context, extra_data, NULL, &cfg, &start_pos);
 	if (rc != VOD_OK)
 	{
 		return rc;
@@ -363,7 +379,26 @@ codec_config_get_hevc_codec_name(request_context_t* request_context, media_info_
 	char profile_space[2] = { 0, 0 };
 	int shift;
 
-	rc = codec_config_hevc_config_parse(request_context, &media_info->extra_data, &cfg, NULL);
+	if (media_info->format == FORMAT_DVH1)
+	{
+		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0, "!!! It is Dolby Vision");
+		rc = codec_config_hevc_config_parse(request_context, &media_info->extra_data, &media_info->dovi_data, &cfg, NULL);
+		if (rc != VOD_OK)
+		{
+			return rc;
+		}
+		p = vod_sprintf(media_info->codec_name.data, "%*s.%02d.%02d", (size_t)sizeof(uint32_t), 
+			&media_info->format,
+			cfg.dovi_config.dv_profile,
+			cfg.dovi_config.dv_level);
+		*p = '\0';
+		
+		media_info->codec_name.len = p - media_info->codec_name.data;
+		return VOD_OK;
+
+	} else {
+		rc = codec_config_hevc_config_parse(request_context, &media_info->extra_data, NULL, &cfg, NULL);
+	}
 	if (rc != VOD_OK)
 	{
 		return rc;
