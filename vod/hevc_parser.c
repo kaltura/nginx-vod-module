@@ -1334,7 +1334,7 @@ hevc_parser_parse_extra_data(
 	uint8_t type_count;
 	uint8_t nal_type;
 
-	rc = codec_config_hevc_config_parse(ctx->request_context, extra_data, &cfg, &start_pos);
+	rc = codec_config_hevc_config_parse(ctx->request_context, extra_data, NULL, &cfg, &start_pos);
 	if (rc != VOD_OK)
 	{
 		return rc;

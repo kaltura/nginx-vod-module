@@ -34,6 +34,7 @@
 #define ATOM_NAME_SINF (0x666e6973)		// protection scheme information
 #define ATOM_NAME_AVCC (0x43637661)		// advanced video codec configuration
 #define ATOM_NAME_HVCC (0x43637668)		// high efficiency video codec configuration
+#define ATOM_NAME_DVCC (0x43637664)		// dolby vision codec configuration
 #define ATOM_NAME_VPCC (0x43637076)		// vp9 codec configuration
 #define ATOM_NAME_ESDS (0x73647365)		// elementary stream description
 #define ATOM_NAME_DAC3 (0x33636164)
