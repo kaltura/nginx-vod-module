@@ -970,6 +970,7 @@ m3u8_builder_write_video_range(u_char* p, uint8_t transfer_characteristics)
 		p = vod_copy(p, M3U8_VIDEO_RANGE_SDR, sizeof(M3U8_VIDEO_RANGE_SDR) - 1);
 		break;
 
+	case 2:
 	case 16:
 	case 18:
 		p = vod_copy(p, M3U8_VIDEO_RANGE_PQ, sizeof(M3U8_VIDEO_RANGE_PQ) - 1);

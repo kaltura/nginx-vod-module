@@ -183,8 +183,6 @@ codec_config_hevc_config_parse(
 		cfg->dovi_config.el_present_flag = bit_read_stream_get_one(&dovi_reader);
 		cfg->dovi_config.bl_present_flag = bit_read_stream_get_one(&dovi_reader);
 		cfg->dovi_config.dv_bl_signal_compatibility_id = bit_read_stream_get(&dovi_reader, 4);
-		vod_log_debug2(VOD_LOG_DEBUG_LEVEL, request_context->log, 0, 
-			"DoVi Profile/Level: %02d.%02d", cfg->dovi_config.dv_profile, cfg->dovi_config.dv_level);
 	}
 
 	if (reader.stream.eof_reached)
@@ -381,7 +379,6 @@ codec_config_get_hevc_codec_name(request_context_t* request_context, media_info_
 
 	if (media_info->format == FORMAT_DVH1)
 	{
-		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0, "!!! It is Dolby Vision");
 		rc = codec_config_hevc_config_parse(request_context, &media_info->extra_data, &media_info->dovi_data, &cfg, NULL);
 		if (rc != VOD_OK)
 		{
