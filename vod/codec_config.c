@@ -384,43 +384,41 @@ codec_config_get_hevc_codec_name(request_context_t* request_context, media_info_
 		{
 			return rc;
 		}
+
+		// following https://www.dolby.com/us/en/technologies/dolby-vision/dolby-vision-streams-within-the-http-live-streaming-format-v2.0.pdf
 		p = vod_sprintf(media_info->codec_name.data, "%*s.%02d.%02d", (size_t)sizeof(uint32_t), 
 			&media_info->format,
 			cfg.dovi_config.dv_profile,
 			cfg.dovi_config.dv_level);
-		*p = '\0';
-		
-		media_info->codec_name.len = p - media_info->codec_name.data;
-		return VOD_OK;
-
 	} else {
 		rc = codec_config_hevc_config_parse(request_context, &media_info->extra_data, NULL, &cfg, NULL);
-	}
-	if (rc != VOD_OK)
-	{
-		return rc;
+		if (rc != VOD_OK)
+		{
+			return rc;
+		}
+
+		if (cfg.profile_space > 0)
+		{
+			profile_space[0] = 'A' + (cfg.profile_space - 1);
+		}
+
+		c = cfg.progressive_source_flag << 7;
+		c |= cfg.interlaced_source_flag << 6;
+		c |= cfg.non_packed_constraint_flag << 5;
+		c |= cfg.frame_only_constraint_flag << 4;
+		c |= (cfg.constraint_indicator_flags >> 40);
+
+		p = vod_sprintf(media_info->codec_name.data, "%*s.%s%D.%xD.%c%D.%02xD",
+			(size_t)sizeof(uint32_t),
+			&media_info->format,
+			profile_space,
+			(uint32_t)cfg.profile_idc,
+			codec_config_flip_bits_32(cfg.general_profile_compatibility_flags),
+			(int)(cfg.tier_flag ? 'H' : 'L'),
+			(uint32_t)cfg.level_idc,
+			(uint32_t)c);
 	}
 
-	if (cfg.profile_space > 0)
-	{
-		profile_space[0] = 'A' + (cfg.profile_space - 1);
-	}
-
-	c = cfg.progressive_source_flag << 7;
-	c |= cfg.interlaced_source_flag << 6;
-	c |= cfg.non_packed_constraint_flag << 5;
-	c |= cfg.frame_only_constraint_flag << 4;
-	c |= (cfg.constraint_indicator_flags >> 40);
-
-	p = vod_sprintf(media_info->codec_name.data, "%*s.%s%D.%xD.%c%D.%02xD",
-		(size_t)sizeof(uint32_t),
-		&media_info->format,
-		profile_space,
-		(uint32_t)cfg.profile_idc,
-		codec_config_flip_bits_32(cfg.general_profile_compatibility_flags),
-		(int)(cfg.tier_flag ? 'H' : 'L'),
-		(uint32_t)cfg.level_idc,
-		(uint32_t)c);
 	for (shift = 32; shift >= 0; shift -= 8)
 	{
 		if ((cfg.constraint_indicator_flags & (((uint64_t)1 << (shift + 8)) - 1)) == 0)
