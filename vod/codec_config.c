@@ -124,7 +124,7 @@ vod_status_t
 codec_config_hevc_config_parse(
 	request_context_t* request_context, 
 	vod_str_t* extra_data, 
-	vod_str_t* dovi_data, 
+	vod_str_t* dvcc_data, 
 	hevc_config_t* cfg, 
 	const u_char** end_pos)
 {
@@ -173,8 +173,8 @@ codec_config_hevc_config_parse(
 		cfg->scalability_mask = bit_read_stream_get(&reader, 16);
 	}*/
 
-	if (dovi_data != NULL) {
-		bit_read_stream_init(&dovi_reader, dovi_data->data, dovi_data->len);
+	if (dvcc_data != NULL) {
+		bit_read_stream_init(&dovi_reader, dvcc_data->data, dvcc_data->len);
 		cfg->dovi_config.dv_version_major = bit_read_stream_get(&dovi_reader, 8);
 		cfg->dovi_config.dv_version_minor = bit_read_stream_get(&dovi_reader, 8);
 		cfg->dovi_config.dv_profile = bit_read_stream_get(&dovi_reader, 7);
@@ -379,7 +379,7 @@ codec_config_get_hevc_codec_name(request_context_t* request_context, media_info_
 
 	if (media_info->format == FORMAT_DVH1)
 	{
-		rc = codec_config_hevc_config_parse(request_context, &media_info->extra_data, &media_info->dovi_data, &cfg, NULL);
+		rc = codec_config_hevc_config_parse(request_context, &media_info->extra_data, &media_info->dvcc_data, &cfg, NULL);
 		if (rc != VOD_OK)
 		{
 			return rc;

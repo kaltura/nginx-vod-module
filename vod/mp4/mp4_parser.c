@@ -1963,8 +1963,8 @@ mp4_parser_parse_video_extra_data_atom(void* ctx, atom_info_t* atom_info)
 	case ATOM_NAME_HVCC:
 		break;
 	case ATOM_NAME_DVCC:
-		context->media_info.dovi_data.len = atom_info->size;
-		context->media_info.dovi_data.data = (u_char*)atom_info->ptr;
+		context->media_info.dvcc_data.len = atom_info->size;
+		context->media_info.dvcc_data.data = (u_char*)atom_info->ptr;
 		return VOD_OK;
 
 	case ATOM_NAME_VPCC:
