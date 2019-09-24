@@ -13,7 +13,7 @@
 // constants
 #define MIN_ENCRYPTED_PACKET_SIZE (1 + AES_BLOCK_SIZE)		// minimum 1 byte for slice header
 #define ENCRYPTED_BLOCK_PERIOD (10)							// 1 out of 10 blocks is encrypted
-#define MAX_SLICE_HEADER_SIZE (80)
+#define MAX_SLICE_HEADER_SIZE (128)
 #define ENCRYPT_KEY_SIZE (16)
 
 // typedefs
