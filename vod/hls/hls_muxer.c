@@ -268,7 +268,7 @@ hls_muxer_init_id3_stream(
 		{
 			p = vod_sprintf(p, ID3_TEXT_JSON_FORMAT, timestamp);
 		}
-		cur_track->frame.size = p - (u_char*)cur_track->frame.offset;
+		cur_track->frame.size = (uintptr_t)p - cur_track->frame.offset;
 		cur_track->frame.duration = 0;
 		cur_track->frame.key_frame = 1;
 		cur_track->frame.pts_delay = 0;
