@@ -120,6 +120,7 @@ static json_object_value_def_t media_sequence_params[] = {
 	{ vod_string("language"),		VOD_JSON_STRING,	offsetof(media_sequence_t, language), media_set_parse_language },
 	{ vod_string("label"),			VOD_JSON_STRING,	offsetof(media_sequence_t, label), media_set_parse_null_term_string },
 	{ vod_string("bitrate"),		VOD_JSON_OBJECT,	offsetof(media_sequence_t, bitrate), media_set_parse_bitrate },
+	{ vod_string("avg_bitrate"),	VOD_JSON_OBJECT,	offsetof(media_sequence_t, avg_bitrate), media_set_parse_bitrate },
 	{ vod_null_string, 0, 0, NULL }
 };
 
@@ -1482,7 +1483,7 @@ media_set_init_look_ahead_segments(
 	uint32_t segment_index_limit;
 
 	cur_output = vod_alloc(request_context->pool,
-		sizeof(cur_output[0]) *  MAX_LOOK_AHEAD_SEGMENTS);
+		sizeof(cur_output[0]) * MAX_LOOK_AHEAD_SEGMENTS);
 	if (cur_output == NULL)
 	{
 		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,

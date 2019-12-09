@@ -61,6 +61,7 @@ struct media_sequence_s {
 	vod_str_t label;
 	language_id_t language;
 	uint32_t bitrate[MEDIA_TYPE_COUNT];
+	uint32_t avg_bitrate[MEDIA_TYPE_COUNT];
 	int64_t first_key_frame_offset;
 	vod_array_part_t* key_frame_durations;
 	uint64_t last_key_frame_time;
@@ -87,8 +88,8 @@ struct media_sequence_s {
 typedef struct {
 	uint32_t* durations;				// [total_count] clip durations in millis
 	uint32_t total_count;				// number of clips in the whole set
-	uint64_t* times;					// [total_count] clip timestamps in miilis
-	uint64_t* original_times;			// [total_count] clip timestamps in miilis
+	uint64_t* times;					// [total_count] clip timestamps in millis
+	uint64_t* original_times;			// [total_count] clip timestamps in millis
 	uint64_t segment_base_time;			// the time of segment 0
 	uint64_t total_duration;			// = sum(durations)
 	uint64_t first_time;				// = times[0]
