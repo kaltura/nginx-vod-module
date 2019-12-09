@@ -515,6 +515,9 @@ Optional fields:
 * `bitrate` - an object that can be used to set the bitrate for the different media types,
 	in bits per second. For example, `{"v": 900000, "a": 64000}`. If the bitrate is not supplied,
 	nginx-vod-module will estimate it based on the last clip in the sequence.
+* `avg_bitrate` - an object that can be used to set the average bitrate for the different media types,
+	in bits per second. See `bitrate` above for a sample object. If specified, the module will use
+	the value to populate the AVERAGE-BANDWIDTH attribute of `#EXT-X-STREAM-INF` in HLS.
 
 #### Clip (abstract)
 
@@ -926,7 +929,7 @@ an HLS manifest will contain #EXTINF:10
 frame rate of 29.97 and 10 second segments it will report the first segment as 10.01. accurate mode also
 takes into account the key frame alignment, in case `vod_align_segments_to_key_frames` is on
 
-### vod_media_set_override_json
+#### vod_media_set_override_json
 * **syntax**: `vod_media_set_override_json json`
 * **default**: `{}`
 * **context**: `http`, `server`, `location`
