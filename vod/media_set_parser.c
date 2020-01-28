@@ -815,6 +815,7 @@ media_set_parse_sequences(
 		cur_output->key_frame_durations = NULL;
 		cur_output->drm_info = NULL;
 		vod_memzero(cur_output->bitrate, sizeof(cur_output->bitrate));
+		vod_memzero(cur_output->avg_bitrate, sizeof(cur_output->avg_bitrate));
 
 		rc = vod_json_parse_object_values(
 			cur_pos,
