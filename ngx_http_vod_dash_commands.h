@@ -56,6 +56,13 @@
 	BASE_OFFSET + offsetof(ngx_http_vod_dash_loc_conf_t, mpd_config.manifest_format),
 	dash_manifest_formats },
 
+	{ ngx_string("vod_dash_subtitle_format"),
+	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1,
+	ngx_conf_set_enum_slot,
+	NGX_HTTP_LOC_CONF_OFFSET,
+	BASE_OFFSET + offsetof(ngx_http_vod_dash_loc_conf_t, mpd_config.subtitle_format),
+	dash_subtitle_formats },
+
 	{ ngx_string("vod_dash_duplicate_bitrate_threshold"),
 	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1,
 	ngx_conf_set_num_slot,

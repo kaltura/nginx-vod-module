@@ -72,14 +72,17 @@ mp4_fragment_get_trun_atom_size(uint32_t media_type, uint32_t frame_count)
 
 	case MEDIA_TYPE_AUDIO:
 		return ATOM_HEADER_SIZE + sizeof(trun_atom_t) + frame_count * sizeof(trun_audio_frame_t);
+
+	case MEDIA_TYPE_SUBTITLE:
+		return ATOM_HEADER_SIZE + sizeof(trun_atom_t) + sizeof(trun_audio_frame_t);
 	}
 	return 0;
 }
 
-static u_char* 
+u_char*
 mp4_fragment_write_video_trun_atom(
-	u_char* p, 
-	media_sequence_t* sequence, 
+	u_char* p,
+	media_sequence_t* sequence,
 	uint32_t first_frame_offset,
 	uint32_t version)
 {
@@ -139,8 +142,11 @@ mp4_fragment_write_video_trun_atom(
 	return p;
 }
 
-static u_char* 
-mp4_fragment_write_audio_trun_atom(u_char* p, media_sequence_t* sequence, uint32_t first_frame_offset)
+u_char*
+mp4_fragment_write_audio_trun_atom(
+	u_char* p,
+	media_sequence_t* sequence,
+	uint32_t first_frame_offset)
 {
 	media_clip_filtered_t* cur_clip;
 	frame_list_part_t* part;
@@ -180,22 +186,24 @@ mp4_fragment_write_audio_trun_atom(u_char* p, media_sequence_t* sequence, uint32
 }
 
 u_char*
-mp4_fragment_write_trun_atom(
-	u_char* p, 
-	media_sequence_t* sequence,
+mp4_fragment_write_subtitle_trun_atom(
+	u_char* p,
 	uint32_t first_frame_offset,
-	uint32_t version)
+	uint32_t duration,
+	u_char** sample_size)
 {
-	switch (sequence->media_type)
-	{
-	case MEDIA_TYPE_VIDEO:
-		p = mp4_fragment_write_video_trun_atom(p, sequence, first_frame_offset, version);
-		break;
+	uint32_t atom_size;
 
-	case MEDIA_TYPE_AUDIO:
-		p = mp4_fragment_write_audio_trun_atom(p, sequence, first_frame_offset);
-		break;
-	}
+	atom_size = ATOM_HEADER_SIZE + sizeof(trun_atom_t) + sizeof(trun_audio_frame_t);
+	write_atom_header(p, atom_size, 't', 'r', 'u', 'n');
+	write_be32(p, TRUN_AUDIO_FLAGS);		// flags = data offset, duration, size
+	write_be32(p, 1);						// sample count = 1
+	write_be32(p, first_frame_offset);
+
+	write_be32(p, duration);
+	*sample_size = p;
+	write_be32(p, 0);
+
 	return p;
 }
 

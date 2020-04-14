@@ -1620,6 +1620,7 @@ ngx_http_vod_init_parse_params_frames(
 		ctx->submodule_context.media_set.segment_duration =
 			clip_ranges.clip_ranges->end - clip_ranges.clip_ranges->start;
 	}
+	ctx->submodule_context.media_set.segment_start_time = clip_ranges.clip_ranges->start;
 
 	parse_params->range = clip_ranges.clip_ranges;
 	parse_params->range->start = (parse_params->range->start * rate.num) / rate.denom;

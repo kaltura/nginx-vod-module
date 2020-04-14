@@ -369,6 +369,8 @@ edash_packager_video_build_fragment_header(
 	dash_fragment_header_extensions_t header_extensions;
 
 	// get the header extensions
+	vod_memzero(&header_extensions, sizeof(header_extensions));
+
 	header_extensions.extra_traf_atoms_size = 
 		state->base.saiz_atom_size + 
 		state->base.saio_atom_size + 
@@ -420,6 +422,8 @@ edash_packager_audio_build_fragment_header(
 	vod_status_t rc;
 
 	// get the header extensions
+	vod_memzero(&header_extensions, sizeof(header_extensions));
+
 	header_extensions.extra_traf_atoms_size =
 		state->saiz_atom_size + 
 		state->saio_atom_size + 
@@ -502,6 +506,8 @@ edash_packager_get_fragment_writer(
 			"edash_packager_get_fragment_writer: using encryption passthrough");
 
 		// get the header extensions
+		vod_memzero(&header_extensions, sizeof(header_extensions));
+
 		header_extensions.extra_traf_atoms_size = passthrough_context.total_size + ATOM_HEADER_SIZE + sizeof(senc_atom_t);
 		header_extensions.write_extra_traf_atoms_callback = edash_packager_passthrough_write_encryption_atoms;
 		header_extensions.write_extra_traf_atoms_context = &passthrough_context;
