@@ -17,4 +17,6 @@ typedef struct
 // globals
 extern ngx_conf_enum_t dash_manifest_formats[];
 
+extern ngx_conf_enum_t dash_subtitle_formats[];
+
 #endif // _NGX_HTTP_VOD_DASH_CONF_H_INCLUDED_

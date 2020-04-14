@@ -9,6 +9,7 @@
 #define TTML_HEADER										\
 	"<?xml version=\"1.0\" encoding=\"utf-8\"?>\n"		\
 	"<tt xmlns=\"http://www.w3.org/ns/ttml\">\n"		\
+	"  <head/>\n"										\
 	"  <body>\n"										\
 	"    <div>\n"
 
@@ -127,10 +128,25 @@ ttml_copy_payload_without_styles(
 	return p;
 }
 
-static u_char*
-ttml_builder_write(
-	media_set_t* media_set,
-	u_char* p)
+size_t
+ttml_builder_get_max_size(media_set_t* media_set)
+{
+	media_track_t* cur_track;
+	size_t result;
+
+	result =
+		sizeof(TTML_HEADER) - 1 +
+		sizeof(TTML_FOOTER) - 1;
+	for (cur_track = media_set->filtered_tracks; cur_track < media_set->filtered_tracks_end; cur_track++)
+	{
+		result += cur_track->total_frames_size + TTML_P_MAX_SIZE * cur_track->frame_count;
+	}
+
+	return result;
+}
+
+u_char*
+ttml_builder_write(media_set_t* media_set, u_char* p)
 {
 	frame_list_part_t* part;
 	media_track_t* cur_track;
@@ -191,7 +207,6 @@ ttml_build_mp4(
 	uint32_t timescale,
 	vod_str_t* result)
 {
-	media_track_t* cur_track;
 	size_t traf_atom_size;
 	size_t moof_atom_size;
 	size_t mdat_atom_size;
@@ -202,13 +217,7 @@ ttml_build_mp4(
 	u_char* p;
 
 	// get the result size
-	ttml_size =
-		sizeof(TTML_HEADER) - 1 +
-		sizeof(TTML_FOOTER) - 1;
-	for (cur_track = media_set->filtered_tracks; cur_track < media_set->filtered_tracks_end; cur_track++)
-	{
-		ttml_size += cur_track->total_frames_size + TTML_P_MAX_SIZE * cur_track->frame_count;
-	}
+	ttml_size = ttml_builder_get_max_size(media_set);
 
 	traf_atom_size = ATOM_HEADER_SIZE +
 		ATOM_HEADER_SIZE + sizeof(ttml_tfhd_atom_t) +

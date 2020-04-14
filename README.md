@@ -1433,6 +1433,15 @@ Sets the MPD format, available options are:
 * `segmenttemplate` - uses SegmentTemplate, reporting a single duration for all fragments
 * `segmenttimeline` - uses SegmentTemplate and SegmentTimeline to explicitly set the duration of the fragments
 
+#### vod_dash_subtitle_format
+* **syntax**: `vod_dash_subtitle_format format`
+* **default**: `webvtt`
+* **context**: `http`, `server`, `location`
+
+Sets the format of the subtitles returned in the MPD, available options are:
+* `webvtt` - WebVTT
+* `smpte-tt` - SMPTE Timed Text
+
 #### vod_dash_init_mp4_pssh
 * **syntax**: `vod_dash_init_mp4_pssh on/off`
 * **default**: `on`
