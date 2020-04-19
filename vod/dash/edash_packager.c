@@ -106,6 +106,11 @@ edash_packager_write_content_protection(void* ctx, u_char* p, media_track_t* tra
 	vod_str_t base64;
 	vod_str_t pssh;
 
+	if (track->media_info.media_type > MEDIA_TYPE_AUDIO)	// ignore subtitles
+	{
+		return p;
+	}
+
 	p = vod_copy(p, VOD_EDASH_MANIFEST_CONTENT_PROTECTION_CENC, sizeof(VOD_EDASH_MANIFEST_CONTENT_PROTECTION_CENC) - 1);
 	for (cur_info = drm_info->pssh_array.first; cur_info < drm_info->pssh_array.last; cur_info++)
 	{
