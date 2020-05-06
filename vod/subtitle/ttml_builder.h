@@ -7,7 +7,11 @@
 // constants
 #define TTML_TIMESCALE (1000)
 
-// globals
+// functions
+size_t ttml_builder_get_max_size(media_set_t* media_set);
+
+u_char* ttml_builder_write(media_set_t* media_set, u_char* p);
+
 vod_status_t ttml_build_mp4(
 	request_context_t* request_context,
 	media_set_t* media_set,

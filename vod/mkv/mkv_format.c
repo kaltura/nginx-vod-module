@@ -882,6 +882,7 @@ mkv_metadata_parse(
 		cur_track->media_info.frames_timescale = timescale;
 		cur_track->media_info.codec_delay = track.codec_delay;
 		cur_track->media_info.bitrate = sequence->bitrate[media_type];
+		cur_track->media_info.avg_bitrate = sequence->avg_bitrate[media_type];
 
 		// Note: setting the duration of all tracks to the file duration, since there is no efficient
 		//	way to get the duration of a track

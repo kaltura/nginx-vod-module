@@ -1382,7 +1382,7 @@ segmenter_get_segment_durations_estimate_internal(
 	uint32_t alloc_count;
 	uint64_t* cur_clip_time = timing->times;
 
-	// initalize the align context
+	// initialize the align context
 	if (sequence->key_frame_durations != NULL)
 	{
 		context.align.request_context = request_context;
@@ -1418,7 +1418,7 @@ segmenter_get_segment_durations_estimate_internal(
 
 	for (;;)
 	{
-		// update fime fields
+		// update time fields
 		context.cur_time = *cur_clip_time - alignment_offset;
 		context.aligned_time = *cur_clip_time;
 		context.clip_end_time = context.aligned_time + cur_clip_duration;
@@ -1891,7 +1891,7 @@ segmenter_get_segment_durations_accurate(
 	if (main_track == NULL)
 	{
 		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-			"segmenter_get_segment_durations_accurate: didnt get any tracks");
+			"segmenter_get_segment_durations_accurate: didn't get any tracks");
 		return VOD_UNEXPECTED;
 	}
 

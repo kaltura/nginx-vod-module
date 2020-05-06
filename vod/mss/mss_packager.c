@@ -773,11 +773,16 @@ mss_packager_build_fragment_header(
 	}
 
 	// moof.traf.trun
-	p = mp4_fragment_write_trun_atom(
-		p,
-		sequence,
-		moof_atom_size + ATOM_HEADER_SIZE, 
-		0);
+	switch (sequence->media_type)
+	{
+	case MEDIA_TYPE_VIDEO:
+		p = mp4_fragment_write_video_trun_atom(p, sequence, moof_atom_size + ATOM_HEADER_SIZE, 0);
+		break;
+
+	case MEDIA_TYPE_AUDIO:
+		p = mp4_fragment_write_audio_trun_atom(p, sequence, moof_atom_size + ATOM_HEADER_SIZE);
+		break;
+	}
 
 	// moof.traf.tfxd
 	mss_get_segment_timing_info(sequence, &timing_info);

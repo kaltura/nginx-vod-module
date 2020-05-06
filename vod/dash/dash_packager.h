@@ -16,7 +16,14 @@ enum {
 	FORMAT_SEGMENT_TEMPLATE,
 };
 
+enum {
+	SUBTITLE_FORMAT_WEBVTT,
+	SUBTITLE_FORMAT_SMPTE_TT,
+};
+
 typedef u_char* (*dash_write_extra_traf_atoms_callback_t)(void* context, u_char* p, size_t mdat_atom_start);
+
+typedef u_char* (*dash_write_mdat_atom_callback_t)(void* context, u_char* p);
 
 typedef u_char* (*write_tags_callback_t)(void* context, u_char* p, media_track_t* track);
 
@@ -32,6 +39,7 @@ typedef struct {
 	vod_str_t fragment_file_name_prefix;
 	vod_str_t subtitle_file_name_prefix;
 	vod_uint_t manifest_format;
+	vod_uint_t subtitle_format;
 	vod_uint_t duplicate_bitrate_threshold;
 	bool_t write_playready_kid;		// TODO: remove
 	bool_t use_base_url_tag;		// TODO: remove - if supported by all devices, always use BaseURL
@@ -46,6 +54,10 @@ typedef struct {
 	size_t extra_traf_atoms_size;
 	dash_write_extra_traf_atoms_callback_t write_extra_traf_atoms_callback;
 	void* write_extra_traf_atoms_context;
+
+	size_t mdat_atom_max_size;
+	dash_write_mdat_atom_callback_t write_mdat_atom_callback;
+	void* write_mdat_atom_context;
 } dash_fragment_header_extensions_t;
 
 // functions

@@ -2830,6 +2830,9 @@ mp4_parser_process_moov_atom_callback(void* ctx, atom_info_t* atom_info)
 		metadata_parse_context.media_info.bitrate = bitrate;
 	}
 
+	bitrate = sequence->avg_bitrate[metadata_parse_context.media_info.media_type];
+	metadata_parse_context.media_info.avg_bitrate = bitrate;
+
 	result_track->trak_atom_infos = trak_atom_infos;
 	result_track->media_info = metadata_parse_context.media_info;
 	result_track->sinf_atom = metadata_parse_context.sinf_atom;
