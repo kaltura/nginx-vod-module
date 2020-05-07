@@ -2707,7 +2707,8 @@ media_set_parse_json(
 					segmenter,
 					result,
 					parse_all_clips,
-					&context.clip_ranges);
+					&context.clip_ranges,
+					&context.base_clip_index);
 				if (rc != VOD_OK)
 				{
 					return rc;
