@@ -295,6 +295,7 @@ edash_packager_build_init_mp4(
 {
 	drm_info_t* drm_info = (drm_info_t*)media_set->sequences[0].drm_info;
 	atom_writer_t* stsd_atom_writers;
+	atom_writer_t* ppssh_atom_writer;
 	atom_writer_t pssh_atom_writer;
 	drm_system_info_t* cur_info;
 	vod_status_t rc;
@@ -313,25 +314,35 @@ edash_packager_build_init_mp4(
 		return rc;
 	}
 
-	// build the pssh writer
-	pssh_atom_writer.atom_size = 0;
-	for (cur_info = drm_info->pssh_array.first; cur_info < drm_info->pssh_array.last; cur_info++)
+	if ((flags & EDASH_INIT_MP4_WRITE_PSSH) != 0 &&
+		media_set->track_count[MEDIA_TYPE_VIDEO] + media_set->track_count[MEDIA_TYPE_AUDIO] > 0)
 	{
-		pssh_atom_writer.atom_size += ATOM_HEADER_SIZE + sizeof(pssh_atom_t) + cur_info->data.len;
-		if (edash_pssh_v1(cur_info))
+		// build the pssh writer
+		pssh_atom_writer.atom_size = 0;
+		for (cur_info = drm_info->pssh_array.first; cur_info < drm_info->pssh_array.last; cur_info++)
 		{
-			pssh_atom_writer.atom_size -= sizeof(uint32_t);
+			pssh_atom_writer.atom_size += ATOM_HEADER_SIZE + sizeof(pssh_atom_t) + cur_info->data.len;
+			if (edash_pssh_v1(cur_info))
+			{
+				pssh_atom_writer.atom_size -= sizeof(uint32_t);
+			}
 		}
+		pssh_atom_writer.write = edash_packager_write_psshs;
+		pssh_atom_writer.context = &drm_info->pssh_array;
+
+		ppssh_atom_writer = &pssh_atom_writer;
 	}
-	pssh_atom_writer.write = edash_packager_write_psshs;
-	pssh_atom_writer.context = &drm_info->pssh_array;
+	else
+	{
+		ppssh_atom_writer = NULL;
+	}
 
 	// build the init segment
 	rc = mp4_init_segment_build(
 		request_context,
 		media_set,
 		size_only,
-		(flags & EDASH_INIT_MP4_WRITE_PSSH) != 0 ? &pssh_atom_writer : NULL,
+		ppssh_atom_writer,
 		stsd_atom_writers,
 		result);
 	if (rc != VOD_OK)
