@@ -280,7 +280,6 @@ typedef struct {
 	vod_status_t(*init_metadata_reader)(
 		request_context_t* request_context, 
 		vod_str_t* buffer,
-		size_t initial_read_size,
 		size_t max_metadata_size,
 		void** ctx);
 

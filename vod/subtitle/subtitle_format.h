@@ -18,7 +18,6 @@ typedef struct {
 // functions
 vod_status_t subtitle_reader_init(
 	request_context_t* request_context,
-	size_t initial_read_size,
 	void** ctx);
 
 vod_status_t subtitle_reader_read(
