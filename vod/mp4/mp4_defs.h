@@ -35,6 +35,7 @@
 #define ATOM_NAME_AVCC (0x43637661)		// advanced video codec configuration
 #define ATOM_NAME_HVCC (0x43637668)		// high efficiency video codec configuration
 #define ATOM_NAME_VPCC (0x43637076)		// vp9 codec configuration
+#define ATOM_NAME_AV1C (0x43317661)		// av1 codec configuration
 #define ATOM_NAME_ESDS (0x73647365)		// elementary stream description
 #define ATOM_NAME_DAC3 (0x33636164)
 #define ATOM_NAME_DEC3 (0x33636564)
@@ -69,6 +70,9 @@
 
 // vp9 4cc tags
 #define FORMAT_VP09    (0x39307076)
+
+// av1 4cc tags
+#define FORMAT_AV1     (0x31307661)
 
 // audio 4cc tags
 #define FORMAT_MP4A    (0x6134706d)
