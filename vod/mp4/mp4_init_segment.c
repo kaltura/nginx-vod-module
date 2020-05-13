@@ -105,6 +105,19 @@ static const u_char hdlr_audio_atom[] = {
 	0x00
 };
 
+static const u_char hdlr_subtitle_atom[] = {
+	0x00, 0x00, 0x00, 0x25,		// size
+	0x68, 0x64, 0x6c, 0x72,		// hdlr
+	0x00, 0x00, 0x00, 0x00,		// version + flags
+	0x00, 0x00, 0x00, 0x00,		// pre defined
+	0x73, 0x75, 0x62, 0x74,		// handler type = subt
+	0x00, 0x00, 0x00, 0x00,		// reserved1
+	0x00, 0x00, 0x00, 0x00,		// reserved2
+	0x00, 0x00, 0x00, 0x00,		// reserved3
+	0x73, 0x75, 0x62, 0x74,		// name = subt\0
+	0x00
+};
+
 static const u_char dinf_atom[] = {
 	0x00, 0x00, 0x00, 0x24,		// atom size
 	0x64, 0x69, 0x6e, 0x66,		// dinf
@@ -130,6 +143,79 @@ static const u_char smhd_atom[] = {
 	0x73, 0x6d, 0x68, 0x64,		// smhd
 	0x00, 0x00, 0x00, 0x00,		// version & flags
 	0x00, 0x00, 0x00, 0x00,		// reserved
+};
+
+static const u_char sthd_atom[] = {
+	0x00, 0x00, 0x00, 0x0C,		// atom size
+	0x73, 0x74, 0x68, 0x64,		// sthd
+	0x00, 0x00, 0x00, 0x00,		// version & flags
+};
+
+static const u_char smpte_tt_stsd_atom[] = {
+	0x00, 0x00, 0x00, 0xff,		// size
+	0x73, 0x74, 0x73, 0x64,		// stsd
+	0x00, 0x00, 0x00, 0x00,		// version & flags
+	0x00, 0x00, 0x00, 0x01,		// entries
+	0x00, 0x00, 0x00, 0xef,		// size
+	0x73, 0x74, 0x70, 0x70,		// stpp
+	0x00, 0x00, 0x00, 0x00,		// reserved
+	0x00, 0x00, 0x00, 0x01,		// reserved + data_reference_index
+	0x68, 0x74, 0x74, 0x70,		// namespace:
+	0x3a, 0x2f, 0x2f, 0x77,		//	http://www.smpte-ra.org/schemas/2052-1/2013/smpte-tt
+	0x77, 0x77, 0x2e, 0x73,		//	http://www.w3.org/ns/ttml
+	0x6d, 0x70, 0x74, 0x65,		//	http://www.w3.org/ns/ttml#metadata
+	0x2d, 0x72, 0x61, 0x2e,		//	http://www.w3.org/ns/ttml#parameter
+	0x6f, 0x72, 0x67, 0x2f,		//	http://www.w3.org/ns/ttml#styling
+	0x73, 0x63, 0x68, 0x65,		//	urn:ebu:tt:metadata
+	0x6d, 0x61, 0x73, 0x2f,		//	urn:ebu:tt:style
+	0x32, 0x30, 0x35, 0x32,
+	0x2d, 0x31, 0x2f, 0x32,
+	0x30, 0x31, 0x33, 0x2f,
+	0x73, 0x6d, 0x70, 0x74,
+	0x65, 0x2d, 0x74, 0x74,
+	0x20, 0x68, 0x74, 0x74,
+	0x70, 0x3a, 0x2f, 0x2f,
+	0x77, 0x77, 0x77, 0x2e,
+	0x77, 0x33, 0x2e, 0x6f,
+	0x72, 0x67, 0x2f, 0x6e,
+	0x73, 0x2f, 0x74, 0x74,
+	0x6d, 0x6c, 0x20, 0x68,
+	0x74, 0x74, 0x70, 0x3a,
+	0x2f, 0x2f, 0x77, 0x77,
+	0x77, 0x2e, 0x77, 0x33,
+	0x2e, 0x6f, 0x72, 0x67,
+	0x2f, 0x6e, 0x73, 0x2f,
+	0x74, 0x74, 0x6d, 0x6c,
+	0x23, 0x6d, 0x65, 0x74,
+	0x61, 0x64, 0x61, 0x74,
+	0x61, 0x20, 0x68, 0x74,
+	0x74, 0x70, 0x3a, 0x2f,
+	0x2f, 0x77, 0x77, 0x77,
+	0x2e, 0x77, 0x33, 0x2e,
+	0x6f, 0x72, 0x67, 0x2f,
+	0x6e, 0x73, 0x2f, 0x74,
+	0x74, 0x6d, 0x6c, 0x23,
+	0x70, 0x61, 0x72, 0x61,
+	0x6d, 0x65, 0x74, 0x65,
+	0x72, 0x20, 0x68, 0x74,
+	0x74, 0x70, 0x3a, 0x2f,
+	0x2f, 0x77, 0x77, 0x77,
+	0x2e, 0x77, 0x33, 0x2e,
+	0x6f, 0x72, 0x67, 0x2f,
+	0x6e, 0x73, 0x2f, 0x74,
+	0x74, 0x6d, 0x6c, 0x23,
+	0x73, 0x74, 0x79, 0x6c,
+	0x69, 0x6e, 0x67, 0x20,
+	0x75, 0x72, 0x6e, 0x3a,
+	0x65, 0x62, 0x75, 0x3a,
+	0x74, 0x74, 0x3a, 0x6d,
+	0x65, 0x74, 0x61, 0x64,
+	0x61, 0x74, 0x61, 0x20,
+	0x75, 0x72, 0x6e, 0x3a,
+	0x65, 0x62, 0x75, 0x3a,
+	0x74, 0x74, 0x3a, 0x73,
+	0x74, 0x79, 0x6c, 0x65,
+	0x00, 0x00, 0x00,			// schema_location + auxiliary_mime_types (null)
 };
 
 static const u_char fixed_stbl_atoms[] = {
@@ -165,7 +251,11 @@ mp4_init_segment_get_track_sizes(
 	size_t mdhd_atom_size;
 	size_t hdlr_atom_size = 0;
 
-	if (stsd_atom_writer != NULL)
+	if (cur_track->media_info.media_type == MEDIA_TYPE_SUBTITLE)
+	{
+		result->stsd_size = sizeof(smpte_tt_stsd_atom);
+	}
+	else if (stsd_atom_writer != NULL)
 	{
 		result->stsd_size = stsd_atom_writer->atom_size;
 	}
@@ -197,6 +287,10 @@ mp4_init_segment_get_track_sizes(
 	case MEDIA_TYPE_AUDIO:
 		result->minf_size += sizeof(smhd_atom);
 		hdlr_atom_size = sizeof(hdlr_audio_atom);
+		break;
+	case MEDIA_TYPE_SUBTITLE:
+		result->minf_size += sizeof(sthd_atom);
+		hdlr_atom_size = sizeof(hdlr_subtitle_atom);
 		break;
 	}
 	result->mdia_size = ATOM_HEADER_SIZE + mdhd_atom_size + hdlr_atom_size + result->minf_size;
@@ -540,6 +634,7 @@ mp4_init_segment_calc_size(
 	init_mp4_sizes_t* result)
 {
 	media_track_t* first_track = media_set->filtered_tracks;
+	atom_writer_t* stsd_atom_writer;
 	track_sizes_t* track_sizes;
 	uint32_t timescale = first_track->media_info.timescale;
 	uint32_t i;
@@ -568,10 +663,19 @@ mp4_init_segment_calc_size(
 	{
 		track_sizes = &result->track_sizes[i];
 
+		if (stsd_atom_writers != NULL && stsd_atom_writers[i].write != NULL)
+		{
+			stsd_atom_writer = &stsd_atom_writers[i];
+		}
+		else
+		{
+			stsd_atom_writer = NULL;
+		}
+
 		mp4_init_segment_get_track_sizes(
 			media_set, 
 			&first_track[i], 
-			stsd_atom_writers != NULL ? &stsd_atom_writers[i] : NULL, 
+			stsd_atom_writer,
 			track_sizes);
 
 		result->moov_atom_size += track_sizes->trak_size;
@@ -691,6 +795,9 @@ mp4_init_segment_write(
 		case MEDIA_TYPE_AUDIO:
 			p = vod_copy(p, hdlr_audio_atom, sizeof(hdlr_audio_atom));
 			break;
+		case MEDIA_TYPE_SUBTITLE:
+			p = vod_copy(p, hdlr_subtitle_atom, sizeof(hdlr_subtitle_atom));
+			break;
 		}
 
 		// moov.trak.mdia.minf
@@ -703,12 +810,19 @@ mp4_init_segment_write(
 		case MEDIA_TYPE_AUDIO:
 			p = vod_copy(p, smhd_atom, sizeof(smhd_atom));
 			break;
+		case MEDIA_TYPE_SUBTITLE:
+			p = vod_copy(p, sthd_atom, sizeof(sthd_atom));
+			break;
 		}
 		p = vod_copy(p, dinf_atom, sizeof(dinf_atom));
 
 		// moov.trak.mdia.minf.stbl
 		write_atom_header(p, track_sizes->stbl_size, 's', 't', 'b', 'l');
-		if (stsd_atom_writers != NULL)
+		if (cur_track->media_info.media_type == MEDIA_TYPE_SUBTITLE)
+		{
+			p = vod_copy(p, smpte_tt_stsd_atom, sizeof(smpte_tt_stsd_atom));
+		}
+		else if (stsd_atom_writers != NULL && stsd_atom_writers[i].write != NULL)
 		{
 			p = stsd_atom_writers[i].write(stsd_atom_writers[i].context, p);
 		}
@@ -1012,11 +1126,11 @@ mp4_init_segment_get_encrypted_stsd_writers(
 	u_char* iv,
 	atom_writer_t** result)
 {
-	media_track_t* first_track = media_set->filtered_tracks;
+	media_track_t* cur_track;
+	media_track_t* last_track;
 	stsd_writer_context_t* stsd_writer_context;
 	atom_writer_t* stsd_atom_writer;
 	vod_status_t rc;
-	uint32_t i;
 
 	// allocate the context
 	stsd_atom_writer = vod_alloc(request_context->pool,
@@ -1032,10 +1146,16 @@ mp4_init_segment_get_encrypted_stsd_writers(
 
 	stsd_writer_context = (void*)(stsd_atom_writer + media_set->total_track_count);
 
-	for (i = 0;
-		i < media_set->total_track_count;
-		i++, stsd_writer_context++, stsd_atom_writer++)
+	cur_track = media_set->filtered_tracks;
+	last_track = cur_track + media_set->total_track_count;
+	for (; cur_track < last_track; cur_track++, stsd_atom_writer++)
 	{
+		if (cur_track->media_info.media_type > MEDIA_TYPE_AUDIO) // subtitles
+		{
+			vod_memzero(stsd_atom_writer, sizeof(*stsd_atom_writer));
+			continue;
+		}
+
 		// build the stsd writer for the current track
 		stsd_writer_context->scheme_type = scheme_type;
 		stsd_writer_context->has_clear_lead = has_clear_lead;
@@ -1044,7 +1164,7 @@ mp4_init_segment_get_encrypted_stsd_writers(
 
 		rc = mp4_init_segment_init_encrypted_stsd_writer(
 			request_context,
-			&first_track[i],
+			cur_track,
 			stsd_writer_context);
 		if (rc != VOD_OK)
 		{
@@ -1056,6 +1176,7 @@ mp4_init_segment_get_encrypted_stsd_writers(
 		stsd_atom_writer->atom_size = stsd_writer_context->stsd_atom_size;
 		stsd_atom_writer->write = mp4_init_segment_write_encrypted_stsd;
 		stsd_atom_writer->context = stsd_writer_context;
+		stsd_writer_context++;
 	}
 
 	return VOD_OK;

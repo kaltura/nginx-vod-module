@@ -62,11 +62,23 @@ u_char* mp4_fragment_write_tfdt64_atom(u_char* p, uint64_t earliest_pres_time);
 
 size_t mp4_fragment_get_trun_atom_size(uint32_t media_type, uint32_t frame_count);
 
-u_char* mp4_fragment_write_trun_atom(
-	u_char* p, 
-	media_sequence_t* sequence, 
+u_char* mp4_fragment_write_video_trun_atom(
+	u_char* p,
+	media_sequence_t* sequence,
 	uint32_t first_frame_offset,
 	uint32_t version);
+
+u_char* mp4_fragment_write_audio_trun_atom(
+	u_char* p,
+	media_sequence_t* sequence,
+	uint32_t first_frame_offset);
+
+u_char* mp4_fragment_write_subtitle_trun_atom(
+	u_char* p,
+	uint32_t first_frame_offset,
+	uint32_t duration,
+	u_char** sample_size);
+
 
 vod_status_t mp4_fragment_frame_writer_init(
 	request_context_t* request_context,

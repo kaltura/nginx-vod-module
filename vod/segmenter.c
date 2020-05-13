@@ -1147,7 +1147,8 @@ segmenter_get_live_window(
 	segmenter_conf_t* conf,
 	media_set_t* media_set,
 	bool_t parse_all_clips,
-	get_clip_ranges_result_t* clip_ranges)
+	get_clip_ranges_result_t* clip_ranges,
+	uint32_t* base_clip_index)
 {
 	live_window_start_end_t window;
 	media_clip_timing_t temp_timing;
@@ -1292,17 +1293,19 @@ segmenter_get_live_window(
 		}
 
 		clip_ranges->clip_count = timing->total_count;
-		clip_ranges->min_clip_index = window.start_clip_index;
+		clip_ranges->min_clip_index = 0;
 	}
 	else
 	{
 		// parse only the last clip in each sequence, assume subsequent clips have the same media info
 		clip_ranges->clip_count = 1;
-		clip_ranges->min_clip_index = window.end_clip_index;
+		clip_ranges->min_clip_index = window.end_clip_index - window.start_clip_index;
 	}
 
-	clip_ranges->max_clip_index = window.end_clip_index;
+	clip_ranges->max_clip_index = window.end_clip_index - window.start_clip_index;
 	clip_ranges->clip_time = timing->first_time;
+
+	*base_clip_index += window.start_clip_index;
 
 	return VOD_OK;
 }
@@ -1382,7 +1385,7 @@ segmenter_get_segment_durations_estimate_internal(
 	uint32_t alloc_count;
 	uint64_t* cur_clip_time = timing->times;
 
-	// initalize the align context
+	// initialize the align context
 	if (sequence->key_frame_durations != NULL)
 	{
 		context.align.request_context = request_context;
@@ -1418,7 +1421,7 @@ segmenter_get_segment_durations_estimate_internal(
 
 	for (;;)
 	{
-		// update fime fields
+		// update time fields
 		context.cur_time = *cur_clip_time - alignment_offset;
 		context.aligned_time = *cur_clip_time;
 		context.clip_end_time = context.aligned_time + cur_clip_duration;
@@ -1891,7 +1894,7 @@ segmenter_get_segment_durations_accurate(
 	if (main_track == NULL)
 	{
 		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-			"segmenter_get_segment_durations_accurate: didnt get any tracks");
+			"segmenter_get_segment_durations_accurate: didn't get any tracks");
 		return VOD_UNEXPECTED;
 	}
 

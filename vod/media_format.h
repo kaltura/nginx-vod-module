@@ -169,6 +169,7 @@ typedef struct media_info_s {
 	uint64_t duration;
 	uint32_t duration_millis;
 	uint32_t bitrate;
+	uint32_t avg_bitrate;
 	uint32_t min_frame_duration;	// valid only for video		XXXXX move to video_media_info_t
 	uint32_t codec_id;
 	vod_str_t codec_name;
@@ -280,7 +281,6 @@ typedef struct {
 	vod_status_t(*init_metadata_reader)(
 		request_context_t* request_context, 
 		vod_str_t* buffer,
-		size_t initial_read_size,
 		size_t max_metadata_size,
 		void** ctx);
 

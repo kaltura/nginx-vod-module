@@ -1080,7 +1080,8 @@ ngx_http_vod_parse_uri_path(
 		cur_sequence->first_key_frame_offset = 0;
 		cur_sequence->key_frame_durations = NULL;
 		cur_sequence->drm_info = NULL;
-		vod_memzero(cur_sequence->bitrate, sizeof(cur_sequence->bitrate));
+		ngx_memzero(cur_sequence->bitrate, sizeof(cur_sequence->bitrate));
+		ngx_memzero(cur_sequence->avg_bitrate, sizeof(cur_sequence->avg_bitrate));
 
 		parts[1] = multi_uri.middle_parts[i];
 		rc = ngx_http_vod_merge_string_parts(r, parts, 3, &cur_uri);
