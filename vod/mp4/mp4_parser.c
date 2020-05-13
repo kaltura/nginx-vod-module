@@ -2633,13 +2633,11 @@ mp4_parser_process_moov_atom_callback(void* ctx, atom_info_t* atom_info)
 		case FORMAT_AVC1:
 		case FORMAT_h264:
 		case FORMAT_H264:
-		case FORMAT_DVA1:
 			metadata_parse_context.media_info.codec_id = VOD_CODEC_ID_AVC;
 			break;
 
 		case FORMAT_HEV1:
 		case FORMAT_HVC1:
-		case FORMAT_DVH1:
 			metadata_parse_context.media_info.codec_id = VOD_CODEC_ID_HEVC;
 			break;
 

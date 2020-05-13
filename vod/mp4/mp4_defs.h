@@ -62,12 +62,10 @@
 #define FORMAT_AVC1	   (0x31637661)
 #define FORMAT_h264	   (0x34363268)
 #define FORMAT_H264	   (0x34363248)
-#define FORMAT_DVA1	   (0x31617664)
 
 // h265 4cc tags
 #define FORMAT_HEV1	   (0x31766568)
 #define FORMAT_HVC1	   (0x31637668)
-#define FORMAT_DVH1	   (0x31687664)
 
 // vp9 4cc tags
 #define FORMAT_VP09    (0x39307076)
