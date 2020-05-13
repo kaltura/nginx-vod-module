@@ -88,7 +88,8 @@ typedef vod_status_t(*parser_init_t)(vod_pool_t* pool, vod_pool_t* temp_pool);
 // forward decls
 static vod_status_t media_set_parse_tracks_spec(void* ctx, vod_json_value_t* value, void* dest);
 static vod_status_t media_set_parse_int64(void* ctx, vod_json_value_t* value, void* dest);
-static vod_status_t media_set_parse_encryption_key(void* ctx, vod_json_value_t* value, void* dest);
+static vod_status_t media_set_parse_base64_string(void* ctx, vod_json_value_t* value, void* dest);
+static vod_status_t media_set_parse_encryption_scheme(void* ctx, vod_json_value_t* value, void* dest);
 static vod_status_t media_set_parse_source(void* ctx, vod_json_object_t* element, void** result);
 static vod_status_t media_set_parse_language(void* ctx, vod_json_value_t* value, void* dest);
 static vod_status_t media_set_parse_clips_array(void* ctx, vod_json_value_t* value, void* dest);
@@ -110,7 +111,9 @@ static json_object_value_def_t media_clip_source_params[] = {
 	{ vod_string("path"),			VOD_JSON_STRING,	offsetof(media_clip_source_t, mapped_uri), media_set_parse_null_term_string },
 	{ vod_string("tracks"),			VOD_JSON_STRING,	offsetof(media_clip_source_t, tracks_mask), media_set_parse_tracks_spec },
 	{ vod_string("clipFrom"),		VOD_JSON_INT,		offsetof(media_clip_source_t, clip_from), media_set_parse_int64 },
-	{ vod_string("encryptionKey"),	VOD_JSON_STRING,	offsetof(media_clip_source_t, encryption_key), media_set_parse_encryption_key },
+	{ vod_string("encryptionScheme"), VOD_JSON_STRING,	offsetof(media_clip_source_t, encryption.scheme), media_set_parse_encryption_scheme },
+	{ vod_string("encryptionKey"),	VOD_JSON_STRING,	offsetof(media_clip_source_t, encryption.key), media_set_parse_base64_string },
+	{ vod_string("encryptionIv"),	VOD_JSON_STRING,	offsetof(media_clip_source_t, encryption.iv), media_set_parse_base64_string },
 	{ vod_null_string, 0, 0, NULL }
 };
 
@@ -158,6 +161,13 @@ static json_object_key_def_t media_set_params[] = {
 	{ vod_string("clipFrom"),						VOD_JSON_INT,	MEDIA_SET_PARAM_CLIP_FROM },
 	{ vod_string("clipTo"),							VOD_JSON_INT,	MEDIA_SET_PARAM_CLIP_TO },
 	{ vod_null_string, 0, 0 }
+};
+
+// Note: must match media_clip_source_enc_scheme_t in order
+static vod_str_t encryption_schemes[] = {
+    ngx_string("cenc"),
+    ngx_string("aes-cbc"),
+    ngx_null_string
 };
 
 static vod_str_t type_key = vod_string("type");
@@ -286,40 +296,47 @@ media_set_parse_int64(
 }
 
 static vod_status_t
-media_set_parse_encryption_key(
+media_set_parse_encryption_scheme(
+	void* ctx,
+	vod_json_value_t* value,
+	void* dest)
+{
+	media_clip_source_enc_scheme_t* result = dest;
+	media_filter_parse_context_t* context = ctx;
+	vod_str_t* cur;
+
+	for (cur = encryption_schemes; cur->len; cur++)
+	{
+		if (value->v.str.len == cur->len && vod_strncasecmp(value->v.str.data, cur->data, cur->len) == 0)
+		{
+			*result = cur - encryption_schemes;
+			return NGX_OK;
+		}
+	}
+
+	vod_log_error(VOD_LOG_ERR, context->request_context->log, 0,
+		"media_set_parse_encryption_scheme: invalid scheme %V", &value->v.str);
+	return VOD_BAD_MAPPING;
+}
+
+static vod_status_t
+media_set_parse_base64_string(
 	void* ctx,
 	vod_json_value_t* value,
 	void* dest)
 {
 	media_filter_parse_context_t* context = ctx;
-#if (VOD_HAVE_OPENSSL_EVP)
 	vod_status_t rc;
-	u_char* result;
 
-	result = vod_alloc(context->request_context->pool, MP4_AES_CTR_KEY_SIZE);
-	if (result == NULL)
-	{
-		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, context->request_context->log, 0,
-			"media_set_parse_encryption_key: vod_alloc failed");
-		return VOD_ALLOC_FAILED;
-	}
-
-	*(u_char**)dest = result;
-
-	rc = parse_utils_parse_fixed_base64_string(&value->v.str, result, MP4_AES_CTR_KEY_SIZE);
+	rc = parse_utils_parse_variable_base64_string(context->request_context->pool, &value->v.str, dest);
 	if (rc != VOD_OK)
 	{
 		vod_log_error(VOD_LOG_ERR, context->request_context->log, 0,
-			"media_set_parse_encryption_key: failed to parse encryptionKey %V", &value->v.str);
+			"media_set_parse_base64_string: failed to parse %V", &value->v.str);
 		return VOD_BAD_MAPPING;
 	}
 
 	return VOD_OK;
-#else
-	vod_log_error(VOD_LOG_ERR, context->request_context->log, 0,
-		"media_set_parse_encryption_key: decryption not supported, recompile with openssl to enable it");
-	return VOD_BAD_REQUEST;
-#endif // VOD_HAVE_OPENSSL_EVP
 }
 
 vod_status_t 
@@ -2707,7 +2724,8 @@ media_set_parse_json(
 					segmenter,
 					result,
 					parse_all_clips,
-					&context.clip_ranges);
+					&context.clip_ranges,
+					&context.base_clip_index);
 				if (rc != VOD_OK)
 				{
 					return rc;

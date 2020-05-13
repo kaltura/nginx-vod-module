@@ -1147,7 +1147,8 @@ segmenter_get_live_window(
 	segmenter_conf_t* conf,
 	media_set_t* media_set,
 	bool_t parse_all_clips,
-	get_clip_ranges_result_t* clip_ranges)
+	get_clip_ranges_result_t* clip_ranges,
+	uint32_t* base_clip_index)
 {
 	live_window_start_end_t window;
 	media_clip_timing_t temp_timing;
@@ -1292,17 +1293,19 @@ segmenter_get_live_window(
 		}
 
 		clip_ranges->clip_count = timing->total_count;
-		clip_ranges->min_clip_index = window.start_clip_index;
+		clip_ranges->min_clip_index = 0;
 	}
 	else
 	{
 		// parse only the last clip in each sequence, assume subsequent clips have the same media info
 		clip_ranges->clip_count = 1;
-		clip_ranges->min_clip_index = window.end_clip_index;
+		clip_ranges->min_clip_index = window.end_clip_index - window.start_clip_index;
 	}
 
-	clip_ranges->max_clip_index = window.end_clip_index;
+	clip_ranges->max_clip_index = window.end_clip_index - window.start_clip_index;
 	clip_ranges->clip_time = timing->first_time;
+
+	*base_clip_index += window.start_clip_index;
 
 	return VOD_OK;
 }

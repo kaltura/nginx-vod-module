@@ -18,6 +18,7 @@
 
 #if (VOD_HAVE_OPENSSL_EVP)
 #include "mp4_cenc_decrypt.h"
+#include "mp4_aes_ctr.h"
 #endif // VOD_HAVE_OPENSSL_EVP
 
 // TODO: use iterators from mp4_parser_base.c to reduce code duplication
@@ -3064,6 +3065,7 @@ mp4_parser_parse_frames(
 	mp4_track_base_metadata_t* last_track = first_track + metadata->base.tracks.nelts;
 	mp4_track_base_metadata_t* cur_track;
 	frames_parse_context_t context;
+	media_clip_source_t* source;
 	frames_source_t* frames_source;
 	media_track_t* result_track;
 	input_frame_t* cur_frame;
@@ -3101,6 +3103,8 @@ mp4_parser_parse_frames(
 	context.parse_params = *parse_params;
 	context.clip_from = rescale_time(parse_params->clip_from, 1000, parse_params->range->timescale);
 	context.mvhd_timescale = metadata->mvhd_timescale;
+
+	source = parse_params->source;
 
 	for (cur_track = first_track; cur_track < last_track; cur_track++)
 	{
@@ -3183,7 +3187,7 @@ mp4_parser_parse_frames(
 		rc = frames_source_cache_init(
 			request_context,
 			read_cache_state,
-			parse_params->source,
+			source,
 			media_type,
 			&frames_source_context);
 		if (rc != VOD_OK)
@@ -3194,18 +3198,32 @@ mp4_parser_parse_frames(
 		if (context.encryption_info.auxiliary_info < context.encryption_info.auxiliary_info_end)
 		{
 #if (VOD_HAVE_OPENSSL_EVP)
-			if (parse_params->source->encryption_key == NULL)
+			if (source->encryption.key.len == 0)
 			{
 				vod_log_error(VOD_LOG_ERR, request_context->log, 0,
 					"mp4_parser_parse_frames: media is encrypted and no decryption key was supplied");
 				return VOD_BAD_REQUEST;
 			}
 
+			if (source->encryption.key.len != MP4_AES_CTR_KEY_SIZE)
+			{
+				vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+					"mp4_parser_parse_frames: invalid encryption key len %uz", source->encryption.key.len);
+				return VOD_BAD_MAPPING;
+			}
+
+			if (source->encryption.scheme != MCS_ENC_CENC)
+			{
+				vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+					"mp4_parser_parse_frames: invalid encryption scheme type %d", source->encryption.scheme);
+				return VOD_BAD_MAPPING;
+			}
+
 			rc = mp4_cenc_decrypt_init(
 				request_context,
 				frames_source,
 				frames_source_context,
-				parse_params->source->encryption_key,
+				source->encryption.key.data,
 				&context.encryption_info,
 				&frames_source_context);
 			if (rc != VOD_OK)
@@ -3247,9 +3265,9 @@ mp4_parser_parse_frames(
 		{
 			last_frame = result_track->frames.last_frame - 1;
 			last_offset = last_frame->offset + last_frame->size;
-			if (last_offset > parse_params->source->last_offset)
+			if (last_offset > source->last_offset)
 			{
-				parse_params->source->last_offset = last_offset;
+				source->last_offset = last_offset;
 			}
 		}
 

@@ -131,7 +131,8 @@ vod_status_t segmenter_get_live_window(
 	segmenter_conf_t* conf,
 	media_set_t* media_set,
 	bool_t parse_all_clips,
-	get_clip_ranges_result_t* clip_ranges);
+	get_clip_ranges_result_t* clip_ranges,
+	uint32_t* base_clip_index);
 
 // manifest duration
 uint64_t segmenter_get_total_duration(

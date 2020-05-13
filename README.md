@@ -555,9 +555,13 @@ Optional fields:
 	which means the first video track and the first audio track
 * `clipFrom` - an integer that specifies an offset in milliseconds, from the beginning of the 
 	media file, from which to start loading frames
-* `encryptionKey` - a base64 encoded string containing the key (128 bit) that should be used
-	to decrypt the media file. 
-	
+* `encryptionKey` - a base64 encoded string containing the key (128/192/256 bit) that should be used
+	to decrypt the file.
+* `encryptionIv` - a base64 encoded string containing the iv (128 bit) that should be used
+	to decrypt the file.
+* `encryptionScheme` - the encryption scheme that was used to encrypt the file. Currently,
+	only two schemes are supported - `cenc` for MP4 files, `aes-cbc` for caption files.
+
 #### Rate filter clip
 
 Mandatory fields:

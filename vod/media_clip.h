@@ -40,6 +40,18 @@ typedef struct media_clip_s {
 	uint32_t source_count;
 } media_clip_t;
 
+
+typedef enum {
+	MCS_ENC_CENC,
+	MCS_ENC_AES_CBC,
+} media_clip_source_enc_scheme_t;
+
+typedef struct {
+	media_clip_source_enc_scheme_t scheme;
+	ngx_str_t key;
+	ngx_str_t iv;
+} media_clip_source_enc_t;
+
 struct media_clip_source_s;
 typedef struct media_clip_source_s media_clip_source_t;
 
@@ -59,7 +71,7 @@ struct media_clip_source_s {
 	uint64_t clip_from;
 	uint32_t tracks_mask[MEDIA_TYPE_COUNT];
 	uint32_t time_shift[MEDIA_TYPE_COUNT];
-	u_char* encryption_key;
+	media_clip_source_enc_t encryption;
 
 	// derived params
 	vod_str_t stripped_uri;		// without any params like clipTo

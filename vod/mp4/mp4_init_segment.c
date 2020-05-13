@@ -634,6 +634,7 @@ mp4_init_segment_calc_size(
 	init_mp4_sizes_t* result)
 {
 	media_track_t* first_track = media_set->filtered_tracks;
+	atom_writer_t* stsd_atom_writer;
 	track_sizes_t* track_sizes;
 	uint32_t timescale = first_track->media_info.timescale;
 	uint32_t i;
@@ -662,10 +663,19 @@ mp4_init_segment_calc_size(
 	{
 		track_sizes = &result->track_sizes[i];
 
+		if (stsd_atom_writers != NULL && stsd_atom_writers[i].write != NULL)
+		{
+			stsd_atom_writer = &stsd_atom_writers[i];
+		}
+		else
+		{
+			stsd_atom_writer = NULL;
+		}
+
 		mp4_init_segment_get_track_sizes(
 			media_set, 
 			&first_track[i], 
-			stsd_atom_writers != NULL ? &stsd_atom_writers[i] : NULL, 
+			stsd_atom_writer,
 			track_sizes);
 
 		result->moov_atom_size += track_sizes->trak_size;
@@ -812,7 +822,7 @@ mp4_init_segment_write(
 		{
 			p = vod_copy(p, smpte_tt_stsd_atom, sizeof(smpte_tt_stsd_atom));
 		}
-		else if (stsd_atom_writers != NULL)
+		else if (stsd_atom_writers != NULL && stsd_atom_writers[i].write != NULL)
 		{
 			p = stsd_atom_writers[i].write(stsd_atom_writers[i].context, p);
 		}
@@ -1116,11 +1126,11 @@ mp4_init_segment_get_encrypted_stsd_writers(
 	u_char* iv,
 	atom_writer_t** result)
 {
-	media_track_t* first_track = media_set->filtered_tracks;
+	media_track_t* cur_track;
+	media_track_t* last_track;
 	stsd_writer_context_t* stsd_writer_context;
 	atom_writer_t* stsd_atom_writer;
 	vod_status_t rc;
-	uint32_t i;
 
 	// allocate the context
 	stsd_atom_writer = vod_alloc(request_context->pool,
@@ -1136,10 +1146,16 @@ mp4_init_segment_get_encrypted_stsd_writers(
 
 	stsd_writer_context = (void*)(stsd_atom_writer + media_set->total_track_count);
 
-	for (i = 0;
-		i < media_set->total_track_count;
-		i++, stsd_writer_context++, stsd_atom_writer++)
+	cur_track = media_set->filtered_tracks;
+	last_track = cur_track + media_set->total_track_count;
+	for (; cur_track < last_track; cur_track++, stsd_atom_writer++)
 	{
+		if (cur_track->media_info.media_type > MEDIA_TYPE_AUDIO) // subtitles
+		{
+			vod_memzero(stsd_atom_writer, sizeof(*stsd_atom_writer));
+			continue;
+		}
+
 		// build the stsd writer for the current track
 		stsd_writer_context->scheme_type = scheme_type;
 		stsd_writer_context->has_clear_lead = has_clear_lead;
@@ -1148,7 +1164,7 @@ mp4_init_segment_get_encrypted_stsd_writers(
 
 		rc = mp4_init_segment_init_encrypted_stsd_writer(
 			request_context,
-			&first_track[i],
+			cur_track,
 			stsd_writer_context);
 		if (rc != VOD_OK)
 		{
@@ -1160,6 +1176,7 @@ mp4_init_segment_get_encrypted_stsd_writers(
 		stsd_atom_writer->atom_size = stsd_writer_context->stsd_atom_size;
 		stsd_atom_writer->write = mp4_init_segment_write_encrypted_stsd;
 		stsd_atom_writer->context = stsd_writer_context;
+		stsd_writer_context++;
 	}
 
 	return VOD_OK;
