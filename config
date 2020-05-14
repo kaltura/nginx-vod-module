@@ -20,7 +20,7 @@ if test -z "$HTTP_POSTPONE_FILTER_MODULE"; then
 fi
 
 # This module depends upon the postpone filter being activated
-if [ "$HTTP_POSTPONE" != YES ]; then
+if [ "$HTTP_POSTPONE" = NO ]; then
     HTTP_FILTER_MODULES="$HTTP_FILTER_MODULES $HTTP_POSTPONE_FILTER_MODULE"
     HTTP_SRCS="$HTTP_SRCS $HTTP_POSTPONE_FILTER_SRCS"
     HTTP_POSTPONE=YES
