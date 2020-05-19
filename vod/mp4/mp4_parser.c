@@ -1963,6 +1963,7 @@ mp4_parser_parse_video_extra_data_atom(void* ctx, atom_info_t* atom_info)
 	case ATOM_NAME_AVCC:
 	case ATOM_NAME_HVCC:
 	case ATOM_NAME_VPCC:
+	case ATOM_NAME_AV1C:
 		break;			// handled outside the switch
 
 	default:
@@ -2643,6 +2644,10 @@ mp4_parser_process_moov_atom_callback(void* ctx, atom_info_t* atom_info)
 
 		case FORMAT_VP09:
 			metadata_parse_context.media_info.codec_id = VOD_CODEC_ID_VP9;
+			break;
+
+		case FORMAT_AV1:
+			metadata_parse_context.media_info.codec_id = VOD_CODEC_ID_AV1;
 			break;
 		}
 		break;

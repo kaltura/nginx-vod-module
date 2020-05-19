@@ -423,6 +423,10 @@ codec_config_get_video_codec_name(request_context_t* request_context, media_info
 		codec_config_copy_string(media_info->codec_name, "vp9");
 		return VOD_OK;
 
+	case VOD_CODEC_ID_AV1:
+		codec_config_copy_string(media_info->codec_name, "av1");
+		return VOD_OK;
+
 	default:
 		return VOD_UNEXPECTED;
 	}
