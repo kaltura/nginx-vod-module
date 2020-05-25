@@ -2027,7 +2027,6 @@ mp4_parser_parse_es_descriptor(simple_read_stream_t* stream)							// ff_mp4_par
 static vod_status_t 
 mp4_parser_read_config_descriptor(metadata_parse_context_t* context, simple_read_stream_t* stream)		// ff_mp4_read_dec_config_descr
 {
-	mp4a_config_t* codec_config;
 	vod_status_t rc;
 	unsigned len;
 	int tag;
@@ -2048,19 +2047,14 @@ mp4_parser_read_config_descriptor(metadata_parse_context_t* context, simple_read
 		context->media_info.extra_data.len = len;
 		context->media_info.extra_data.data = (u_char*)stream->cur_pos;
 
-		codec_config = &context->media_info.u.audio.codec_config;
 		rc = codec_config_mp4a_config_parse(
 			context->request_context, 
 			&context->media_info.extra_data, 
-			codec_config);
+			&context->media_info.u.audio);
 		if (rc != VOD_OK)
 		{
 			return rc;
 		}
-
-		vod_log_debug3(VOD_LOG_DEBUG_LEVEL, context->request_context->log, 0,
-			"mp4_parser_read_config_descriptor: codec config: object_type=%d sample_rate_index=%d channel_config=%d",
-			codec_config->object_type, codec_config->sample_rate_index, codec_config->channel_config);
 	}
 	
 	return VOD_OK;

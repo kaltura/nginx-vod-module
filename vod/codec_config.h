@@ -6,6 +6,7 @@
 
 // typedefs
 struct media_info_s;
+struct audio_media_info_s;
 
 typedef vod_status_t (*codec_config_get_nal_units_t)(
 	request_context_t* request_context,
@@ -88,7 +89,7 @@ vod_status_t codec_config_get_audio_codec_name(request_context_t* request_contex
 vod_status_t codec_config_mp4a_config_parse(
 	request_context_t* request_context,
 	vod_str_t* extra_data, 
-	mp4a_config_t* result);
+	struct audio_media_info_s* result);
 
 vod_status_t codec_config_hevc_config_parse(
 	request_context_t* request_context,
