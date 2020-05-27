@@ -1,5 +1,5 @@
 // The table below is based on data from http://www-01.sil.org/iso639-3/download.asp
-LANG(UND, "un", "und", "und", "", "")
+LANG(UND, "un", "und", "und", "Undefined", "Undefined")
 
 LANG(AA , "aa", "aar", "aar", "Afar", "Afaraf")
 LANG(AAL, NULL, NULL , "aal", "Afade", "Afa\xc3\xab")
