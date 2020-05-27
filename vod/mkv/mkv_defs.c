@@ -9,6 +9,7 @@ mkv_codec_type_t mkv_codec_types[] = {
 	{ vod_string("V_MPEGH/ISO/HEVC"),	VOD_CODEC_ID_HEVC,	FORMAT_HEV1,	TRUE },
 	{ vod_string("V_VP8"),				VOD_CODEC_ID_VP8,	0,				FALSE },
 	{ vod_string("V_VP9"),				VOD_CODEC_ID_VP9,	0,				FALSE },
+	{ vod_string("V_AV1"),				VOD_CODEC_ID_AV1,	0,				FALSE },
 
 	// audio
 	{ vod_string("A_AAC"),				VOD_CODEC_ID_AAC,	FORMAT_MP4A,	TRUE },

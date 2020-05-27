@@ -283,6 +283,7 @@ static dash_codec_info_t dash_codecs[VOD_CODEC_ID_COUNT] = {
 	{ vod_string("video/mp4"),	vod_string("mp4"),	vod_string("m4s")	},		// hevc
 	{ vod_string("video/webm"),	vod_string("webm"), vod_string("webm")	},		// vp8
 	{ vod_string("video/webm"),	vod_string("webm"), vod_string("webm")	},		// vp9
+	{ vod_string("video/webm"),	vod_string("webm"), vod_string("webm")	},		// av1
 
 	{ vod_string("audio/mp4"),	vod_string("mp4"),	vod_string("m4s")	},		// aac
 	{ vod_string("audio/mp4"),	vod_string("mp4"),	vod_string("m4s")	},		// ac3
