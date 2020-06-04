@@ -3,17 +3,6 @@
 #include "avc_parser.h"
 #include "hevc_parser.h"
 
-static uint16_t channel_config_to_channel_count[] = {
-	0, // defined in AOT Specific Config
-	1, // front - center
-	2, // front - left, front - right
-	3, // front - center, front - left, front - right
-	4, // front - center, front - left, front - right, back - center
-	5, // front - center, front - left, front - right, back - left, back - right
-	6, // front - center, front - left, front - right, back - left, back - right, LFE - channel
-	8, // front - center, front - left, front - right, side - left, side - right, back - left, back - right, LFE - channel
-};
-
 vod_status_t
 media_format_finalize_track(
 	request_context_t* request_context, 
@@ -24,21 +13,12 @@ media_format_finalize_track(
 	vod_status_t rc = VOD_OK;
 	u_char* new_extra_data;
 	void* parser_ctx;
-	uint8_t channel_config;
 
 	switch (media_info->media_type)
 	{
 	case MEDIA_TYPE_AUDIO:
 		// always save the audio extra data to support audio filtering
 		parse_type |= PARSE_FLAG_EXTRA_DATA;
-
-		// derive the channel count from the codec config when possible
-		//	the channel count in the stsd atom is occasionally wrong
-		channel_config = media_info->u.audio.codec_config.channel_config;
-		if (channel_config > 0 && channel_config < vod_array_entries(channel_config_to_channel_count))
-		{
-			media_info->u.audio.channels = channel_config_to_channel_count[channel_config];
-		}
 		break;
 
 	case MEDIA_TYPE_VIDEO:

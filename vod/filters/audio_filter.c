@@ -270,17 +270,6 @@ static const AVFilter *buffersink_filter = NULL;
 
 static bool_t initialized = FALSE;
 
-static const uint64_t aac_channel_layout[] = {
-	0,
-	AV_CH_LAYOUT_MONO,
-	AV_CH_LAYOUT_STEREO,
-	AV_CH_LAYOUT_SURROUND,
-	AV_CH_LAYOUT_4POINT0,
-	AV_CH_LAYOUT_5POINT0_BACK,
-	AV_CH_LAYOUT_5POINT1_BACK,
-	AV_CH_LAYOUT_7POINT1_WIDE_BACK,
-};
-
 void 
 audio_filter_process_init(vod_log_t* log)
 {
@@ -569,9 +558,7 @@ audio_filter_alloc_state(
 	AVFilterInOut *outputs = NULL;
 	AVFilterInOut *inputs = NULL;
 	vod_status_t rc;
-	uint64_t channel_layout;
 	uint32_t initial_alloc_size;
-	uint8_t channel_config;
 	size_t frame_size;
 	int avrc;
 
@@ -687,20 +674,10 @@ audio_filter_alloc_state(
 	// initialize the sink
 	vod_sprintf(filter_name, "%uD%Z", clip->id);
 
-	channel_config = output_track->media_info.u.audio.codec_config.channel_config;
-	if (channel_config < vod_array_entries(aac_channel_layout))
-	{
-		channel_layout = aac_channel_layout[channel_config];
-	}
-	else
-	{
-		channel_layout = 0;
-	}
-
 	rc = audio_filter_init_sink(
 		request_context,
 		state->filter_graph,
-		channel_layout,
+		output_track->media_info.u.audio.channel_layout,
 		output_track->media_info.u.audio.sample_rate,
 		filter_name,
 		&state->sink,
@@ -755,8 +732,8 @@ audio_filter_alloc_state(
 	}
 	else
 	{
-		encoder_params.channel_layout = sink_link->channel_layout;
 		encoder_params.channels = sink_link->channels;
+		encoder_params.channel_layout = sink_link->channel_layout;
 		encoder_params.sample_rate = sink_link->sample_rate;
 		encoder_params.timescale = sink_link->time_base.den;
 		encoder_params.bitrate = output_track->media_info.bitrate;
