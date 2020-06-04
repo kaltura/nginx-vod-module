@@ -88,6 +88,7 @@ silence_generator_generate(
 	track->media_info.extra_data.len = 2;
 	track->media_info.u.audio.object_type_id = 0x40;
 	track->media_info.u.audio.channels = 2;
+	track->media_info.u.audio.channel_layout = VOD_CH_LAYOUT_STEREO;
 	track->media_info.u.audio.bits_per_sample = 16;
 	track->media_info.u.audio.packet_size = 0;
 	track->media_info.u.audio.sample_rate = 44100;

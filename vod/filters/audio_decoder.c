@@ -1,17 +1,5 @@
 #include "audio_decoder.h"
 
-// constants
-static const uint64_t aac_channel_layout[] = {
-	0,
-	AV_CH_LAYOUT_MONO,
-	AV_CH_LAYOUT_STEREO,
-	AV_CH_LAYOUT_SURROUND,
-	AV_CH_LAYOUT_4POINT0,
-	AV_CH_LAYOUT_5POINT0_BACK,
-	AV_CH_LAYOUT_5POINT1_BACK,
-	AV_CH_LAYOUT_7POINT1_WIDE_BACK,
-};
-
 // globals
 static AVCodec *decoder_codec = NULL;
 static bool_t initialized = FALSE;
@@ -40,7 +28,6 @@ audio_decoder_init_decoder(
 	media_info_t* media_info)
 {
 	AVCodecContext* decoder;
-	uint8_t channel_config;
 	int avrc;
 
 	if (media_info->codec_id != VOD_CODEC_ID_AAC)
@@ -69,17 +56,9 @@ audio_decoder_init_decoder(
 	decoder->extradata = media_info->extra_data.data;
 	decoder->extradata_size = media_info->extra_data.len;
 	decoder->channels = media_info->u.audio.channels;
+	decoder->channel_layout = media_info->u.audio.channel_layout;
 	decoder->bits_per_coded_sample = media_info->u.audio.bits_per_sample;
 	decoder->sample_rate = media_info->u.audio.sample_rate;
-	channel_config = media_info->u.audio.codec_config.channel_config;
-	if (channel_config < vod_array_entries(aac_channel_layout))
-	{
-		decoder->channel_layout = aac_channel_layout[channel_config];
-	}
-	else
-	{
-		decoder->channel_layout = 0;
-	}
 
 	avrc = avcodec_open2(decoder, decoder_codec, NULL);
 	if (avrc < 0)

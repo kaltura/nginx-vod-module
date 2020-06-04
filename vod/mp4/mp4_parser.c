@@ -208,8 +208,6 @@ static const raw_atom_mapping_t raw_atom_mapping[] = {
 	{ RTA_STSD, offsetof(trak_atom_infos_t, stsd) },
 };
 
-static const uint16_t ac3_mode_channels[] = { 2, 1, 2, 3, 3, 4, 4, 5 };
-
 // compressed moov
 typedef struct {
 	atom_info_t dcom;
@@ -2027,7 +2025,6 @@ mp4_parser_parse_es_descriptor(simple_read_stream_t* stream)							// ff_mp4_par
 static vod_status_t 
 mp4_parser_read_config_descriptor(metadata_parse_context_t* context, simple_read_stream_t* stream)		// ff_mp4_read_dec_config_descr
 {
-	mp4a_config_t* codec_config;
 	vod_status_t rc;
 	unsigned len;
 	int tag;
@@ -2048,28 +2045,64 @@ mp4_parser_read_config_descriptor(metadata_parse_context_t* context, simple_read
 		context->media_info.extra_data.len = len;
 		context->media_info.extra_data.data = (u_char*)stream->cur_pos;
 
-		codec_config = &context->media_info.u.audio.codec_config;
 		rc = codec_config_mp4a_config_parse(
 			context->request_context, 
 			&context->media_info.extra_data, 
-			codec_config);
+			&context->media_info);
 		if (rc != VOD_OK)
 		{
 			return rc;
 		}
-
-		vod_log_debug3(VOD_LOG_DEBUG_LEVEL, context->request_context->log, 0,
-			"mp4_parser_read_config_descriptor: codec config: object_type=%d sample_rate_index=%d channel_config=%d",
-			codec_config->object_type, codec_config->sample_rate_index, codec_config->channel_config);
 	}
 	
 	return VOD_OK;
 }
 
-static uint16_t
-mp4_parser_get_ac3_channel_count(uint8_t mode, uint8_t low_freq)
+static uint64_t
+mp4_parser_get_ac3_channel_layout(uint8_t acmod, uint8_t lfeon, uint16_t chan_loc)
 {
-	return ac3_mode_channels[mode] + low_freq;
+	static uint64_t acmod_channel_layout[] = {
+		VOD_CH_LAYOUT_STEREO,
+		VOD_CH_LAYOUT_MONO,
+		VOD_CH_LAYOUT_STEREO,
+		VOD_CH_LAYOUT_SURROUND,
+		VOD_CH_LAYOUT_2_1,
+		VOD_CH_LAYOUT_4POINT0,
+		VOD_CH_LAYOUT_2_2,
+		VOD_CH_LAYOUT_5POINT0
+	};
+
+	static uint64_t lfeon_channel_layout[] = {
+		0,
+		VOD_CH_LOW_FREQUENCY
+	};
+
+	static uint64_t chan_loc_channel_layout[] = {
+		VOD_CH_FRONT_LEFT_OF_CENTER | VOD_CH_FRONT_RIGHT_OF_CENTER,
+		VOD_CH_BACK_LEFT | VOD_CH_BACK_RIGHT,
+		VOD_CH_BACK_CENTER,
+		VOD_CH_TOP_CENTER,
+		VOD_CH_SURROUND_DIRECT_LEFT | VOD_CH_SURROUND_DIRECT_RIGHT,
+		VOD_CH_WIDE_LEFT | VOD_CH_WIDE_RIGHT,
+		VOD_CH_TOP_FRONT_LEFT | VOD_CH_TOP_FRONT_RIGHT,
+		VOD_CH_TOP_FRONT_CENTER,
+		VOD_CH_LOW_FREQUENCY_2,
+	};
+
+	uint64_t result;
+	uint32_t i;
+
+	result = acmod_channel_layout[acmod] | lfeon_channel_layout[lfeon];
+
+	for (i = 0; i < vod_array_entries(chan_loc_channel_layout); i++)
+	{
+		if (chan_loc & (1 << i))
+		{
+			result |= chan_loc_channel_layout[i];
+		}
+	}
+
+	return result;
 }
 
 static vod_status_t
@@ -2123,8 +2156,10 @@ mp4_parser_parse_audio_atoms(void* ctx, atom_info_t* atom_info)
 	metadata_parse_context_t* context = (metadata_parse_context_t*)ctx;
 	simple_read_stream_t stream;
 	vod_status_t rc;
-	uint8_t ac3_low_freq;
-	uint8_t ac3_mode;
+	uint64_t channel_layout;
+	uint16_t chan_loc;
+	uint8_t acmod;
+	uint8_t lfeon;
 	int tag;
 
 	switch (atom_info->name)
@@ -2139,28 +2174,48 @@ mp4_parser_parse_audio_atoms(void* ctx, atom_info_t* atom_info)
 		break;			// handled outside the switch
 
 	case ATOM_NAME_DAC3:
-		if (atom_info->size > 1)
+		if (atom_info->size <= 1)
 		{
-			ac3_mode = (atom_info->ptr[1] >> 3) & 0x7;
-			ac3_low_freq = (atom_info->ptr[1] >> 2) & 0x1;
-			context->media_info.u.audio.channels =
-				mp4_parser_get_ac3_channel_count(ac3_mode, ac3_low_freq);
+			return VOD_OK;
 		}
+
+		acmod = (atom_info->ptr[1] >> 3) & 0x7;
+		lfeon = (atom_info->ptr[1] >> 2) & 0x1;
+
+		channel_layout = mp4_parser_get_ac3_channel_layout(acmod, lfeon, 0);
+
+		context->media_info.u.audio.channels = vod_get_number_of_set_bits(channel_layout & NGX_MAX_UINT32_VALUE);
+		context->media_info.u.audio.channel_layout = channel_layout;
 		return VOD_OK;
 
 	case ATOM_NAME_DEC3:
-		if (atom_info->size > 3)
+		if (atom_info->size <= 3)
 		{
-			ac3_mode = (atom_info->ptr[3] >> 1) & 0x7;
-			ac3_low_freq = (atom_info->ptr[3]) & 0x1;
-			context->media_info.u.audio.channels =
-				mp4_parser_get_ac3_channel_count(ac3_mode, ac3_low_freq);
-
-			// set the extra data to the contents of this atom, since it's used 
-			// as the setup info in hls/sample-aes
-			context->media_info.extra_data.len = atom_info->size;
-			context->media_info.extra_data.data = (u_char*)atom_info->ptr;
+			return VOD_OK;
 		}
+
+		acmod = (atom_info->ptr[3] >> 1) & 0x7;
+		lfeon = (atom_info->ptr[3]) & 0x1;
+
+		if (atom_info->size > 5 && (atom_info->ptr[4] >> 1) & 0xf)  // num_dep_sub
+		{
+			chan_loc = (atom_info->ptr[4] & 0x1) << 8 | atom_info->ptr[5];
+		}
+		else
+		{
+			chan_loc = 0;
+		}
+
+		channel_layout = mp4_parser_get_ac3_channel_layout(acmod, lfeon, chan_loc);
+
+		context->media_info.u.audio.channels = vod_get_number_of_set_bits(channel_layout & NGX_MAX_UINT32_VALUE) +
+			vod_get_number_of_set_bits(channel_layout >> 32);
+		context->media_info.u.audio.channel_layout = channel_layout;
+
+		// set the extra data to the contents of this atom, since it's used
+		// as the setup info in hls/sample-aes
+		context->media_info.extra_data.len = atom_info->size;
+		context->media_info.extra_data.data = (u_char*)atom_info->ptr;
 		return VOD_OK;
 
 	default:

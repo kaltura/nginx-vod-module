@@ -76,26 +76,30 @@
 	"          startWithSAP=\"1\"\n"											\
 	"          bandwidth=\"%uD\">\n"
 
-// TODO: value should be the number of channels ?
 #define VOD_DASH_MANIFEST_ADAPTATION_HEADER_AUDIO								\
 	"    <AdaptationSet\n"														\
 	"        id=\"%uD\"\n"														\
-	"        segmentAlignment=\"true\">\n"										\
-	"      <AudioChannelConfiguration\n"										\
-	"          schemeIdUri=\"urn:mpeg:dash:"									\
-								"23003:3:audio_channel_configuration:2011\"\n"	\
-	"          value=\"1\"/>\n"
+	"        segmentAlignment=\"true\">\n"
 
 #define VOD_DASH_MANIFEST_ADAPTATION_HEADER_AUDIO_LANG							\
 	"    <AdaptationSet\n"														\
 	"        id=\"%uD\"\n"														\
 	"        lang=\"%s\"\n"														\
 	"        label=\"%V\"\n"													\
-	"        segmentAlignment=\"true\">\n"										\
+	"        segmentAlignment=\"true\">\n"
+
+// TODO: value should be the number of channels ?
+#define VOD_DASH_MANIFEST_AUDIO_CHANNEL_CONFIG									\
 	"      <AudioChannelConfiguration\n"										\
-	"          schemeIdUri=\"urn:mpeg:dash:"									\
-								"23003:3:audio_channel_configuration:2011\"\n"	\
+	"          schemeIdUri=\"urn:mpeg:dash:23003:3:"							\
+								"audio_channel_configuration:2011\"\n"			\
 	"          value=\"1\"/>\n"
+
+#define VOD_DASH_MANIFEST_AUDIO_CHANNEL_CONFIG_EAC3								\
+	"      <AudioChannelConfiguration\n"										\
+	"          schemeIdUri=\"tag:dolby.com,2014:dash:"							\
+								"audio_channel_configuration:2011\"\n"			\
+	"          value=\"%uxD\"/>\n"
 
 #define VOD_DASH_MANIFEST_REPRESENTATION_HEADER_AUDIO							\
 	"      <Representation\n"													\
@@ -666,6 +670,44 @@ dash_packager_write_frame_rate(
 	}
 }
 
+static uint32_t
+dash_packager_get_eac3_channel_config(media_info_t* media_info)
+{
+	static uint64_t channel_layout_map[] = {
+		VOD_CH_FRONT_LEFT,
+		VOD_CH_FRONT_CENTER,
+		VOD_CH_FRONT_RIGHT,
+		VOD_CH_SIDE_LEFT,
+		VOD_CH_SIDE_RIGHT,
+		VOD_CH_FRONT_LEFT_OF_CENTER | VOD_CH_FRONT_RIGHT_OF_CENTER,
+		VOD_CH_BACK_LEFT | VOD_CH_BACK_RIGHT,
+		VOD_CH_BACK_CENTER,
+		VOD_CH_TOP_CENTER,
+		VOD_CH_SURROUND_DIRECT_LEFT | VOD_CH_SURROUND_DIRECT_RIGHT,
+		VOD_CH_WIDE_LEFT | VOD_CH_WIDE_RIGHT,
+		VOD_CH_TOP_FRONT_LEFT | VOD_CH_TOP_FRONT_RIGHT,
+		VOD_CH_TOP_FRONT_CENTER,
+		VOD_CH_TOP_BACK_LEFT | VOD_CH_TOP_BACK_RIGHT,
+		VOD_CH_LOW_FREQUENCY_2,
+		VOD_CH_LOW_FREQUENCY,
+	};
+
+	uint64_t cur;
+	uint32_t result = 0;
+	uint32_t i;
+
+	for (i = 0; i < vod_array_entries(channel_layout_map); i++)
+	{
+		cur = channel_layout_map[i];
+		if ((media_info->u.audio.channel_layout & cur) == cur)
+		{
+			result |= 1 << (15 - i);
+		}
+	}
+
+	return result;
+}
+
 static u_char* 
 dash_packager_write_mpd_period(
 	u_char* p,
@@ -826,6 +868,17 @@ dash_packager_write_mpd_period(
 			{
 				p = vod_sprintf(p, VOD_DASH_MANIFEST_ADAPTATION_HEADER_AUDIO, 
 					adapt_id++);
+			}
+
+			if (reference_track->media_info.codec_id == VOD_CODEC_ID_EAC3)
+			{
+				p = vod_sprintf(p, VOD_DASH_MANIFEST_AUDIO_CHANNEL_CONFIG_EAC3,
+					dash_packager_get_eac3_channel_config(&reference_track->media_info));
+			}
+			else
+			{
+				p = vod_copy(p, VOD_DASH_MANIFEST_AUDIO_CHANNEL_CONFIG,
+					sizeof(VOD_DASH_MANIFEST_AUDIO_CHANNEL_CONFIG) - 1);
 			}
 			break;
 
@@ -1328,7 +1381,7 @@ dash_packager_build_mpd(
 			(sizeof(VOD_DASH_MANIFEST_REPRESENTATION_HEADER_VIDEO) - 1 + MAX_TRACK_SPEC_LENGTH + MAX_MIME_TYPE_SIZE + MAX_CODEC_NAME_SIZE + 3 * VOD_INT32_LEN + VOD_DASH_MAX_FRAME_RATE_LEN +
 			sizeof(VOD_DASH_MANIFEST_REPRESENTATION_FOOTER) - 1) * media_set->track_count[MEDIA_TYPE_VIDEO] +
 			// audio adaptations
-			(sizeof(VOD_DASH_MANIFEST_ADAPTATION_HEADER_AUDIO_LANG) - 1 + VOD_INT32_LEN + LANG_ISO639_3_LEN +
+			(sizeof(VOD_DASH_MANIFEST_ADAPTATION_HEADER_AUDIO_LANG) - 1 + sizeof(VOD_DASH_MANIFEST_AUDIO_CHANNEL_CONFIG_EAC3) - 1 + 2 * VOD_INT32_LEN + LANG_ISO639_3_LEN +
 			sizeof(VOD_DASH_MANIFEST_ADAPTATION_FOOTER) - 1) * context.adaptation_sets.count[ADAPTATION_TYPE_AUDIO] +
 			// audio representations
 			(sizeof(VOD_DASH_MANIFEST_REPRESENTATION_HEADER_AUDIO) - 1 + MAX_TRACK_SPEC_LENGTH + MAX_MIME_TYPE_SIZE + MAX_CODEC_NAME_SIZE + 2 * VOD_INT32_LEN +
