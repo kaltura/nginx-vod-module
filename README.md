@@ -33,7 +33,7 @@
   4. CAP (Cheetah)
   
   Output:
-  1. DASH - served as a single WebVTT
+  1. DASH - either a single WebVTT or SMPTE-TT segments (configurable)
   2. HLS - segmented WebVTT (m3u8)
   3. MSS - converted to TTML and packaged in fragmented MP4 (no support for styling)
 
