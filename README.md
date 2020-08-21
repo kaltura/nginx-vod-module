@@ -143,7 +143,7 @@ For Ubuntu 16.04, 16.10 add this repo:
 
 For Ubuntu 20.04 add this repo:
 ```
-# wget -O - http://installrepo.kaltura.org/repo/aptn/focal/kaltura-deb-curr-256.gpg.key|apt-key add -
+# wget -O - http://installrepo.kaltura.org/repo/aptn/focal/kaltura-deb-256.gpg.key|apt-key add -
 # echo "deb [arch=amd64] http://installrepo.kaltura.org/repo/apt/xenial propus main" > /etc/apt/sources.list.d/kaltura.list
 ```
 
