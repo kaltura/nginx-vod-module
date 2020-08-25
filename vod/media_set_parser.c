@@ -94,6 +94,7 @@ static vod_status_t media_set_parse_source(void* ctx, vod_json_object_t* element
 static vod_status_t media_set_parse_language(void* ctx, vod_json_value_t* value, void* dest);
 static vod_status_t media_set_parse_clips_array(void* ctx, vod_json_value_t* value, void* dest);
 static vod_status_t media_set_parse_bitrate(void* ctx, vod_json_value_t* value, void* dest);
+static vod_status_t media_set_parse_source_type(void* ctx, vod_json_value_t* value, void* dest);
 
 // constants
 static json_parser_union_type_def_t media_clip_union_params[] = {
@@ -114,6 +115,7 @@ static json_object_value_def_t media_clip_source_params[] = {
 	{ vod_string("encryptionScheme"), VOD_JSON_STRING,	offsetof(media_clip_source_t, encryption.scheme), media_set_parse_encryption_scheme },
 	{ vod_string("encryptionKey"),	VOD_JSON_STRING,	offsetof(media_clip_source_t, encryption.key), media_set_parse_base64_string },
 	{ vod_string("encryptionIv"),	VOD_JSON_STRING,	offsetof(media_clip_source_t, encryption.iv), media_set_parse_base64_string },
+	{ vod_string("sourceType"),		VOD_JSON_STRING,	offsetof(media_clip_source_t, source_type), media_set_parse_source_type },
 	{ vod_null_string, 0, 0, NULL }
 };
 
@@ -165,9 +167,9 @@ static json_object_key_def_t media_set_params[] = {
 
 // Note: must match media_clip_source_enc_scheme_t in order
 static vod_str_t encryption_schemes[] = {
-    ngx_string("cenc"),
-    ngx_string("aes-cbc"),
-    ngx_null_string
+	vod_string("cenc"),
+	vod_string("aes-cbc"),
+	vod_null_string
 };
 
 static vod_str_t type_key = vod_string("type");
@@ -296,6 +298,34 @@ media_set_parse_int64(
 }
 
 static vod_status_t
+media_set_parse_source_type(
+	void* ctx,
+	vod_json_value_t* value,
+	void* dest)
+{
+	media_filter_parse_context_t* context = ctx;
+
+	if (value->v.str.len == sizeof("file") - 1 &&
+		vod_strncasecmp(value->v.str.data, (u_char*)"file", sizeof("file") - 1) == 0)
+	{
+		*(media_clip_source_type_t*)dest = MEDIA_CLIP_SOURCE_FILE;
+	}
+	else if (value->v.str.len == sizeof("http") - 1 &&
+		vod_strncasecmp(value->v.str.data, (u_char*)"http", sizeof("http") - 1) == 0)
+	{
+		*(media_clip_source_type_t*)dest = MEDIA_CLIP_SOURCE_HTTP;
+	}
+	else
+	{
+		vod_log_error(VOD_LOG_ERR, context->request_context->log, 0,
+			"media_set_parse_source_type: invalid sourceType %V", &value->v.str);
+		return VOD_BAD_MAPPING;
+	}
+
+	return VOD_OK;
+}
+
+static vod_status_t
 media_set_parse_encryption_scheme(
 	void* ctx,
 	vod_json_value_t* value,
@@ -310,7 +340,7 @@ media_set_parse_encryption_scheme(
 		if (value->v.str.len == cur->len && vod_strncasecmp(value->v.str.data, cur->data, cur->len) == 0)
 		{
 			*result = cur - encryption_schemes;
-			return NGX_OK;
+			return VOD_OK;
 		}
 	}
 
