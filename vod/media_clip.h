@@ -29,6 +29,12 @@ typedef enum {
 	MEDIA_CLIP_DYNAMIC,
 } media_clip_type_t;
 
+typedef enum {
+	MEDIA_CLIP_SOURCE_DEFAULT,
+	MEDIA_CLIP_SOURCE_FILE,
+	MEDIA_CLIP_SOURCE_HTTP,
+} media_clip_source_type_t;
+
 typedef struct media_clip_s {
 	media_clip_type_t type;
 	uint32_t id;
@@ -54,6 +60,7 @@ typedef struct {
 
 struct media_clip_source_s;
 typedef struct media_clip_source_s media_clip_source_t;
+typedef struct ngx_http_vod_reader_s ngx_http_vod_reader_t;
 
 struct media_clip_source_s {
 	// base
@@ -67,6 +74,7 @@ struct media_clip_source_s {
 	// TODO: the fields below are not required for generators, consider adding another struct
 
 	// input params
+	media_clip_source_type_t source_type;
 	vod_str_t uri;				// original uri
 	uint64_t clip_from;
 	uint32_t tracks_mask[MEDIA_TYPE_COUNT];
@@ -79,7 +87,11 @@ struct media_clip_source_s {
 	u_char file_key[MEDIA_CLIP_KEY_SIZE];
 
 	// runtime members
+	ngx_http_vod_reader_t* reader;
 	void* reader_context;
+	off_t alignment;
+	size_t alloc_extra_size;
+
 	media_clip_source_t* next;
 	uint64_t last_offset;
 };

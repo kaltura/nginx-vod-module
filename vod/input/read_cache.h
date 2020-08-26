@@ -23,7 +23,6 @@ typedef struct {
 	cache_buffer_t* target_buffer;
 	size_t buffer_count;
 	size_t buffer_size;
-	size_t alignment;
 	bool_t reuse_buffers;
 } read_cache_state_t;
 
@@ -51,8 +50,7 @@ typedef struct {
 void read_cache_init(
 	read_cache_state_t* state, 
 	request_context_t* request_context, 
-	size_t buffer_size, 
-	size_t alignment);
+	size_t buffer_size);
 	
 vod_status_t read_cache_allocate_buffer_slots(
 	read_cache_state_t* state,

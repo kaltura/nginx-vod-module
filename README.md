@@ -558,6 +558,9 @@ Mandatory fields:
 	an empty captions file (useful in case only some videos in a playlist have captions)
 
 Optional fields:
+* `sourceType` - sets the interface that should be used to read the MP4 file, allowed values are:
+	`file` and `http`. By default, the module uses `http` if `vod_remote_upstream_location` is set,
+	and `file` otherwise.
 * `tracks` - a string that specifies the tracks that should be used, the default is "v1-a1",
 	which means the first video track and the first audio track
 * `clipFrom` - an integer that specifies an offset in milliseconds, from the beginning of the 
@@ -848,6 +851,9 @@ Sets the file access mode - local, remote or mapped (see the features section ab
 * **context**: `location`
 
 Enables the nginx-vod status page on the enclosing location. 
+The following query params are supported:
+* `?reset=1` - resets the performance counters and cache stats.
+* `?format=prom` - returns the output in format compatible with Prometheus (the default format is XML).
 
 ### Configuration directives - segmentation
 

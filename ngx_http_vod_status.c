@@ -212,7 +212,7 @@ ngx_http_vod_status_xml_handler(ngx_http_request_t *r)
 	if (response.data == NULL)
 	{
 		ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
-			"ngx_http_vod_status_handler: ngx_palloc failed");
+			"ngx_http_vod_status_xml_handler: ngx_palloc failed");
 		return NGX_HTTP_INTERNAL_SERVER_ERROR;
 	}
 
@@ -258,7 +258,7 @@ ngx_http_vod_status_xml_handler(ngx_http_request_t *r)
 	if (response.len > result_size)
 	{
 		ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
-			"ngx_http_vod_status_handler: response length %uz exceeded allocated length %uz", 
+			"ngx_http_vod_status_xml_handler: response length %uz exceeded allocated length %uz",
 			response.len, result_size);
 		return NGX_HTTP_INTERNAL_SERVER_ERROR;
 	}
