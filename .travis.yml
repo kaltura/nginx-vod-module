@@ -8,7 +8,6 @@ before_install:
 language: c
 compiler:
     - clang
-    - gcc
 dist: focal
 env:
   - NGX_VOD_MODULE=--add-module=./nginx-vod-module
@@ -17,7 +16,6 @@ script: ./travis_build.sh $NGX_VOD_MODULE
 notifications:
   email:
     recipients:
-      - eran.kornblau@kaltura.com
-      - jess.portnoy@kaltura.com
+      - video-inf@ellation.com
     on_success: change
     on_failure: always
