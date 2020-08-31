@@ -667,6 +667,47 @@ error:
 	return rc;
 }
 
+static u_char*
+vod_json_unicode_hex_to_utf8(u_char* dest, u_char* src)
+{
+	vod_int_t ch;
+
+	ch = vod_hextoi(src, 4);
+	if (ch < 0)
+	{
+		return NULL;
+	}
+
+	if (ch < 0x80)
+	{
+		*dest++ = (u_char)ch;
+	}
+	else if (ch < 0x800)
+	{
+		*dest++ = (ch >> 6) | 0xC0;
+		*dest++ = (ch & 0x3F) | 0x80;
+	}
+	else if (ch < 0x10000)
+	{
+		*dest++ = (ch >> 12) | 0xE0;
+		*dest++ = ((ch >> 6) & 0x3F) | 0x80;
+		*dest++ = (ch & 0x3F) | 0x80;
+	}
+	else if (ch < 0x110000)
+	{
+		*dest++ = (ch >> 18) | 0xF0;
+		*dest++ = ((ch >> 12) & 0x3F) | 0x80;
+		*dest++ = ((ch >> 6) & 0x3F) | 0x80;
+		*dest++ = (ch & 0x3F) | 0x80;
+	}
+	else
+	{
+		return NULL;
+	}
+
+	return dest;
+}
+
 vod_json_status_t
 vod_json_decode_string(vod_str_t* dest, vod_str_t* src)
 {
@@ -717,7 +758,17 @@ vod_json_decode_string(vod_str_t* dest, vod_str_t* src)
 			*p++ = '\t';
 			break;
 		case 'u':
-			// TODO: implement this
+			if (cur_pos + 5 > end_pos)
+			{
+				return VOD_JSON_BAD_DATA;
+			}
+
+			p = vod_json_unicode_hex_to_utf8(p, cur_pos + 1);
+			if (p == NULL)
+			{
+				return VOD_JSON_BAD_DATA;
+			}
+			cur_pos += 4;
 			break;
 		default:
 			return VOD_JSON_BAD_DATA;

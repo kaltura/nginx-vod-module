@@ -10,6 +10,28 @@
 
 #define AOT_ESCAPE (31)
 
+static const uint64_t aac_config_channel_layout[] = {
+	0,
+	VOD_CH_LAYOUT_MONO,
+	VOD_CH_LAYOUT_STEREO,
+	VOD_CH_LAYOUT_SURROUND,
+	VOD_CH_LAYOUT_4POINT0,
+	VOD_CH_LAYOUT_5POINT0_BACK,
+	VOD_CH_LAYOUT_5POINT1_BACK,
+	VOD_CH_LAYOUT_7POINT1_WIDE_BACK,
+};
+
+static uint16_t aac_config_channel_count[] = {
+	0,
+	1,
+	2,
+	3,
+	4,
+	5,
+	6,
+	8,
+};
+
 vod_status_t 
 codec_config_avcc_get_nal_units(
 	request_context_t* request_context,
@@ -423,6 +445,10 @@ codec_config_get_video_codec_name(request_context_t* request_context, media_info
 		codec_config_copy_string(media_info->codec_name, "vp9");
 		return VOD_OK;
 
+	case VOD_CODEC_ID_AV1:
+		codec_config_copy_string(media_info->codec_name, "av1");
+		return VOD_OK;
+
 	default:
 		return VOD_UNEXPECTED;
 	}
@@ -484,23 +510,24 @@ vod_status_t
 codec_config_mp4a_config_parse(
 	request_context_t* request_context, 
 	vod_str_t* extra_data, 
-	mp4a_config_t* result)
+	media_info_t* media_info)
 {
 	bit_reader_state_t reader;
+	mp4a_config_t* config = &media_info->u.audio.codec_config;
 
 	vod_log_buffer(VOD_LOG_DEBUG_LEVEL, request_context->log, 0, "codec_config_mp4a_config_parse: extra data ", extra_data->data, extra_data->len);
 
 	bit_read_stream_init(&reader, extra_data->data, extra_data->len);
 
-	result->object_type = bit_read_stream_get(&reader, 5);
-	if (result->object_type == AOT_ESCAPE)
-		result->object_type = 32 + bit_read_stream_get(&reader, 6);
+	config->object_type = bit_read_stream_get(&reader, 5);
+	if (config->object_type == AOT_ESCAPE)
+		config->object_type = 32 + bit_read_stream_get(&reader, 6);
 
-	result->sample_rate_index = bit_read_stream_get(&reader, 4);
-	if (result->sample_rate_index == 0x0f)
+	config->sample_rate_index = bit_read_stream_get(&reader, 4);
+	if (config->sample_rate_index == 0x0f)
 		bit_read_stream_get(&reader, 24);
 
-	result->channel_config = bit_read_stream_get(&reader, 4);
+	config->channel_config = bit_read_stream_get(&reader, 4);
 
 	if (reader.stream.eof_reached)
 	{
@@ -508,6 +535,16 @@ codec_config_mp4a_config_parse(
 			"codec_config_mp4a_config_parse: failed to read all required audio extra data fields");
 		return VOD_BAD_DATA;
 	}
+
+	if (config->channel_config < vod_array_entries(aac_config_channel_layout))
+	{
+		media_info->u.audio.channels = aac_config_channel_count[config->channel_config];
+		media_info->u.audio.channel_layout = aac_config_channel_layout[config->channel_config];
+	}
+
+	vod_log_debug3(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
+		"codec_config_mp4a_config_parse: codec config: object_type=%d sample_rate_index=%d channel_config=%d",
+		config->object_type, config->sample_rate_index, config->channel_config);
 
 	return VOD_OK;
 }

@@ -99,8 +99,8 @@ audio_encoder_init(
 	encoder->time_base.num = 1;
 	encoder->time_base.den = params->timescale;
 	encoder->sample_rate = params->sample_rate;
-	encoder->channel_layout = params->channel_layout;
 	encoder->channels = params->channels;
+	encoder->channel_layout = params->channel_layout;
 	encoder->bit_rate = params->bitrate;
 	encoder->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;		// make the codec generate the extra data
 
@@ -296,6 +296,7 @@ audio_encoder_update_media_info(
 
 	media_info->u.audio.object_type_id = 0x40;		// ffmpeg always writes 0x40 (ff_mp4_obj_type)
 	media_info->u.audio.channels = encoder->channels;
+	media_info->u.audio.channel_layout = encoder->channel_layout;
 	media_info->u.audio.bits_per_sample = AUDIO_ENCODER_BITS_PER_SAMPLE;
 	media_info->u.audio.packet_size = 0;			// ffmpeg always writes 0 (mov_write_audio_tag)
 	media_info->u.audio.sample_rate = encoder->sample_rate;

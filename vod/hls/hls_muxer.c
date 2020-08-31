@@ -10,6 +10,8 @@
 #endif // VOD_HAVE_OPENSSL_EVP
 
 #define ID3_TEXT_JSON_FORMAT "{\"timestamp\":%uL}%Z"
+#define ID3_TEXT_JSON_SEQUENCE_ID_PREFIX_FORMAT "{\"timestamp\":%uL,\"sequenceId\":\""
+#define ID3_TEXT_JSON_SEQUENCE_ID_SUFFIX "\"}"
 
 // from ffmpeg mpegtsenc
 #define DEFAULT_PES_HEADER_FREQ 16
@@ -22,7 +24,6 @@
 typedef struct {
 	media_track_t track;
 	input_frame_t frame;
-	u_char data[sizeof(ID3_TEXT_JSON_FORMAT) + VOD_INT64_LEN];
 } id3_track_t;
 
 struct id3_context_s {
@@ -157,6 +158,10 @@ hls_muxer_init_id3_stream(
 	id3_track_t* last_track;
 	id3_track_t* cur_track;
 	vod_status_t rc;
+	vod_str_t* sequence_id;
+	u_char* p;
+	size_t sequence_id_escape;
+	size_t data_size;
 	int64_t timestamp;
 	void* frames_source_context;
 
@@ -179,9 +184,25 @@ hls_muxer_init_id3_stream(
 		return VOD_OK;
 	}
 
+	// get the data size
+	sequence_id = &media_set->sequences[0].id;
+	if (sequence_id->len != 0)
+	{
+		sequence_id_escape = vod_escape_json(NULL, sequence_id->data, sequence_id->len);
+		data_size = sizeof(ID3_TEXT_JSON_SEQUENCE_ID_PREFIX_FORMAT) + VOD_INT64_LEN + 
+			sequence_id->len + sequence_id_escape +
+			sizeof(ID3_TEXT_JSON_SEQUENCE_ID_SUFFIX);
+	}
+	else
+	{
+		sequence_id_escape = 0;
+		data_size = sizeof(ID3_TEXT_JSON_FORMAT) + VOD_INT64_LEN;
+	}
+
 	// allocate the context
 	context = vod_alloc(state->request_context->pool, 
-		sizeof(*context) + sizeof(context->first_track[0]) * media_set->clip_count);
+		sizeof(*context) + 
+		(sizeof(context->first_track[0]) + data_size) * media_set->clip_count);
 	if (context == NULL)
 	{
 		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, state->request_context->log, 0,
@@ -189,7 +210,10 @@ hls_muxer_init_id3_stream(
 		return VOD_ALLOC_FAILED;
 	}
 
-	context->first_track = (void*)(context + 1);
+	cur_track = (void*)(context + 1);
+	last_track = cur_track + media_set->clip_count;
+
+	p = (void*)last_track;
 
 	// init the memory frames source
 	rc = frames_source_memory_init(state->request_context, &frames_source_context);
@@ -199,8 +223,7 @@ hls_muxer_init_id3_stream(
 	}
 
 	// init the tracks
-	cur_track = context->first_track;
-	last_track = cur_track + media_set->clip_count;
+	context->first_track = cur_track;
 	ref_track = media_set->filtered_tracks;
 
 	for (; cur_track < last_track; cur_track++, ref_track += media_set->total_track_count)
@@ -224,14 +247,31 @@ hls_muxer_init_id3_stream(
 		dest_track->frames.frames_source_context = frames_source_context;
 
 		// init the frame
-		timestamp = ref_track->original_clip_time + 
+		cur_track->frame.offset = (uintptr_t)p;
+		timestamp = ref_track->original_clip_time +
 			hls_rescale_to_millis(ref_track->first_frame_time_offset);
-		cur_track->frame.size = vod_sprintf(cur_track->data, 
-			ID3_TEXT_JSON_FORMAT, timestamp) - cur_track->data;
+		if (sequence_id->len != 0)
+		{
+			p = vod_sprintf(p, ID3_TEXT_JSON_SEQUENCE_ID_PREFIX_FORMAT, timestamp);
+			if (sequence_id_escape)
+			{
+				p = (u_char*)vod_escape_json(p, sequence_id->data, sequence_id->len);
+			}
+			else
+			{
+				p = vod_copy(p, sequence_id->data, sequence_id->len);
+			}
+			p = vod_copy(p, ID3_TEXT_JSON_SEQUENCE_ID_SUFFIX, sizeof(ID3_TEXT_JSON_SEQUENCE_ID_SUFFIX));
+
+		}
+		else
+		{
+			p = vod_sprintf(p, ID3_TEXT_JSON_FORMAT, timestamp);
+		}
+		cur_track->frame.size = (uintptr_t)p - cur_track->frame.offset;
 		cur_track->frame.duration = 0;
 		cur_track->frame.key_frame = 1;
 		cur_track->frame.pts_delay = 0;
-		cur_track->frame.offset = (uintptr_t)&cur_track->data;
 	}
 
 	// init the first track

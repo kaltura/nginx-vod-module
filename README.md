@@ -34,7 +34,7 @@
   5. ASS/SSA (Advanced SubStation Alpha)
   
   Output:
-  1. DASH - served as a single WebVTT
+  1. DASH - either a single WebVTT or SMPTE-TT segments (configurable)
   2. HLS - segmented WebVTT (m3u8)
   3. MSS - converted to TTML and packaged in fragmented MP4 (no support for styling)
 
@@ -93,7 +93,6 @@ without the overhead of short segments for the whole duration of the video
 When enabled, they are applied per cue using a voice span.
 Only Styles used by current segment duration are added to the segment.
 
-
 ### Compilation
 
 #### Dependencies
@@ -147,15 +146,22 @@ Debug settings:
 
 For Debian Wheezy [7], Debian Jessie [8], Ubuntu 14.04 and 14.10, add this repo:
 ```
-# wget -O - http://installrepo.kaltura.org/repo/apt/debian/kaltura-deb.gpg.key|apt-key add -
-# echo "deb [arch=amd64] http://installrepo.kaltura.org/repo/apt/debian naos main" > /etc/apt/sources.list.d/kaltura.list
+# wget -O - http://installrepo.kaltura.org/repo/apt/debian/kaltura-deb-curr.gpg.key|apt-key add -
+# echo "deb [arch=amd64] http://installrepo.kaltura.org/repo/apt/debian propus main" > /etc/apt/sources.list.d/kaltura.list
 ```
 
 For Ubuntu 16.04, 16.10 add this repo:
 ```
-# wget -O - http://installrepo.kaltura.org/repo/apt/xenial/kaltura-deb-256.gpg.key|apt-key add -
-# echo "deb [arch=amd64] http://installrepo.kaltura.org/repo/apt/xenial naos main" > /etc/apt/sources.list.d/kaltura.list
+# wget -O - http://installrepo.kaltura.org/repo/apt/xenial/kaltura-deb-curr-256.gpg.key|apt-key add -
+# echo "deb [arch=amd64] http://installrepo.kaltura.org/repo/apt/xenial propus main" > /etc/apt/sources.list.d/kaltura.list
 ```
+
+For Ubuntu 20.04 add this repo:
+```
+# wget -O - http://installrepo.kaltura.org/repo/aptn/focal/kaltura-deb-256.gpg.key|apt-key add -
+# echo "deb [arch=amd64] http://installrepo.kaltura.org/repo/apt/xenial propus main" > /etc/apt/sources.list.d/kaltura.list
+```
+
 
 Then install the kaltura-nginx package:
 ```
@@ -531,6 +537,9 @@ Optional fields:
 * `bitrate` - an object that can be used to set the bitrate for the different media types,
 	in bits per second. For example, `{"v": 900000, "a": 64000}`. If the bitrate is not supplied,
 	nginx-vod-module will estimate it based on the last clip in the sequence.
+* `avg_bitrate` - an object that can be used to set the average bitrate for the different media types,
+	in bits per second. See `bitrate` above for a sample object. If specified, the module will use
+	the value to populate the AVERAGE-BANDWIDTH attribute of `#EXT-X-STREAM-INF` in HLS.
 
 #### Clip (abstract)
 
@@ -564,13 +573,20 @@ Mandatory fields:
 	an empty captions file (useful in case only some videos in a playlist have captions)
 
 Optional fields:
+* `sourceType` - sets the interface that should be used to read the MP4 file, allowed values are:
+	`file` and `http`. By default, the module uses `http` if `vod_remote_upstream_location` is set,
+	and `file` otherwise.
 * `tracks` - a string that specifies the tracks that should be used, the default is "v1-a1",
 	which means the first video track and the first audio track
 * `clipFrom` - an integer that specifies an offset in milliseconds, from the beginning of the 
 	media file, from which to start loading frames
-* `encryptionKey` - a base64 encoded string containing the key (128 bit) that should be used
-	to decrypt the media file. 
-	
+* `encryptionKey` - a base64 encoded string containing the key (128/192/256 bit) that should be used
+	to decrypt the file.
+* `encryptionIv` - a base64 encoded string containing the iv (128 bit) that should be used
+	to decrypt the file.
+* `encryptionScheme` - the encryption scheme that was used to encrypt the file. Currently,
+	only two schemes are supported - `cenc` for MP4 files, `aes-cbc` for caption files.
+
 #### Rate filter clip
 
 Mandatory fields:
@@ -850,6 +866,9 @@ Sets the file access mode - local, remote or mapped (see the features section ab
 * **context**: `location`
 
 Enables the nginx-vod status page on the enclosing location. 
+The following query params are supported:
+* `?reset=1` - resets the performance counters and cache stats.
+* `?format=prom` - returns the output in format compatible with Prometheus (the default format is XML).
 
 ### Configuration directives - segmentation
 
@@ -942,7 +961,7 @@ an HLS manifest will contain #EXTINF:10
 frame rate of 29.97 and 10 second segments it will report the first segment as 10.01. accurate mode also
 takes into account the key frame alignment, in case `vod_align_segments_to_key_frames` is on
 
-### vod_media_set_override_json
+#### vod_media_set_override_json
 * **syntax**: `vod_media_set_override_json json`
 * **default**: `{}`
 * **context**: `http`, `server`, `location`
@@ -1204,6 +1223,13 @@ The name of the speed request parameter.
 
 The name of the language request parameter.
 
+#### vod_force_sequence_index
+* **syntax**: `vod_force_sequence_index on/off`
+* **default**: `off`
+* **context**: `http`, `server`, `location`
+
+Use sequence index in segment uris even if there is only one sequence
+
 ### Configuration directives - response headers
 
 #### vod_expires
@@ -1438,6 +1464,15 @@ Sets the MPD format, available options are:
 * `segmentlist` - uses SegmentList and SegmentURL tags, in this format the URL of each fragment is explicitly set in the MPD
 * `segmenttemplate` - uses SegmentTemplate, reporting a single duration for all fragments
 * `segmenttimeline` - uses SegmentTemplate and SegmentTimeline to explicitly set the duration of the fragments
+
+#### vod_dash_subtitle_format
+* **syntax**: `vod_dash_subtitle_format format`
+* **default**: `webvtt`
+* **context**: `http`, `server`, `location`
+
+Sets the format of the subtitles returned in the MPD, available options are:
+* `webvtt` - WebVTT
+* `smpte-tt` - SMPTE Timed Text
 
 #### vod_dash_init_mp4_pssh
 * **syntax**: `vod_dash_init_mp4_pssh on/off`

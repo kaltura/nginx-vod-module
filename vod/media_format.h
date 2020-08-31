@@ -64,6 +64,42 @@
 #define REQUEST_FLAG_NO_DISCONTINUITY				(0x20)
 #define REQUEST_FLAG_FORCE_PLAYLIST_TYPE_VOD		(0x40)
 
+// audio channels (aligned with ffmpeg AV_CH_XXX)
+#define VOD_CH_FRONT_LEFT				0x00000001
+#define VOD_CH_FRONT_RIGHT				0x00000002
+#define VOD_CH_FRONT_CENTER				0x00000004
+#define VOD_CH_LOW_FREQUENCY			0x00000008
+#define VOD_CH_BACK_LEFT				0x00000010
+#define VOD_CH_BACK_RIGHT				0x00000020
+#define VOD_CH_FRONT_LEFT_OF_CENTER		0x00000040
+#define VOD_CH_FRONT_RIGHT_OF_CENTER	0x00000080
+#define VOD_CH_BACK_CENTER				0x00000100
+#define VOD_CH_SIDE_LEFT				0x00000200
+#define VOD_CH_SIDE_RIGHT				0x00000400
+#define VOD_CH_TOP_CENTER				0x00000800
+#define VOD_CH_TOP_FRONT_LEFT			0x00001000
+#define VOD_CH_TOP_FRONT_CENTER			0x00002000
+#define VOD_CH_TOP_FRONT_RIGHT			0x00004000
+#define VOD_CH_TOP_BACK_LEFT			0x00008000
+#define VOD_CH_TOP_BACK_CENTER			0x00010000
+#define VOD_CH_TOP_BACK_RIGHT			0x00020000
+#define VOD_CH_WIDE_LEFT				0x0000000080000000ULL
+#define VOD_CH_WIDE_RIGHT				0x0000000100000000ULL
+#define VOD_CH_SURROUND_DIRECT_LEFT		0x0000000200000000ULL
+#define VOD_CH_SURROUND_DIRECT_RIGHT	0x0000000400000000ULL
+#define VOD_CH_LOW_FREQUENCY_2			0x0000000800000000ULL
+
+#define VOD_CH_LAYOUT_MONO				(VOD_CH_FRONT_CENTER)
+#define VOD_CH_LAYOUT_STEREO		  	(VOD_CH_FRONT_LEFT|VOD_CH_FRONT_RIGHT)
+#define VOD_CH_LAYOUT_SURROUND			(VOD_CH_LAYOUT_STEREO|VOD_CH_FRONT_CENTER)
+#define VOD_CH_LAYOUT_2_1			 	(VOD_CH_LAYOUT_STEREO|VOD_CH_BACK_CENTER)
+#define VOD_CH_LAYOUT_4POINT0		 	(VOD_CH_LAYOUT_SURROUND|VOD_CH_BACK_CENTER)
+#define VOD_CH_LAYOUT_2_2			 	(VOD_CH_LAYOUT_STEREO|VOD_CH_SIDE_LEFT|VOD_CH_SIDE_RIGHT)
+#define VOD_CH_LAYOUT_5POINT0		 	(VOD_CH_LAYOUT_SURROUND|VOD_CH_SIDE_LEFT|VOD_CH_SIDE_RIGHT)
+#define VOD_CH_LAYOUT_5POINT0_BACK	  	(VOD_CH_LAYOUT_SURROUND|VOD_CH_BACK_LEFT|VOD_CH_BACK_RIGHT)
+#define VOD_CH_LAYOUT_5POINT1_BACK	  	(VOD_CH_LAYOUT_5POINT0_BACK|VOD_CH_LOW_FREQUENCY)
+#define VOD_CH_LAYOUT_7POINT1_WIDE_BACK	(VOD_CH_LAYOUT_5POINT1_BACK|VOD_CH_FRONT_LEFT_OF_CENTER|VOD_CH_FRONT_RIGHT_OF_CENTER)
+
 #define VOD_CODEC_FLAG(name) (1 << (VOD_CODEC_ID_##name - 1))
 
 #define vod_codec_in_mask(codec_id, mask) (((mask) & (1 << ((codec_id) - 1))) != 0)
@@ -78,6 +114,7 @@ enum {
 	VOD_CODEC_ID_HEVC,
 	VOD_CODEC_ID_VP8,
 	VOD_CODEC_ID_VP9,
+	VOD_CODEC_ID_AV1,
 
 	// audio
 	VOD_CODEC_ID_AUDIO,
@@ -155,6 +192,7 @@ typedef struct {
 typedef struct {
 	uint8_t object_type_id;
 	uint16_t channels;
+	uint64_t channel_layout;
 	uint16_t bits_per_sample;
 	uint16_t packet_size;
 	uint32_t sample_rate;
@@ -171,6 +209,7 @@ typedef struct media_info_s {
 	uint64_t duration;
 	uint32_t duration_millis;
 	uint32_t bitrate;
+	uint32_t avg_bitrate;
 	uint32_t min_frame_duration;	// valid only for video		XXXXX move to video_media_info_t
 	uint32_t codec_id;
 	vod_str_t codec_name;
@@ -281,7 +320,6 @@ typedef struct {
 	vod_status_t(*init_metadata_reader)(
 		request_context_t* request_context, 
 		vod_str_t* buffer,
-		size_t initial_read_size,
 		size_t max_metadata_size,
 		void** ctx);
 

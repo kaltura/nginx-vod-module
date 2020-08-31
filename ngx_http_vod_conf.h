@@ -74,6 +74,7 @@ struct ngx_http_vod_loc_conf_s {
 	ngx_table_elt_t proxy_header;
 	ngx_flag_t force_playlist_type_vod;
 	ngx_flag_t force_continuous_timestamps;
+	ngx_flag_t force_sequence_index;
 
 	time_t expires[EXPIRES_TYPE_COUNT];
 	time_t last_modified_time;

@@ -96,7 +96,7 @@ ngx_http_vod_hls_init_encryption_iv(u_char* iv, uint32_t segment_index)
 
 static ngx_int_t
 ngx_http_vod_hls_get_iv_seed(
-	ngx_http_vod_submodule_context_t* submodule_context,
+	ngx_http_vod_submodule_context_t* submodule_context, 
 	media_sequence_t* sequence,
 	ngx_str_t* result)
 {
@@ -284,11 +284,11 @@ ngx_http_vod_hls_handle_master_playlist(
 
 	content_type->data = m3u8_content_type;
 	content_type->len = sizeof(m3u8_content_type) - 1;
-
+	
 	return NGX_OK;
 }
 
-static ngx_int_t
+static ngx_int_t 
 ngx_http_vod_hls_handle_index_playlist(
 	ngx_http_vod_submodule_context_t* submodule_context,
 	ngx_str_t* response,
@@ -328,7 +328,7 @@ ngx_http_vod_hls_handle_index_playlist(
 	}
 
 	container_format = ngx_http_vod_hls_get_container_format(
-		&conf->hls,
+		&conf->hls, 
 		&submodule_context->media_set);
 
 #if (NGX_HAVE_OPENSSL_EVP)
@@ -366,7 +366,6 @@ ngx_http_vod_hls_handle_index_playlist(
 		&conf->hls.m3u8_config,
 		&base_url,
 		&segments_base_url,
-		&submodule_context->request_params,
 		&encryption_params,
 		container_format,
 		&submodule_context->media_set,
@@ -380,7 +379,7 @@ ngx_http_vod_hls_handle_index_playlist(
 
 	content_type->data = m3u8_content_type;
 	content_type->len = sizeof(m3u8_content_type) - 1;
-
+	
 	return NGX_OK;
 }
 
@@ -393,7 +392,7 @@ ngx_http_vod_hls_handle_iframe_playlist(
 	ngx_http_vod_loc_conf_t* conf = submodule_context->conf;
 	ngx_str_t base_url = ngx_null_string;
 	vod_status_t rc;
-
+	
 	if (conf->hls.encryption_method != HLS_ENC_NONE)
 	{
 		ngx_log_error(NGX_LOG_ERR, submodule_context->request_context.log, 0,
@@ -431,7 +430,6 @@ ngx_http_vod_hls_handle_iframe_playlist(
 		&conf->hls.m3u8_config,
 		&conf->hls.mpegts_muxer_config,
 		&base_url,
-		&submodule_context->request_params,
 		&submodule_context->media_set,
 		response);
 	if (rc != VOD_OK)
@@ -443,7 +441,7 @@ ngx_http_vod_hls_handle_iframe_playlist(
 
 	content_type->data = m3u8_content_type;
 	content_type->len = sizeof(m3u8_content_type) - 1;
-
+	
 	return NGX_OK;
 }
 
@@ -522,7 +520,7 @@ ngx_http_vod_hls_init_ts_frame_processor(
 		segment_writer->write_tail,
 		segment_writer->context,
 		reuse_output_buffers,
-		response_size,
+		response_size, 
 		output_buffer,
 		&state);
 	if (rc != VOD_OK)
@@ -532,7 +530,7 @@ ngx_http_vod_hls_init_ts_frame_processor(
 		return ngx_http_vod_status_to_ngx_error(submodule_context->r, rc);
 	}
 
-	if (encryption_params.type == HLS_ENC_AES_128 &&
+	if (encryption_params.type == HLS_ENC_AES_128 && 
 		*response_size != 0)
 	{
 		*response_size = aes_round_up_to_block(*response_size);
@@ -854,7 +852,7 @@ ngx_http_vod_hls_handle_vtt_segment(
 	ngx_str_t* content_type)
 {
 	vod_status_t rc;
-
+	
 	rc = webvtt_builder_build(
 		&submodule_context->request_context,
 		&submodule_context->media_set,
@@ -1021,12 +1019,12 @@ ngx_http_vod_hls_merge_loc_conf(
 	ngx_conf_merge_value(conf->mpegts_muxer_config.interleave_frames, prev->mpegts_muxer_config.interleave_frames, 0);
 	ngx_conf_merge_value(conf->mpegts_muxer_config.align_frames, prev->mpegts_muxer_config.align_frames, 1);
 	ngx_conf_merge_value(conf->mpegts_muxer_config.output_id3_timestamps, prev->mpegts_muxer_config.output_id3_timestamps, 0);
-
+	
 	ngx_conf_merge_uint_value(conf->encryption_method, prev->encryption_method, HLS_ENC_NONE);
 
 	m3u8_builder_init_config(
 		&conf->m3u8_config,
-		base->segmenter.max_segment_duration,
+		base->segmenter.max_segment_duration, 
 		conf->encryption_method);
 
 	switch (conf->encryption_method)
@@ -1057,7 +1055,7 @@ ngx_http_vod_hls_merge_loc_conf(
 	return NGX_CONF_OK;
 }
 
-static int
+static int 
 ngx_http_vod_hls_get_file_path_components(ngx_str_t* uri)
 {
 	return 1;

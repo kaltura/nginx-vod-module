@@ -88,7 +88,7 @@ vod_status_t codec_config_get_audio_codec_name(request_context_t* request_contex
 vod_status_t codec_config_mp4a_config_parse(
 	request_context_t* request_context,
 	vod_str_t* extra_data, 
-	mp4a_config_t* result);
+	struct media_info_s* media_info);
 
 vod_status_t codec_config_hevc_config_parse(
 	request_context_t* request_context,

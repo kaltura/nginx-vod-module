@@ -4,11 +4,10 @@
 #define MIN_BUFFER_COUNT (2)
 
 void 
-read_cache_init(read_cache_state_t* state, request_context_t* request_context, size_t buffer_size, size_t alignment)
+read_cache_init(read_cache_state_t* state, request_context_t* request_context, size_t buffer_size)
 {
 	state->request_context = request_context;
 	state->buffer_size = buffer_size;
-	state->alignment = alignment;
 	state->buffer_count = 0;
 	state->reuse_buffers = TRUE;
 }
@@ -76,7 +75,7 @@ read_cache_get_from_cache(
 	}
 
 	// don't have the offset in cache
-	alignment = state->alignment - 1;
+	alignment = source->alignment - 1;
 	cache_slot_id = request->cache_slot_id;
 
 	// start reading from the min offset, if that would contain the whole frame

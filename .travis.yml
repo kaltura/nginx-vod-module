@@ -1,23 +1,15 @@
 before_install:
     - sudo add-apt-repository -y ppa:ubuntu-toolchain-r/test
     - sudo apt-get update -qq
-    - sudo apt-get install -y libssl-dev libpcre3-dev libxml2-dev wget unzip libopencore-amrwb0 libopencore-amrnb0 libass4 libgsm1 libmp3lame0 libopenjpeg2 libschroedinger-1.0-0 libspeex1 libtheora0  libva1  libvpx1 libxvidcore4 libnuma1 gcc-7
-    - wget http://installrepo.origin.kaltura.org/releases/kaltura-ffmpeg_amd64.deb
-    - wget http://installrepo.origin.kaltura.org/repo/apt/debian/pool/main/x/x264/libx264-148_0.148-1_amd64.deb
-    - wget http://installrepo.origin.kaltura.org/repo/apt/debian/pool/main/x/x265/libx265-87_2.0-4_amd64.deb
-    - wget http://installrepo.kaltura.org/releases/kaltura-ffmpeg-deb-deps/libvdpau1_0.4.1-3ubuntu1.2_amd64.deb
-    - wget http://installrepo.kaltura.org/releases/kaltura-ffmpeg-deb-deps/libfdk-aac0_0.1.3-1_amd64.deb
-    - sudo dpkg -i libfdk-aac0_0.1.3-1_amd64.deb
-    - sudo dpkg -i libx264-148_0.148-1_amd64.deb
-    - sudo dpkg -i libx265-87_2.0-4_amd64.deb 
-    - sudo dpkg -i libvdpau1_0.4.1-3ubuntu1.2_amd64.deb
-    - sudo dpkg -i kaltura-ffmpeg_amd64.deb
-    - sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-7 20
+    - sudo apt-get install -y libssl-dev libpcre3-dev libxml2-dev wget unzip libopencore-amrwb0 libopencore-amrnb0 libass9 libgsm1 libmp3lame0 libjpeg9 libspeex1 libtheora0  libva2  libvpx6 libxvidcore4 libnuma1 gcc-10 libvdpau1 libfdk-aac1  libva-drm2 libva-x11-2 libvorbisfile3 libopenjp2-7 libzvbi0 libx264-155 libx265-179 libxcb1-dev libxcb-shm0-dev libvorbisenc2
+    - wget http://installrepo.origin.kaltura.org/repo/aptn/test_debs/kaltura-ffmpeg_4.2.2-1_amd64.deb
+    - sudo dpkg -i kaltura-ffmpeg_4.2.2-1_amd64.deb
+    - sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-10 20
 language: c
 compiler:
     - clang
     - gcc
-dist: trusty
+dist: focal
 env:
   - NGX_VOD_MODULE=--add-module=./nginx-vod-module
   - NGX_VOD_MODULE=--add-dynamic-module=./nginx-vod-module

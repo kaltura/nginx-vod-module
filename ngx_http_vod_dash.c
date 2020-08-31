@@ -7,6 +7,7 @@
 #include "vod/mp4/mp4_fragment.h"
 #include "vod/mp4/mp4_init_segment.h"
 #include "vod/subtitle/webvtt_builder.h"
+#include "vod/subtitle/ttml_builder.h"
 #include "vod/udrm.h"
 
 #if (NGX_HAVE_OPENSSL_EVP)
@@ -15,13 +16,19 @@
 
 // constants
 #define SUPPORTED_CODECS_MP4 (VOD_CODEC_FLAG(AVC) | VOD_CODEC_FLAG(HEVC) | VOD_CODEC_FLAG(AAC) | VOD_CODEC_FLAG(AC3) | VOD_CODEC_FLAG(EAC3))
-#define SUPPORTED_CODECS_WEBM (VOD_CODEC_FLAG(VP8) | VOD_CODEC_FLAG(VP9) | VOD_CODEC_FLAG(VORBIS) | VOD_CODEC_FLAG(OPUS))
+#define SUPPORTED_CODECS_WEBM (VOD_CODEC_FLAG(VP8) | VOD_CODEC_FLAG(VP9) | VOD_CODEC_FLAG(AV1) | VOD_CODEC_FLAG(VORBIS) | VOD_CODEC_FLAG(OPUS))
 #define SUPPORTED_CODECS (SUPPORTED_CODECS_MP4 | SUPPORTED_CODECS_WEBM)
 
 ngx_conf_enum_t  dash_manifest_formats[] = {
 	{ ngx_string("segmentlist"), FORMAT_SEGMENT_LIST },
 	{ ngx_string("segmenttemplate"), FORMAT_SEGMENT_TEMPLATE },
 	{ ngx_string("segmenttimeline"), FORMAT_SEGMENT_TIMELINE },
+	{ ngx_null_string, 0 }
+};
+
+ngx_conf_enum_t  dash_subtitle_formats[] = {
+	{ ngx_string("webvtt"), SUBTITLE_FORMAT_WEBVTT },
+	{ ngx_string("smpte-tt"), SUBTITLE_FORMAT_SMPTE_TT },
 	{ ngx_null_string, 0 }
 };
 
@@ -37,6 +44,7 @@ static const u_char init_segment_file_ext[] = ".mp4";
 static const u_char fragment_file_ext[] = ".m4s";
 static const u_char webm_file_ext[] = ".webm";
 static const u_char vtt_file_ext[] = ".vtt";
+static const u_char ttml_file_ext[] = ".ttml";
 
 static ngx_int_t 
 ngx_http_vod_dash_handle_manifest(
@@ -386,7 +394,7 @@ ngx_http_vod_dash_handle_vtt_file(
 	ngx_str_t* content_type)
 {
 	vod_status_t rc;
-	
+
 	rc = webvtt_builder_build(
 		&submodule_context->request_context,
 		&submodule_context->media_set,
@@ -404,6 +412,42 @@ ngx_http_vod_dash_handle_vtt_file(
 	return NGX_OK;
 }
 
+static ngx_int_t
+ngx_http_vod_dash_handle_ttml_fragment(
+	ngx_http_vod_submodule_context_t* submodule_context,
+	ngx_str_t* response,
+	ngx_str_t* content_type)
+{
+	dash_fragment_header_extensions_t header_extensions;
+	vod_status_t rc;
+	size_t ignore;
+
+	ngx_memzero(&header_extensions, sizeof(header_extensions));
+
+	header_extensions.mdat_atom_max_size = ttml_builder_get_max_size(&submodule_context->media_set);
+	header_extensions.write_mdat_atom_callback = (dash_write_mdat_atom_callback_t)ttml_builder_write;
+	header_extensions.write_mdat_atom_context = &submodule_context->media_set;
+
+	rc = dash_packager_build_fragment_header(
+		&submodule_context->request_context,
+		&submodule_context->media_set,
+		submodule_context->request_params.segment_index,
+		0,
+		&header_extensions,
+		FALSE,
+		response,
+		&ignore);
+	if (rc != VOD_OK)
+	{
+		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, submodule_context->request_context.log, 0,
+			"ngx_http_vod_dash_handle_ttml_fragment: dash_packager_build_fragment_header failed %i", rc);
+		return ngx_http_vod_status_to_ngx_error(submodule_context->r, rc);
+	}
+
+	mp4_fragment_get_content_type(TRUE, content_type);
+	return NGX_OK;
+}
+
 static const ngx_http_vod_request_t dash_manifest_request = {
 	REQUEST_FLAG_TIME_DEPENDENT_ON_LIVE,
 	PARSE_FLAG_DURATION_LIMITS_AND_TOTAL_SIZE | PARSE_FLAG_INITIAL_PTS_DELAY | PARSE_FLAG_CODEC_NAME,
@@ -418,7 +462,7 @@ static const ngx_http_vod_request_t dash_mp4_init_request = {
 	REQUEST_FLAG_SINGLE_TRACK,
 	PARSE_BASIC_METADATA_ONLY | PARSE_FLAG_SAVE_RAW_ATOMS,
 	REQUEST_CLASS_OTHER,
-	SUPPORTED_CODECS_MP4,
+	SUPPORTED_CODECS_MP4 | VOD_CODEC_FLAG(WEBVTT),
 	DASH_TIMESCALE,
 	ngx_http_vod_dash_mp4_handle_init_segment,
 	NULL,
@@ -474,6 +518,16 @@ static const ngx_http_vod_request_t dash_webvtt_file_request = {
 	NULL,
 };
 
+static const ngx_http_vod_request_t dash_ttml_request = {
+	REQUEST_FLAG_SINGLE_TRACK,
+	PARSE_FLAG_FRAMES_ALL | PARSE_FLAG_EXTRA_DATA,
+	REQUEST_CLASS_SEGMENT,
+	VOD_CODEC_FLAG(WEBVTT),
+	TTML_TIMESCALE,
+	ngx_http_vod_dash_handle_ttml_fragment,
+	NULL,
+};
+
 static void
 ngx_http_vod_dash_create_loc_conf(
 	ngx_conf_t *cf,
@@ -482,6 +536,7 @@ ngx_http_vod_dash_create_loc_conf(
 	conf->absolute_manifest_urls = NGX_CONF_UNSET;
 	conf->init_mp4_pssh = NGX_CONF_UNSET;
 	conf->mpd_config.manifest_format = NGX_CONF_UNSET_UINT;
+	conf->mpd_config.subtitle_format = NGX_CONF_UNSET_UINT;
 	conf->mpd_config.duplicate_bitrate_threshold = NGX_CONF_UNSET_UINT;
 	conf->mpd_config.write_playready_kid = NGX_CONF_UNSET;
 	conf->mpd_config.use_base_url_tag = NGX_CONF_UNSET;
@@ -503,6 +558,7 @@ ngx_http_vod_dash_merge_loc_conf(
 	ngx_conf_merge_str_value(conf->mpd_config.fragment_file_name_prefix, prev->mpd_config.fragment_file_name_prefix, "fragment");
 	ngx_conf_merge_str_value(conf->mpd_config.subtitle_file_name_prefix, prev->mpd_config.subtitle_file_name_prefix, "sub");
 	ngx_conf_merge_uint_value(conf->mpd_config.manifest_format, prev->mpd_config.manifest_format, FORMAT_SEGMENT_TIMELINE);
+	ngx_conf_merge_uint_value(conf->mpd_config.subtitle_format, prev->mpd_config.subtitle_format, SUBTITLE_FORMAT_WEBVTT);
 	ngx_conf_merge_uint_value(conf->mpd_config.duplicate_bitrate_threshold, prev->mpd_config.duplicate_bitrate_threshold, 4096);
 	ngx_conf_merge_value(conf->mpd_config.write_playready_kid, prev->mpd_config.write_playready_kid, 0);
 	ngx_conf_merge_value(conf->mpd_config.use_base_url_tag, prev->mpd_config.use_base_url_tag, 0);
@@ -567,6 +623,14 @@ ngx_http_vod_dash_parse_uri_file_name(
 		end_pos -= (sizeof(manifest_file_ext) - 1);
 		*request = &dash_manifest_request;
 		flags = PARSE_FILE_NAME_MULTI_STREAMS_PER_TYPE;
+	}
+	// smpte fragment
+	else if (ngx_http_vod_match_prefix_postfix(start_pos, end_pos, &conf->dash.mpd_config.fragment_file_name_prefix, ttml_file_ext))
+	{
+		start_pos += conf->dash.mpd_config.fragment_file_name_prefix.len;
+		end_pos -= (sizeof(ttml_file_ext) - 1);
+		*request = &dash_ttml_request;
+		flags = PARSE_FILE_NAME_EXPECT_SEGMENT_INDEX;
 	}
 	// webvtt file
 	else if (ngx_http_vod_match_prefix_postfix(start_pos, end_pos, &conf->dash.mpd_config.subtitle_file_name_prefix, vtt_file_ext))

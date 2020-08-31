@@ -7,12 +7,20 @@
 #include "ngx_buffer_cache.h"
 
 // macros
-#define DEFINE_STAT(x) { #x, sizeof(#x) - 1, offsetof(ngx_buffer_cache_stats_t, x) }
+#define DEFINE_STAT(x) { { sizeof(#x) - 1, (u_char *) #x }, offsetof(ngx_buffer_cache_stats_t, x) }
 
 // constants
 #define PATH_PERF_COUNTERS_OPEN "<performance_counters>\r\n"
 #define PATH_PERF_COUNTERS_CLOSE "</performance_counters>\r\n"
 #define PERF_COUNTER_FORMAT "<sum>%uA</sum>\r\n<count>%uA</count>\r\n<max>%uA</max>\r\n<max_time>%uA</max_time>\r\n<max_pid>%uA</max_pid>\r\n"
+
+#define PROM_VOD_CACHE_METRIC_FORMAT "vod_cache_%V{cache=\"%V\"} %uA\n"
+#define PROM_PERF_COUNTER_METRICS						\
+	"vod_perf_counter_sum{action=\"%V\"} %uA\n"			\
+	"vod_perf_counter_count{action=\"%V\"} %uA\n"		\
+	"vod_perf_counter_max{action=\"%V\"} %uA\n"			\
+	"vod_perf_counter_max_time{action=\"%V\"} %uA\n"	\
+	"vod_perf_counter_max_pid{action=\"%V\"} %uA\n\n"	\
 
 // typedefs
 typedef struct {
@@ -22,9 +30,8 @@ typedef struct {
 } ngx_http_vod_cache_info_t;
 
 typedef struct {
-	const char* name;
-	int name_len;
-	int offset;
+	ngx_str_t name;
+	unsigned offset;
 } ngx_http_vod_stat_def_t;
 
 // constants
@@ -51,7 +58,7 @@ static ngx_http_vod_stat_def_t buffer_cache_stat_defs[] = {
 	DEFINE_STAT(reset),
 	DEFINE_STAT(entries),
 	DEFINE_STAT(data_size),
-	{ NULL, 0, 0 }
+	{ ngx_null_string, 0 }
 };
 
 static ngx_http_vod_cache_info_t cache_infos[] = {
@@ -92,11 +99,11 @@ ngx_http_vod_append_cache_stats(u_char* p, ngx_buffer_cache_stats_t* stats)
 {
 	ngx_http_vod_stat_def_t* cur_stat;
 
-	for (cur_stat = buffer_cache_stat_defs; cur_stat->name != NULL; cur_stat++)
+	for (cur_stat = buffer_cache_stat_defs; cur_stat->name.data != NULL; cur_stat++)
 	{
 		// opening tag
 		*p++ = '<';
-		p = ngx_copy(p, cur_stat->name, cur_stat->name_len);
+		p = ngx_copy(p, cur_stat->name.data, cur_stat->name.len);
 		*p++ = '>';
 
 		// value
@@ -105,7 +112,7 @@ ngx_http_vod_append_cache_stats(u_char* p, ngx_buffer_cache_stats_t* stats)
 		// closing tag
 		*p++ = '<';
 		*p++ = '/';
-		p = ngx_copy(p, cur_stat->name, cur_stat->name_len);
+		p = ngx_copy(p, cur_stat->name.data, cur_stat->name.len);
 		*p++ = '>';
 
 		// newline
@@ -119,8 +126,8 @@ ngx_http_vod_append_cache_stats(u_char* p, ngx_buffer_cache_stats_t* stats)
 static ngx_int_t
 ngx_http_vod_status_reset(ngx_http_request_t *r)
 {
-	ngx_perf_counters_t* perf_counters;
 	ngx_http_vod_loc_conf_t *conf;
+	ngx_perf_counters_t* perf_counters;
 	ngx_buffer_cache_t *cur_cache;
 	unsigned i;
 
@@ -153,35 +160,27 @@ ngx_http_vod_status_reset(ngx_http_request_t *r)
 	return ngx_http_vod_send_response(r, &reset_response, &text_content_type);
 }
 
-ngx_int_t
-ngx_http_vod_status_handler(ngx_http_request_t *r)
+static ngx_int_t
+ngx_http_vod_status_xml_handler(ngx_http_request_t *r)
 {
-	ngx_perf_counters_t* perf_counters;
 	ngx_buffer_cache_stats_t stats;
 	ngx_http_vod_loc_conf_t *conf;
 	ngx_http_vod_stat_def_t* cur_stat;
+	ngx_perf_counters_t* perf_counters;
 	ngx_buffer_cache_t *cur_cache;
 	ngx_str_t response;
-	ngx_str_t reset;
 	u_char* p;
 	size_t cache_stats_len = 0;
 	size_t result_size;
 	unsigned i;
 
-	if (ngx_http_arg(r, (u_char *) "reset", sizeof("reset") - 1, &reset) == NGX_OK &&
-		reset.len == 1 &&
-		reset.data[0] == '1') 
-	{
-		return ngx_http_vod_status_reset(r);
-	}
-
 	conf = ngx_http_get_module_loc_conf(r, ngx_http_vod_module);
 	perf_counters = ngx_perf_counter_get_state(conf->perf_counters_zone);
 
 	// calculate the buffer size
-	for (cur_stat = buffer_cache_stat_defs; cur_stat->name != NULL; cur_stat++)
+	for (cur_stat = buffer_cache_stat_defs; cur_stat->name.data != NULL; cur_stat++)
 	{
-		cache_stats_len += sizeof("<></>\r\n") - 1 + 2 * cur_stat->name_len + NGX_ATOMIC_T_LEN;
+		cache_stats_len += sizeof("<></>\r\n") - 1 + 2 * cur_stat->name.len + NGX_ATOMIC_T_LEN;
 	}
 
 	result_size = sizeof(status_prefix) - 1;
@@ -213,7 +212,7 @@ ngx_http_vod_status_handler(ngx_http_request_t *r)
 	if (response.data == NULL)
 	{
 		ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
-			"ngx_http_vod_status_handler: ngx_palloc failed");
+			"ngx_http_vod_status_xml_handler: ngx_palloc failed");
 		return NGX_HTTP_INTERNAL_SERVER_ERROR;
 	}
 
@@ -259,10 +258,138 @@ ngx_http_vod_status_handler(ngx_http_request_t *r)
 	if (response.len > result_size)
 	{
 		ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
-			"ngx_http_vod_status_handler: response length %uz exceeded allocated length %uz", 
+			"ngx_http_vod_status_xml_handler: response length %uz exceeded allocated length %uz",
 			response.len, result_size);
 		return NGX_HTTP_INTERNAL_SERVER_ERROR;
 	}
 
 	return ngx_http_vod_send_response(r, &response, &xml_content_type);
+}
+
+static ngx_int_t
+ngx_http_vod_status_prom_handler(ngx_http_request_t *r)
+{
+	ngx_buffer_cache_stats_t stats;
+	ngx_http_vod_stat_def_t* cur_stat;
+	ngx_http_vod_loc_conf_t *conf;
+	ngx_perf_counters_t* perf_counters;
+	ngx_buffer_cache_t *cur_cache;
+	ngx_str_t response;
+	ngx_str_t cache_name;
+	ngx_str_t action;
+	unsigned i;
+	u_char* p;
+	size_t result_size;
+	size_t names_len;
+
+	conf = ngx_http_get_module_loc_conf(r, ngx_http_vod_module);
+	perf_counters = ngx_perf_counter_get_state(conf->perf_counters_zone);
+
+	names_len = 0;
+	for (cur_stat = buffer_cache_stat_defs; cur_stat->name.data != NULL; cur_stat++)
+	{
+		names_len += cur_stat->name.len;
+	}
+
+	result_size = 0;
+	for (i = 0; i < vod_array_entries(cache_infos); i++)
+	{
+		cur_cache = *(ngx_buffer_cache_t **)((u_char*)conf + cache_infos[i].conf_offset);
+		if (cur_cache == NULL)
+		{
+			continue;
+		}
+
+		result_size += (sizeof(PROM_VOD_CACHE_METRIC_FORMAT) - 1 + cache_infos[i].open_tag.len + NGX_ATOMIC_T_LEN) *
+			vod_array_entries(buffer_cache_stat_defs) + names_len + sizeof("\n") - 1;
+	}
+
+	if (perf_counters != NULL)
+	{
+		for (i = 0; i < PC_COUNT; i++)
+		{
+			result_size += sizeof(PROM_PERF_COUNTER_METRICS) - 1 + (perf_counters_open_tags[i].len + NGX_ATOMIC_T_LEN) * 5;
+		}
+	}
+
+	// allocate the buffer
+	p = ngx_palloc(r->pool, result_size);
+	if (p == NULL)
+	{
+		ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+			"ngx_http_vod_status_prom_handler: ngx_palloc failed");
+		return NGX_HTTP_INTERNAL_SERVER_ERROR;
+	}
+
+	response.data = p;
+
+	for (i = 0; i < vod_array_entries(cache_infos); i++)
+	{
+		cur_cache = *(ngx_buffer_cache_t **)((u_char*)conf + cache_infos[i].conf_offset);
+		if (cur_cache == NULL)
+		{
+			continue;
+		}
+
+		ngx_buffer_cache_get_stats(cur_cache, &stats);
+
+		cache_name.data = cache_infos[i].open_tag.data + 1;
+		cache_name.len = cache_infos[i].open_tag.len - 4;
+
+		for (cur_stat = buffer_cache_stat_defs; cur_stat->name.data != NULL; cur_stat++)
+		{
+			p = ngx_sprintf(p, PROM_VOD_CACHE_METRIC_FORMAT, &cur_stat->name, &cache_name, *(ngx_atomic_t*)((u_char*)&stats + cur_stat->offset));
+		}
+		*p++ = '\n';
+	}
+
+	if (perf_counters != NULL)
+	{
+		for (i = 0; i < PC_COUNT; i++)
+		{
+			action.data = perf_counters_open_tags[i].data + 1;
+			action.len = perf_counters_open_tags[i].len - 4;
+
+			p = ngx_sprintf(p, PROM_PERF_COUNTER_METRICS,
+				&action, perf_counters->counters[i].sum,
+				&action, perf_counters->counters[i].count,
+				&action, perf_counters->counters[i].max,
+				&action, perf_counters->counters[i].max_time,
+				&action, perf_counters->counters[i].max_pid);
+		}
+	}
+
+	response.len = p - response.data;
+
+	if (response.len > result_size)
+	{
+		ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
+			"ngx_http_vod_status_prom_handler: response length %uz exceeded allocated length %uz",
+			response.len, result_size);
+		return NGX_HTTP_INTERNAL_SERVER_ERROR;
+	}
+
+	return ngx_http_vod_send_response(r, &response, &xml_content_type);
+}
+
+ngx_int_t
+ngx_http_vod_status_handler(ngx_http_request_t *r)
+{
+	ngx_str_t value;
+
+	if (ngx_http_arg(r, (u_char *) "reset", sizeof("reset") - 1, &value) == NGX_OK &&
+		value.len == 1 &&
+		value.data[0] == '1')
+	{
+		return ngx_http_vod_status_reset(r);
+	}
+
+	if (ngx_http_arg(r, (u_char *) "format", sizeof("format") - 1, &value) == NGX_OK &&
+		value.len == sizeof("prom") - 1 &&
+		ngx_strncmp(value.data, "prom", sizeof("prom") - 1) == 0)
+	{
+		return ngx_http_vod_status_prom_handler(r);
+	}
+
+	return ngx_http_vod_status_xml_handler(r);
 }

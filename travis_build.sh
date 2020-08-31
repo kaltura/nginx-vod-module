@@ -1,7 +1,7 @@
 #!/bin/sh
 set -o nounset                              # Treat unset variables as an error
 
-NGINX_VERSION=1.14.0
+NGINX_VERSION=1.19.1
 NGINX_URI="http://nginx.org/download/nginx-$NGINX_VERSION.tar.gz"
 
 
@@ -16,7 +16,7 @@ wget $NGINX_URI -O kaltura-nginx-$NGINX_VERSION.tar.gz
 tar zxf kaltura-nginx-$NGINX_VERSION.tar.gz
 cd nginx-$NGINX_VERSION
 
-FFMPEG_VERSION=3.2
+FFMPEG_VERSION=4.2.2
 LD_LIBRARY_PATH=/opt/kaltura/ffmpeg-$FFMPEG_VERSION/lib
 LIBRARY_PATH=/opt/kaltura/ffmpeg-$FFMPEG_VERSION/lib
 C_INCLUDE_PATH=/opt/kaltura/ffmpeg-$FFMPEG_VERSION/include

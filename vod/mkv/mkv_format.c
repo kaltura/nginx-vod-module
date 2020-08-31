@@ -299,7 +299,6 @@ static vod_status_t
 mkv_metadata_reader_init(
 	request_context_t* request_context,
 	vod_str_t* buffer,
-	size_t initial_read_size,
 	size_t max_metadata_size,
 	void** ctx)
 {
@@ -851,7 +850,7 @@ mkv_metadata_parse(
 				rc = codec_config_mp4a_config_parse(
 					request_context,
 					&track.codec_private,
-					&cur_track->media_info.u.audio.codec_config);
+					&cur_track->media_info);
 				if (rc != VOD_OK)
 				{
 					return rc;
@@ -882,6 +881,7 @@ mkv_metadata_parse(
 		cur_track->media_info.frames_timescale = timescale;
 		cur_track->media_info.codec_delay = track.codec_delay;
 		cur_track->media_info.bitrate = sequence->bitrate[media_type];
+		cur_track->media_info.avg_bitrate = sequence->avg_bitrate[media_type];
 
 		// Note: setting the duration of all tracks to the file duration, since there is no efficient
 		//	way to get the duration of a track

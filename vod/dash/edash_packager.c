@@ -106,6 +106,11 @@ edash_packager_write_content_protection(void* ctx, u_char* p, media_track_t* tra
 	vod_str_t base64;
 	vod_str_t pssh;
 
+	if (track->media_info.media_type > MEDIA_TYPE_AUDIO)	// ignore subtitles
+	{
+		return p;
+	}
+
 	p = vod_copy(p, VOD_EDASH_MANIFEST_CONTENT_PROTECTION_CENC, sizeof(VOD_EDASH_MANIFEST_CONTENT_PROTECTION_CENC) - 1);
 	for (cur_info = drm_info->pssh_array.first; cur_info < drm_info->pssh_array.last; cur_info++)
 	{
@@ -290,6 +295,7 @@ edash_packager_build_init_mp4(
 {
 	drm_info_t* drm_info = (drm_info_t*)media_set->sequences[0].drm_info;
 	atom_writer_t* stsd_atom_writers;
+	atom_writer_t* ppssh_atom_writer;
 	atom_writer_t pssh_atom_writer;
 	drm_system_info_t* cur_info;
 	vod_status_t rc;
@@ -308,25 +314,35 @@ edash_packager_build_init_mp4(
 		return rc;
 	}
 
-	// build the pssh writer
-	pssh_atom_writer.atom_size = 0;
-	for (cur_info = drm_info->pssh_array.first; cur_info < drm_info->pssh_array.last; cur_info++)
+	if ((flags & EDASH_INIT_MP4_WRITE_PSSH) != 0 &&
+		media_set->track_count[MEDIA_TYPE_VIDEO] + media_set->track_count[MEDIA_TYPE_AUDIO] > 0)
 	{
-		pssh_atom_writer.atom_size += ATOM_HEADER_SIZE + sizeof(pssh_atom_t) + cur_info->data.len;
-		if (edash_pssh_v1(cur_info))
+		// build the pssh writer
+		pssh_atom_writer.atom_size = 0;
+		for (cur_info = drm_info->pssh_array.first; cur_info < drm_info->pssh_array.last; cur_info++)
 		{
-			pssh_atom_writer.atom_size -= sizeof(uint32_t);
+			pssh_atom_writer.atom_size += ATOM_HEADER_SIZE + sizeof(pssh_atom_t) + cur_info->data.len;
+			if (edash_pssh_v1(cur_info))
+			{
+				pssh_atom_writer.atom_size -= sizeof(uint32_t);
+			}
 		}
+		pssh_atom_writer.write = edash_packager_write_psshs;
+		pssh_atom_writer.context = &drm_info->pssh_array;
+
+		ppssh_atom_writer = &pssh_atom_writer;
 	}
-	pssh_atom_writer.write = edash_packager_write_psshs;
-	pssh_atom_writer.context = &drm_info->pssh_array;
+	else
+	{
+		ppssh_atom_writer = NULL;
+	}
 
 	// build the init segment
 	rc = mp4_init_segment_build(
 		request_context,
 		media_set,
 		size_only,
-		(flags & EDASH_INIT_MP4_WRITE_PSSH) != 0 ? &pssh_atom_writer : NULL,
+		ppssh_atom_writer,
 		stsd_atom_writers,
 		result);
 	if (rc != VOD_OK)
@@ -369,6 +385,8 @@ edash_packager_video_build_fragment_header(
 	dash_fragment_header_extensions_t header_extensions;
 
 	// get the header extensions
+	vod_memzero(&header_extensions, sizeof(header_extensions));
+
 	header_extensions.extra_traf_atoms_size = 
 		state->base.saiz_atom_size + 
 		state->base.saio_atom_size + 
@@ -420,6 +438,8 @@ edash_packager_audio_build_fragment_header(
 	vod_status_t rc;
 
 	// get the header extensions
+	vod_memzero(&header_extensions, sizeof(header_extensions));
+
 	header_extensions.extra_traf_atoms_size =
 		state->saiz_atom_size + 
 		state->saio_atom_size + 
@@ -502,6 +522,8 @@ edash_packager_get_fragment_writer(
 			"edash_packager_get_fragment_writer: using encryption passthrough");
 
 		// get the header extensions
+		vod_memzero(&header_extensions, sizeof(header_extensions));
+
 		header_extensions.extra_traf_atoms_size = passthrough_context.total_size + ATOM_HEADER_SIZE + sizeof(senc_atom_t);
 		header_extensions.write_extra_traf_atoms_callback = edash_packager_passthrough_write_encryption_atoms;
 		header_extensions.write_extra_traf_atoms_context = &passthrough_context;

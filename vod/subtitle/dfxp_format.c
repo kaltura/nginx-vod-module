@@ -26,7 +26,6 @@ static vod_status_t
 dfxp_reader_init(
 	request_context_t* request_context,
 	vod_str_t* buffer,
-	size_t initial_read_size,
 	size_t max_metadata_size,
 	void** ctx)
 {
@@ -53,7 +52,6 @@ dfxp_reader_init(
 
 	return subtitle_reader_init(
 		request_context,
-		initial_read_size,
 		ctx);
 }
 
