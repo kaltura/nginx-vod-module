@@ -464,6 +464,8 @@ Optional fields:
 	Setting this parameter is equivalent to passing /clipFrom/ on the URL.
 * `clipTo` - integer, contains a timestamp indicating where the returned stream should end.
 	Setting this parameter is equivalent to passing /clipTo/ on the URL.
+* `cache` - boolean, if set to false, the mapping response will not be saved to cache (vod_mapping_cache).
+	The default value is true.
 	
 Live fields:
 * `firstClipTime` - integer, mandatory for all live playlists unless `clipTimes` is specified.

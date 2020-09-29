@@ -39,6 +39,7 @@ enum {
 	MEDIA_SET_PARAM_NOTIFICATIONS,
 	MEDIA_SET_PARAM_CLIP_FROM,
 	MEDIA_SET_PARAM_CLIP_TO,
+	MEDIA_SET_PARAM_CACHE,
 
 	MEDIA_SET_PARAM_COUNT
 };
@@ -162,6 +163,7 @@ static json_object_key_def_t media_set_params[] = {
 	{ vod_string("notifications"),					VOD_JSON_ARRAY,	MEDIA_SET_PARAM_NOTIFICATIONS },
 	{ vod_string("clipFrom"),						VOD_JSON_INT,	MEDIA_SET_PARAM_CLIP_FROM },
 	{ vod_string("clipTo"),							VOD_JSON_INT,	MEDIA_SET_PARAM_CLIP_TO },
+	{ vod_string("cache"),							VOD_JSON_BOOL,	MEDIA_SET_PARAM_CACHE },
 	{ vod_null_string, 0, 0 }
 };
 
@@ -2287,6 +2289,15 @@ media_set_parse_json(
 			"media_set_parse_json: clip from %uL greater than clip to %uL",
 			source->clip_from, source->clip_to);
 		return VOD_BAD_REQUEST;
+	}
+
+	if (params[MEDIA_SET_PARAM_CACHE] != NULL)
+	{
+		result->cache_mapping = params[MEDIA_SET_PARAM_CACHE]->v.boolean;
+	}
+	else
+	{
+		result->cache_mapping = TRUE;
 	}
 
 	if (params[MEDIA_SET_PARAM_DURATIONS] == NULL)
