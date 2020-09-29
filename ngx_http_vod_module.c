@@ -4647,7 +4647,15 @@ ngx_http_vod_map_run_step(ngx_http_vod_ctx_t *ctx)
 		}
 
 		// save to cache
-		cache = ctx->mapping.caches[store_cache_index];
+		if (store_cache_index >= 0)
+		{
+			cache = ctx->mapping.caches[store_cache_index];
+		}
+		else
+		{
+			cache = NULL;
+		}
+
 		if (cache != NULL)
 		{
 			if (ngx_buffer_cache_store_perf(
@@ -5259,7 +5267,7 @@ ngx_http_vod_map_media_set_apply(ngx_http_vod_ctx_t *ctx, ngx_str_t* mapping, in
 			cur_source->source_type = mapped_source->source_type;
 			cur_source->encryption = mapped_source->encryption;
 
-			*cache_index = CACHE_TYPE_VOD;
+			*cache_index = mapped_media_set.cache_mapping ? CACHE_TYPE_VOD : -1;
 
 			return NGX_OK;
 		}
@@ -5282,7 +5290,7 @@ ngx_http_vod_map_media_set_apply(ngx_http_vod_ctx_t *ctx, ngx_str_t* mapping, in
 		ctx->cur_source = NULL;
 
 		// Note: this is ok because CACHE_TYPE_xxx matches MEDIA_TYPE_xxx in order
-		*cache_index = mapped_media_set.original_type;
+		*cache_index = mapped_media_set.cache_mapping ? (int)mapped_media_set.original_type : -1;
 
 		return NGX_OK;
 	}

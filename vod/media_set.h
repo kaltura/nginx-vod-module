@@ -120,6 +120,7 @@ typedef struct {
 	bool_t original_use_discontinuity;		// will be different than use_discontinuity in case force_continuous_timestamps is enabled
 	bool_t use_discontinuity;
 	bool_t presentation_end;
+	bool_t cache_mapping;
 
 	uint32_t clip_count;					// number of clips relevant to serve the current request
 	uint32_t sequence_count;
