@@ -506,6 +506,8 @@ Live fields:
 * `liveWindowDuration` - integer, optional, provides a way to override `vod_live_window_duration`
 	specified in the configuration. If the value exceeds the absolute value specified in 
 	`vod_live_window_duration`, it is ignored.
+* `timeOffset` - integer, sets an offset that should be applied to the server clock when serving
+	live requests. This parameter can be used to test future/past events.
 	
 #### Sequence
 
