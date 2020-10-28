@@ -187,9 +187,9 @@ void vod_log_error(vod_uint_t level, vod_log_t *log, int err,
 
 // time functions
 #if (VOD_DEBUG)
-#define vod_time(request_context) (request_context->time > 0 ? request_context->time : ngx_time())
+#define vod_time(request_context) ((request_context)->time > 0 ? (request_context)->time : (ngx_time() + (request_context)->time_offset))
 #else
-#define vod_time(request_context) ngx_time()
+#define vod_time(request_context) (ngx_time() + (request_context)->time_offset)
 #endif
 
 #define vod_gmtime(t, tp) ngx_gmtime(t, tp)
@@ -339,6 +339,7 @@ typedef struct {
 	vod_log_t *log;
 	buffer_pool_t* output_buffer_pool;
 	bool_t simulation_only;
+	time_t time_offset;
 #if (VOD_DEBUG)
 	time_t time;
 #endif

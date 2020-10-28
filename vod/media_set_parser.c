@@ -25,6 +25,7 @@ enum {
 	MEDIA_SET_PARAM_CONSISTENT_SEQUENCE_MEDIA_INFO,
 	MEDIA_SET_PARAM_DURATIONS,
 	MEDIA_SET_PARAM_SEQUENCES,
+	MEDIA_SET_PARAM_TIME_OFFSET,
 	MEDIA_SET_PARAM_INITIAL_SEGMENT_INDEX,
 	MEDIA_SET_PARAM_INITIAL_CLIP_INDEX,
 	MEDIA_SET_PARAM_FIRST_CLIP_TIME,
@@ -149,6 +150,7 @@ static json_object_key_def_t media_set_params[] = {
 	{ vod_string("consistentSequenceMediaInfo"),	VOD_JSON_BOOL,	MEDIA_SET_PARAM_CONSISTENT_SEQUENCE_MEDIA_INFO },
 	{ vod_string("durations"),						VOD_JSON_ARRAY, MEDIA_SET_PARAM_DURATIONS },
 	{ vod_string("sequences"),						VOD_JSON_ARRAY,	MEDIA_SET_PARAM_SEQUENCES },
+	{ vod_string("timeOffset"),						VOD_JSON_INT,	MEDIA_SET_PARAM_TIME_OFFSET },
 	{ vod_string("initialSegmentIndex"),			VOD_JSON_INT,	MEDIA_SET_PARAM_INITIAL_SEGMENT_INDEX },
 	{ vod_string("initialClipIndex"),				VOD_JSON_INT,	MEDIA_SET_PARAM_INITIAL_CLIP_INDEX },
 	{ vod_string("firstClipTime"),					VOD_JSON_INT,	MEDIA_SET_PARAM_FIRST_CLIP_TIME },
@@ -1276,6 +1278,11 @@ media_set_parse_live_params(
 	media_set_t* media_set)
 {
 	vod_status_t rc;
+
+	if (params[MEDIA_SET_PARAM_TIME_OFFSET] != NULL)
+	{
+		request_context->time_offset = params[MEDIA_SET_PARAM_TIME_OFFSET]->v.num.num;
+	}
 
 	// clip times
 	rc = media_set_live_init_clip_times(request_context, media_set, params);
