@@ -23,7 +23,8 @@
 	VOD_CODEC_FLAG(AC3) | \
 	VOD_CODEC_FLAG(EAC3) | \
 	VOD_CODEC_FLAG(MP3) | \
-	VOD_CODEC_FLAG(DTS))
+	VOD_CODEC_FLAG(DTS) | \
+	VOD_CODEC_FLAG(FLAC))
 
 // content types
 static u_char m3u8_content_type[] = "application/vnd.apple.mpegurl";
