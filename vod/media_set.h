@@ -15,6 +15,7 @@
 
 #define MAX_LOOK_AHEAD_SEGMENTS (2)
 #define MAX_NOTIFICATIONS (1024)
+#define MAX_CLOSED_CAPTIONS (67)
 #define MAX_CLIPS (128)
 #define MAX_CLIPS_PER_REQUEST (16)
 #define MAX_SEQUENCES (32)
@@ -104,6 +105,12 @@ typedef struct media_notification_s {
 } media_notification_t;
 
 typedef struct {
+	vod_str_t id;
+	language_id_t language;
+	vod_str_t label;
+} media_closed_captions_t;
+
+typedef struct {
 	uint64_t start_time;
 	uint32_t duration;
 } media_look_ahead_segment_t;
@@ -145,6 +152,9 @@ typedef struct {
 	vod_str_t uri;
 
 	media_notification_t* notifications_head;
+
+	media_closed_captions_t* closed_captions;
+	media_closed_captions_t* closed_captions_end;
 
 	// initialized while applying filters
 	uint32_t track_count[MEDIA_TYPE_COUNT];	// sum of track count in all sequences per clip
