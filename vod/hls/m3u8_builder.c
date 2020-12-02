@@ -27,6 +27,7 @@
 
 #define M3U8_STREAM_TAG_AUDIO ",AUDIO=\"" M3U8_EXT_MEDIA_GROUP_ID_AUDIO "%uD\""
 #define M3U8_STREAM_TAG_SUBTITLES ",SUBTITLES=\"" M3U8_EXT_MEDIA_GROUP_ID_SUBTITLES "%uD\""
+#define M3U8_STREAM_TAG_NO_SUBTITLES ",CLOSED-CAPTIONS=NONE"
 
 #define M3U8_VIDEO_RANGE_SDR ",VIDEO-RANGE=SDR"
 #define M3U8_VIDEO_RANGE_PQ ",VIDEO-RANGE=PQ"
@@ -1092,6 +1093,10 @@ m3u8_builder_write_variants(
 		{
 			p = vod_sprintf(p, M3U8_STREAM_TAG_SUBTITLES, 0);
 		}
+		else
+		{
+			p = vod_sprintf(p, M3U8_STREAM_TAG_NO_SUBTITLES, 0);
+		}
 		*p++ = '\n';
 
 		// output the url
@@ -1284,6 +1289,10 @@ m3u8_builder_build_master_playlist(
 			MEDIA_TYPE_SUBTITLE);
 
 		max_video_stream_inf += sizeof(M3U8_STREAM_TAG_SUBTITLES) - 1 + VOD_INT32_LEN;
+	}
+	else
+	{
+		max_video_stream_inf += sizeof(M3U8_STREAM_TAG_NO_SUBTITLES) - 1;
 	}
 
 	// variants
