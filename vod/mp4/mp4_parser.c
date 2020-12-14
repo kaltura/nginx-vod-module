@@ -2744,9 +2744,9 @@ mp4_parser_process_moov_atom_callback(void* ctx, atom_info_t* atom_info)
 			break;
 
 		case FORMAT_FLAC:
-		      	metadata_parse_context.media_info.codec_id = VOD_CODEC_ID_FLAC;
-                        extra_data_required = FALSE;
-                        break;
+			metadata_parse_context.media_info.codec_id = VOD_CODEC_ID_FLAC;
+			extra_data_required = FALSE;
+			break;
 
 		case FORMAT_OPUS:
 			metadata_parse_context.media_info.codec_id = VOD_CODEC_ID_OPUS;
