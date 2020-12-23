@@ -10,7 +10,7 @@
 
 #define WEBVTT_MIN_SEGMENT_SIZE (10)	// iOS11 doesn't play when the first vtt segment is smaller than 10 bytes
 
-#define MPEGTS_MAX_TIMESTAMP (2ULL << 33)	// 33 bit
+#define MPEGTS_MAX_TIMESTAMP (1ULL << 33)	// 33 bit
 
 static u_char*
 webvtt_builder_write_timestamp(u_char* p, uint64_t timestamp)
