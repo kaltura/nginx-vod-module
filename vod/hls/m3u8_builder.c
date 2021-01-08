@@ -12,22 +12,28 @@
 #define M3U8_HEADER_PART2 "#EXT-X-VERSION:%d\n#EXT-X-MEDIA-SEQUENCE:%uD\n"
 
 #define M3U8_EXT_MEDIA_BASE "#EXT-X-MEDIA:TYPE=%s,GROUP-ID=\"%s%uD\",NAME=\"%V\","
+#define M3U8_EXT_MEDIA_BASE_CC "#EXT-X-MEDIA:TYPE=CLOSED-CAPTIONS,GROUP-ID=\"cc\","
+#define M3U8_EXT_MEDIA_NAME "NAME=\"%s\","
 #define M3U8_EXT_MEDIA_LANG "LANGUAGE=\"%s\","
 #define M3U8_EXT_MEDIA_DEFAULT "AUTOSELECT=YES,DEFAULT=YES,"
 #define M3U8_EXT_MEDIA_NON_DEFAULT "AUTOSELECT=NO,DEFAULT=NO,"
 #define M3U8_EXT_MEDIA_URI "URI=\""
+#define M3U8_EXT_MEDIA_INSTREAM_ID "INSTREAM-ID=\"%s\""
 
 #define M3U8_EXT_MEDIA_CHANNELS "CHANNELS=\"%uD\","
 
 #define M3U8_EXT_MEDIA_TYPE_AUDIO "AUDIO"
 #define M3U8_EXT_MEDIA_TYPE_SUBTITLES "SUBTITLES"
+#define M3U8_EXT_MEDIA_TYPE_CLOSED_CAPTIONS "CLOSED-CAPTIONS"
 
 #define M3U8_EXT_MEDIA_GROUP_ID_AUDIO "audio"
 #define M3U8_EXT_MEDIA_GROUP_ID_SUBTITLES "subs"
+#define M3U8_EXT_MEDIA_GROUP_ID_CLOSED_CAPTIONS "cc"
 
 #define M3U8_STREAM_TAG_AUDIO ",AUDIO=\"" M3U8_EXT_MEDIA_GROUP_ID_AUDIO "%uD\""
 #define M3U8_STREAM_TAG_SUBTITLES ",SUBTITLES=\"" M3U8_EXT_MEDIA_GROUP_ID_SUBTITLES "%uD\""
-#define M3U8_STREAM_TAG_NO_SUBTITLES ",CLOSED-CAPTIONS=NONE"
+#define M3U8_STREAM_TAG_CLOSED_CAPTIONS ",CLOSED-CAPTIONS=\"cc\""
+#define M3U8_STREAM_TAG_NO_CLOSED_CAPTIONS ",CLOSED-CAPTIONS=NONE"
 
 #define M3U8_VIDEO_RANGE_SDR ",VIDEO-RANGE=SDR"
 #define M3U8_VIDEO_RANGE_PQ ",VIDEO-RANGE=PQ"
@@ -811,6 +817,70 @@ m3u8_builder_append_index_url(
 }
 
 static size_t
+m3u8_builder_closed_captions_get_size(
+	media_set_t* media_set,
+	request_context_t* request_context)
+{
+	media_closed_captions_t* closed_captions;
+	size_t result = 0;
+	size_t base =
+		sizeof("\n\n") - 1 +
+		(sizeof(M3U8_EXT_MEDIA_BASE) - 1 + VOD_INT32_LEN +
+		sizeof(M3U8_EXT_MEDIA_TYPE_CLOSED_CAPTIONS) - 1 +
+		sizeof(M3U8_EXT_MEDIA_GROUP_ID_CLOSED_CAPTIONS) - 1 +
+		sizeof(M3U8_EXT_MEDIA_LANG) - 1 +
+		LANG_ISO639_3_LEN +
+		sizeof(M3U8_EXT_MEDIA_INSTREAM_ID) - 1 +
+		sizeof(M3U8_EXT_MEDIA_NON_DEFAULT) - 1 +
+		sizeof("\"\n") - 1);
+
+	for (closed_captions = media_set->closed_captions; closed_captions < media_set->closed_captions_end; closed_captions++)
+	{
+		result += base + closed_captions->id.len + closed_captions->label.len;
+	}
+
+	return result;
+}
+
+static u_char*
+m3u8_builder_closed_captions_write(
+	u_char* p,
+	media_set_t* media_set)
+{
+	media_closed_captions_t* closed_captions;
+	bool_t first_cc_track = TRUE;
+
+	for (closed_captions = media_set->closed_captions; closed_captions < media_set->closed_captions_end; closed_captions++)
+	{
+		p = vod_copy(p, M3U8_EXT_MEDIA_BASE_CC, sizeof(M3U8_EXT_MEDIA_BASE_CC) - 1);
+		
+		p = vod_sprintf(p, M3U8_EXT_MEDIA_NAME, (char *) closed_captions->label.data);
+
+		p = vod_sprintf(p, M3U8_EXT_MEDIA_LANG,
+				lang_get_rfc_5646_name(closed_captions->language));
+
+		if (first_cc_track)
+		{
+			p = vod_copy(p, M3U8_EXT_MEDIA_DEFAULT, sizeof(M3U8_EXT_MEDIA_DEFAULT) - 1);
+			first_cc_track = FALSE;
+		}
+		else 
+		{
+			p = vod_copy(p, M3U8_EXT_MEDIA_NON_DEFAULT, sizeof(M3U8_EXT_MEDIA_NON_DEFAULT) - 1);
+		}
+
+		p = vod_sprintf(p, M3U8_EXT_MEDIA_INSTREAM_ID, (char *) closed_captions->id.data);
+
+		*p++ = '\n';
+
+	}
+
+	*p++ = '\n';
+
+	return p;
+}
+
+static size_t
 m3u8_builder_ext_x_media_tags_get_size(
 	adaptation_sets_t* adaptation_sets,
 	vod_str_t* base_url,
@@ -1093,9 +1163,13 @@ m3u8_builder_write_variants(
 		{
 			p = vod_sprintf(p, M3U8_STREAM_TAG_SUBTITLES, 0);
 		}
-		else
+		if (media_set->closed_captions_count == 0 && media_set->has_closed_captions)
 		{
-			p = vod_sprintf(p, M3U8_STREAM_TAG_NO_SUBTITLES, 0);
+			p = vod_sprintf(p, M3U8_STREAM_TAG_NO_CLOSED_CAPTIONS);
+		}
+		if (media_set->closed_captions_count > 0 && media_set->has_closed_captions)
+		{
+			p = vod_sprintf(p, M3U8_STREAM_TAG_CLOSED_CAPTIONS);
 		}
 		*p++ = '\n';
 
@@ -1272,6 +1346,7 @@ m3u8_builder_build_master_playlist(
 		variant_set_count = m3u8_builder_get_audio_codec_count(
 			&adaptation_sets, 
 			audio_codec_tracks);
+
 	}
 	else
 	{
@@ -1290,9 +1365,17 @@ m3u8_builder_build_master_playlist(
 
 		max_video_stream_inf += sizeof(M3U8_STREAM_TAG_SUBTITLES) - 1 + VOD_INT32_LEN;
 	}
-	else
+
+	if (media_set->closed_captions_count == 0 && media_set->has_closed_captions)
 	{
-		max_video_stream_inf += sizeof(M3U8_STREAM_TAG_NO_SUBTITLES) - 1;
+		max_video_stream_inf += sizeof(M3U8_STREAM_TAG_NO_CLOSED_CAPTIONS) - 1;
+	}
+
+	if (media_set->closed_captions_count > 0 && media_set->has_closed_captions)
+	{
+		result_size += m3u8_builder_closed_captions_get_size(media_set, request_context);
+
+		max_video_stream_inf += sizeof(M3U8_STREAM_TAG_CLOSED_CAPTIONS);
 	}
 
 	// variants
@@ -1362,6 +1445,11 @@ m3u8_builder_build_master_playlist(
 			base_url,
 			media_set,
 			MEDIA_TYPE_SUBTITLE);
+	}
+
+	if (media_set->closed_captions_count > 0 && media_set->has_closed_captions)
+	{
+		p = m3u8_builder_closed_captions_write(p, media_set);
 	}
 
 	// output variants
