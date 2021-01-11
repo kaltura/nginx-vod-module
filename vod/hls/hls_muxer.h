@@ -26,6 +26,7 @@ typedef void(*hls_get_iframe_positions_callback_t)(
 typedef struct {
 	bool_t interleave_frames;
 	bool_t align_frames;
+	bool_t align_pts;
 	bool_t output_id3_timestamps;
 } hls_mpegts_muxer_conf_t;
 
@@ -63,6 +64,7 @@ typedef struct {
 	// fixed
 	hls_muxer_stream_state_t* first_stream;
 	hls_muxer_stream_state_t* last_stream;
+	bool_t align_pts;
 	uint32_t video_duration;
 
 	// child states
