@@ -1658,6 +1658,14 @@ padding is added as needed.
 When enabled, an ID3 TEXT frame will be outputted in each TS segment, containing a JSON with the absolute segment timestamp.
 The timestamp is measured in milliseconds since the epoch (unixtime x 1000), the JSON structure is: `{"timestamp":1459779115000}`
 
+#### vod_hls_mpegts_align_pts
+* **syntax**: `vod_hls_mpegts_align_pts on/off`
+* **default**: `off`
+* **context**: `http`, `server`, `location`
+
+When enabled, the module will shift back the dts timestamps by the pts delay of the initial frame.
+This can help keep the pts timestamps aligned across multiple renditions.
+
 ### Configuration directives - MSS
 
 #### vod_mss_manifest_file_name_prefix

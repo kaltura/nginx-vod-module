@@ -40,6 +40,7 @@ static vod_status_t hls_muxer_choose_stream(hls_muxer_state_t* state, hls_muxer_
 
 static vod_status_t
 hls_muxer_init_track(
+	hls_muxer_state_t* state,
 	hls_muxer_stream_state_t* cur_stream,
 	media_track_t* track)
 {
@@ -52,7 +53,6 @@ hls_muxer_init_track(
 	cur_stream->source = get_frame_part_source_clip(cur_stream->cur_frame_part);
 	cur_stream->first_frame_time_offset = hls_rescale_millis(track->clip_start_time) + track->first_frame_time_offset;
 	cur_stream->clip_from_frame_offset = track->clip_from_frame_offset;
-	cur_stream->next_frame_time_offset = cur_stream->first_frame_time_offset;
 
 	switch (track->media_info.media_type)
 	{
@@ -63,6 +63,11 @@ hls_muxer_init_track(
 		if (rc != VOD_OK)
 		{
 			return rc;
+		}
+
+		if (state->align_pts)
+		{
+			cur_stream->first_frame_time_offset -= vod_min(INITIAL_DTS, track->media_info.u.video.initial_pts_delay);
 		}
 		break;
 
@@ -79,6 +84,8 @@ hls_muxer_init_track(
 		}
 		break;
 	}
+
+	cur_stream->next_frame_time_offset = cur_stream->first_frame_time_offset;
 
 	return VOD_OK;
 }
@@ -275,7 +282,7 @@ hls_muxer_init_id3_stream(
 	}
 
 	// init the first track
-	rc = hls_muxer_init_track(cur_stream, &context->first_track[0].track);
+	rc = hls_muxer_init_track(state, cur_stream, &context->first_track[0].track);
 	if (rc != VOD_OK)
 	{
 		return rc;
@@ -312,6 +319,7 @@ hls_muxer_init_base(
 	*simulation_supported = hls_muxer_simulation_supported(media_set, encryption_params);
 
 	state->request_context = request_context;
+	state->align_pts = conf->align_pts;
 	state->cur_frame = NULL;
 	state->video_duration = 0;
 	state->first_time = TRUE;
@@ -464,7 +472,7 @@ hls_muxer_init_base(
 			break;
 		}
 
-		rc = hls_muxer_init_track(cur_stream, track);
+		rc = hls_muxer_init_track(state, cur_stream, track);
 		if (rc != VOD_OK)
 		{
 			return rc;
@@ -588,7 +596,7 @@ hls_muxer_reinit_tracks(hls_muxer_state_t* state)
 			state->id3_context->cur_track++;
 		}
 
-		rc = hls_muxer_init_track(cur_stream, track);
+		rc = hls_muxer_init_track(state, cur_stream, track);
 		if (rc != VOD_OK)
 		{
 			return rc;
