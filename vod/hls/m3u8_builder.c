@@ -16,17 +16,22 @@
 #define M3U8_EXT_MEDIA_DEFAULT "AUTOSELECT=YES,DEFAULT=YES,"
 #define M3U8_EXT_MEDIA_NON_DEFAULT "AUTOSELECT=NO,DEFAULT=NO,"
 #define M3U8_EXT_MEDIA_URI "URI=\""
+#define M3U8_EXT_MEDIA_INSTREAM_ID "INSTREAM-ID=\"%V\""
 
 #define M3U8_EXT_MEDIA_CHANNELS "CHANNELS=\"%uD\","
 
 #define M3U8_EXT_MEDIA_TYPE_AUDIO "AUDIO"
 #define M3U8_EXT_MEDIA_TYPE_SUBTITLES "SUBTITLES"
+#define M3U8_EXT_MEDIA_TYPE_CLOSED_CAPTIONS "CLOSED-CAPTIONS"
 
 #define M3U8_EXT_MEDIA_GROUP_ID_AUDIO "audio"
 #define M3U8_EXT_MEDIA_GROUP_ID_SUBTITLES "subs"
+#define M3U8_EXT_MEDIA_GROUP_ID_CLOSED_CAPTIONS "cc"
 
 #define M3U8_STREAM_TAG_AUDIO ",AUDIO=\"" M3U8_EXT_MEDIA_GROUP_ID_AUDIO "%uD\""
 #define M3U8_STREAM_TAG_SUBTITLES ",SUBTITLES=\"" M3U8_EXT_MEDIA_GROUP_ID_SUBTITLES "%uD\""
+#define M3U8_STREAM_TAG_CLOSED_CAPTIONS ",CLOSED-CAPTIONS=\"" M3U8_EXT_MEDIA_GROUP_ID_CLOSED_CAPTIONS "%uD\""
+#define M3U8_STREAM_TAG_NO_CLOSED_CAPTIONS ",CLOSED-CAPTIONS=NONE"
 
 #define M3U8_VIDEO_RANGE_SDR ",VIDEO-RANGE=SDR"
 #define M3U8_VIDEO_RANGE_PQ ",VIDEO-RANGE=PQ"
@@ -810,6 +815,73 @@ m3u8_builder_append_index_url(
 }
 
 static size_t
+m3u8_builder_closed_captions_get_size(
+	media_set_t* media_set,
+	request_context_t* request_context)
+{
+	media_closed_captions_t* closed_captions;
+	size_t result = 0;
+	size_t base;
+
+	base =
+		sizeof(M3U8_EXT_MEDIA_BASE) - 1 +
+		sizeof(M3U8_EXT_MEDIA_TYPE_CLOSED_CAPTIONS) - 1 +
+		sizeof(M3U8_EXT_MEDIA_GROUP_ID_CLOSED_CAPTIONS) - 1 + VOD_INT32_LEN +
+		sizeof(M3U8_EXT_MEDIA_LANG) - 1 +
+		LANG_ISO639_3_LEN +
+		sizeof(M3U8_EXT_MEDIA_INSTREAM_ID) - 1 +
+		sizeof(M3U8_EXT_MEDIA_DEFAULT) - 1;
+
+	for (closed_captions = media_set->closed_captions; closed_captions < media_set->closed_captions_end; closed_captions++)
+	{
+		result += base + closed_captions->id.len + closed_captions->label.len + sizeof("\n") - 1;
+	}
+
+	return result + sizeof("\n") - 1;
+}
+
+static u_char*
+m3u8_builder_closed_captions_write(
+	u_char* p,
+	media_set_t* media_set)
+{
+	media_closed_captions_t* closed_captions;
+	uint32_t index = 0;
+
+	for (closed_captions = media_set->closed_captions; closed_captions < media_set->closed_captions_end; closed_captions++)
+	{
+		p = vod_sprintf(p, M3U8_EXT_MEDIA_BASE,
+			M3U8_EXT_MEDIA_TYPE_CLOSED_CAPTIONS,
+			M3U8_EXT_MEDIA_GROUP_ID_CLOSED_CAPTIONS,
+			index,
+			(vod_str_t*) &closed_captions->label);
+		
+		if (closed_captions->language != 0)
+		{
+			p = vod_sprintf(p, M3U8_EXT_MEDIA_LANG,
+					lang_get_rfc_5646_name(closed_captions->language));
+		}
+
+		if (closed_captions == media_set->closed_captions)
+		{
+			p = vod_copy(p, M3U8_EXT_MEDIA_DEFAULT, sizeof(M3U8_EXT_MEDIA_DEFAULT) - 1);
+		}
+		else 
+		{
+			p = vod_copy(p, M3U8_EXT_MEDIA_NON_DEFAULT, sizeof(M3U8_EXT_MEDIA_NON_DEFAULT) - 1);
+		}
+
+		p = vod_sprintf(p, M3U8_EXT_MEDIA_INSTREAM_ID, (vod_str_t*) &closed_captions->id);
+
+		*p++ = '\n';
+	}
+
+	*p++ = '\n';
+
+	return p;
+}
+
+static size_t
 m3u8_builder_ext_x_media_tags_get_size(
 	adaptation_sets_t* adaptation_sets,
 	vod_str_t* base_url,
@@ -1092,6 +1164,14 @@ m3u8_builder_write_variants(
 		{
 			p = vod_sprintf(p, M3U8_STREAM_TAG_SUBTITLES, 0);
 		}
+		if (media_set->closed_captions < media_set->closed_captions_end)
+		{
+			p = vod_sprintf(p, M3U8_STREAM_TAG_CLOSED_CAPTIONS, 0);
+		} 
+		else if (media_set->closed_captions != NULL)
+		{
+			p = vod_copy(p, M3U8_STREAM_TAG_NO_CLOSED_CAPTIONS, sizeof(M3U8_STREAM_TAG_NO_CLOSED_CAPTIONS) - 1);
+		}
 		*p++ = '\n';
 
 		// output the url
@@ -1286,6 +1366,18 @@ m3u8_builder_build_master_playlist(
 		max_video_stream_inf += sizeof(M3U8_STREAM_TAG_SUBTITLES) - 1 + VOD_INT32_LEN;
 	}
 
+	if (media_set->closed_captions < media_set->closed_captions_end)
+	{
+		result_size += m3u8_builder_closed_captions_get_size(media_set, request_context);
+
+		max_video_stream_inf += sizeof(M3U8_STREAM_TAG_CLOSED_CAPTIONS) - 1;
+	}
+	else if (media_set->closed_captions != NULL)
+	{
+		max_video_stream_inf += sizeof(M3U8_STREAM_TAG_NO_CLOSED_CAPTIONS) - 1;
+	}
+
+
 	// variants
 	muxed_tracks = adaptation_sets.first->type == ADAPTATION_TYPE_MUXED ? MEDIA_TYPE_COUNT : 1;
 
@@ -1353,6 +1445,11 @@ m3u8_builder_build_master_playlist(
 			base_url,
 			media_set,
 			MEDIA_TYPE_SUBTITLE);
+	}
+
+	if (media_set->closed_captions < media_set->closed_captions_end)
+	{
+		p = m3u8_builder_closed_captions_write(p, media_set);
 	}
 
 	// output variants

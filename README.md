@@ -466,6 +466,10 @@ Optional fields:
 	Setting this parameter is equivalent to passing /clipTo/ on the URL.
 * `cache` - boolean, if set to false, the mapping response will not be saved to cache (vod_mapping_cache).
 	The default value is true.
+* `closedCaptions` - array of closed captions objects (see below), containing languages and ids
+	of any embedded CEA-608 / CEA-708 captions. If an empty array is provided, the module will output
+	`CLOSED-CAPTIONS=NONE` on each `EXT-X-STREAM-INF` tag. If the list does not appear in the JSON, the 
+	module will not output any `CLOSED-CAPTIONS` fields in the playlist.
 	
 Live fields:
 * `firstClipTime` - integer, mandatory for all live playlists unless `clipTimes` is specified.
@@ -635,6 +639,17 @@ Mandatory fields:
 	the beginning of the concat clip.
 * `id` - a string that identifies the notification, this id can be referenced by `vod_notification_uri`
 	using the variable `$vod_notification_id`
+
+#### Closed Captions
+
+Mandatory fields:
+* `id` - a string that identifies the embedded captions. This will become the `INSTREAM-ID` field and must
+have one of the following values: `CC1`, `CC3`, `CC3`, `CC4`, or `SERVICEn`, where `n` is between 1 and 63.
+* `label` - a friendly string that indicates the language of the closed caption track.
+
+Optional fields:
+* `language` - a 3-letter (ISO-639-2) language code that indicates the language of the closed caption track.
+
 
 ### Security
 
