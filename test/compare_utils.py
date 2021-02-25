@@ -3,8 +3,9 @@ import time
 
 INGORED_HEADERS = set([
 	'x-vod-me','x-vod-session',
+	'x-proxy-me', 'x-proxy-session',
 	'x-me', 'x-kaltura-session', 
-	'x-varnish', 
+	'x-varnish', 'x-amz-id-2', 'x-amz-request-id',
 ])
 
 IGNORE_HEADER_VALUES = set([
