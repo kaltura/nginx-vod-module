@@ -23,7 +23,8 @@
 	VOD_CODEC_FLAG(AC3) | \
 	VOD_CODEC_FLAG(EAC3) | \
 	VOD_CODEC_FLAG(MP3) | \
-	VOD_CODEC_FLAG(DTS))
+	VOD_CODEC_FLAG(DTS) | \
+	VOD_CODEC_FLAG(FLAC))
 
 // content types
 static u_char m3u8_content_type[] = "application/vnd.apple.mpegurl";
@@ -913,7 +914,7 @@ static const ngx_http_vod_request_t hls_enc_key_request = {
 
 static const ngx_http_vod_request_t hls_ts_segment_request = {
 	REQUEST_FLAG_SINGLE_TRACK_PER_MEDIA_TYPE,
-	PARSE_FLAG_FRAMES_ALL | PARSE_FLAG_PARSED_EXTRA_DATA,
+	PARSE_FLAG_FRAMES_ALL | PARSE_FLAG_PARSED_EXTRA_DATA | PARSE_FLAG_INITIAL_PTS_DELAY,
 	REQUEST_CLASS_SEGMENT,
 	SUPPORTED_CODECS,
 	HLS_TIMESCALE,
@@ -982,6 +983,7 @@ ngx_http_vod_hls_create_loc_conf(
 	conf->mpegts_muxer_config.interleave_frames = NGX_CONF_UNSET;
 	conf->mpegts_muxer_config.align_frames = NGX_CONF_UNSET;
 	conf->mpegts_muxer_config.output_id3_timestamps = NGX_CONF_UNSET;
+	conf->mpegts_muxer_config.align_pts = NGX_CONF_UNSET;
 	conf->encryption_method = NGX_CONF_UNSET_UINT;
 	conf->m3u8_config.output_iframes_playlist = NGX_CONF_UNSET;
 	conf->m3u8_config.force_unmuxed_segments = NGX_CONF_UNSET;
@@ -1019,6 +1021,7 @@ ngx_http_vod_hls_merge_loc_conf(
 	ngx_conf_merge_value(conf->mpegts_muxer_config.interleave_frames, prev->mpegts_muxer_config.interleave_frames, 0);
 	ngx_conf_merge_value(conf->mpegts_muxer_config.align_frames, prev->mpegts_muxer_config.align_frames, 1);
 	ngx_conf_merge_value(conf->mpegts_muxer_config.output_id3_timestamps, prev->mpegts_muxer_config.output_id3_timestamps, 0);
+	ngx_conf_merge_value(conf->mpegts_muxer_config.align_pts, prev->mpegts_muxer_config.align_pts, 0);
 	
 	ngx_conf_merge_uint_value(conf->encryption_method, prev->encryption_method, HLS_ENC_NONE);
 

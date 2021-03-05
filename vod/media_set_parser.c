@@ -25,6 +25,7 @@ enum {
 	MEDIA_SET_PARAM_CONSISTENT_SEQUENCE_MEDIA_INFO,
 	MEDIA_SET_PARAM_DURATIONS,
 	MEDIA_SET_PARAM_SEQUENCES,
+	MEDIA_SET_PARAM_TIME_OFFSET,
 	MEDIA_SET_PARAM_INITIAL_SEGMENT_INDEX,
 	MEDIA_SET_PARAM_INITIAL_CLIP_INDEX,
 	MEDIA_SET_PARAM_FIRST_CLIP_TIME,
@@ -39,6 +40,8 @@ enum {
 	MEDIA_SET_PARAM_NOTIFICATIONS,
 	MEDIA_SET_PARAM_CLIP_FROM,
 	MEDIA_SET_PARAM_CLIP_TO,
+	MEDIA_SET_PARAM_CACHE,
+	MEDIA_SET_PARAM_CLOSED_CAPTIONS,
 
 	MEDIA_SET_PARAM_COUNT
 };
@@ -55,6 +58,14 @@ enum {
 	MEDIA_NOTIFICATION_PARAM_OFFSET,
 
 	MEDIA_NOTIFICATION_PARAM_COUNT
+};
+
+enum {
+	MEDIA_CLOSED_CAPTIONS_PARAM_ID,
+	MEDIA_CLOSED_CAPTIONS_PARAM_LANGUAGE,
+	MEDIA_CLOSED_CAPTIONS_PARAM_LABEL,
+
+	MEDIA_CLOSED_CAPTIONS_PARAM_COUNT
 };
 
 typedef struct {
@@ -135,6 +146,13 @@ static json_object_key_def_t media_notification_params[] = {
 	{ vod_null_string, 0, 0 }
 };
 
+static json_object_key_def_t media_closed_captions_params[] = {
+	{ vod_string("id"),								VOD_JSON_STRING, MEDIA_CLOSED_CAPTIONS_PARAM_ID },
+	{ vod_string("language"),						VOD_JSON_STRING, MEDIA_CLOSED_CAPTIONS_PARAM_LANGUAGE },
+	{ vod_string("label"),							VOD_JSON_STRING, MEDIA_CLOSED_CAPTIONS_PARAM_LABEL },
+	{ vod_null_string, 0, 0 } 
+};
+
 static json_object_key_def_t media_clip_params[] = {
 	{ vod_string("firstKeyFrameOffset"),			VOD_JSON_INT,	MEDIA_CLIP_PARAM_FIRST_KEY_FRAME_OFFSET },
 	{ vod_string("keyFrameDurations"),				VOD_JSON_ARRAY, MEDIA_CLIP_PARAM_KEY_FRAME_DURATIONS },
@@ -148,6 +166,7 @@ static json_object_key_def_t media_set_params[] = {
 	{ vod_string("consistentSequenceMediaInfo"),	VOD_JSON_BOOL,	MEDIA_SET_PARAM_CONSISTENT_SEQUENCE_MEDIA_INFO },
 	{ vod_string("durations"),						VOD_JSON_ARRAY, MEDIA_SET_PARAM_DURATIONS },
 	{ vod_string("sequences"),						VOD_JSON_ARRAY,	MEDIA_SET_PARAM_SEQUENCES },
+	{ vod_string("timeOffset"),						VOD_JSON_INT,	MEDIA_SET_PARAM_TIME_OFFSET },
 	{ vod_string("initialSegmentIndex"),			VOD_JSON_INT,	MEDIA_SET_PARAM_INITIAL_SEGMENT_INDEX },
 	{ vod_string("initialClipIndex"),				VOD_JSON_INT,	MEDIA_SET_PARAM_INITIAL_CLIP_INDEX },
 	{ vod_string("firstClipTime"),					VOD_JSON_INT,	MEDIA_SET_PARAM_FIRST_CLIP_TIME },
@@ -162,6 +181,8 @@ static json_object_key_def_t media_set_params[] = {
 	{ vod_string("notifications"),					VOD_JSON_ARRAY,	MEDIA_SET_PARAM_NOTIFICATIONS },
 	{ vod_string("clipFrom"),						VOD_JSON_INT,	MEDIA_SET_PARAM_CLIP_FROM },
 	{ vod_string("clipTo"),							VOD_JSON_INT,	MEDIA_SET_PARAM_CLIP_TO },
+	{ vod_string("cache"),							VOD_JSON_BOOL,	MEDIA_SET_PARAM_CACHE },
+	{ vod_string("closedCaptions"), 				VOD_JSON_ARRAY, MEDIA_SET_PARAM_CLOSED_CAPTIONS},
 	{ vod_null_string, 0, 0 }
 };
 
@@ -192,6 +213,7 @@ static vod_hash_t media_clip_source_hash;
 static vod_hash_t media_clip_union_hash;
 static vod_hash_t media_sequence_hash;
 static vod_hash_t media_notification_hash;
+static vod_hash_t media_closed_captions_hash;
 static vod_hash_t media_set_hash;
 static vod_hash_t media_clip_hash;
 
@@ -202,6 +224,7 @@ static hash_definition_t hash_definitions[] = {
 	HASH_TABLE(media_clip_union),
 	HASH_TABLE(media_notification),
 	HASH_TABLE(media_clip),
+	HASH_TABLE(media_closed_captions),
 	{ NULL, NULL, 0, NULL }
 };
 
@@ -780,6 +803,106 @@ media_set_sequence_id_exists(request_params_t* request_params, vod_str_t* id)
 }
 
 static vod_status_t
+media_set_parse_closed_captions(
+	request_context_t* request_context,
+	media_set_t* media_set,
+	vod_json_array_t* array)
+{
+	media_closed_captions_t* cur_output;
+	vod_json_value_t* params[MEDIA_CLOSED_CAPTIONS_PARAM_COUNT];
+	vod_array_part_t* part;
+	vod_json_object_t* cur_pos;
+	vod_status_t rc;
+
+	if (array->type != VOD_JSON_OBJECT && array->count > 0)
+	{
+		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+			"media_set_parse_closed_captions: invalid closed caption type %d expected object", array->type);
+		return VOD_BAD_MAPPING;
+	}
+
+	if (array->count > MAX_CLOSED_CAPTIONS)
+	{
+		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+			"media_set_parse_closed_captions: invalid number of elements in the closed captions array %uz", array->count);
+		return VOD_BAD_MAPPING;
+	}
+
+	cur_output = vod_alloc(request_context->pool, sizeof(cur_output[0]) * array->count);
+	if (cur_output == NULL)
+	{
+		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
+			"media_set_parse_closed_captions: vod_alloc failed");
+		return VOD_ALLOC_FAILED;
+	}
+
+	media_set->closed_captions = cur_output;
+
+	part = &array->part;
+	for (cur_pos = part->first; ; cur_pos++)
+	{
+		if ((void*)cur_pos >= part->last)
+		{
+			if (part->next == NULL)
+			{
+				break;
+			}
+
+			part = part->next;
+			cur_pos = part->first;
+		}
+
+		vod_memzero(params, sizeof(params));
+
+		vod_json_get_object_values(cur_pos, &media_closed_captions_hash, params);
+
+		if (params[MEDIA_CLOSED_CAPTIONS_PARAM_ID] == NULL)
+		{
+			vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+				"media_set_parse_closed_captions: missing id in closed captions object");
+			return VOD_BAD_MAPPING;
+		}
+
+		if (params[MEDIA_CLOSED_CAPTIONS_PARAM_LABEL] == NULL)
+		{
+			vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+				"media_set_parse_closed_captions: missing label in closed captions object");
+			return VOD_BAD_MAPPING;
+		}
+
+		if (params[MEDIA_CLOSED_CAPTIONS_PARAM_LANGUAGE] != NULL)
+		{
+			rc = media_set_parse_language(request_context, params[MEDIA_CLOSED_CAPTIONS_PARAM_LANGUAGE], &cur_output->language);
+			if (rc != VOD_OK)
+			{
+				return rc;
+			}
+		} else 
+		{
+			cur_output->language = 0;
+		}
+
+		rc = media_set_parse_null_term_string(&request_context, params[MEDIA_CLOSED_CAPTIONS_PARAM_ID], &cur_output->id);
+		if (rc != VOD_OK)
+		{
+			return rc;
+		}
+
+		rc = media_set_parse_null_term_string(&request_context, params[MEDIA_CLOSED_CAPTIONS_PARAM_LABEL], &cur_output->label);
+		if (rc != VOD_OK)
+		{
+			return rc;
+		}
+		
+		cur_output++;
+	}
+
+	media_set->closed_captions_end = cur_output;
+
+	return VOD_OK;
+}
+
+static vod_status_t
 media_set_parse_sequences(
 	request_context_t* request_context,
 	media_set_t* media_set,
@@ -1274,6 +1397,11 @@ media_set_parse_live_params(
 	media_set_t* media_set)
 {
 	vod_status_t rc;
+
+	if (params[MEDIA_SET_PARAM_TIME_OFFSET] != NULL)
+	{
+		request_context->time_offset = params[MEDIA_SET_PARAM_TIME_OFFSET]->v.num.num;
+	}
 
 	// clip times
 	rc = media_set_live_init_clip_times(request_context, media_set, params);
@@ -2287,6 +2415,27 @@ media_set_parse_json(
 			"media_set_parse_json: clip from %uL greater than clip to %uL",
 			source->clip_from, source->clip_to);
 		return VOD_BAD_REQUEST;
+	}
+
+	if (params[MEDIA_SET_PARAM_CACHE] != NULL)
+	{
+		result->cache_mapping = params[MEDIA_SET_PARAM_CACHE]->v.boolean;
+	}
+	else
+	{
+		result->cache_mapping = TRUE;
+	}
+
+	if (params[MEDIA_SET_PARAM_CLOSED_CAPTIONS] != NULL)
+	{
+		rc = media_set_parse_closed_captions(
+			request_context,
+			result,
+			&params[MEDIA_SET_PARAM_CLOSED_CAPTIONS]->v.arr);
+		if (rc != VOD_OK)
+		{
+			return rc;
+		}
 	}
 
 	if (params[MEDIA_SET_PARAM_DURATIONS] == NULL)

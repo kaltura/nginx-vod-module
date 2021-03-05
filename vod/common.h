@@ -22,7 +22,7 @@
 #define vod_no_flag_set(mask, f) (((mask) & (f)) == 0)
 #define vod_all_flags_set(mask, f) (((mask) & (f)) == (f))
 
-// Note: comparing the pointers since in the case of labels if both were derived by the language, 
+// Note: comparing the pointers since in the case of labels if both were derived by the language,
 //		they will have the same pointer and we can skip the memcmp
 #define vod_str_equals(l1, l2) \
 	((l1).len == (l2).len && ((l1).data == (l2).data || vod_memcmp((l1).data, (l2).data, (l1).len) == 0))
@@ -189,9 +189,9 @@ void vod_log_error(vod_uint_t level, vod_log_t *log, int err,
 
 // time functions
 #if (VOD_DEBUG)
-#define vod_time(request_context) (request_context->time > 0 ? request_context->time : ngx_time())
+#define vod_time(request_context) ((request_context)->time > 0 ? (request_context)->time : (ngx_time() + (request_context)->time_offset))
 #else
-#define vod_time(request_context) ngx_time()
+#define vod_time(request_context) (ngx_time() + (request_context)->time_offset)
 #endif
 
 #define vod_gmtime(t, tp) ngx_gmtime(t, tp)
@@ -231,15 +231,15 @@ void vod_log_error(vod_uint_t level, vod_log_t *log, int err,
 
 #define VOD_MAX_ERROR_STR NGX_MAX_ERROR_STR
 
-#define VOD_LOG_STDERR            NGX_LOG_STDERR 
-#define VOD_LOG_EMERG             NGX_LOG_EMERG  
-#define VOD_LOG_ALERT             NGX_LOG_ALERT  
-#define VOD_LOG_CRIT              NGX_LOG_CRIT   
-#define VOD_LOG_ERR               NGX_LOG_ERR    
-#define VOD_LOG_WARN              NGX_LOG_WARN   
-#define VOD_LOG_NOTICE            NGX_LOG_NOTICE 
-#define VOD_LOG_INFO              NGX_LOG_INFO   
-#define VOD_LOG_DEBUG             NGX_LOG_DEBUG  
+#define VOD_LOG_STDERR            NGX_LOG_STDERR
+#define VOD_LOG_EMERG             NGX_LOG_EMERG
+#define VOD_LOG_ALERT             NGX_LOG_ALERT
+#define VOD_LOG_CRIT              NGX_LOG_CRIT
+#define VOD_LOG_ERR               NGX_LOG_ERR
+#define VOD_LOG_WARN              NGX_LOG_WARN
+#define VOD_LOG_NOTICE            NGX_LOG_NOTICE
+#define VOD_LOG_INFO              NGX_LOG_INFO
+#define VOD_LOG_DEBUG             NGX_LOG_DEBUG
 
 #define vod_log_error ngx_log_error
 
@@ -275,16 +275,16 @@ typedef ngx_err_t vod_err_t;
 #define vod_log_buffer(level, log, err, prefix, buffer, size)	\
 	if ((log)->log_level & level)								\
 		log_buffer(level, log, err, prefix, buffer, size)
-		
+
 #define MAX_DUMP_BUFFER_SIZE (100)
 
-static vod_inline void 
+static vod_inline void
 log_buffer(unsigned level, vod_log_t* log, int err, const char* prefix, const u_char* buffer, int size)
 {
 	static const char hex_chars[] = "0123456789abcdef";
 	char hex[MAX_DUMP_BUFFER_SIZE * 3 + 1];
 	char* hex_pos = hex;
-	
+
 	size = vod_min(size, MAX_DUMP_BUFFER_SIZE);
 	for (; size > 0; size--, buffer++)
 	{
@@ -293,7 +293,7 @@ log_buffer(unsigned level, vod_log_t* log, int err, const char* prefix, const u_
 		*hex_pos++ = ' ';
 	}
 	*hex_pos = '\0';
-	
+
 	vod_log_debug2(level, log, err, "%s %s", prefix, hex);
 }
 
@@ -341,6 +341,7 @@ typedef struct {
 	vod_log_t *log;
 	buffer_pool_t* output_buffer_pool;
 	bool_t simulation_only;
+	time_t time_offset;
 #if (VOD_DEBUG)
 	time_t time;
 #endif

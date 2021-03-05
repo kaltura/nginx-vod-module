@@ -63,7 +63,7 @@ static u_char edash_playready_system_id[] = {
 };
 
 static u_char edash_clear_key_system_id[] = {
-	0x10, 0x77, 0xef, 0xec, 0xc0, 0xb2, 0x4d, 0x02, 
+	0x10, 0x77, 0xef, 0xec, 0xc0, 0xb2, 0x4d, 0x02,
 	0xac, 0xe3, 0x3c, 0x1e, 0x52, 0xe2, 0xfb, 0x4b
 };
 
@@ -97,7 +97,7 @@ edash_packager_write_pssh(u_char* p, drm_system_info_t* cur_info)
 	return p;
 }
 
-static u_char* 
+static u_char*
 edash_packager_write_content_protection(void* ctx, u_char* p, media_track_t* track)
 {
 	write_content_protection_context_t* context = ctx;
@@ -379,7 +379,7 @@ edash_packager_video_write_encryption_atoms(void* context, u_char* p, size_t mda
 static vod_status_t
 edash_packager_video_build_fragment_header(
 	mp4_cenc_encrypt_video_state_t* state,
-	vod_str_t* fragment_header, 
+	vod_str_t* fragment_header,
 	size_t* total_fragment_size)
 {
 	dash_fragment_header_extensions_t header_extensions;
@@ -387,9 +387,9 @@ edash_packager_video_build_fragment_header(
 	// get the header extensions
 	vod_memzero(&header_extensions, sizeof(header_extensions));
 
-	header_extensions.extra_traf_atoms_size = 
-		state->base.saiz_atom_size + 
-		state->base.saio_atom_size + 
+	header_extensions.extra_traf_atoms_size =
+		state->base.saiz_atom_size +
+		state->base.saio_atom_size +
 		ATOM_HEADER_SIZE + sizeof(senc_atom_t) + state->auxiliary_data.pos - state->auxiliary_data.start;
 	header_extensions.write_extra_traf_atoms_callback = edash_packager_video_write_encryption_atoms;
 	header_extensions.write_extra_traf_atoms_context = state;
@@ -441,8 +441,8 @@ edash_packager_audio_build_fragment_header(
 	vod_memzero(&header_extensions, sizeof(header_extensions));
 
 	header_extensions.extra_traf_atoms_size =
-		state->saiz_atom_size + 
-		state->saio_atom_size + 
+		state->saiz_atom_size +
+		state->saio_atom_size +
 		ATOM_HEADER_SIZE + sizeof(senc_atom_t) + MP4_AES_CTR_IV_SIZE * state->sequence->total_frame_count;
 	header_extensions.write_extra_traf_atoms_callback = edash_packager_audio_write_encryption_atoms;
 	header_extensions.write_extra_traf_atoms_context = state;
@@ -491,8 +491,8 @@ edash_packager_passthrough_write_encryption_atoms(void* ctx, u_char* p, size_t m
 	for (cur_clip = sequence->filtered_clips; cur_clip < sequence->filtered_clips_end; cur_clip++)
 	{
 		cur_track = cur_clip->first_track;
-		p = vod_copy(p, 
-			cur_track->encryption_info.auxiliary_info, 
+		p = vod_copy(p,
+			cur_track->encryption_info.auxiliary_info,
 			cur_track->encryption_info.auxiliary_info_end - cur_track->encryption_info.auxiliary_info);
 	}
 
@@ -554,21 +554,21 @@ edash_packager_get_fragment_writer(
 	case MEDIA_TYPE_VIDEO:
 		return mp4_cenc_encrypt_video_get_fragment_writer(
 			segment_writer,
-			request_context, 
-			media_set, 
-			segment_index, 
+			request_context,
+			media_set,
+			segment_index,
 			single_nalu_per_frame,
 			edash_packager_video_build_fragment_header,
-			iv, 
+			iv,
 			fragment_header,
 			total_fragment_size);
 
 	case MEDIA_TYPE_AUDIO:
 		rc = mp4_cenc_encrypt_audio_get_fragment_writer(
 			segment_writer,
-			request_context, 
+			request_context,
 			media_set,
-			segment_index, 
+			segment_index,
 			iv);
 		if (rc != VOD_OK)
 		{

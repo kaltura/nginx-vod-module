@@ -1,12 +1,16 @@
 #include "webvtt_builder.h"
 
 // constants
+#define WEBVTT_HEADER_LEN (sizeof("WEBVTT") - 1)
+#define WEBVTT_TIMESTAMP_MAP "WEBVTT\r\nX-TIMESTAMP-MAP=MPEGTS:0,LOCAL:00:00:00.000"
 #define WEBVTT_TIMESTAMP_FORMAT "%02uD:%02uD:%02uD.%03uD"
 #define WEBVTT_TIMESTAMP_DELIM " --> "
 #define WEBVTT_TIMESTAMP_MAX_SIZE (VOD_INT32_LEN + sizeof(":00:00.000") - 1)
 #define WEBVTT_CUE_TIMINGS_MAX_SIZE (WEBVTT_TIMESTAMP_MAX_SIZE * 2 + sizeof(WEBVTT_TIMESTAMP_DELIM) - 1)
 
 #define WEBVTT_MIN_SEGMENT_SIZE (10)	// iOS11 doesn't play when the first vtt segment is smaller than 10 bytes
+
+#define MPEGTS_MAX_TIMESTAMP (1ULL << 33)	// 33 bit
 
 static u_char*
 webvtt_builder_write_timestamp(u_char* p, uint64_t timestamp)
@@ -31,14 +35,29 @@ webvtt_builder_build(
 	input_frame_t* cur_frame;
 	input_frame_t* last_frame;
 	uint64_t start_time;
+	uint64_t base_time;
 	uint32_t id_size;
 	size_t result_size;
 	u_char* end;
 	u_char* src;
 	u_char* p;
 
+	// calculate the base time
+	start_time = first_track->first_frame_time_offset;
+	if (!clip_relative_timestamps)
+	{
+		start_time += first_track->clip_start_time;
+	}
+
+	base_time = ((start_time * 90) / MPEGTS_MAX_TIMESTAMP) * MPEGTS_MAX_TIMESTAMP / 90;
+
 	// get the result size
 	result_size = first_track->media_info.extra_data.len;
+	if (base_time > 0)
+	{
+		result_size += sizeof(WEBVTT_TIMESTAMP_MAP) - 1;
+	}
+
 	for (cur_track = first_track; cur_track < media_set->filtered_tracks_end; cur_track++)
 	{
 		result_size += cur_track->total_frames_size + WEBVTT_CUE_TIMINGS_MAX_SIZE * cur_track->frame_count;
@@ -61,7 +80,16 @@ webvtt_builder_build(
 	result->data = p;
 
 	// webvtt header
-	p = vod_copy(p, first_track->media_info.extra_data.data, first_track->media_info.extra_data.len);
+	if (base_time > 0)
+	{
+		p = vod_copy(p, WEBVTT_TIMESTAMP_MAP, sizeof(WEBVTT_TIMESTAMP_MAP) - 1);
+		p = vod_copy(p, first_track->media_info.extra_data.data + WEBVTT_HEADER_LEN,
+			first_track->media_info.extra_data.len - WEBVTT_HEADER_LEN);
+	}
+	else
+	{
+		p = vod_copy(p, first_track->media_info.extra_data.data, first_track->media_info.extra_data.len);
+	}
 
 	for (cur_track = first_track; cur_track < media_set->filtered_tracks_end; cur_track++)
 	{
@@ -70,6 +98,8 @@ webvtt_builder_build(
 		{
 			start_time += cur_track->clip_start_time;
 		}
+		start_time -= base_time;
+
 		part = &cur_track->frames;
 		last_frame = part->last_frame;
 		for (cur_frame = part->first_frame;; cur_frame++)

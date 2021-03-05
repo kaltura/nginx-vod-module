@@ -126,6 +126,7 @@ enum {
 	VOD_CODEC_ID_VORBIS,
 	VOD_CODEC_ID_OPUS,
 	VOD_CODEC_ID_VOLUME_MAP,
+	VOD_CODEC_ID_FLAC,
 
 	// captions
 	VOD_CODEC_ID_SUBTITLE,
@@ -318,7 +319,7 @@ typedef struct {
 
 	// metadata reader
 	vod_status_t(*init_metadata_reader)(
-		request_context_t* request_context, 
+		request_context_t* request_context,
 		vod_str_t* buffer,
 		size_t max_metadata_size,
 		void** ctx);

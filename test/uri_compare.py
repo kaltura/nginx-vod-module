@@ -76,7 +76,11 @@ class TestThread(stress_base.TestThreadBase):
 		if body1.startswith('<?xml'):
 			body1 = re.sub('<executionTime>[0-9\.]+<\/executionTime>', '', body1)
 			body2 = re.sub('<executionTime>[0-9\.]+<\/executionTime>', '', body2)
-			
+
+		if body1.startswith('<html>'):
+			body1 = body1.replace(' bgcolor="white"', '')
+			body2 = body2.replace(' bgcolor="white"', '')
+
 		if body1 != body2:
 			self.writeOutput('Error: comparison failed - url1=%s, url2=%s' % (url1, url2))
 			self.writeOutput(body1)
