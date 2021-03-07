@@ -9,6 +9,7 @@ local ERR = ngx.ERR
 local INFO = ngx.INFO
 local ngx_time = ngx.time
 local timer_at = ngx.timer.at
+local timer_every = ngx.timer.every
 local setmetatable = setmetatable
 
 local _M = { _VERSION = '0.1' }
@@ -17,13 +18,6 @@ local mt = { __index = _M }
 
 local _sync
 
-
-local function _set_timer(self, delay)
-    local hdl, err = timer_at(delay or self._shared_period, _sync, self)
-    if not hdl then
-        log(ERR, 'ngx.timer.at failed: ', err)
-    end
-end
 
 local function _pull_remote(self)
     local dict = self._dict
@@ -104,8 +98,6 @@ function _sync(premature, self)
     end
 
     _pull_shared(self)
-
-    _set_timer(self)
 end
 
 function _M.new(_, pull, update, dict, prefix, options)
@@ -126,7 +118,16 @@ function _M.new(_, pull, update, dict, prefix, options)
         _remote_period = options.remote_period or 30,
     }, mt)
 
-    _set_timer(res, 0)
+    local hdl, err = timer_at(0, _sync, res)
+    if not hdl then
+        log(ERR, 'ngx.timer.at failed: ', err)
+    end
+
+    local hdl, err = timer_every(res._shared_period, _sync, res)
+    if not hdl then
+        log(ERR, 'ngx.timer.every failed: ', err)
+    end
+
     return res
 end
 

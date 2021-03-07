@@ -33,6 +33,7 @@ local concat = table.concat
 
 local BUSY = -3
 local SERVER_LIST_KEY = 'server_list'
+local SERVER_LIST_PULL_OK_KEY = 'server_list_pull_ok'
 local SERVER_LIST_PULL_ERR_KEY = 'server_list_pull_err'
 local FAILS_KEY_SUFFIX = '_fails'
 local FAILED_KEY_SUFFIX = '_failed'
@@ -40,7 +41,6 @@ local CHECKED_KEY_SUFFIX = '_checked'
 local FAST_REQ_KEY_SUFFIX = '_fast_'
 local SLOW_REQ_KEY_SUFFIX = '_slow_'
 local PERSIST_STATUS_KEY_PREFIX = 'persist_status_'
-local HTTP_STATUS_KEY_PREFIX = 'http_status_'
 
 local PERSIST_STATUSES = { 'LOCALHIT', 'REMOTEHIT', 'MISS', 'ERROR' }
 
@@ -49,7 +49,8 @@ local _M = { _VERSION = '0.1' }
 local mt = { __index = _M }
 
 
-local function _k8s_get_pod_list(options)
+local function _k8s_get_pod_list(self)
+    local options = self._k8s_options
     local host = 'https://' .. options.host .. ':' .. options.port
     local url = host .. '/api/v1/namespaces/' .. options.namespace .. '/pods/'
 
@@ -73,17 +74,25 @@ local function _k8s_get_pod_list(options)
         ssl_verify = false,
     })
 
+    local body, key
+
     if not res then
         log(ERR, 'request_uri failed: ', err)
-        return
-    end
-
-    if res.status ~= 200 then
+        key = SERVER_LIST_PULL_ERR_KEY
+    elseif res.status ~= 200 then
         log(ERR, 'bad status: ', res.status)
-        return
+        key = SERVER_LIST_PULL_ERR_KEY
+    else
+        body = res.body
+        key = SERVER_LIST_PULL_OK_KEY
     end
 
-    return res.body
+    local res, err = self._srv_dict:incr(key, 1, 0)
+    if not res then
+        log(ERR, 'srv_dict:incr failed: ', err)
+    end
+
+    return body
 end
 
 
@@ -93,6 +102,8 @@ local function _redis_connect(self)
         log(ERR, 'redis:new failed: ', err)
         return
     end
+
+    red:set_timeout(1000)
 
     local params = self._redis
     local res, err = red:connect(params._host, params._port)
@@ -127,13 +138,18 @@ local function _redis_get_server_list(self)
         err = 'not found'
     end
 
+    local key
+
     if not data then
         log(ERR, 'redis:get failed: ', err)
+        key = SERVER_LIST_PULL_ERR_KEY
+    else
+        key = SERVER_LIST_PULL_OK_KEY
+    end
 
-        local res, err = self._srv_dict:incr(SERVER_LIST_PULL_ERR_KEY, 1, 0)
-        if not res then
-            log(ERR, 'srv_dict:incr failed: ', err)
-        end
+    local res, err = self._srv_dict:incr(key, 1, 0)
+    if not res then
+        log(ERR, 'srv_dict:incr failed: ', err)
     end
 
     _redis_set_keepalive(self, red)
@@ -457,6 +473,8 @@ function _M.get_status()
             '\nupstream_slow_reqs' .. tags .. slow .. '\n'
     end
 
+    local upstream_count = count
+
     for _, status in pairs(PERSIST_STATUSES) do
         local cur = srv_dict:get(PERSIST_STATUS_KEY_PREFIX .. status) or 0
 
@@ -464,35 +482,16 @@ function _M.get_status()
         res[count] = 'upstream_persist{status="' .. status .. '"} ' .. cur .. '\n'
     end
 
-    for status, _ in pairs(self._statuses) do
-        local cur = srv_dict:get(HTTP_STATUS_KEY_PREFIX .. status) or 0
-
-        count = count + 1
-        res[count] = 'upstream_http_status{status="' .. status .. '"} ' .. cur .. '\n'
-    end
-
+    local pull_ok = srv_dict:get(SERVER_LIST_PULL_OK_KEY) or 0
     local pull_errs = srv_dict:get(SERVER_LIST_PULL_ERR_KEY) or 0
     local parse_errs = self._srv_list:get_errors()
 
-    res[count + 1] = 'upstream_count ' .. count ..
+    res[count + 1] = 'upstream_count ' .. upstream_count ..
+        '\nupstream_list_pull_ok ' .. pull_ok ..
         '\nupstream_list_pull_errs ' .. pull_errs ..
         '\nupstream_list_parse_errs ' .. parse_errs .. '\n'
 
     return concat(res)
-end
-
-function _M.log()
-    local self = _M.self
-    local srv_dict = self._srv_dict
-    local status = ngx_var.status
-
-    local key = HTTP_STATUS_KEY_PREFIX .. status
-    local res, err = srv_dict:incr(key, 1, 0)
-    if not res then
-        log(ERR, 'srv_dict:incr failed: ', err, ', key: ', key)
-    end
-
-    self._statuses[status] = 1
 end
 
 function _M.get_req_balancer(persist_key)
@@ -531,10 +530,22 @@ function _M.get_req_balancer(persist_key)
     return _req_balancer_new(self, list)
 end
 
+local function _print_table(t, prefix)
+    for key, value in pairs(t) do
+        if type(value) == 'table' then
+            _print_table(value, prefix .. '.' .. key)
+        elseif type(value) == 'string' or type(value) == 'number' then
+            log(INFO, prefix .. '.' .. key, '=', value)
+        end
+    end
+end
+
 function _M.new(_, options)
     if _M.self then
         return _M.self
     end
+
+    _print_table(options, 'options')
 
     local srv_dict = options.srv_dict
     local cache_dict = options.cache_dict
@@ -563,12 +574,12 @@ function _M.new(_, options)
         _cache_dict       = cache_dict,
         _redis            = redis,
         _stats            = stats,
-        _statuses         = {},
         _max_tries        = options.max_tries or 5,
         _redis_ttl        = options.redis_ttl or 3600,
         _dict_ttl         = options.dict_ttl or 600,
         _fail_timeout     = options.fail_timeout or 30,
         _persist_prefix   = options.persist_prefix or 'persist_',
+        _k8s_options      = options.k8s,
     }, mt)
 
     local srvlist_options = {}
@@ -577,7 +588,7 @@ function _M.new(_, options)
     if options.k8s then
         srvlist_options.format = 'k8s_pod_list'
         srvlist_pull = function()
-            return _k8s_get_pod_list(options.k8s)
+            return _k8s_get_pod_list(self)
         end
     else
         srvlist_pull = function()
