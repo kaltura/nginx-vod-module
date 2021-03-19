@@ -12,14 +12,14 @@ encryption_iv = [ARGV[3]].pack("H*")
 
 hash_size = 8
 
-signedUrl = Digest::MD5.digest(encrypted_part)[0,hash_size] + encrypted_part
+signed_url = Digest::MD5.digest(encrypted_part)[0,hash_size] + encrypted_part
 
 cipher = OpenSSL::Cipher::AES.new('256-CBC')
 cipher.encrypt
 cipher.key = encryption_key
 cipher.iv = encryption_iv
 
-encrypted_data = cipher.update(signedUrl)
+encrypted_data = cipher.update(signed_url)
 encrypted_data << cipher.final
 
 puts base_url + Base64.strict_encode64(encrypted_data).tr('+/', '-_').gsub(/(\s|=)*$/,'')
