@@ -60,6 +60,7 @@ struct media_sequence_s {
 	vod_str_t stripped_uri;
 	vod_str_t id;
 	vod_str_t label;
+	vod_str_t lang_str;
 	language_id_t language;
 	uint32_t bitrate[MEDIA_TYPE_COUNT];
 	uint32_t avg_bitrate[MEDIA_TYPE_COUNT];
@@ -106,7 +107,7 @@ typedef struct media_notification_s {
 
 typedef struct {
 	vod_str_t id;
-	language_id_t language;
+	vod_str_t language;
 	vod_str_t label;
 } media_closed_captions_t;
 
