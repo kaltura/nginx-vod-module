@@ -29,10 +29,12 @@ def getAbsoluteUrl(url, baseUrl = ''):
 	if not url.startswith('http://') and not url.startswith('https://'):
 		if baseUrl == '':
 			raise Exception('bad url %s' % url)
-		if baseUrl.endswith('/'):
-			url = baseUrl + url
-		else:
-			url = baseUrl + '/' + url
+		queryPos = baseUrl.find('?')
+		if queryPos >= 0:
+			baseUrl = baseUrl[:queryPos]
+
+		baseUrl = baseUrl[:baseUrl.rfind('/')]
+		url = baseUrl + '/' + url
 	return url
 	
 def getHlsMediaPlaylistUrls(baseUrl, urlContent):
@@ -71,7 +73,7 @@ def getHlsMasterPlaylistUrls(baseUrl, urlContent, headers):
 		code, _, mediaContent = http_utils.getUrl(curUrl, headers)
 		if code != 200 or len(mediaContent) == 0:
 			continue
-		curBaseUrl = curUrl.rsplit('/', 1)[0]
+		curBaseUrl = curUrl.rsplit('/', 1)[0] + '/'
 		result += getHlsMediaPlaylistUrls(curBaseUrl, mediaContent)
 	return result
 
