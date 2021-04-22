@@ -14,7 +14,7 @@ mimeType = headers['content-type'][0]
 urls = manifest_utils.getManifestUrls(manifestUrl, body, mimeType, {})
 
 for curUrl in [manifestUrl] + urls:
-	fileName = os.path.join(outputPath, os.path.split(curUrl)[1])
+	fileName = os.path.join(outputPath, os.path.split(curUrl)[1].split('?')[0])
 	if os.path.exists(fileName):
 		print 'Error: %s already exists' % fileName
 		break
