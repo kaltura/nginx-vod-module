@@ -69,6 +69,7 @@ subtitle_parse(
 	media_sequence_t* sequence;
 	media_track_t* track;
 	language_id_t lang_id;
+	vod_str_t lang_str;
 	vod_str_t label;
 	uint64_t duration;
 
@@ -92,12 +93,14 @@ subtitle_parse(
 	sequence = parse_params->source->sequence;
 	if (sequence->label.len != 0)
 	{
-		label = sequence->label;
+		lang_str = sequence->lang_str;
 		lang_id = sequence->language;
+		label = sequence->label;
 	}
 	else
 	{
 		// no language, assume English
+		ngx_str_set(&lang_str, "eng");
 		lang_id = VOD_LANG_EN;
 		lang_get_native_name(lang_id, &label);
 	}
@@ -140,8 +143,9 @@ subtitle_parse(
 	track->media_info.duration = duration;
 	track->media_info.full_duration = full_duration;
 	track->media_info.duration_millis = duration;
-	track->media_info.label = label;
+	track->media_info.lang_str = lang_str;
 	track->media_info.language = lang_id;
+	track->media_info.label = label;
 	track->media_info.bitrate = (source->len * 1000 * 8) / full_duration;
 
 	metadata->source = *source;

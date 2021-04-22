@@ -5242,7 +5242,8 @@ ngx_http_vod_map_media_set_apply(ngx_http_vod_ctx_t *ctx, ngx_str_t* mapping, in
 	if (mapped_media_set.sequence_count == 1 &&
 		mapped_media_set.timing.durations == NULL &&
 		mapped_media_set.sequences[0].clips[0]->type == MEDIA_CLIP_SOURCE &&
-		!mapped_media_set.has_multi_sequences)
+		!mapped_media_set.has_multi_sequences &&
+		mapped_media_set.closed_captions == NULL)
 	{
 		mapped_source = (media_clip_source_t*)*mapped_media_set.sequences[0].clips;
 
@@ -5258,6 +5259,7 @@ ngx_http_vod_map_media_set_apply(ngx_http_vod_ctx_t *ctx, ngx_str_t* mapping, in
 			ctx->submodule_context.media_set.segmenter_conf = mapped_media_set.segmenter_conf;
 			sequence = cur_source->sequence;
 			sequence->mapped_uri = mapped_source->mapped_uri;
+			sequence->lang_str = mapped_media_set.sequences->lang_str;
 			sequence->language = mapped_media_set.sequences->language;
 			sequence->label = mapped_media_set.sequences->label;
 			sequence->id = mapped_media_set.sequences->id;

@@ -517,10 +517,17 @@ mp4_parser_parse_mdhd_atom(atom_info_t* atom_info, metadata_parse_context_t* con
 	context->media_info.frames_timescale = timescale;
 	context->media_info.full_duration = duration;
 	context->media_info.duration_millis = rescale_time(duration, timescale, 1000);
+
 	context->media_info.language = lang_parse_iso639_3_code(language);
-	if (context->media_info.label.len == 0)
+	if (context->media_info.language != 0)
 	{
-		lang_get_native_name(context->media_info.language, &context->media_info.label);
+		context->media_info.lang_str.data = (u_char *)lang_get_iso639_3_name(context->media_info.language);
+		context->media_info.lang_str.len = ngx_strlen(context->media_info.lang_str.data);
+
+		if (context->media_info.label.len == 0)
+		{
+			lang_get_native_name(context->media_info.language, &context->media_info.label);
+		}
 	}
 
 	return VOD_OK;
@@ -2801,8 +2808,9 @@ mp4_parser_process_moov_atom_callback(void* ctx, atom_info_t* atom_info)
 
 		// Note: it is not possible for the sequence to have a language without a label,
 		//              since a default label will be assigned according to the language
-		if (sequence->language != 0)
+		if (sequence->lang_str.len != 0)
 		{
+			metadata_parse_context.media_info.lang_str = sequence->lang_str;
 			metadata_parse_context.media_info.language = sequence->language;
 		}
 	}

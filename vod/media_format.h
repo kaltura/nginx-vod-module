@@ -217,6 +217,7 @@ typedef struct media_info_s {
 	int64_t start_time;			// temporary during parsing
 	uint64_t codec_delay;
 	language_id_t language;
+	vod_str_t lang_str;
 	vod_str_t label;
 	union {
 		video_media_info_t video;

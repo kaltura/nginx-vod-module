@@ -102,7 +102,6 @@ static vod_status_t media_set_parse_int64(void* ctx, vod_json_value_t* value, vo
 static vod_status_t media_set_parse_base64_string(void* ctx, vod_json_value_t* value, void* dest);
 static vod_status_t media_set_parse_encryption_scheme(void* ctx, vod_json_value_t* value, void* dest);
 static vod_status_t media_set_parse_source(void* ctx, vod_json_object_t* element, void** result);
-static vod_status_t media_set_parse_language(void* ctx, vod_json_value_t* value, void* dest);
 static vod_status_t media_set_parse_clips_array(void* ctx, vod_json_value_t* value, void* dest);
 static vod_status_t media_set_parse_bitrate(void* ctx, vod_json_value_t* value, void* dest);
 static vod_status_t media_set_parse_source_type(void* ctx, vod_json_value_t* value, void* dest);
@@ -133,7 +132,7 @@ static json_object_value_def_t media_clip_source_params[] = {
 static json_object_value_def_t media_sequence_params[] = {
 	{ vod_string("id"),				VOD_JSON_STRING,	offsetof(media_sequence_t, id), media_set_parse_null_term_string },
 	{ vod_string("clips"),			VOD_JSON_ARRAY,		offsetof(media_sequence_t, unparsed_clips), media_set_parse_clips_array },
-	{ vod_string("language"),		VOD_JSON_STRING,	offsetof(media_sequence_t, language), media_set_parse_language },
+	{ vod_string("language"),		VOD_JSON_STRING,	offsetof(media_sequence_t, lang_str), media_set_parse_null_term_string },
 	{ vod_string("label"),			VOD_JSON_STRING,	offsetof(media_sequence_t, label), media_set_parse_null_term_string },
 	{ vod_string("bitrate"),		VOD_JSON_OBJECT,	offsetof(media_sequence_t, bitrate), media_set_parse_bitrate },
 	{ vod_string("avg_bitrate"),	VOD_JSON_OBJECT,	offsetof(media_sequence_t, avg_bitrate), media_set_parse_bitrate },
@@ -182,7 +181,7 @@ static json_object_key_def_t media_set_params[] = {
 	{ vod_string("clipFrom"),						VOD_JSON_INT,	MEDIA_SET_PARAM_CLIP_FROM },
 	{ vod_string("clipTo"),							VOD_JSON_INT,	MEDIA_SET_PARAM_CLIP_TO },
 	{ vod_string("cache"),							VOD_JSON_BOOL,	MEDIA_SET_PARAM_CACHE },
-	{ vod_string("closedCaptions"), 				VOD_JSON_ARRAY, MEDIA_SET_PARAM_CLOSED_CAPTIONS},
+	{ vod_string("closedCaptions"), 				VOD_JSON_ARRAY, MEDIA_SET_PARAM_CLOSED_CAPTIONS },
 	{ vod_null_string, 0, 0 }
 };
 
@@ -422,35 +421,6 @@ media_set_parse_null_term_string(
 	result.data[result.len] = '\0';
 
 	*(vod_str_t*)dest = result;
-
-	return VOD_OK;
-}
-
-static vod_status_t 
-media_set_parse_language(
-	void* ctx,
-	vod_json_value_t* value,
-	void* dest)
-{
-	request_context_t* request_context = *(request_context_t**)ctx;
-	language_id_t result;
-
-	if (value->v.str.len < LANG_ISO639_3_LEN)
-	{
-		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-			"media_set_parse_language: invalid language string length \"%V\"", &value->v.str);
-		return VOD_BAD_MAPPING;
-	}
-
-	result = lang_parse_iso639_3_code(iso639_3_str_to_int(value->v.str.data));
-	if (result == 0)
-	{
-		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-			"media_set_parse_language: invalid language string \"%V\"", &value->v.str);
-		return VOD_BAD_MAPPING;
-	}
-
-	*(language_id_t*)dest = result;
 
 	return VOD_OK;
 }
@@ -870,18 +840,6 @@ media_set_parse_closed_captions(
 			return VOD_BAD_MAPPING;
 		}
 
-		if (params[MEDIA_CLOSED_CAPTIONS_PARAM_LANGUAGE] != NULL)
-		{
-			rc = media_set_parse_language(request_context, params[MEDIA_CLOSED_CAPTIONS_PARAM_LANGUAGE], &cur_output->language);
-			if (rc != VOD_OK)
-			{
-				return rc;
-			}
-		} else 
-		{
-			cur_output->language = 0;
-		}
-
 		rc = media_set_parse_null_term_string(&request_context, params[MEDIA_CLOSED_CAPTIONS_PARAM_ID], &cur_output->id);
 		if (rc != VOD_OK)
 		{
@@ -894,6 +852,19 @@ media_set_parse_closed_captions(
 			return rc;
 		}
 		
+		if (params[MEDIA_CLOSED_CAPTIONS_PARAM_LANGUAGE] != NULL)
+		{
+			rc = media_set_parse_null_term_string(&request_context, params[MEDIA_CLOSED_CAPTIONS_PARAM_LANGUAGE], &cur_output->language);
+			if (rc != VOD_OK)
+			{
+				return rc;
+			}
+		}
+		else
+		{
+			cur_output->language.len = 0;
+		}
+
 		cur_output++;
 	}
 
@@ -979,6 +950,7 @@ media_set_parse_sequences(
 
 		cur_output->id.len = 0;
 		cur_output->unparsed_clips = NULL;
+		cur_output->lang_str.len = 0;
 		cur_output->language = 0;
 		cur_output->label.len = 0;
 		cur_output->first_key_frame_offset = 0;
@@ -1010,9 +982,24 @@ media_set_parse_sequences(
 			continue;
 		}
 
-		if (cur_output->language != 0 && cur_output->label.len == 0)
+		if (cur_output->lang_str.len != 0)
 		{
-			lang_get_native_name(cur_output->language, &cur_output->label);
+			if (cur_output->lang_str.len >= LANG_ISO639_3_LEN)
+			{
+				cur_output->language = lang_parse_iso639_3_code(iso639_3_str_to_int(cur_output->lang_str.data));
+			}
+
+			if (cur_output->label.len == 0)
+			{
+				if (cur_output->language != 0)
+				{
+					lang_get_native_name(cur_output->language, &cur_output->label);
+				}
+				else
+				{
+					cur_output->label = cur_output->lang_str;
+				}
+			}
 		}
 
 		cur_output->index = index;

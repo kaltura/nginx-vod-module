@@ -12,7 +12,7 @@
 #define M3U8_HEADER_PART2 "#EXT-X-VERSION:%d\n#EXT-X-MEDIA-SEQUENCE:%uD\n"
 
 #define M3U8_EXT_MEDIA_BASE "#EXT-X-MEDIA:TYPE=%s,GROUP-ID=\"%s%uD\",NAME=\"%V\","
-#define M3U8_EXT_MEDIA_LANG "LANGUAGE=\"%s\","
+#define M3U8_EXT_MEDIA_LANG "LANGUAGE=\"%V\","
 #define M3U8_EXT_MEDIA_DEFAULT "AUTOSELECT=YES,DEFAULT=YES,"
 #define M3U8_EXT_MEDIA_NON_DEFAULT "AUTOSELECT=NO,DEFAULT=NO,"
 #define M3U8_EXT_MEDIA_URI "URI=\""
@@ -828,13 +828,12 @@ m3u8_builder_closed_captions_get_size(
 		sizeof(M3U8_EXT_MEDIA_TYPE_CLOSED_CAPTIONS) - 1 +
 		sizeof(M3U8_EXT_MEDIA_GROUP_ID_CLOSED_CAPTIONS) - 1 + VOD_INT32_LEN +
 		sizeof(M3U8_EXT_MEDIA_LANG) - 1 +
-		LANG_ISO639_3_LEN +
 		sizeof(M3U8_EXT_MEDIA_INSTREAM_ID) - 1 +
 		sizeof(M3U8_EXT_MEDIA_DEFAULT) - 1;
 
 	for (closed_captions = media_set->closed_captions; closed_captions < media_set->closed_captions_end; closed_captions++)
 	{
-		result += base + closed_captions->id.len + closed_captions->label.len + sizeof("\n") - 1;
+		result += base + closed_captions->id.len + closed_captions->label.len + closed_captions->language.len + sizeof("\n") - 1;
 	}
 
 	return result + sizeof("\n") - 1;
@@ -854,12 +853,11 @@ m3u8_builder_closed_captions_write(
 			M3U8_EXT_MEDIA_TYPE_CLOSED_CAPTIONS,
 			M3U8_EXT_MEDIA_GROUP_ID_CLOSED_CAPTIONS,
 			index,
-			(vod_str_t*) &closed_captions->label);
+			&closed_captions->label);
 		
-		if (closed_captions->language != 0)
+		if (closed_captions->language.len != 0)
 		{
-			p = vod_sprintf(p, M3U8_EXT_MEDIA_LANG,
-					lang_get_rfc_5646_name(closed_captions->language));
+			p = vod_sprintf(p, M3U8_EXT_MEDIA_LANG, &closed_captions->language);
 		}
 
 		if (closed_captions == media_set->closed_captions)
@@ -902,7 +900,6 @@ m3u8_builder_ext_x_media_tags_get_size(
 		sizeof(M3U8_EXT_MEDIA_TYPE_SUBTITLES) - 1 +
 		sizeof(M3U8_EXT_MEDIA_GROUP_ID_AUDIO) - 1 +
 		sizeof(M3U8_EXT_MEDIA_LANG) - 1 +
-		LANG_ISO639_3_LEN +
 		sizeof(M3U8_EXT_MEDIA_DEFAULT) - 1 +
 		sizeof(M3U8_EXT_MEDIA_CHANNELS) - 1 + VOD_INT32_LEN +
 		sizeof(M3U8_EXT_MEDIA_URI) - 1 +
@@ -916,7 +913,7 @@ m3u8_builder_ext_x_media_tags_get_size(
 		cur_track = adaptation_set->first[0];
 
 		label_len = cur_track->media_info.label.len;
-		result += vod_max(label_len, default_label.len);
+		result += vod_max(label_len, default_label.len) + cur_track->media_info.lang_str.len;
 
 		if (base_url->len != 0)
 		{
@@ -998,7 +995,7 @@ m3u8_builder_ext_x_media_tags_write(
 		if (media_type != MEDIA_TYPE_AUDIO || adaptation_sets->multi_audio)
 		{
 			p = vod_sprintf(p, M3U8_EXT_MEDIA_LANG,
-				lang_get_rfc_5646_name(tracks[media_type]->media_info.language));
+				&tracks[media_type]->media_info.lang_str);
 		}
 
 		if (adaptation_set == first_adaptation_set)
