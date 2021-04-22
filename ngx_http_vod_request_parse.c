@@ -734,7 +734,7 @@ ngx_http_vod_parse_lang_param(ngx_str_t* value, void* output, int offset)
 		return NGX_HTTP_BAD_REQUEST;
 	}
 
-	sequence->lang_str.data = (u_char *)lang_get_iso639_3_name(result);
+	sequence->lang_str.data = (u_char *)lang_get_rfc_5646_name(result);
 	sequence->lang_str.len = ngx_strlen(sequence->lang_str.data);
 	sequence->language = result;
 	lang_get_native_name(result, &sequence->label);

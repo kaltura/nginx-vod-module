@@ -521,7 +521,7 @@ mp4_parser_parse_mdhd_atom(atom_info_t* atom_info, metadata_parse_context_t* con
 	context->media_info.language = lang_parse_iso639_3_code(language);
 	if (context->media_info.language != 0)
 	{
-		context->media_info.lang_str.data = (u_char *)lang_get_iso639_3_name(context->media_info.language);
+		context->media_info.lang_str.data = (u_char *)lang_get_rfc_5646_name(context->media_info.language);
 		context->media_info.lang_str.len = ngx_strlen(context->media_info.lang_str.data);
 
 		if (context->media_info.label.len == 0)
