@@ -4,6 +4,7 @@
 // constants
 #define AUDIO_ENCODER_BITS_PER_SAMPLE (16)
 #define AAC_ENCODER_NAME ("libfdk_aac")
+#define AAC_ENCODER_NAME_FALLBACK ("aac")
 
 // typedefs
 typedef struct
@@ -43,9 +44,13 @@ audio_encoder_process_init(vod_log_t* log)
 	encoder_codec = avcodec_find_encoder_by_name(AAC_ENCODER_NAME);
 	if (encoder_codec == NULL)
 	{
-		vod_log_error(VOD_LOG_WARN, log, 0,
-			"audio_encoder_process_init: failed to get AAC encoder, audio encoding is disabled. recompile libavcodec with libfdk_aac to enable it");
-		return;
+		encoder_codec = avcodec_find_encoder_by_name(AAC_ENCODER_NAME_FALLBACK);
+		if (encoder_codec == NULL)
+		{
+			vod_log_error(VOD_LOG_WARN, log, 0,
+				"audio_encoder_process_init: failed to get AAC encoder, audio encoding is disabled. recompile libavcodec with libfdk_aac to enable it");
+			return;
+		}
 	}
 
 	if (!audio_encoder_is_format_supported(encoder_codec, AUDIO_ENCODER_INPUT_SAMPLE_FORMAT))
