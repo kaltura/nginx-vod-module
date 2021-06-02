@@ -49,6 +49,8 @@
 #define ATOM_NAME_DCOM (0x6d6f6364)		// data compression
 #define ATOM_NAME_CMVD (0x64766d63)		// compressed movie data
 #define ATOM_NAME_DOPS (0x73704f64)
+#define ATOM_NAME_UDTA (0x61746475)
+#define ATOM_NAME_NAME (0x656d616e)
 
 #define ATOM_NAME_NULL (0x00000000)
 
