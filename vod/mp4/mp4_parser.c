@@ -76,6 +76,7 @@ typedef struct {
 	atom_info_t dinf;
 	atom_info_t elst;
 	atom_info_t tkhd;
+	atom_info_t udta_name;
 } trak_atom_infos_t;
 
 typedef struct {
@@ -191,11 +192,17 @@ static const relevant_atom_t relevant_atoms_edts[] = {
 	{ ATOM_NAME_NULL, 0, NULL }
 };
 
+static const relevant_atom_t relevant_atoms_udta[] = {
+	{ ATOM_NAME_NAME, offsetof(trak_atom_infos_t, udta_name), NULL },
+	{ ATOM_NAME_NULL, 0, NULL }
+};
+
 static const relevant_atom_t relevant_atoms_trak[] = {
 	{ ATOM_NAME_MDIA, 0, relevant_atoms_mdia },
 	{ ATOM_NAME_EDTS, 0, relevant_atoms_edts },
 	{ ATOM_NAME_TKHD, offsetof(trak_atom_infos_t, tkhd), NULL },
 	{ ATOM_NAME_SENC, offsetof(trak_atom_infos_t, senc), NULL },
+	{ ATOM_NAME_UDTA, 0, relevant_atoms_udta },
 	{ ATOM_NAME_NULL, 0, NULL }
 };
 
@@ -272,8 +279,8 @@ mp4_parser_parse_hdlr_atom(atom_info_t* atom_info, metadata_parse_context_t* con
 		break;
 	}
 	
-	// parse the name
-	if ((context->parse_params.parse_type & PARSE_FLAG_HDLR_NAME) == 0)
+	// parse the name / already set
+	if ((context->parse_params.parse_type & PARSE_FLAG_HDLR_NAME) == 0 || context->media_info.label.data != NULL)
 	{
 		return VOD_OK;
 	}
@@ -529,6 +536,36 @@ mp4_parser_parse_mdhd_atom(atom_info_t* atom_info, metadata_parse_context_t* con
 			lang_get_native_name(context->media_info.language, &context->media_info.label);
 		}
 	}
+
+	return VOD_OK;
+}
+
+static vod_status_t
+mp4_parser_parse_udta_name_atom(atom_info_t* atom_info, metadata_parse_context_t* context)
+{
+	vod_str_t name;
+	name.data = (u_char*)atom_info->ptr;
+	name.len = atom_info->size;
+
+	// atom empty/non-existent or name already set
+	if (name.len == 0 || context->media_info.label.data != NULL)
+	{
+		return VOD_OK;
+	}
+
+	context->media_info.label.data = vod_alloc(
+		context->request_context->pool,
+		name.len + 1);
+	if (context->media_info.label.data == NULL)
+	{
+		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, context->request_context->log, 0,
+			"mp4_parser_parse_udta_name_atom: vod_alloc failed");
+		return VOD_ALLOC_FAILED;
+	}
+
+	vod_memcpy(context->media_info.label.data, name.data, name.len);
+	context->media_info.label.data[name.len] = '\0';
+	context->media_info.label.len = name.len;
 
 	return VOD_OK;
 }
@@ -2676,6 +2713,16 @@ mp4_parser_process_moov_atom_callback(void* ctx, atom_info_t* atom_info)
 	if (rc != VOD_OK)
 	{
 		return rc;
+	}
+
+	// udta stream name
+	if ((context->parse_params.parse_type & PARSE_FLAG_UDTA_NAME) != 0)
+	{
+		rc = mp4_parser_parse_udta_name_atom(&trak_atom_infos.udta_name, &metadata_parse_context);
+		if (rc != VOD_OK)
+		{
+			return rc;
+		}
 	}
 
 	// get the codec type and extra data

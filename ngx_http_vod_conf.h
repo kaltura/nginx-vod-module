@@ -56,6 +56,7 @@ struct ngx_http_vod_loc_conf_s {
 	size_t max_upstream_headers_size;
 	ngx_flag_t ignore_edit_list;
 	ngx_flag_t parse_hdlr_name;
+	ngx_flag_t parse_udta_name;
 	int parse_flags;
 	ngx_http_complex_value_t *upstream_extra_args;
 	ngx_buffer_cache_t* mapping_cache[CACHE_TYPE_COUNT];

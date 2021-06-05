@@ -1766,6 +1766,13 @@ When enabled, the module ignores any edit lists (elst) in the MP4 file.
 
 When enabled, the module parses the name field of the hdlr MP4 atom, and uses it as the stream label.
 
+#### vod_parse_udta_name
+* **syntax**: `vod_parse_udta_name on/off`
+* **default**: `off`
+* **context**: `http`, `server`, `location`
+
+When enabled, the module parses the name atom child of the udta MP4 atom, and uses it as the stream label.
+
 ### Nginx variables
 
 The module adds the following nginx variables:

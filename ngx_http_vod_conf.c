@@ -89,6 +89,7 @@ ngx_http_vod_create_loc_conf(ngx_conf_t *cf)
 	conf->max_upstream_headers_size = NGX_CONF_UNSET_SIZE;
 	conf->ignore_edit_list = NGX_CONF_UNSET;
 	conf->parse_hdlr_name = NGX_CONF_UNSET;
+	conf->parse_udta_name = NGX_CONF_UNSET;
 	conf->max_mapping_response_size = NGX_CONF_UNSET_SIZE;
 
 	conf->metadata_cache = NGX_CONF_UNSET_PTR;
@@ -213,6 +214,7 @@ ngx_http_vod_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child)
 
 	ngx_conf_merge_value(conf->ignore_edit_list, prev->ignore_edit_list, 0);
 	ngx_conf_merge_value(conf->parse_hdlr_name, prev->parse_hdlr_name, 0);
+	ngx_conf_merge_value(conf->parse_udta_name, prev->parse_udta_name, 0);
 
 	conf->parse_flags = 0;
 	if (!conf->ignore_edit_list)
@@ -222,6 +224,10 @@ ngx_http_vod_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child)
 	if (conf->parse_hdlr_name)
 	{
 		conf->parse_flags |= PARSE_FLAG_HDLR_NAME;
+	}
+	if (conf->parse_udta_name)
+	{
+		conf->parse_flags |= PARSE_FLAG_UDTA_NAME;
 	}
 
 	if (conf->upstream_extra_args == NULL)
@@ -1042,6 +1048,13 @@ ngx_command_t ngx_http_vod_commands[] = {
 	ngx_conf_set_flag_slot,
 	NGX_HTTP_LOC_CONF_OFFSET,
 	offsetof(ngx_http_vod_loc_conf_t, parse_hdlr_name),
+	NULL },
+
+	{ ngx_string("vod_parse_udta_name"),
+	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1,
+	ngx_conf_set_flag_slot,
+	NGX_HTTP_LOC_CONF_OFFSET,
+	offsetof(ngx_http_vod_loc_conf_t, parse_udta_name),
 	NULL },
 
 	// upstream parameters - only for mapped/remote modes
