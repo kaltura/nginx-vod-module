@@ -59,7 +59,7 @@ static const char encryption_key_tag_key_format_versions[] = ",KEYFORMATVERSIONS
 static const char encryption_key_extension[] = ".key";
 static const char encryption_type_aes_128[] = "AES-128";
 static const char encryption_type_sample_aes[] = "SAMPLE-AES";
-static const char encryption_type_sample_aes_cenc[] = "SAMPLE-AES-CENC";
+static const char encryption_type_sample_aes_cenc[] = "SAMPLE-AES-CTR";
 
 #if (NGX_HAVE_OPENSSL_EVP)
 static const char sample_aes_cenc_uri_prefix[] = "data:text/plain;base64,";
@@ -992,7 +992,7 @@ m3u8_builder_ext_x_media_tags_write(
 			group_index,
 			label);
 
-		if (media_type != MEDIA_TYPE_AUDIO || adaptation_sets->multi_audio)
+		if (tracks[media_type]->media_info.lang_str.len > 0 && (media_type != MEDIA_TYPE_AUDIO || adaptation_sets->multi_audio))
 		{
 			p = vod_sprintf(p, M3U8_EXT_MEDIA_LANG,
 				&tracks[media_type]->media_info.lang_str);
