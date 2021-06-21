@@ -912,6 +912,15 @@ Configures the policy for calculating the segment count, for segment_duration = 
 * last_long - a file of 33 sec is partitioned as - 10, 10, 13
 * last_rounded - a file of 33 sec is partitioned as - 10, 10, 13, a file of 38 sec is partitioned as 10, 10, 10, 8
 
+#### vod_segment_count_last_short_threshold_ms
+* **syntax**: `vod_segment_count_last_short_threshold_ms 79`
+* **default**: `0`
+* **context**: `http`, `server`, `location`
+
+If non-zero, the segment count for "last_short" will ignore segments that would otherwise be less than the threshold
+in ms duration. For example, with `vod_segment_duration` set to 2000 and `vod_segment_count_last_short_threshold_ms`,
+a clip with a duration of 8045ms would be segmented into 3 clips, [2000, 2000, 2000, 2045] milliseconds.
+
 #### vod_manifest_duration_policy
 * **syntax**: `vod_manifest_duration_policy min/max`
 * **default**: `max`

@@ -117,9 +117,13 @@ segmenter_init_config(segmenter_conf_t* conf, vod_pool_t* pool)
 }
 
 uint32_t
-segmenter_get_segment_count_last_short(segmenter_conf_t* conf, uint64_t duration_millis)
+segmenter_get_segment_count_last_short(
+	segmenter_conf_t* conf,
+	request_context_t* request_context,
+	uint64_t duration_millis)
 {
 	uint32_t result;
+	uint32_t mod;
 
 	if (duration_millis == 0)
 	{
@@ -136,6 +140,18 @@ segmenter_get_segment_count_last_short(segmenter_conf_t* conf, uint64_t duration
 		}
 
 		result = conf->bootstrap_segments_count + vod_div_ceil(duration_millis, conf->segment_duration);
+		if (conf->segment_count_last_short_threshold_ms > 0)
+		{
+			mod = duration_millis % conf->segment_duration;
+			if (mod < conf->segment_count_last_short_threshold_ms) {
+				vod_log_debug1(vod_log_debug1, request_context->log, 0, "appending short segment with dur: %uD, threshold: %uD", mod, conf->segment_count_last_short_threshold_ms);
+				result -= 1;
+			}
+			else
+			{
+				vod_log_debug1(vod_log_debug1, request_context->log, 0, "splitting short segment with dur: %uD, threshold: %uD", mod, conf->segment_count_last_short_threshold_ms);
+			}
+		}
 	}
 	else
 	{
@@ -146,7 +162,10 @@ segmenter_get_segment_count_last_short(segmenter_conf_t* conf, uint64_t duration
 }
 
 uint32_t
-segmenter_get_segment_count_last_long(segmenter_conf_t* conf, uint64_t duration_millis)
+segmenter_get_segment_count_last_long(
+	segmenter_conf_t* conf,
+	request_context_t* request_context,
+	uint64_t duration_millis)
 {
 	uint32_t result;
 
@@ -179,7 +198,10 @@ segmenter_get_segment_count_last_long(segmenter_conf_t* conf, uint64_t duration_
 }
 
 uint32_t
-segmenter_get_segment_count_last_rounded(segmenter_conf_t* conf, uint64_t duration_millis)
+segmenter_get_segment_count_last_rounded(
+	segmenter_conf_t* conf,
+	request_context_t* request_context,
+	uint64_t duration_millis)
 {
 	uint32_t result;
 
@@ -357,7 +379,7 @@ segmenter_get_segment_index_discontinuity(
 		segmenter_get_start_offset(conf, segment_index, &clip_start_offset);
 
 		// get segment limit for the current clip
-		clip_segment_limit = conf->get_segment_count(conf, clip_start_offset + *cur_duration);
+		clip_segment_limit = conf->get_segment_count(conf, request_context, clip_start_offset + *cur_duration);
 		if (clip_segment_limit == INVALID_SEGMENT_COUNT)
 		{
 			vod_log_error(VOD_LOG_ERR, request_context->log, 0,
@@ -530,7 +552,7 @@ segmenter_get_start_end_ranges_no_discontinuity(
 	}
 
 	// get the segment count
-	segment_count = params->conf->get_segment_count(params->conf, end_time);
+	segment_count = params->conf->get_segment_count(params->conf, request_context, end_time);
 	if (segment_count == INVALID_SEGMENT_COUNT)
 	{
 		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
@@ -717,7 +739,7 @@ segmenter_get_start_end_ranges_discontinuity(
 
 			// get segment limit for the current clip
 			clip_duration = *cur_duration;
-			cur_segment_limit = conf->get_segment_count(conf, clip_start_offset + clip_duration);
+			cur_segment_limit = conf->get_segment_count(conf, request_context, clip_start_offset + clip_duration);
 			if (cur_segment_limit == INVALID_SEGMENT_COUNT)
 			{
 				vod_log_error(VOD_LOG_ERR, request_context->log, 0,
@@ -797,7 +819,7 @@ segmenter_get_start_end_ranges_discontinuity(
 			conf,
 			params->timing.original_times[clip_index] - params->timing.segment_base_time);
 
-		cur_segment_limit = conf->get_segment_count(conf, clip_time + clip_duration - params->timing.segment_base_time);
+		cur_segment_limit = conf->get_segment_count(conf, request_context, clip_time + clip_duration - params->timing.segment_base_time);
 		if (cur_segment_limit == INVALID_SEGMENT_COUNT)
 		{
 			vod_log_error(VOD_LOG_ERR, request_context->log, 0,
@@ -1443,7 +1465,7 @@ segmenter_get_segment_durations_estimate_internal(
 			context.segment_index = new_segment_index;
 
 			// get the last segment index for this clip
-			clip_segment_limit = conf->get_segment_count(conf, context.clip_end_time - timing->segment_base_time);
+			clip_segment_limit = conf->get_segment_count(conf, request_context, context.clip_end_time - timing->segment_base_time);
 			if (clip_segment_limit == INVALID_SEGMENT_COUNT)
 			{
 				vod_log_error(VOD_LOG_ERR, request_context->log, 0,
@@ -1474,7 +1496,7 @@ segmenter_get_segment_durations_estimate_internal(
 			segmenter_get_start_offset(conf, context.segment_index, &segment_start);
 
 			// get segment limit for the current clip
-			clip_segment_limit = conf->get_segment_count(conf, segment_start + alignment_offset + cur_clip_duration);
+			clip_segment_limit = conf->get_segment_count(conf, request_context, segment_start + alignment_offset + cur_clip_duration);
 			if (clip_segment_limit == INVALID_SEGMENT_COUNT)
 			{
 				vod_log_error(VOD_LOG_ERR, request_context->log, 0,
@@ -1922,7 +1944,7 @@ segmenter_get_segment_durations_accurate(
 	}
 
 	// get the segment count
-	result->segment_count = conf->get_segment_count(conf, duration_millis);
+	result->segment_count = conf->get_segment_count(conf, request_context, duration_millis);
 	if (result->segment_count > MAX_SEGMENT_COUNT)
 	{
 		vod_log_error(VOD_LOG_ERR, request_context->log, 0,

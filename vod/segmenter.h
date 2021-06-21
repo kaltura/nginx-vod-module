@@ -68,7 +68,10 @@ typedef struct {
 	uint32_t clip_relative_segment_index;
 } get_clip_ranges_result_t;
 
-typedef uint32_t (*segmenter_get_segment_count_t)(segmenter_conf_t* conf, uint64_t duration_millis);
+typedef uint32_t (*segmenter_get_segment_count_t)(
+	segmenter_conf_t* conf,
+	request_context_t* request_context,
+	uint64_t duration_millis);
 
 typedef vod_status_t (*segmenter_get_segment_durations_t)(
 	request_context_t* request_context,
@@ -81,10 +84,11 @@ typedef vod_status_t (*segmenter_get_segment_durations_t)(
 struct segmenter_conf_s {
 	// config fields
 	uintptr_t segment_duration;
-	vod_array_t* bootstrap_segments;		// array of vod_str_t
+	vod_array_t* bootstrap_segments;							// array of vod_str_t
 	bool_t align_to_key_frames;
 	intptr_t live_window_duration;
 	segmenter_get_segment_count_t get_segment_count;			// last short / last long / last rounded
+	uintptr_t segment_count_last_short_threshold_ms;			// > 0 to enable
 	segmenter_get_segment_durations_t get_segment_durations;	// estimate / accurate
 	vod_uint_t manifest_duration_policy;
 	uintptr_t gop_look_behind;
@@ -113,11 +117,20 @@ typedef struct {
 vod_status_t segmenter_init_config(segmenter_conf_t* conf, vod_pool_t* pool);
 
 // get segment count modes
-uint32_t segmenter_get_segment_count_last_short(segmenter_conf_t* conf, uint64_t duration_millis);
+uint32_t segmenter_get_segment_count_last_short(
+	segmenter_conf_t* conf,
+	request_context_t* request_context,
+	uint64_t duration_millis);
 
-uint32_t segmenter_get_segment_count_last_long(segmenter_conf_t* conf, uint64_t duration_millis);
+uint32_t segmenter_get_segment_count_last_long(
+	segmenter_conf_t* conf,
+	request_context_t* request_context,
+	uint64_t duration_millis);
 
-uint32_t segmenter_get_segment_count_last_rounded(segmenter_conf_t* conf, uint64_t duration_millis);
+uint32_t segmenter_get_segment_count_last_rounded(
+	segmenter_conf_t* conf,
+	request_context_t* request_context,
+	uint64_t duration_millis);
 
 // key frames
 int64_t segmenter_align_to_key_frames(

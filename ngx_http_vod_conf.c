@@ -75,6 +75,7 @@ ngx_http_vod_create_loc_conf(ngx_conf_t *cf)
 	conf->segmenter.bootstrap_segments = NGX_CONF_UNSET_PTR;
 	conf->segmenter.align_to_key_frames = NGX_CONF_UNSET;
 	conf->segmenter.get_segment_count = NGX_CONF_UNSET_PTR;
+	conf->segmenter.segment_count_last_short_threshold_ms = NGX_CONF_UNSET_UINT;
 	conf->segmenter.get_segment_durations = NGX_CONF_UNSET_PTR;
 	conf->segmenter.manifest_duration_policy = NGX_CONF_UNSET_UINT;
 	conf->segmenter.gop_look_ahead = NGX_CONF_UNSET_UINT;
@@ -158,6 +159,7 @@ ngx_http_vod_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child)
 	ngx_conf_merge_ptr_value(conf->segmenter.bootstrap_segments, prev->segmenter.bootstrap_segments, NULL);
 	ngx_conf_merge_value(conf->segmenter.align_to_key_frames, prev->segmenter.align_to_key_frames, 0);
 	ngx_conf_merge_ptr_value(conf->segmenter.get_segment_count, prev->segmenter.get_segment_count, segmenter_get_segment_count_last_short);
+	ngx_conf_merge_uint_value(conf->segmenter.segment_count_last_short_threshold_ms, prev->segmenter.segment_count_last_short_threshold_ms, 0);
 	ngx_conf_merge_ptr_value(conf->segmenter.get_segment_durations, prev->segmenter.get_segment_durations, segmenter_get_segment_durations_estimate);
 	ngx_conf_merge_uint_value(conf->segmenter.manifest_duration_policy, prev->segmenter.manifest_duration_policy, MDP_MAX);
 	ngx_conf_merge_uint_value(conf->segmenter.gop_look_ahead, prev->segmenter.gop_look_ahead, 1000);
@@ -915,6 +917,13 @@ ngx_command_t ngx_http_vod_commands[] = {
 	ngx_http_vod_segment_count_policy_command,
 	NGX_HTTP_LOC_CONF_OFFSET,
 	0,
+	NULL },
+
+	{ ngx_string("vod_segment_count_last_short_threshold_ms"),
+	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1,
+	ngx_conf_set_num_slot,
+	NGX_HTTP_LOC_CONF_OFFSET,
+	offsetof(ngx_http_vod_loc_conf_t, segmenter.segment_count_last_short_threshold_ms),
 	NULL },
 
 	{ ngx_string("vod_manifest_duration_policy"),
