@@ -47,8 +47,8 @@ typedef struct {
 } codec_id_mapping_t;
 
 // globals
-static AVCodec *decoder_codec[VOD_CODEC_ID_COUNT];
-static AVCodec *encoder_codec = NULL;
+static const AVCodec *decoder_codec[VOD_CODEC_ID_COUNT];
+static const AVCodec *encoder_codec = NULL;
 
 static codec_id_mapping_t codec_mappings[] = {
 	{ VOD_CODEC_ID_AVC, AV_CODEC_ID_H264, "h264" },
@@ -60,7 +60,7 @@ static codec_id_mapping_t codec_mappings[] = {
 void
 thumb_grabber_process_init(vod_log_t* log)
 {
-	AVCodec *cur_decoder_codec;
+	const AVCodec *cur_decoder_codec;
 	codec_id_mapping_t* mapping_cur;
 	codec_id_mapping_t* mapping_end;
 
