@@ -1,7 +1,7 @@
 #include "audio_decoder.h"
 
 // globals
-static AVCodec *decoder_codec = NULL;
+static const AVCodec *decoder_codec = NULL;
 static bool_t initialized = FALSE;
 
 void

@@ -14,11 +14,11 @@ typedef struct
 } audio_encoder_state_t;
 
 // globals
-static AVCodec *encoder_codec = NULL;
+static const AVCodec *encoder_codec = NULL;
 static bool_t initialized = FALSE;
 
 static bool_t
-audio_encoder_is_format_supported(AVCodec *codec, enum AVSampleFormat sample_fmt)
+audio_encoder_is_format_supported(const AVCodec *codec, enum AVSampleFormat sample_fmt)
 {
 	const enum AVSampleFormat *p;
 
