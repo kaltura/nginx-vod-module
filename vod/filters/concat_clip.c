@@ -68,7 +68,7 @@ concat_clip_parse(
 	uint64_t original_clip_time;
 	uint64_t start;
 	uint64_t end;
-	uint32_t tracks_mask[MEDIA_TYPE_COUNT];
+	uint64_t tracks_mask[MEDIA_TYPE_COUNT];
 	uint32_t min_index;
 	uint32_t max_index;
 	uint32_t clip_count;

@@ -154,9 +154,22 @@ parse_utils_extract_uint32_token(u_char* start_pos, u_char* end_pos, uint32_t* r
 }
 
 u_char*
-parse_utils_extract_track_tokens(u_char* start_pos, u_char* end_pos, uint32_t* result)
+parse_utils_extract_uint64_token(u_char* start_pos, u_char* end_pos, uint64_t* result)
 {
-	uint32_t stream_index;
+	uint64_t value = 0;
+
+	for (; start_pos < end_pos && *start_pos >= '0' && *start_pos <= '9'; start_pos++)
+	{
+		value = value * 10 + *start_pos - '0';
+	}
+	*result = value;
+	return start_pos;
+}
+
+u_char*
+parse_utils_extract_track_tokens(u_char* start_pos, u_char* end_pos, uint64_t* result)
+{
+	uint64_t stream_index;
 	u_char* next_pos;
 	int media_type;
 
@@ -188,16 +201,16 @@ parse_utils_extract_track_tokens(u_char* start_pos, u_char* end_pos, uint32_t* r
 
 		start_pos++;		// skip the v/a
 
-		next_pos = parse_utils_extract_uint32_token(start_pos, end_pos, &stream_index);
+		next_pos = parse_utils_extract_uint64_token(start_pos, end_pos, &stream_index);
 
 		if (stream_index == 0)
 		{
 			// no index => all streams of the media type
-			result[media_type] = 0xffffffff;
+			result[media_type] = 0xffffffffffffffff;
 		}
 		else
 		{
-			result[media_type] |= (1 << (stream_index - 1));
+			result[media_type] |= ((uint64_t)1 << (stream_index - 1));
 		}
 
 		start_pos = next_pos;

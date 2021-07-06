@@ -1414,7 +1414,7 @@ static void
 ngx_http_vod_get_sequence_tracks_mask(
 	request_params_t* request_params,
 	media_sequence_t* sequence,
-	uint32_t** result)
+	uint64_t** result)
 {
 	sequence_tracks_mask_t* sequence_tracks_mask;
 	ngx_str_t* cur_sequence_id;
@@ -1450,13 +1450,13 @@ ngx_http_vod_get_sequence_tracks_mask(
 static void
 ngx_http_vod_init_parse_params_metadata(
 	ngx_http_vod_ctx_t *ctx,
-	uint32_t* tracks_mask,
+	uint64_t* tracks_mask,
 	media_parse_params_t* parse_params)
 {
 	const ngx_http_vod_request_t* request = ctx->request;
 	media_clip_source_t* cur_source = ctx->cur_source;
 	segmenter_conf_t* segmenter = ctx->submodule_context.media_set.segmenter_conf;
-	uint32_t* request_tracks_mask;
+	uint64_t* request_tracks_mask;
 	uint32_t media_type;
 
 	if (request != NULL)
@@ -1642,7 +1642,7 @@ ngx_http_vod_parse_metadata(
 	request_context_t* request_context = &ctx->submodule_context.request_context;
 	media_range_t range;
 	vod_status_t rc;
-	uint32_t tracks_mask[MEDIA_TYPE_COUNT];
+	uint64_t tracks_mask[MEDIA_TYPE_COUNT];
 
 	// initialize clipping params
 	if (cur_source->clip_to == ULLONG_MAX)
@@ -3473,7 +3473,7 @@ ngx_http_vod_run_generators(ngx_http_vod_ctx_t *ctx)
 	media_parse_params_t parse_params;
 	media_generator_t* generator;
 	media_range_t range;
-	uint32_t tracks_mask[MEDIA_TYPE_COUNT];
+	uint64_t tracks_mask[MEDIA_TYPE_COUNT];
 	ngx_int_t rc;
 
 	for (cur_source = ctx->submodule_context.media_set.generators_head;
@@ -3969,8 +3969,8 @@ ngx_http_vod_start_processing_media_file(ngx_http_vod_ctx_t *ctx)
 	if (ctx->request == NULL &&
 		cur_source->clip_from == 0 &&
 		cur_source->clip_to == ULLONG_MAX &&
-		cur_source->tracks_mask[MEDIA_TYPE_AUDIO] == 0xffffffff &&
-		cur_source->tracks_mask[MEDIA_TYPE_VIDEO] == 0xffffffff)
+		cur_source->tracks_mask[MEDIA_TYPE_AUDIO] == 0xffffffffffffffff &&
+		cur_source->tracks_mask[MEDIA_TYPE_VIDEO] == 0xffffffffffffffff)
 	{
 		ctx->state = STATE_DUMP_OPEN_FILE;
 
@@ -5249,8 +5249,8 @@ ngx_http_vod_map_media_set_apply(ngx_http_vod_ctx_t *ctx, ngx_str_t* mapping, in
 
 		if (mapped_source->clip_from == 0 &&
 			mapped_source->clip_to == ULLONG_MAX &&
-			mapped_source->tracks_mask[MEDIA_TYPE_AUDIO] == 0xffffffff &&
-			mapped_source->tracks_mask[MEDIA_TYPE_VIDEO] == 0xffffffff)
+			mapped_source->tracks_mask[MEDIA_TYPE_AUDIO] == 0xffffffffffffffff &&
+			mapped_source->tracks_mask[MEDIA_TYPE_VIDEO] == 0xffffffffffffffff)
 		{
 			// TODO: drop the sequence when request params filter by id and the id does not match
 

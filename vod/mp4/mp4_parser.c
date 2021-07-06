@@ -2228,7 +2228,7 @@ mp4_parser_parse_audio_atoms(void* ctx, atom_info_t* atom_info)
 
 		channel_layout = mp4_parser_get_ac3_channel_layout(acmod, lfeon, 0);
 
-		context->media_info.u.audio.channels = vod_get_number_of_set_bits(channel_layout & NGX_MAX_UINT32_VALUE);
+		context->media_info.u.audio.channels = vod_get_number_of_set_bits64(channel_layout);
 		context->media_info.u.audio.channel_layout = channel_layout;
 		return VOD_OK;
 
@@ -2252,8 +2252,7 @@ mp4_parser_parse_audio_atoms(void* ctx, atom_info_t* atom_info)
 
 		channel_layout = mp4_parser_get_ac3_channel_layout(acmod, lfeon, chan_loc);
 
-		context->media_info.u.audio.channels = vod_get_number_of_set_bits(channel_layout & NGX_MAX_UINT32_VALUE) +
-			vod_get_number_of_set_bits(channel_layout >> 32);
+		context->media_info.u.audio.channels = vod_get_number_of_set_bits64(channel_layout);
 		context->media_info.u.audio.channel_layout = channel_layout;
 
 		// set the extra data to the contents of this atom, since it's used
@@ -2864,7 +2863,7 @@ mp4_parser_process_moov_atom_callback(void* ctx, atom_info_t* atom_info)
 
 	// check whether we should include this track
 	track_index = context->track_indexes[metadata_parse_context.media_info.media_type]++;
-	if ((context->parse_params.required_tracks_mask[metadata_parse_context.media_info.media_type] & (1 << track_index)) == 0)
+	if ((context->parse_params.required_tracks_mask[metadata_parse_context.media_info.media_type] & ((uint64_t)1 << track_index)) == 0)
 	{
 		return VOD_OK;
 	}
