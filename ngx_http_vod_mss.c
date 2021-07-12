@@ -312,12 +312,12 @@ ngx_http_vod_mss_parse_uri_file_name(
 		if (fragment_params.media_type.len == sizeof(MSS_STREAM_TYPE_VIDEO) - 1 && 
 			ngx_memcmp(fragment_params.media_type.data, MSS_STREAM_TYPE_VIDEO, sizeof(MSS_STREAM_TYPE_VIDEO) - 1) == 0)
 		{
-			request_params->tracks_mask[MEDIA_TYPE_VIDEO] = (1 << mss_track_index(fragment_params.bitrate));
+			request_params->tracks_mask[MEDIA_TYPE_VIDEO] = ((uint64_t)1 << mss_track_index(fragment_params.bitrate));
 		}
 		else if (fragment_params.media_type.len == sizeof(MSS_STREAM_TYPE_AUDIO) - 1 &&
 			ngx_memcmp(fragment_params.media_type.data, MSS_STREAM_TYPE_AUDIO, sizeof(MSS_STREAM_TYPE_AUDIO) - 1) == 0)
 		{
-			request_params->tracks_mask[MEDIA_TYPE_AUDIO] = (1 << mss_track_index(fragment_params.bitrate));
+			request_params->tracks_mask[MEDIA_TYPE_AUDIO] = ((uint64_t)1 << mss_track_index(fragment_params.bitrate));
 		}
 		else if (fragment_params.media_type.len == sizeof(MSS_STREAM_TYPE_TEXT) - 1 &&
 			ngx_memcmp(fragment_params.media_type.data, MSS_STREAM_TYPE_TEXT, sizeof(MSS_STREAM_TYPE_TEXT) - 1) == 0)

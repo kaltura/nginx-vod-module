@@ -14,7 +14,7 @@
 // constants
 #define MAX_CODEC_NAME_SIZE (64)
 #define MAX_FRAME_SIZE (10 * 1024 * 1024)
-#define MAX_TRACK_COUNT (1024)
+#define MAX_TRACK_COUNT (64)
 #define MAX_DURATION_SEC (1000000)
 #define MAX_CLIP_DURATION (90000000)		// 25h
 #define MAX_SEQUENCE_DURATION (864000000)		// 10 days
@@ -159,7 +159,7 @@ typedef struct {
 } media_range_t;
 
 typedef struct {
-	uint32_t* required_tracks_mask;
+	uint64_t* required_tracks_mask;
 	uint8_t* langs_mask;
 	uint32_t clip_from;
 	uint32_t clip_to;

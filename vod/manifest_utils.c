@@ -48,12 +48,32 @@ manifest_utils_write_bitmask(u_char* p, uint32_t bitmask, u_char letter)
 	return p;
 }
 
-static uint32_t*
+static u_char*
+manifest_utils_write_bitmask64(u_char* p, uint64_t bitmask, u_char letter)
+{
+  uint32_t i;
+
+  for (i = 0; i < 64; i++)
+  {
+    if ((bitmask & ((uint64_t)1 << i)) == 0)
+    {
+      continue;
+    }
+
+    *p++ = '-';
+    *p++ = letter;
+    p = vod_sprintf(p, "%uD", i + 1);
+  }
+
+  return p;
+}
+
+static uint64_t*
 manifest_utils_get_tracks_mask(
 	uint32_t index,
 	sequence_tracks_mask_t* sequence_tracks_mask,
 	sequence_tracks_mask_t* sequence_tracks_mask_end,
-	uint32_t* default_tracks_mask)
+	uint64_t* default_tracks_mask)
 {
 	sequence_tracks_mask_t* sequence_tracks_mask_cur;
 
@@ -77,10 +97,10 @@ manifest_utils_build_request_params_string_per_sequence_tracks(
 	uint32_t sequences_mask,
 	sequence_tracks_mask_t* sequence_tracks_mask,
 	sequence_tracks_mask_t* sequence_tracks_mask_end,
-	uint32_t* default_tracks_mask,
+	uint64_t* default_tracks_mask,
 	vod_str_t* result)
 {
-	uint32_t* tracks_mask;
+	uint64_t* tracks_mask;
 	uint32_t i;
 	size_t result_size;
 	u_char* p;
@@ -111,23 +131,23 @@ manifest_utils_build_request_params_string_per_sequence_tracks(
 		result_size += sizeof("-f32") - 1;
 
 		// video tracks
-		if (tracks_mask[MEDIA_TYPE_VIDEO] == 0xffffffff)
+		if (tracks_mask[MEDIA_TYPE_VIDEO] == 0xffffffffffffffff)
 		{
 			result_size += sizeof("-v0") - 1;
 		}
 		else
 		{
-			result_size += vod_get_number_of_set_bits(tracks_mask[MEDIA_TYPE_VIDEO]) * (sizeof("-v32") - 1);
+			result_size += vod_get_number_of_set_bits64(tracks_mask[MEDIA_TYPE_VIDEO]) * (sizeof("-v64") - 1);
 		}
 
 		// audio tracks
-		if (tracks_mask[MEDIA_TYPE_AUDIO] == 0xffffffff)
+		if (tracks_mask[MEDIA_TYPE_AUDIO] == 0xffffffffffffffff)
 		{
 			result_size += sizeof("-a0") - 1;
 		}
 		else
 		{
-			result_size += vod_get_number_of_set_bits(tracks_mask[MEDIA_TYPE_AUDIO]) * (sizeof("-a32") - 1);
+			result_size += vod_get_number_of_set_bits64(tracks_mask[MEDIA_TYPE_AUDIO]) * (sizeof("-a64") - 1);
 		}
 	}
 
@@ -166,7 +186,7 @@ manifest_utils_build_request_params_string_per_sequence_tracks(
 		// video tracks
 		switch (tracks_mask[MEDIA_TYPE_VIDEO])
 		{
-		case 0xffffffff:
+		case 0xffffffffffffffff:
 			p = vod_copy(p, "-v0", sizeof("-v0") - 1);
 			break;
 
@@ -174,14 +194,14 @@ manifest_utils_build_request_params_string_per_sequence_tracks(
 			break;
 
 		default:
-			p = manifest_utils_write_bitmask(p, tracks_mask[MEDIA_TYPE_VIDEO], 'v');
+			p = manifest_utils_write_bitmask64(p, tracks_mask[MEDIA_TYPE_VIDEO], 'v');
 			break;
 		}
 
 		// audio tracks
 		switch (tracks_mask[MEDIA_TYPE_AUDIO])
 		{
-		case 0xffffffff:
+		case 0xffffffffffffffff:
 			p = vod_copy(p, "-a0", sizeof("-a0") - 1);
 			break;
 
@@ -189,7 +209,7 @@ manifest_utils_build_request_params_string_per_sequence_tracks(
 			break;
 
 		default:
-			p = manifest_utils_write_bitmask(p, tracks_mask[MEDIA_TYPE_AUDIO], 'a');
+			p = manifest_utils_write_bitmask64(p, tracks_mask[MEDIA_TYPE_AUDIO], 'a');
 			break;
 		}
 	}
@@ -210,12 +230,12 @@ manifest_utils_build_request_params_string_per_sequence_tracks(
 vod_status_t
 manifest_utils_build_request_params_string(
 	request_context_t* request_context, 
-	uint32_t* has_tracks,
+	uint64_t* has_tracks,
 	uint32_t segment_index,
 	uint32_t sequences_mask,
 	sequence_tracks_mask_t* sequence_tracks_mask,
 	sequence_tracks_mask_t* sequence_tracks_mask_end,
-	uint32_t* tracks_mask,
+	uint64_t* tracks_mask,
 	vod_str_t* result)
 {
 	u_char* p;
@@ -244,27 +264,27 @@ manifest_utils_build_request_params_string(
 	// sequence mask
 	if (sequences_mask != 0xffffffff)
 	{
-		result_size += vod_get_number_of_set_bits(sequences_mask) * (sizeof("-f32") - 1);
+		result_size += vod_get_number_of_set_bits32(sequences_mask) * (sizeof("-f32") - 1);
 	}
 
 	// video tracks
-	if (tracks_mask[MEDIA_TYPE_VIDEO] == 0xffffffff)
+	if (tracks_mask[MEDIA_TYPE_VIDEO] == 0xffffffffffffffff)
 	{
 		result_size += sizeof("-v0") - 1;
 	}
 	else
 	{
-		result_size += vod_get_number_of_set_bits(tracks_mask[MEDIA_TYPE_VIDEO]) * (sizeof("-v32") - 1);
+		result_size += vod_get_number_of_set_bits64(tracks_mask[MEDIA_TYPE_VIDEO]) * (sizeof("-v64") - 1);
 	}
-	
+
 	// audio tracks
-	if (tracks_mask[MEDIA_TYPE_AUDIO] == 0xffffffff)
+	if (tracks_mask[MEDIA_TYPE_AUDIO] == 0xffffffffffffffff)
 	{
 		result_size += sizeof("-a0") - 1;
 	}
 	else
 	{
-		result_size += vod_get_number_of_set_bits(tracks_mask[MEDIA_TYPE_AUDIO]) * (sizeof("-a32") - 1);
+		result_size += vod_get_number_of_set_bits64(tracks_mask[MEDIA_TYPE_AUDIO]) * (sizeof("-a64") - 1);
 	}
 	
 	p = vod_alloc(request_context->pool, result_size + 1);
@@ -291,26 +311,26 @@ manifest_utils_build_request_params_string(
 	// video tracks
 	if (has_tracks[MEDIA_TYPE_VIDEO])
 	{
-		if (tracks_mask[MEDIA_TYPE_VIDEO] == 0xffffffff)
+		if (tracks_mask[MEDIA_TYPE_VIDEO] == 0xffffffffffffffff)
 		{
 			p = vod_copy(p, "-v0", sizeof("-v0") - 1);
 		}
 		else
 		{
-			p = manifest_utils_write_bitmask(p, tracks_mask[MEDIA_TYPE_VIDEO], 'v');
+			p = manifest_utils_write_bitmask64(p, tracks_mask[MEDIA_TYPE_VIDEO], 'v');
 		}
 	}
 	
 	// audio tracks
 	if (has_tracks[MEDIA_TYPE_AUDIO])
 	{
-		if (tracks_mask[MEDIA_TYPE_AUDIO] == 0xffffffff)
+		if (tracks_mask[MEDIA_TYPE_AUDIO] == 0xffffffffffffffff)
 		{
 			p = vod_copy(p, "-a0", sizeof("-a0") - 1);
 		}
 		else
 		{
-			p = manifest_utils_write_bitmask(p, tracks_mask[MEDIA_TYPE_AUDIO], 'a');
+			p = manifest_utils_write_bitmask64(p, tracks_mask[MEDIA_TYPE_AUDIO], 'a');
 		}
 	}
 
@@ -319,7 +339,7 @@ manifest_utils_build_request_params_string(
 	if (result->len > result_size)
 	{
 		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-			"manifest_utils_build_request_params_string: result length %uz exceeded allocated length %uz", 
+			"manifest_utils_build_request_params_string: result length %uz exceeded allocated length %uz",
 			result->len, result_size);
 		return VOD_UNEXPECTED;
 	}

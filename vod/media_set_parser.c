@@ -432,7 +432,7 @@ media_set_parse_tracks_spec(
 	void* dest)
 {
 	media_filter_parse_context_t* context = ctx;
-	uint32_t* tracks_mask = dest;
+	uint64_t* tracks_mask = dest;
 	u_char* end_pos = value->v.str.data + value->v.str.len;
 
 	vod_memzero(tracks_mask, sizeof(tracks_mask[0]) * MEDIA_TYPE_COUNT);
@@ -904,7 +904,7 @@ media_set_parse_sequences(
 
 	if (request_params->sequence_ids[0].len == 0)
 	{
-		required_sequences_num = vod_get_number_of_set_bits(request_params->sequences_mask);
+		required_sequences_num = vod_get_number_of_set_bits32(request_params->sequences_mask);
 		required_sequences_num = vod_min(array->count, required_sequences_num);
 	}
 	else

@@ -788,7 +788,7 @@ mkv_metadata_parse(
 
 		// is this track required ?
 		track_index = track_indexes[media_type]++;
-		if ((parse_params->required_tracks_mask[media_type] & (1 << track_index)) == 0)
+		if ((parse_params->required_tracks_mask[media_type] & ((uint64_t)1 << track_index)) == 0)
 		{
 			continue;
 		}
@@ -1221,7 +1221,7 @@ mkv_parse_frames_estimate_bitrate(
 		if (cur_track->media_info.bitrate == 0 &&
 			track_context->max_frame_timecode > track_context->min_frame_timecode)
 		{
-			cur_track->media_info.bitrate = track_context->total_frames_size * base->timescale * 8 / 
+			cur_track->media_info.bitrate = track_context->total_frames_size * base->timescale * 8 /
 				(track_context->max_frame_timecode - track_context->min_frame_timecode);
 		}
 

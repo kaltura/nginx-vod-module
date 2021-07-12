@@ -167,7 +167,7 @@ typedef struct {
 
 typedef struct {
 	int32_t index;			// positive = sequence index (-f1), negative = index into sequence_ids (-s1)
-	uint32_t tracks_mask[MEDIA_TYPE_COUNT];
+	uint64_t tracks_mask[MEDIA_TYPE_COUNT];
 } sequence_tracks_mask_t;
 
 typedef struct {
@@ -178,7 +178,7 @@ typedef struct {
 	uint32_t pts_delay;
 	uint32_t sequences_mask;
 	vod_str_t sequence_ids[MAX_SEQUENCE_IDS];
-	uint32_t tracks_mask[MEDIA_TYPE_COUNT];
+	uint64_t tracks_mask[MEDIA_TYPE_COUNT];
 	sequence_tracks_mask_t* sequence_tracks_mask;
 	sequence_tracks_mask_t* sequence_tracks_mask_end;
 	uint8_t* langs_mask;			// [LANG_MASK_SIZE]
