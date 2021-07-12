@@ -436,7 +436,7 @@ Mandatory fields:
 	
 Optional fields:
 * `id` - a string that identifies the set. The id can be retrieved by `$vod_set_id`.
-* `playlistType` - string, can be set to `live` or `vod`, default is `vod`.
+* `playlistType` - string, can be set to `live`, `vod` or `event` (only supported or HLS playlists), default is `vod`.
 * `durations` - an array of integers representing clip durations in milliseconds.
 	This field is mandatory if the mapping contains more than a single clip per sequence.
 	If specified, this array must contain at least one element and up to 128 elements.

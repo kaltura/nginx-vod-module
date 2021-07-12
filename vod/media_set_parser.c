@@ -197,6 +197,7 @@ static vod_uint_t type_key_hash = vod_hash(vod_hash(vod_hash('t', 'y'), 'p'), 'e
 
 static vod_str_t playlist_type_vod = vod_string("vod");
 static vod_str_t playlist_type_live = vod_string("live");
+static vod_str_t playlist_type_event = vod_string("event");
 
 static parser_init_t parser_init_funcs[] = {
 	gain_filter_parser_init,
@@ -2120,7 +2121,7 @@ media_set_apply_clip_from(
 		//	alignment to keyframes will happen in segmenter_get_live_window
 		sequence = &media_set->sequences[0];
 		if (sequence->key_frame_durations != NULL && 
-			media_set->type == MEDIA_SET_VOD)
+			(media_set->type == MEDIA_SET_VOD || media_set->type == MEDIA_SET_EVENT))
 		{
 			// align to key frames
 			initial_offset = timing->first_time + sequence->first_key_frame_offset - timing->times[clip_index];
@@ -2478,7 +2479,7 @@ media_set_parse_json(
 		return rc;
 	}
 
-	// vod / live
+	// vod / live / event
 	if (params[MEDIA_SET_PARAM_PLAYLIST_TYPE] == NULL || 
 		(params[MEDIA_SET_PARAM_PLAYLIST_TYPE]->v.str.len == playlist_type_vod.len &&
 		vod_strncasecmp(params[MEDIA_SET_PARAM_PLAYLIST_TYPE]->v.str.data, playlist_type_vod.data, playlist_type_vod.len) == 0))
@@ -2498,10 +2499,23 @@ media_set_parse_json(
 			result->type = MEDIA_SET_LIVE;
 		}
 	}
+	else if (params[MEDIA_SET_PARAM_PLAYLIST_TYPE]->v.str.len == playlist_type_event.len &&
+		vod_strncasecmp(params[MEDIA_SET_PARAM_PLAYLIST_TYPE]->v.str.data, playlist_type_event.data, playlist_type_event.len) == 0)
+	{
+		result->original_type = MEDIA_SET_EVENT;
+		if ((request_flags & REQUEST_FLAG_FORCE_PLAYLIST_TYPE_VOD) != 0)
+		{
+			result->presentation_end = TRUE;
+		}
+		else
+		{
+			result->type = MEDIA_SET_EVENT;
+		}
+	}
 	else
 	{
 		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-			"media_set_parse_json: invalid playlist type \"%V\", must be either live or vod", 
+			"media_set_parse_json: invalid playlist type \"%V\", must be either live, vod or event", 
 			&params[MEDIA_SET_PARAM_PLAYLIST_TYPE]->v.str);
 		return VOD_BAD_MAPPING;
 	}

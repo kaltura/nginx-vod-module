@@ -27,6 +27,7 @@
 enum {
 	MEDIA_SET_VOD,
 	MEDIA_SET_LIVE,
+	MEDIA_SET_EVENT,
 };
 
 typedef enum {
