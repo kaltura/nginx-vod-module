@@ -97,9 +97,10 @@ ebml_read_num(ebml_context_t* context, uint64_t* result, size_t max_size, int re
 }
 
 static vod_status_t
-ebml_read_size(ebml_context_t* context, uint64_t* result)
+ebml_read_size(ebml_context_t* context, bool_t truncate, uint64_t* result)
 {
 	vod_status_t rc;
+	uint64_t size_left;
 
 	rc = ebml_read_num(context, result, 8, 1);
 	if (rc < 0)
@@ -109,16 +110,22 @@ ebml_read_size(ebml_context_t* context, uint64_t* result)
 		return rc;
 	}
 
+	size_left = context->end_pos - context->cur_pos;
 	if (is_unknown_size(*result, rc))
 	{
-		*result = context->end_pos - context->cur_pos;
+		*result = size_left;
 	}
-	else if (*result > (uint64_t)(context->end_pos - context->cur_pos))
+	else if (*result > size_left)
 	{
-		vod_log_error(VOD_LOG_ERR, context->request_context->log, 0,
-			"ebml_read_size: size %uL greater than the remaining stream bytes %uL", 
-			*result, (uint64_t)(context->end_pos - context->cur_pos));
-		return VOD_BAD_DATA;
+		if (!truncate)
+		{
+			vod_log_error(VOD_LOG_ERR, context->request_context->log, 0,
+				"ebml_read_size: size %uL greater than the remaining stream bytes %uL",
+				*result, size_left);
+			return VOD_BAD_DATA;
+		}
+
+		*result = size_left;
 	}
 
 	return VOD_OK;
@@ -192,11 +199,12 @@ ebml_parse_element(ebml_context_t* context, ebml_spec_t* spec, void* dest)
 	ebml_context_t next_context;
 	uint64_t max_size;
 	uint64_t size;
+	uint32_t type = spec->type & EBML_TYPE_MASK;
 	void* cur_dest;
 	vod_status_t rc;
 
 	// size
-	rc = ebml_read_size(context, &size);
+	rc = ebml_read_size(context, spec->type & EBML_TRUNCATE, &size);
 	if (rc != VOD_OK)
 	{
 		vod_log_debug1(VOD_LOG_DEBUG_LEVEL, context->request_context->log, 0,
@@ -204,13 +212,13 @@ ebml_parse_element(ebml_context_t* context, ebml_spec_t* spec, void* dest)
 		return rc;
 	}
 
-	if (spec->type == EBML_NONE)
+	if (type == EBML_NONE)
 	{
 		context->cur_pos += size;
 		return VOD_OK;
 	}
 
-	max_size = ebml_max_sizes[spec->type];
+	max_size = ebml_max_sizes[type];
 	if (max_size && size > max_size)
 	{
 		vod_log_error(VOD_LOG_ERR, context->request_context->log, 0,
@@ -220,7 +228,7 @@ ebml_parse_element(ebml_context_t* context, ebml_spec_t* spec, void* dest)
 
 	cur_dest = (u_char*)dest + spec->offset;
 
-	switch (spec->type)
+	switch (type)
 	{
 	case EBML_UINT:
 		rc = ebml_read_uint(context, size, cur_dest);

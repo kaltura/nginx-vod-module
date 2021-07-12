@@ -16,6 +16,9 @@ typedef enum {
 	EBML_BINARY,
 	EBML_MASTER,
 	EBML_CUSTOM,
+
+	EBML_TYPE_MASK = 0x00ffffff,
+	EBML_TRUNCATE = 0x01000000,
 } ebml_type_t;
 
 typedef struct {
@@ -26,7 +29,7 @@ typedef struct {
 
 typedef struct {
 	uint32_t id;
-	ebml_type_t type;
+	uint32_t type;
 	off_t offset;
 	void* child;
 } ebml_spec_t;
