@@ -187,6 +187,7 @@ ngx_http_vod_get_base_url(
 	ngx_flag_t use_https;
 	ngx_str_t base_url;
 	ngx_str_t* host_name = NULL;
+	uintptr_t escape;
 	size_t uri_path_len;
 	size_t result_size;
 	u_char* last_slash;
@@ -213,6 +214,7 @@ ngx_http_vod_get_base_url(
 			file_uri = &empty_string;
 		}
 
+		escape = ngx_escape_uri(NULL, base_url.data, base_url.len, NGX_ESCAPE_URI);
 		result_size = base_url.len;
 	}
 	else
@@ -225,6 +227,7 @@ ngx_http_vod_get_base_url(
 
 		host_name = &r->headers_in.host->value;
 
+		escape = ngx_escape_uri(NULL, host_name->data, host_name->len, NGX_ESCAPE_URI);
 		result_size = sizeof("https://") - 1 + host_name->len;
 	}
 
@@ -233,12 +236,13 @@ ngx_http_vod_get_base_url(
 		last_slash = ngx_http_vod_memrchr(file_uri->data, '/', file_uri->len);
 		if (last_slash == NULL)
 		{
-			vod_log_error(VOD_LOG_ERR, r->connection->log, 0,
+			ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
 				"ngx_http_vod_get_base_url: no slash found in uri %V", file_uri);
 			return NGX_ERROR;
 		}
 
 		uri_path_len = last_slash + 1 - file_uri->data;
+		escape += ngx_escape_uri(NULL, file_uri->data, uri_path_len, NGX_ESCAPE_URI);
 	}
 	else
 	{
@@ -246,7 +250,7 @@ ngx_http_vod_get_base_url(
 	}
 
 	// allocate the base url
-	result_size += uri_path_len + sizeof("/");
+	result_size += uri_path_len + sizeof("/") + escape;
 	p = ngx_palloc(r->pool, result_size);
 	if (p == NULL)
 	{
@@ -260,7 +264,14 @@ ngx_http_vod_get_base_url(
 
 	if (conf_base_url != NULL)
 	{
-		p = vod_copy(p, base_url.data, base_url.len);
+		if (escape == 0)
+		{
+			p = ngx_copy(p, base_url.data, base_url.len);
+		}
+		else
+		{
+			p = (u_char*)ngx_escape_uri(p, base_url.data, base_url.len, NGX_ESCAPE_URI);
+		}
 	}
 	else
 	{
@@ -279,10 +290,24 @@ ngx_http_vod_get_base_url(
 			p = ngx_copy(p, "http://", sizeof("http://") - 1);
 		}
 
-		p = ngx_copy(p, host_name->data, host_name->len);
+		if (escape == 0)
+		{
+			p = ngx_copy(p, host_name->data, host_name->len);
+		}
+		else
+		{
+			p = (u_char*)ngx_escape_uri(p, host_name->data, host_name->len, NGX_ESCAPE_URI);
+		}
 	}
 
-	p = ngx_copy(p, file_uri->data, uri_path_len);
+	if (escape == 0)
+	{
+		p = ngx_copy(p, file_uri->data, uri_path_len);
+	}
+	else
+	{
+		p = (u_char*)ngx_escape_uri(p, file_uri->data, uri_path_len, NGX_ESCAPE_URI);
+	}
 	*p = '\0';
 
 	result->len = p - result->data;
