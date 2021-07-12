@@ -20,7 +20,7 @@ typedef struct
 	AVCodecContext *decoder;
 	AVCodecContext *encoder;
 	AVFrame *decoded_frame;
-	AVPacket output_packet;
+	AVPacket *output_packet;
 	void* resize_buffer;
 	int has_frame;
 
@@ -98,7 +98,7 @@ thumb_grabber_free_state(void* context)
 {
 	thumb_grabber_state_t* state = (thumb_grabber_state_t*)context;
 
-	av_packet_unref(&state->output_packet);
+	av_packet_free(&state->output_packet);
 	if (state->resize_buffer != NULL)
 	{
 		av_freep(state->resize_buffer);
@@ -364,9 +364,7 @@ thumb_grabber_init_state(
 	state->resize_buffer = NULL;
 	state->decoder = NULL;
 	state->encoder = NULL;
-	av_init_packet(&state->output_packet);
-	state->output_packet.data = NULL;
-	state->output_packet.size = 0;
+	state->output_packet = NULL;
 
 	// add to the cleanup pool
 	cln = vod_pool_cleanup_add(request_context->pool, 0);
@@ -432,6 +430,14 @@ thumb_grabber_init_state(
 	{
 		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
 			"thumb_grabber_init_state: av_frame_alloc failed");
+		return VOD_ALLOC_FAILED;
+	}
+
+	state->output_packet = av_packet_alloc();
+	if (state->output_packet == NULL)
+	{
+		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+			"thumb_grabber_init_state: av_packet_alloc failed");
 		return VOD_ALLOC_FAILED;
 	}
 
@@ -506,18 +512,24 @@ static vod_status_t
 thumb_grabber_decode_frame(thumb_grabber_state_t* state, u_char* buffer)
 {
 	input_frame_t* frame = state->cur_frame;
-	AVPacket input_packet;
+	AVPacket* input_packet;
 	u_char original_pad[VOD_BUFFER_PADDING_SIZE];
 	u_char* frame_end;
 	int avrc;
-	
-	vod_memzero(&input_packet, sizeof(input_packet));
-	input_packet.data = buffer;
-	input_packet.size = frame->size;
-	input_packet.dts = state->dts;
-	input_packet.pts = state->dts + frame->pts_delay;
-	input_packet.duration = frame->duration;
-	input_packet.flags = frame->key_frame ? AV_PKT_FLAG_KEY : 0;
+
+	input_packet = av_packet_alloc();
+	if (input_packet == NULL) {
+		vod_log_error(VOD_LOG_ERR, state->request_context->log, 0,
+			"thumb_grabber_decode_frame: av_packet_alloc failed");
+		return VOD_ALLOC_FAILED;
+	}
+
+	input_packet->data = buffer;
+	input_packet->size = frame->size;
+	input_packet->dts = state->dts;
+	input_packet->pts = state->dts + frame->pts_delay;
+	input_packet->duration = frame->duration;
+	input_packet->flags = frame->key_frame ? AV_PKT_FLAG_KEY : 0;
 	state->dts += frame->duration;
 	
 	av_frame_unref(state->decoded_frame);
@@ -528,7 +540,8 @@ thumb_grabber_decode_frame(thumb_grabber_state_t* state, u_char* buffer)
 	vod_memcpy(original_pad, frame_end, sizeof(original_pad));
 	vod_memzero(frame_end, sizeof(original_pad));
 
-	avrc = avcodec_send_packet(state->decoder, &input_packet);
+	avrc = avcodec_send_packet(state->decoder, input_packet);
+	av_packet_free(&input_packet);
 	if (avrc < 0)
 	{
 		vod_log_error(VOD_LOG_ERR, state->request_context->log, 0,
@@ -664,7 +677,7 @@ thumb_grabber_write_frame(thumb_grabber_state_t* state)
 		return VOD_UNEXPECTED;
 	}
 
-	avrc = avcodec_receive_packet(state->encoder, &state->output_packet);
+	avrc = avcodec_receive_packet(state->encoder, state->output_packet);
 	if (avrc < 0)
 	{
 		vod_log_error(VOD_LOG_ERR, state->request_context->log, 0,
@@ -672,7 +685,7 @@ thumb_grabber_write_frame(thumb_grabber_state_t* state)
 		return VOD_UNEXPECTED;
 	}
 
-	rc = state->write_callback(state->write_context, state->output_packet.data, state->output_packet.size);
+	rc = state->write_callback(state->write_context, state->output_packet->data, state->output_packet->size);
 	if (rc != VOD_OK)
 	{
 		return rc;

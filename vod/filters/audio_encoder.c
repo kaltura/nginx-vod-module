@@ -184,7 +184,7 @@ audio_encoder_write_frame(
 {
 	audio_encoder_state_t* state = context;
 	vod_status_t rc;
-	AVPacket output_packet;
+	AVPacket* output_packet;
 	int avrc;
 
 	// send frame
@@ -200,14 +200,19 @@ audio_encoder_write_frame(
 	}
 
 	// receive packet
-	av_init_packet(&output_packet);
-	output_packet.data = NULL; // packet data will be allocated by the encoder
-	output_packet.size = 0;
+	output_packet = av_packet_alloc();
+	if (output_packet == NULL) {
+		vod_log_error(VOD_LOG_ERR, state->request_context->log, 0,
+			"audio_encoder_write_frame: av_packet_alloc failed");
+		return VOD_ALLOC_FAILED;
+	}
+	// packet data will be allocated by the encoder
 
-	avrc = avcodec_receive_packet(state->encoder, &output_packet);
+	avrc = avcodec_receive_packet(state->encoder, output_packet);
 
 	if (avrc == AVERROR(EAGAIN))
 	{
+		av_packet_free(&output_packet);
 		return VOD_OK;
 	}
 
@@ -215,12 +220,13 @@ audio_encoder_write_frame(
 	{
 		vod_log_error(VOD_LOG_ERR, state->request_context->log, 0,
 			"audio_encoder_write_frame: avcodec_receive_packet failed %d", avrc);
+		av_packet_free(&output_packet);
 		return VOD_ALLOC_FAILED;
 	}
 
-	rc = audio_encoder_write_packet(state, &output_packet);
+	rc = audio_encoder_write_packet(state, output_packet);
 
-	av_packet_unref(&output_packet);
+	av_packet_free(&output_packet);
 
 	return rc;
 }
@@ -230,7 +236,7 @@ audio_encoder_flush(
 	void* context)
 {
 	audio_encoder_state_t* state = context;
-	AVPacket output_packet;
+	AVPacket* output_packet;
 	vod_status_t rc;
 	int avrc;
 
@@ -242,13 +248,17 @@ audio_encoder_flush(
 		return VOD_UNEXPECTED;
 	}
 
+	output_packet = av_packet_alloc();
+	if (output_packet == NULL) {
+		vod_log_error(VOD_LOG_ERR, state->request_context->log, 0,
+			"audio_encoder_flush: av_packet_alloc failed");
+		return VOD_ALLOC_FAILED;
+	}
+
 	for (;;)
 	{
-		av_init_packet(&output_packet);
-		output_packet.data = NULL; // packet data will be allocated by the encoder
-		output_packet.size = 0;
-
-		avrc = avcodec_receive_packet(state->encoder, &output_packet);
+		// packet data will be allocated by the encoder, av_packet_unref is always called
+		avrc = avcodec_receive_packet(state->encoder, output_packet);
 		if (avrc == AVERROR_EOF)
 		{
 			break;
@@ -258,19 +268,20 @@ audio_encoder_flush(
 		{
 			vod_log_error(VOD_LOG_ERR, state->request_context->log, 0,
 				"audio_encoder_flush: avcodec_receive_packet failed %d", avrc);
+			av_packet_free(&output_packet);
 			return VOD_UNEXPECTED;
 		}
 
-		rc = audio_encoder_write_packet(state, &output_packet);
-
-		av_packet_unref(&output_packet);
+		rc = audio_encoder_write_packet(state, output_packet);
 
 		if (rc != VOD_OK)
 		{
+			av_packet_free(&output_packet);
 			return rc;
 		}
 	}
 
+	av_packet_free(&output_packet);
 	return VOD_OK;
 }
 
