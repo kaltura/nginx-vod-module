@@ -2004,6 +2004,12 @@ mp4_parser_parse_video_extra_data_atom(void* ctx, atom_info_t* atom_info)
 
 	case ATOM_NAME_AVCC:
 	case ATOM_NAME_HVCC:
+		break;
+	case ATOM_NAME_DVCC:
+		context->media_info.dvcc_data.len = atom_info->size;
+		context->media_info.dvcc_data.data = (u_char*)atom_info->ptr;
+		return VOD_OK;
+
 	case ATOM_NAME_VPCC:
 	case ATOM_NAME_AV1C:
 		break;			// handled outside the switch
@@ -2743,11 +2749,13 @@ mp4_parser_process_moov_atom_callback(void* ctx, atom_info_t* atom_info)
 		case FORMAT_AVC1:
 		case FORMAT_h264:
 		case FORMAT_H264:
+		case FORMAT_DVA1:
 			metadata_parse_context.media_info.codec_id = VOD_CODEC_ID_AVC;
 			break;
 
 		case FORMAT_HEV1:
 		case FORMAT_HVC1:
+		case FORMAT_DVH1:
 			metadata_parse_context.media_info.codec_id = VOD_CODEC_ID_HEVC;
 			break;
 

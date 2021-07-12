@@ -23,6 +23,21 @@ typedef struct
 	u_char nula_length_size;
 } avcc_config_t;
 
+// from https://www.dolby.com/us/en/technologies/dolby-vision/dolby-vision-bitstreams-within-the-iso-base-media-file-format-v2.0.pdf
+// also referenced on https://github.com/gpac/gpac/blob/e1ef9af46ee8542f9a4ada117432377454e71dfa/include/gpac/internal/isomedia_dev.h#L1332
+typedef struct {
+	uint8_t dv_version_major;
+	uint8_t dv_version_minor;
+	uint8_t dv_profile; // 7 bits
+	uint8_t dv_level; // 6 bits
+	bool_t rpu_present_flag;
+	bool_t el_present_flag;
+	bool_t bl_present_flag;
+	uint8_t dv_bl_signal_compatibility_id; // 4 bits
+	// const unsigned int (28) reserved = 0;
+	// const unsigned int (32)[4] reserved = 0;
+} dovi_config_t;
+
 typedef struct
 {
 	uint8_t configurationVersion;
@@ -58,6 +73,9 @@ typedef struct
 	bool_t non_hevc_base_layer;
 	uint8_t num_layers;
 	uint16_t scalability_mask;
+
+	//used in dolby vision config
+	dovi_config_t dovi_config;
 } hevc_config_t;
 
 typedef struct {
@@ -93,6 +111,7 @@ vod_status_t codec_config_mp4a_config_parse(
 vod_status_t codec_config_hevc_config_parse(
 	request_context_t* request_context,
 	vod_str_t* extra_data,
+	vod_str_t* dovi_data,
 	hevc_config_t* cfg,
 	const u_char** end_pos);
 

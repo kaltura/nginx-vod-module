@@ -1,6 +1,7 @@
 #include "codec_config.h"
 #include "media_format.h"
 #include "bit_read_stream.h"
+#include "./mp4/mp4_defs.h"
 
 #define codec_config_copy_string(target, str)	\
 	{											\
@@ -145,10 +146,11 @@ vod_status_t
 codec_config_hevc_config_parse(
 	request_context_t* request_context, 
 	vod_str_t* extra_data, 
+	vod_str_t* dvcc_data, 
 	hevc_config_t* cfg, 
 	const u_char** end_pos)
 {
-	bit_reader_state_t reader;
+	bit_reader_state_t reader, dovi_reader;
 
 	bit_read_stream_init(&reader, extra_data->data, extra_data->len);
 
@@ -193,6 +195,18 @@ codec_config_hevc_config_parse(
 		cfg->scalability_mask = bit_read_stream_get(&reader, 16);
 	}*/
 
+	if (dvcc_data != NULL) {
+		bit_read_stream_init(&dovi_reader, dvcc_data->data, dvcc_data->len);
+		cfg->dovi_config.dv_version_major = bit_read_stream_get(&dovi_reader, 8);
+		cfg->dovi_config.dv_version_minor = bit_read_stream_get(&dovi_reader, 8);
+		cfg->dovi_config.dv_profile = bit_read_stream_get(&dovi_reader, 7);
+		cfg->dovi_config.dv_level = bit_read_stream_get(&dovi_reader, 6);
+		cfg->dovi_config.rpu_present_flag = bit_read_stream_get_one(&dovi_reader);
+		cfg->dovi_config.el_present_flag = bit_read_stream_get_one(&dovi_reader);
+		cfg->dovi_config.bl_present_flag = bit_read_stream_get_one(&dovi_reader);
+		cfg->dovi_config.dv_bl_signal_compatibility_id = bit_read_stream_get(&dovi_reader, 4);
+	}
+
 	if (reader.stream.eof_reached)
 	{
 		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
@@ -227,7 +241,7 @@ codec_config_hevc_get_nal_units(
 	uint8_t type_count;
 	u_char* p;
 
-	rc = codec_config_hevc_config_parse(request_context, extra_data, &cfg, &start_pos);
+	rc = codec_config_hevc_config_parse(request_context, extra_data, NULL, &cfg, &start_pos);
 	if (rc != VOD_OK)
 	{
 		return rc;
@@ -385,32 +399,48 @@ codec_config_get_hevc_codec_name(request_context_t* request_context, media_info_
 	char profile_space[2] = { 0, 0 };
 	int shift;
 
-	rc = codec_config_hevc_config_parse(request_context, &media_info->extra_data, &cfg, NULL);
-	if (rc != VOD_OK)
+	if (media_info->format == FORMAT_DVH1)
 	{
-		return rc;
+		rc = codec_config_hevc_config_parse(request_context, &media_info->extra_data, &media_info->dvcc_data, &cfg, NULL);
+		if (rc != VOD_OK)
+		{
+			return rc;
+		}
+
+		// following https://www.dolby.com/us/en/technologies/dolby-vision/dolby-vision-streams-within-the-http-live-streaming-format-v2.0.pdf
+		p = vod_sprintf(media_info->codec_name.data, "%*s.%02d.%02d", (size_t)sizeof(uint32_t), 
+			&media_info->format,
+			cfg.dovi_config.dv_profile,
+			cfg.dovi_config.dv_level);
+	} else {
+		rc = codec_config_hevc_config_parse(request_context, &media_info->extra_data, NULL, &cfg, NULL);
+		if (rc != VOD_OK)
+		{
+			return rc;
+		}
+
+		if (cfg.profile_space > 0)
+		{
+			profile_space[0] = 'A' + (cfg.profile_space - 1);
+		}
+
+		c = cfg.progressive_source_flag << 7;
+		c |= cfg.interlaced_source_flag << 6;
+		c |= cfg.non_packed_constraint_flag << 5;
+		c |= cfg.frame_only_constraint_flag << 4;
+		c |= (cfg.constraint_indicator_flags >> 40);
+
+		p = vod_sprintf(media_info->codec_name.data, "%*s.%s%D.%xD.%c%D.%02xD",
+			(size_t)sizeof(uint32_t),
+			&media_info->format,
+			profile_space,
+			(uint32_t)cfg.profile_idc,
+			codec_config_flip_bits_32(cfg.general_profile_compatibility_flags),
+			(int)(cfg.tier_flag ? 'H' : 'L'),
+			(uint32_t)cfg.level_idc,
+			(uint32_t)c);
 	}
 
-	if (cfg.profile_space > 0)
-	{
-		profile_space[0] = 'A' + (cfg.profile_space - 1);
-	}
-
-	c = cfg.progressive_source_flag << 7;
-	c |= cfg.interlaced_source_flag << 6;
-	c |= cfg.non_packed_constraint_flag << 5;
-	c |= cfg.frame_only_constraint_flag << 4;
-	c |= (cfg.constraint_indicator_flags >> 40);
-
-	p = vod_sprintf(media_info->codec_name.data, "%*s.%s%D.%xD.%c%D.%02xD",
-		(size_t)sizeof(uint32_t),
-		&media_info->format,
-		profile_space,
-		(uint32_t)cfg.profile_idc,
-		codec_config_flip_bits_32(cfg.general_profile_compatibility_flags),
-		(int)(cfg.tier_flag ? 'H' : 'L'),
-		(uint32_t)cfg.level_idc,
-		(uint32_t)c);
 	for (shift = 32; shift >= 0; shift -= 8)
 	{
 		if ((cfg.constraint_indicator_flags & (((uint64_t)1 << (shift + 8)) - 1)) == 0)
