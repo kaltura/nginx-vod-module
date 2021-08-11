@@ -297,6 +297,7 @@ static dash_codec_info_t dash_codecs[VOD_CODEC_ID_COUNT] = {
 	{ vod_string("audio/webm"),	vod_string("webm"), vod_string("webm")	},		// vorbis
 	{ vod_string("audio/webm"),	vod_string("webm"), vod_string("webm")	},		// opus
 	{ vod_null_string,			vod_null_string,	vod_null_string		},		// volumemap
+	{ vod_null_string,			vod_null_string,	vod_null_string		},		// flac
 
 	{ vod_string("application/mp4"), vod_string("mp4"),	vod_string("ttml") },	// webvtt
 };
