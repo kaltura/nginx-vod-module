@@ -2580,7 +2580,7 @@ media_set_parse_json(
 	}
 
 	// live params
-	if (result->type == MEDIA_SET_LIVE)
+	if (result->type == MEDIA_SET_LIVE || result->type == MEDIA_SET_EVENT)
 	{
 		rc = media_set_parse_live_params(
 			request_context,
@@ -2751,7 +2751,7 @@ media_set_parse_json(
 				}
 
 				// initialize the look ahead segment times
-				if (result->type == MEDIA_SET_LIVE &&
+				if ((result->type == MEDIA_SET_LIVE || result->type == MEDIA_SET_EVENT) &&
 					(request_flags & REQUEST_FLAG_LOOK_AHEAD_SEGMENTS) != 0)
 				{
 					rc = media_set_init_look_ahead_segments(
@@ -2879,12 +2879,16 @@ media_set_parse_json(
 				parse_all_clips = FALSE;
 			}
 
-			if (result->type == MEDIA_SET_LIVE)
+			// applying live window with infinite duration is necessary for playlistType event
+			// because it ensures that incomplete segments are not included in the resulting playlist
+			if (result->type == MEDIA_SET_LIVE || result->type == MEDIA_SET_EVENT)
 			{
 				// trim the playlist to a smaller window if needed
-				result->live_window_duration = segmenter->live_window_duration;
+				result->live_window_duration = result->type == MEDIA_SET_LIVE ?
+					segmenter->live_window_duration :
+					0;
 
-				if (params[MEDIA_SET_PARAM_LIVE_WINDOW_DURATION] != NULL)
+				if (result->type == MEDIA_SET_LIVE && params[MEDIA_SET_PARAM_LIVE_WINDOW_DURATION] != NULL)
 				{
 					result->live_window_duration = media_set_apply_live_window_duration_param(
 						result->live_window_duration,
