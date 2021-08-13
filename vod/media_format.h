@@ -160,7 +160,7 @@ typedef struct {
 
 typedef struct {
 	uint32_t* required_tracks_mask;
-	uint8_t* langs_mask;
+	uint64_t* langs_mask;
 	uint32_t clip_from;
 	uint32_t clip_to;
 	media_range_t* range;
@@ -319,7 +319,7 @@ typedef struct {
 
 	// metadata reader
 	vod_status_t(*init_metadata_reader)(
-		request_context_t* request_context, 
+		request_context_t* request_context,
 		vod_str_t* buffer,
 		size_t max_metadata_size,
 		void** ctx);

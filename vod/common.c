@@ -28,6 +28,21 @@ vod_get_number_of_set_bits64(uint64_t i)
 	return vod_get_number_of_set_bits32((uint32_t)(i & NGX_MAX_UINT32_VALUE)) +
 		vod_get_number_of_set_bits32((uint32_t)(i >> 32));
 }
+
+uint32_t
+vod_get_trailing_zeroes64(uint64_t i)
+{
+	size_t k;
+
+	for (k = 0; k < sizeof(i) * 8; k++)
+	{
+		if ((i >> k) & 1)
+		{
+			return k;
+		}
+	}
+	return -1; /* undefined */
+}
 #endif
 
 u_char*

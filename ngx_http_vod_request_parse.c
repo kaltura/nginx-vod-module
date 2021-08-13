@@ -478,15 +478,13 @@ ngx_http_vod_parse_uri_file_name(
 	// languages
 	if (*start_pos == 'l')
 	{
-		result->langs_mask = ngx_pnalloc(r->pool, LANG_MASK_SIZE);
+		result->langs_mask = ngx_pcalloc(r->pool, LANG_MASK_SIZE * sizeof(result->langs_mask[0]));
 		if (result->langs_mask == NULL)
 		{
 			ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
-				"ngx_http_vod_parse_uri_file_name: ngx_pnalloc failed");
+				"ngx_http_vod_parse_uri_file_name: ngx_palloc failed");
 			return ngx_http_vod_status_to_ngx_error(r, VOD_ALLOC_FAILED);
 		}
-
-		ngx_memzero(result->langs_mask, LANG_MASK_SIZE);
 
 		for (;;)
 		{
