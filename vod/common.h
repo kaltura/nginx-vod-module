@@ -356,7 +356,17 @@ enum {
 // functions
 int vod_get_int_print_len(uint64_t n);
 
-uint32_t vod_get_number_of_set_bits(uint32_t i);
+#if defined(__GNUC__) || defined(__clang__)
+// On x86 this still uses the slow SWAR algorithm unless "-mpopcnt"
+// is set or any other flag that implies it like "-mavx2"
+#define vod_get_number_of_set_bits32(i) __builtin_popcount(i)
+#define vod_get_number_of_set_bits64(i) __builtin_popcountll(i)
+#else
+#define VOD_IMPLEMENT_BIT_COUNT
+uint32_t vod_get_number_of_set_bits32(uint32_t i);
+uint32_t vod_get_number_of_set_bits64(uint64_t i);
+#endif
+#define vod_get_number_of_set_bits(i) ((sizeof(size_t) <= 4) ? vod_get_number_of_set_bits32(i) : vod_get_number_of_set_bits64(i))
 
 u_char* vod_append_hex_string(u_char* p, const u_char* buffer, uint32_t buffer_size);
 

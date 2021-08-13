@@ -1042,7 +1042,7 @@ ngx_http_vod_parse_uri_path(
 
 	parts_mask = (1 << multi_uri.parts_count) - 1;
 	
-	uri_count = vod_get_number_of_set_bits(sequences_mask & parts_mask);
+	uri_count = vod_get_number_of_set_bits32(sequences_mask & parts_mask);
 	if (uri_count == 0)
 	{
 		ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,

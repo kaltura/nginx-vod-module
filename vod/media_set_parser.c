@@ -905,7 +905,7 @@ media_set_parse_sequences(
 
 	if (request_params->sequence_ids[0].len == 0)
 	{
-		required_sequences_num = vod_get_number_of_set_bits(request_params->sequences_mask);
+		required_sequences_num = vod_get_number_of_set_bits32(request_params->sequences_mask);
 		required_sequences_num = vod_min(array->count, required_sequences_num);
 	}
 	else
