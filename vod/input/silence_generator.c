@@ -32,7 +32,7 @@ silence_generator_parse(
 	source->sequence = context->sequence;
 	source->range = context->range;
 	source->clip_time = context->clip_time;
-	source->tracks_mask[MEDIA_TYPE_AUDIO] = 1;
+	vod_set_bit(source->tracks_mask[MEDIA_TYPE_AUDIO], 0);
 
 	if (context->duration == UINT_MAX)
 	{
@@ -197,6 +197,6 @@ silence_generator_generate(
 
 media_generator_t silence_generator = {
 	VOD_CODEC_FLAG(AAC),
-	{ 0, 1, 0 },
+	{ {0}, {1}, {0} },
 	silence_generator_generate
 };

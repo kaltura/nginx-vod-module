@@ -788,7 +788,7 @@ mkv_metadata_parse(
 
 		// is this track required ?
 		track_index = track_indexes[media_type]++;
-		if ((parse_params->required_tracks_mask[media_type] & (1 << track_index)) == 0)
+		if (!vod_is_bit_set(parse_params->required_tracks_mask[media_type], track_index))
 		{
 			continue;
 		}
@@ -808,10 +808,10 @@ mkv_metadata_parse(
 			return VOD_BAD_DATA;
 		}
 
-		if (metadata->base.tracks.nelts >= MAX_TRACK_COUNT)
+		if (metadata->base.tracks.nelts > MAX_TRACK_COUNT)
 		{
 			vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-				"mkv_metadata_parse: track count exceeded the limit");
+				"mkv_metadata_parse: track count exceeded the limit of %i", (ngx_int_t)MAX_TRACK_COUNT);
 			return VOD_BAD_REQUEST;
 		}
 

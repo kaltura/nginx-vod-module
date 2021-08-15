@@ -309,20 +309,23 @@ ngx_http_vod_mss_parse_uri_file_name(
 			&conf->segmenter,
 			request_params->segment_time + SEGMENT_FROM_TIMESTAMP_MARGIN);
 
-		if (fragment_params.media_type.len == sizeof(MSS_STREAM_TYPE_VIDEO) - 1 && 
+		if (fragment_params.media_type.len == sizeof(MSS_STREAM_TYPE_VIDEO) - 1 &&
 			ngx_memcmp(fragment_params.media_type.data, MSS_STREAM_TYPE_VIDEO, sizeof(MSS_STREAM_TYPE_VIDEO) - 1) == 0)
 		{
-			request_params->tracks_mask[MEDIA_TYPE_VIDEO] = (1 << mss_track_index(fragment_params.bitrate));
+			vod_track_mask_reset_all_bits(request_params->tracks_mask[MEDIA_TYPE_VIDEO]);
+			vod_set_bit(request_params->tracks_mask[MEDIA_TYPE_VIDEO], mss_track_index(fragment_params.bitrate));
 		}
 		else if (fragment_params.media_type.len == sizeof(MSS_STREAM_TYPE_AUDIO) - 1 &&
 			ngx_memcmp(fragment_params.media_type.data, MSS_STREAM_TYPE_AUDIO, sizeof(MSS_STREAM_TYPE_AUDIO) - 1) == 0)
 		{
-			request_params->tracks_mask[MEDIA_TYPE_AUDIO] = (1 << mss_track_index(fragment_params.bitrate));
+			vod_track_mask_reset_all_bits(request_params->tracks_mask[MEDIA_TYPE_AUDIO]);
+			vod_set_bit(request_params->tracks_mask[MEDIA_TYPE_AUDIO], mss_track_index(fragment_params.bitrate));
 		}
 		else if (fragment_params.media_type.len == sizeof(MSS_STREAM_TYPE_TEXT) - 1 &&
 			ngx_memcmp(fragment_params.media_type.data, MSS_STREAM_TYPE_TEXT, sizeof(MSS_STREAM_TYPE_TEXT) - 1) == 0)
 		{
-			request_params->tracks_mask[MEDIA_TYPE_SUBTITLE] = 1;
+			vod_track_mask_reset_all_bits(request_params->tracks_mask[MEDIA_TYPE_SUBTITLE]);
+			vod_set_bit(request_params->tracks_mask[MEDIA_TYPE_SUBTITLE], 0);
 			*request = &mss_ttml_request;
 			return NGX_OK;
 		}

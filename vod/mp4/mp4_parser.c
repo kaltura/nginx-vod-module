@@ -2863,7 +2863,7 @@ mp4_parser_process_moov_atom_callback(void* ctx, atom_info_t* atom_info)
 
 	// check whether we should include this track
 	track_index = context->track_indexes[metadata_parse_context.media_info.media_type]++;
-	if ((context->parse_params.required_tracks_mask[metadata_parse_context.media_info.media_type] & (1 << track_index)) == 0)
+	if (!vod_is_bit_set(context->parse_params.required_tracks_mask[metadata_parse_context.media_info.media_type], track_index))
 	{
 		return VOD_OK;
 	}
@@ -2926,10 +2926,10 @@ mp4_parser_process_moov_atom_callback(void* ctx, atom_info_t* atom_info)
 	}
 
 	// add to the result array
-	if (result->base.tracks.nelts >= MAX_TRACK_COUNT)
+	if (result->base.tracks.nelts > MAX_TRACK_COUNT)
 	{
 		vod_log_error(VOD_LOG_ERR, context->request_context->log, 0,
-			"mp4_parser_process_moov_atom_callback: track count exceeded the limit");
+			"mp4_parser_process_moov_atom_callback: track count exceeded the limit of %i", (ngx_int_t)MAX_TRACK_COUNT);
 		return VOD_BAD_REQUEST;
 	}
 

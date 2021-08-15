@@ -94,7 +94,7 @@ bool_t test_bitset()
 
 	vod_memset(mask, 0xff, sizeof(uint64_t) + 1);
 	assert(mask[0] == 0xffffffffffffffff);
-	assert(*((uint8_t*)&mask[1]) == 0xff);
+	assert((mask[1] == 0xff00000000000000) != (mask[1] == 0xff));
 	assert(vod_get_number_of_set_bits_in_mask(mask, BITS) == 64 + 8);
 
 	vod_reset_all_bits(mask, BITS);

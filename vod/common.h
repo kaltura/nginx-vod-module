@@ -373,7 +373,6 @@ uint32_t vod_get_number_of_set_bits32(uint32_t i);
 uint32_t vod_get_number_of_set_bits64(uint64_t i);
 uint32_t vod_get_trailing_zeroes64(uint64_t i);
 #endif
-#define vod_get_number_of_set_bits(i) ((sizeof(size_t) <= 4) ? vod_get_number_of_set_bits32(i) : vod_get_number_of_set_bits64(i))
 
 // bit sets
 // always assumes max_bits = n * 64.

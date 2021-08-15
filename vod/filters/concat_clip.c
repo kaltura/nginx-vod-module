@@ -68,7 +68,7 @@ concat_clip_parse(
 	uint64_t original_clip_time;
 	uint64_t start;
 	uint64_t end;
-	uint32_t tracks_mask[MEDIA_TYPE_COUNT];
+	track_mask_t tracks_mask[MEDIA_TYPE_COUNT];
 	uint32_t min_index;
 	uint32_t max_index;
 	uint32_t clip_count;
@@ -426,10 +426,10 @@ concat_clip_parse(
 		cur_source->stripped_uri = cur_source->mapped_uri = dest_str;
 
 		vod_log_debug3(VOD_LOG_DEBUG_LEVEL, context->request_context->log, 0,
-			"concat_clip_parse: parsed clip source - path=%V tracks[v]=0x%uxD tracks[a]=0x%uxD",
+			"concat_clip_parse: parsed clip source - path=%V tracks[v]=0x%uxL tracks[a]=0x%uxL",
 			&cur_source->mapped_uri,
-			cur_source->tracks_mask[MEDIA_TYPE_VIDEO],
-			cur_source->tracks_mask[MEDIA_TYPE_AUDIO]);
+			cur_source->tracks_mask[MEDIA_TYPE_VIDEO][0],
+			cur_source->tracks_mask[MEDIA_TYPE_AUDIO][0]);
 
 		cur_source++;
 		if (cur_source >= sources_end)

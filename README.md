@@ -111,12 +111,15 @@ In this case, the `load_module` directive should be used in nginx.conf in order 
 Optional recommended settings:
 1. `--with-file-aio` - enable asynchronous I/O support, highly recommended, relevant only to local and mapped modes
 2. `--with-threads` (nginx 1.7.11+) - enable asynchronous file open using thread pool (also requires `vod_open_file_thread_pool` in nginx.conf), relevant only to local and mapped modes
-3. `--with-cc-opt="-O3"` - enable additional compiler optimizations (we saw about 8% reduction in the mp4 parse time
+3. `--with-cc-opt="-O3 -mpopcnt"` - enable additional compiler optimizations (we saw about 8% reduction in the mp4 parse time
 	and frame processing time compared to the nginx default `-O`)
 
 Debug settings:
 1. `--with-debug` - enable debug messages (also requires passing `debug` in the `error_log` directive in nginx.conf).
 2. `--with-cc-opt="-O0"` - disable compiler optimizations (for debugging with gdb)
+
+C Macro Configurations:
+1. `--with-cc-opt="-DNGX_VOD_MAX_TRACK_COUNT=256 -mavx2"` - increase the maximum track count (preferably to multiples of 64). It's recommended to enable vector extensions (AVX2) as well.
 
 ### Installation
 
