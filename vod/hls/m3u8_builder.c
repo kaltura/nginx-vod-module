@@ -581,7 +581,7 @@ m3u8_builder_build_index_playlist(
 	{
 		p = vod_copy(p, M3U8_HEADER_VOD, sizeof(M3U8_HEADER_VOD) - 1);
 	}
-	else if (media_set->type == MEDIA_SET_EVENT)
+	else if (media_set->set_event_playlist_type)
 	{
 		p = vod_copy(p, M3U8_HEADER_EVENT, sizeof(M3U8_HEADER_EVENT) - 1);
 	}
@@ -1309,7 +1309,7 @@ m3u8_builder_build_master_playlist(
 	}
 
 	iframe_playlist = conf->output_iframes_playlist &&
-		(media_set->type == MEDIA_SET_VOD || media_set->type == MEDIA_SET_EVENT) &&
+		(media_set->type == MEDIA_SET_VOD || media_set->set_event_playlist_type) &&
 		media_set->timing.total_count <= 1 &&
 		encryption_method == HLS_ENC_NONE &&
 		conf->container_format != HLS_CONTAINER_FMP4 &&

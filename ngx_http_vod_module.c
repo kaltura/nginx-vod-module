@@ -1044,7 +1044,7 @@ ngx_http_vod_send_header(
 	// last modified
 	if (request == NULL || 
 		(request->request_class & (REQUEST_CLASS_SEGMENT | REQUEST_CLASS_THUMB)) != 0 ||
-		media_set_type == MEDIA_SET_VOD || media_set_type == MEDIA_SET_EVENT)
+		media_set_type == MEDIA_SET_VOD)
 	{
 		if (conf->last_modified_time != -1 &&
 			ngx_http_test_content_type(r, &conf->last_modified_types) != NULL)
