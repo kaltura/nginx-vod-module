@@ -1,0 +1,69 @@
+name: GitHub CI
+
+on: [push, pull_request]
+
+defaults:
+  run:
+    shell: 'bash -Eeuo pipefail -x {0}'
+
+jobs:
+  build-and-test:
+    name: Build and Test
+    runs-on: ubuntu-20.04
+    strategy:
+      fail-fast: false
+      matrix:
+        compiler: [clang-12, gcc-10]
+        confargs: ['--add-module=./nginx-vod-module', '--add-dynamic-module=./nginx-vod-module']
+    env:
+      CC: ${{ matrix.compiler }}
+    steps:
+      - uses: actions/checkout@v2
+      - name: Install Dependencies
+        run: |
+          sudo add-apt-repository -y ppa:ubuntu-toolchain-r/test
+          sudo apt-get update -qq
+          sudo apt-get install -y \
+            build-essential \
+            clang-12 \
+            gcc-10 \
+            python3 \
+            libssl-dev \
+            libpcre3-dev \
+            libxml2-dev \
+            wget \
+            unzip \
+            libopencore-amrwb0 \
+            libopencore-amrnb0 \
+            libass9 \
+            libgsm1 \
+            libmp3lame0 \
+            libjpeg9 \
+            libspeex1 \
+            libtheora0 \
+            libva2 \
+            libvpx6 \
+            libxvidcore4 \
+            libnuma1 \
+            libvdpau1 \
+            libfdk-aac1 \
+            libva-drm2 \
+            libva-x11-2 \
+            libvorbisfile3 \
+            libopenjp2-7 \
+            libzvbi0 \
+            libx264-155 \
+            libx265-179 \
+            libxcb1-dev \
+            libxcb-shm0-dev \
+            libvorbisenc2
+          wget http://installrepo.origin.kaltura.org/repo/aptn/test_debs/kaltura-ffmpeg_4.2.2-1_amd64.deb
+          sudo dpkg -i kaltura-ffmpeg_4.2.2-1_amd64.deb
+      - name : Build
+        run: ./ci_build.sh ${{ matrix.confargs }}
+      - name : Install
+        run : |
+          cd /tmp/builddir/nginx
+          sudo make install
+      - name : Test smoke
+        run : /sbin/nginx -V
