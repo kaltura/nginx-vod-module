@@ -2120,7 +2120,7 @@ media_set_apply_clip_from(
 		// Note: aligning to keyframes only in case of vod, since in live, 
 		//	alignment to keyframes will happen in segmenter_get_live_window
 		sequence = &media_set->sequences[0];
-		if (sequence->key_frame_durations != NULL &&
+		if (sequence->key_frame_durations != NULL && 
 			media_set->type == MEDIA_SET_VOD)
 		{
 			// align to key frames
