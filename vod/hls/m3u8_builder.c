@@ -468,9 +468,15 @@ m3u8_builder_build_index_playlist(
 	segment_length = sizeof("#EXTINF:.000,\n") - 1 + vod_get_int_print_len(vod_div_ceil(duration_millis, 1000)) +
 		segments_base_url->len + conf->segment_file_name_prefix.len + 1 + vod_get_int_print_len(last_segment_index) + name_suffix.len;
 
+	int playlist_type_header_size = media_set->type == MEDIA_SET_VOD ?
+		sizeof(M3U8_HEADER_VOD) :
+		media_set->is_live_event ?
+		sizeof(M3U8_HEADER_EVENT) :
+		0;
+
 	result_size =
 		sizeof(M3U8_HEADER_PART1) + VOD_INT64_LEN +
-		sizeof(M3U8_HEADER_VOD) +
+		playlist_type_header_size +
 		sizeof(M3U8_HEADER_PART2) + VOD_INT64_LEN + VOD_INT32_LEN +
 		segment_length * segment_durations.segment_count +
 		segment_durations.discontinuities * (sizeof(m3u8_discontinuity) - 1) +
@@ -581,7 +587,7 @@ m3u8_builder_build_index_playlist(
 	{
 		p = vod_copy(p, M3U8_HEADER_VOD, sizeof(M3U8_HEADER_VOD) - 1);
 	}
-	else if (media_set->set_event_playlist_type)
+	else if (media_set->is_live_event)
 	{
 		p = vod_copy(p, M3U8_HEADER_EVENT, sizeof(M3U8_HEADER_EVENT) - 1);
 	}
@@ -1309,7 +1315,7 @@ m3u8_builder_build_master_playlist(
 	}
 
 	iframe_playlist = conf->output_iframes_playlist &&
-		(media_set->type == MEDIA_SET_VOD || media_set->set_event_playlist_type) &&
+		(media_set->type == MEDIA_SET_VOD || media_set->is_live_event) &&
 		media_set->timing.total_count <= 1 &&
 		encryption_method == HLS_ENC_NONE &&
 		conf->container_format != HLS_CONTAINER_FMP4 &&

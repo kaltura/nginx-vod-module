@@ -2120,7 +2120,8 @@ media_set_apply_clip_from(
 		// Note: aligning to keyframes only in case of vod, since in live, 
 		//	alignment to keyframes will happen in segmenter_get_live_window
 		sequence = &media_set->sequences[0];
-		if (sequence->key_frame_durations != NULL && media_set->type == MEDIA_SET_VOD)
+		if (sequence->key_frame_durations != NULL &&
+			media_set->type == MEDIA_SET_VOD)
 		{
 			// align to key frames
 			initial_offset = timing->first_time + sequence->first_key_frame_offset - timing->times[clip_index];
@@ -2478,21 +2479,28 @@ media_set_parse_json(
 		return rc;
 	}
 
-	result->set_event_playlist_type = params[MEDIA_SET_PARAM_PLAYLIST_TYPE] != NULL &&
-		params[MEDIA_SET_PARAM_PLAYLIST_TYPE]->v.str.len == playlist_type_event.len &&
-		vod_strncasecmp(params[MEDIA_SET_PARAM_PLAYLIST_TYPE]->v.str.data, playlist_type_event.data, playlist_type_event.len) == 0;
-
-	// vod / live / event
+	// vod / live
 	if (params[MEDIA_SET_PARAM_PLAYLIST_TYPE] == NULL || 
 		(params[MEDIA_SET_PARAM_PLAYLIST_TYPE]->v.str.len == playlist_type_vod.len &&
 		vod_strncasecmp(params[MEDIA_SET_PARAM_PLAYLIST_TYPE]->v.str.data, playlist_type_vod.data, playlist_type_vod.len) == 0))
 	{
 		result->presentation_end = TRUE;
 	}
-	else if ((params[MEDIA_SET_PARAM_PLAYLIST_TYPE]->v.str.len == playlist_type_live.len &&
-		vod_strncasecmp(params[MEDIA_SET_PARAM_PLAYLIST_TYPE]->v.str.data, playlist_type_live.data, playlist_type_live.len) == 0) ||
-		result->set_event_playlist_type)
+	else
 	{
+		if (params[MEDIA_SET_PARAM_PLAYLIST_TYPE] != NULL &&
+			params[MEDIA_SET_PARAM_PLAYLIST_TYPE]->v.str.len == playlist_type_event.len &&
+			vod_strncasecmp(params[MEDIA_SET_PARAM_PLAYLIST_TYPE]->v.str.data, playlist_type_event.data, playlist_type_event.len) == 0)
+		{
+			result->is_live_event = TRUE;
+		} else if (params[MEDIA_SET_PARAM_PLAYLIST_TYPE]->v.str.len != playlist_type_live.len ||
+			vod_strncasecmp(params[MEDIA_SET_PARAM_PLAYLIST_TYPE]->v.str.data, playlist_type_live.data, playlist_type_live.len) != 0)
+		{
+			vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+				"media_set_parse_json: invalid playlist type \"%V\", must be either live, vod or event", 
+				&params[MEDIA_SET_PARAM_PLAYLIST_TYPE]->v.str);
+			return VOD_BAD_MAPPING;
+		}
 		result->original_type = MEDIA_SET_LIVE;
 		if ((request_flags & REQUEST_FLAG_FORCE_PLAYLIST_TYPE_VOD) != 0)
 		{
@@ -2502,13 +2510,6 @@ media_set_parse_json(
 		{
 			result->type = MEDIA_SET_LIVE;
 		}
-	}
-	else
-	{
-		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-			"media_set_parse_json: invalid playlist type \"%V\", must be either live, vod or event", 
-			&params[MEDIA_SET_PARAM_PLAYLIST_TYPE]->v.str);
-		return VOD_BAD_MAPPING;
 	}
 
 	// discontinuity
@@ -2742,7 +2743,7 @@ media_set_parse_json(
 				}
 
 				// initialize the look ahead segment times
-				if ((result->type == MEDIA_SET_LIVE) &&
+				if (result->type == MEDIA_SET_LIVE &&
 					(request_flags & REQUEST_FLAG_LOOK_AHEAD_SEGMENTS) != 0)
 				{
 					rc = media_set_init_look_ahead_segments(
@@ -2871,19 +2872,19 @@ media_set_parse_json(
 			}
 
 			// applying live window with infinite duration is necessary for playlistType event
-			// because it ensures that incomplete segments are not included in the resulting playlist
+			// because we aren't allowed to remove segments from the head for this playlist type
 			if (result->type == MEDIA_SET_LIVE)
 			{
 				// trim the playlist to a smaller window if needed
-				result->live_window_duration = !result->set_event_playlist_type ?
-					segmenter->live_window_duration :
-					0;
-
-				if (result->type == MEDIA_SET_LIVE && params[MEDIA_SET_PARAM_LIVE_WINDOW_DURATION] != NULL)
+				if (!result->is_live_event) 
 				{
-					result->live_window_duration = media_set_apply_live_window_duration_param(
-						result->live_window_duration,
-						params[MEDIA_SET_PARAM_LIVE_WINDOW_DURATION]->v.num.num);
+					result->live_window_duration = segmenter->live_window_duration;
+					if (params[MEDIA_SET_PARAM_LIVE_WINDOW_DURATION] != NULL)
+					{
+						result->live_window_duration = media_set_apply_live_window_duration_param(
+							result->live_window_duration,
+							params[MEDIA_SET_PARAM_LIVE_WINDOW_DURATION]->v.num.num);
+					}
 				}
 
 				if ((request_flags & REQUEST_FLAG_LOOK_AHEAD_SEGMENTS) != 0)
