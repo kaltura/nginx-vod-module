@@ -2488,12 +2488,12 @@ media_set_parse_json(
 	}
 	else
 	{
-		if (params[MEDIA_SET_PARAM_PLAYLIST_TYPE] != NULL &&
-			params[MEDIA_SET_PARAM_PLAYLIST_TYPE]->v.str.len == playlist_type_event.len &&
+		if (params[MEDIA_SET_PARAM_PLAYLIST_TYPE]->v.str.len == playlist_type_event.len &&
 			vod_strncasecmp(params[MEDIA_SET_PARAM_PLAYLIST_TYPE]->v.str.data, playlist_type_event.data, playlist_type_event.len) == 0)
 		{
 			result->is_live_event = TRUE;
-		} else if (params[MEDIA_SET_PARAM_PLAYLIST_TYPE]->v.str.len != playlist_type_live.len ||
+		}
+		else if (params[MEDIA_SET_PARAM_PLAYLIST_TYPE]->v.str.len != playlist_type_live.len ||
 			vod_strncasecmp(params[MEDIA_SET_PARAM_PLAYLIST_TYPE]->v.str.data, playlist_type_live.data, playlist_type_live.len) != 0)
 		{
 			vod_log_error(VOD_LOG_ERR, request_context->log, 0,
@@ -2871,11 +2871,11 @@ media_set_parse_json(
 				parse_all_clips = FALSE;
 			}
 
-			// applying live window with infinite duration is necessary for playlistType event
-			// because we aren't allowed to remove segments from the head for this playlist type
 			if (result->type == MEDIA_SET_LIVE)
 			{
-				// trim the playlist to a smaller window if needed
+				// trim the playlist to a smaller window if needed.
+				// applying live window with infinite duration is necessary for playlistType event
+				// because we aren't allowed to remove segments from the head for this playlist type.
 				if (!result->is_live_event) 
 				{
 					result->live_window_duration = segmenter->live_window_duration;
