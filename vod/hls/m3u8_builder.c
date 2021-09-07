@@ -9,6 +9,7 @@
 // macros
 #define M3U8_HEADER_PART1 "#EXTM3U\n#EXT-X-TARGETDURATION:%uL\n#EXT-X-ALLOW-CACHE:YES\n"
 #define M3U8_HEADER_VOD "#EXT-X-PLAYLIST-TYPE:VOD\n"
+#define M3U8_HEADER_EVENT "#EXT-X-PLAYLIST-TYPE:EVENT\n"
 #define M3U8_HEADER_PART2 "#EXT-X-VERSION:%d\n#EXT-X-MEDIA-SEQUENCE:%uD\n"
 
 #define M3U8_EXT_MEDIA_BASE "#EXT-X-MEDIA:TYPE=%s,GROUP-ID=\"%s%uD\",NAME=\"%V\","
@@ -469,7 +470,7 @@ m3u8_builder_build_index_playlist(
 
 	result_size =
 		sizeof(M3U8_HEADER_PART1) + VOD_INT64_LEN +
-		sizeof(M3U8_HEADER_VOD) +
+		sizeof(M3U8_HEADER_EVENT) +
 		sizeof(M3U8_HEADER_PART2) + VOD_INT64_LEN + VOD_INT32_LEN +
 		segment_length * segment_durations.segment_count +
 		segment_durations.discontinuities * (sizeof(m3u8_discontinuity) - 1) +
@@ -579,6 +580,10 @@ m3u8_builder_build_index_playlist(
 	if (media_set->type == MEDIA_SET_VOD)
 	{
 		p = vod_copy(p, M3U8_HEADER_VOD, sizeof(M3U8_HEADER_VOD) - 1);
+	}
+	else if (media_set->is_live_event)
+	{
+		p = vod_copy(p, M3U8_HEADER_EVENT, sizeof(M3U8_HEADER_EVENT) - 1);
 	}
 
 	if (encryption_type != HLS_ENC_NONE)
@@ -1303,7 +1308,8 @@ m3u8_builder_build_master_playlist(
 		return rc;
 	}
 
-	iframe_playlist = conf->output_iframes_playlist && media_set->type == MEDIA_SET_VOD &&
+	iframe_playlist = conf->output_iframes_playlist &&
+		(media_set->type == MEDIA_SET_VOD || media_set->is_live_event) &&
 		media_set->timing.total_count <= 1 &&
 		encryption_method == HLS_ENC_NONE &&
 		conf->container_format != HLS_CONTAINER_FMP4 &&

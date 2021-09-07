@@ -124,6 +124,7 @@ typedef struct {
 	vod_str_t id;
 	uint32_t type;
 	uint32_t original_type;					// will contain live in case of a live playlist that was forced to vod
+	bool_t is_live_event;					// causes HLS playlist type to be event and infinite live_window_duration
 	media_clip_timing_t timing;
 	bool_t original_use_discontinuity;		// will be different than use_discontinuity in case force_continuous_timestamps is enabled
 	bool_t use_discontinuity;
