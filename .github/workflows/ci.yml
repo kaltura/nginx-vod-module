@@ -67,3 +67,8 @@ jobs:
           sudo make install
       - name : Test smoke
         run : /sbin/nginx -V
+      - name : Test bitset
+        run : |
+          cd test/bitset
+          NGX_ROOT=/tmp/builddir/nginx VOD_ROOT=../../ bash build.sh
+          ./bitsettest

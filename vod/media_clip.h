@@ -77,7 +77,7 @@ struct media_clip_source_s {
 	media_clip_source_type_t source_type;
 	vod_str_t uri;				// original uri
 	uint64_t clip_from;
-	uint32_t tracks_mask[MEDIA_TYPE_COUNT];
+	track_mask_t tracks_mask[MEDIA_TYPE_COUNT];
 	uint32_t time_shift[MEDIA_TYPE_COUNT];
 	media_clip_source_enc_t encryption;
 
@@ -98,7 +98,7 @@ struct media_clip_source_s {
 
 typedef struct {
 	int codec_mask;
-	uint32_t track_mask[MEDIA_TYPE_COUNT];
+	track_mask_t tracks_mask[MEDIA_TYPE_COUNT];
 	vod_status_t(*generate)(
 		request_context_t* request_context,
 		media_parse_params_t* parse_params,

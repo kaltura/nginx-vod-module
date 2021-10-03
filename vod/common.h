@@ -16,13 +16,18 @@
 #define vod_div_ceil(x, y) (((x) + (y) - 1) / (y))
 #define vod_array_entries(x) (sizeof(x) / sizeof(x[0]))
 
-#define vod_is_bit_set(mask, index) (((mask)[(index) >> 3] >> ((index) & 7)) & 1)
-#define vod_set_bit(mask, index) (mask)[(index) >> 3] |= 1 << ((index) & 7)
+// bit sets
+#define vod_array_length_for_bits(i) (((i) + 63) >> 6)
+#define vod_is_bit_set(mask, index) (((mask)[(index) / 64] >> ((index) % 64)) & 1)
+#define vod_set_bit(mask, index) ((mask)[(index) / 64] |= ((uint64_t)1 << ((index) % 64)))
+#define vod_reset_bit(mask, index) ((mask)[(index) / 64] &= ~((uint64_t)1 << ((index) % 64)))
+#define vod_set_all_bits(mask, max_bits) vod_memset((mask), 0xff, sizeof(uint64_t) * vod_array_length_for_bits(max_bits));
+#define vod_reset_all_bits(mask, max_bits) vod_memzero((mask), sizeof(uint64_t) * vod_array_length_for_bits(max_bits));
 
 #define vod_no_flag_set(mask, f) (((mask) & (f)) == 0)
 #define vod_all_flags_set(mask, f) (((mask) & (f)) == (f))
 
-// Note: comparing the pointers since in the case of labels if both were derived by the language, 
+// Note: comparing the pointers since in the case of labels if both were derived by the language,
 //		they will have the same pointer and we can skip the memcmp
 #define vod_str_equals(l1, l2) \
 	((l1).len == (l2).len && ((l1).data == (l2).data || vod_memcmp((l1).data, (l2).data, (l1).len) == 0))
@@ -229,15 +234,15 @@ void vod_log_error(vod_uint_t level, vod_log_t *log, int err,
 
 #define VOD_MAX_ERROR_STR NGX_MAX_ERROR_STR
 
-#define VOD_LOG_STDERR            NGX_LOG_STDERR 
-#define VOD_LOG_EMERG             NGX_LOG_EMERG  
-#define VOD_LOG_ALERT             NGX_LOG_ALERT  
-#define VOD_LOG_CRIT              NGX_LOG_CRIT   
-#define VOD_LOG_ERR               NGX_LOG_ERR    
-#define VOD_LOG_WARN              NGX_LOG_WARN   
-#define VOD_LOG_NOTICE            NGX_LOG_NOTICE 
-#define VOD_LOG_INFO              NGX_LOG_INFO   
-#define VOD_LOG_DEBUG             NGX_LOG_DEBUG  
+#define VOD_LOG_STDERR            NGX_LOG_STDERR
+#define VOD_LOG_EMERG             NGX_LOG_EMERG
+#define VOD_LOG_ALERT             NGX_LOG_ALERT
+#define VOD_LOG_CRIT              NGX_LOG_CRIT
+#define VOD_LOG_ERR               NGX_LOG_ERR
+#define VOD_LOG_WARN              NGX_LOG_WARN
+#define VOD_LOG_NOTICE            NGX_LOG_NOTICE
+#define VOD_LOG_INFO              NGX_LOG_INFO
+#define VOD_LOG_DEBUG             NGX_LOG_DEBUG
 
 #define vod_log_error ngx_log_error
 
@@ -273,16 +278,16 @@ typedef ngx_err_t vod_err_t;
 #define vod_log_buffer(level, log, err, prefix, buffer, size)	\
 	if ((log)->log_level & level)								\
 		log_buffer(level, log, err, prefix, buffer, size)
-		
+
 #define MAX_DUMP_BUFFER_SIZE (100)
 
-static vod_inline void 
+static vod_inline void
 log_buffer(unsigned level, vod_log_t* log, int err, const char* prefix, const u_char* buffer, int size)
 {
 	static const char hex_chars[] = "0123456789abcdef";
 	char hex[MAX_DUMP_BUFFER_SIZE * 3 + 1];
 	char* hex_pos = hex;
-	
+
 	size = vod_min(size, MAX_DUMP_BUFFER_SIZE);
 	for (; size > 0; size--, buffer++)
 	{
@@ -291,7 +296,7 @@ log_buffer(unsigned level, vod_log_t* log, int err, const char* prefix, const u_
 		*hex_pos++ = ' ';
 	}
 	*hex_pos = '\0';
-	
+
 	vod_log_debug2(level, log, err, "%s %s", prefix, hex);
 }
 
@@ -356,7 +361,103 @@ enum {
 // functions
 int vod_get_int_print_len(uint64_t n);
 
-uint32_t vod_get_number_of_set_bits(uint32_t i);
+#if defined(__GNUC__) || defined(__clang__)
+// On x86 this still uses the slow SWAR algorithm unless "-mpopcnt"
+// is set or any other flag that implies it like "-mavx2"
+#define vod_get_number_of_set_bits32(i) __builtin_popcount(i)
+#define vod_get_number_of_set_bits64(i) __builtin_popcountll(i)
+#define vod_get_trailing_zeroes64(i) __builtin_ctzll(i)
+#else
+#define VOD_IMPLEMENT_BIT_COUNT
+uint32_t vod_get_number_of_set_bits32(uint32_t i);
+uint32_t vod_get_number_of_set_bits64(uint64_t i);
+uint32_t vod_get_trailing_zeroes64(uint64_t i);
+#endif
+
+// bit sets
+// always assumes max_bits = n * 64.
+// -> n = max_bits / 64 (integer division)
+// -> residual elements are not handled!
+static vod_inline uint32_t
+vod_get_number_of_set_bits_in_mask(
+	uint64_t* mask,
+	uint32_t max_bits)
+{
+	uint32_t i;
+	uint32_t result = 0;
+	// due to inlining, the loop is unrolled and optimized
+	for (i = 0; i < max_bits / 64; i++)
+	{
+		result += vod_get_number_of_set_bits64(mask[i]);
+	}
+	return result;
+}
+
+static vod_inline bool_t
+vod_are_all_bits_set(
+	uint64_t* mask,
+	uint32_t max_bits)
+{
+	uint32_t i;
+	for (i = 0; i < max_bits / 64; i++)
+	{
+		if (mask[i] != ~(uint64_t)0)
+		{
+			return FALSE;
+		}
+	}
+
+	return TRUE;
+}
+
+static vod_inline bool_t
+vod_is_any_bit_set(
+	uint64_t* mask,
+	uint32_t max_bits)
+{
+	uint32_t i;
+	for (i = 0; i < max_bits / 64; i++)
+	{
+		if (mask[i] != (uint64_t)0)
+		{
+			return TRUE;
+		}
+	}
+
+	return FALSE;
+}
+
+static vod_inline int32_t
+vod_get_lowest_bit_set(
+	uint64_t* mask,
+	uint32_t max_bits)
+{
+	uint32_t i;
+	for (i = 0; max_bits / 64; i++)
+	{
+		if (mask[i] != (uint64_t)0)
+		{
+			return i * 64 + vod_get_trailing_zeroes64(mask[i]);
+		}
+	}
+
+	// well defined result in case no bit is set
+	return -1;
+}
+
+static vod_inline void
+vod_and_bits(
+	uint64_t* dst,
+	uint64_t* a,
+	uint64_t* b,
+	uint32_t max_bits)
+{
+	uint32_t i;
+	for (i = 0; i < vod_array_length_for_bits(max_bits); i++)
+	{
+		dst[i] = a[i] & b[i];
+	}
+}
 
 u_char* vod_append_hex_string(u_char* p, const u_char* buffer, uint32_t buffer_size);
 

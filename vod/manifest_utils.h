@@ -46,12 +46,12 @@ typedef struct {
 // functions
 vod_status_t manifest_utils_build_request_params_string(
 	request_context_t* request_context,
-	uint32_t* has_tracks,
+	track_mask_t* has_tracks,
 	uint32_t segment_index,
 	uint32_t sequences_mask,
 	sequence_tracks_mask_t* sequence_tracks_mask,
 	sequence_tracks_mask_t* sequence_tracks_mask_end,
-	uint32_t* tracks_mask,
+	track_mask_t* tracks_mask,
 	vod_str_t* result);
 
 u_char* manifest_utils_append_tracks_spec(

@@ -433,7 +433,7 @@ media_set_parse_tracks_spec(
 	void* dest)
 {
 	media_filter_parse_context_t* context = ctx;
-	uint32_t* tracks_mask = dest;
+	track_mask_t* tracks_mask = dest;
 	u_char* end_pos = value->v.str.data + value->v.str.len;
 
 	vod_memzero(tracks_mask, sizeof(tracks_mask[0]) * MEDIA_TYPE_COUNT);
@@ -648,10 +648,10 @@ media_set_parse_source(
 	context->base.sources_head = source;
 
 	vod_log_debug4(VOD_LOG_DEBUG_LEVEL, context->base.request_context->log, 0,
-		"media_set_parse_source: parsed clip source - path=%V tracks[v]=0x%uxD tracks[a]=0x%uxD, clipFrom=%uL", 
+		"media_set_parse_source: parsed clip source - path=%V tracks[v]=0x%uxL tracks[a]=0x%uxL, clipFrom=%uL",
 		&source->mapped_uri, 
-		source->tracks_mask[MEDIA_TYPE_VIDEO],
-		source->tracks_mask[MEDIA_TYPE_AUDIO],
+		source->tracks_mask[MEDIA_TYPE_VIDEO][0],
+		source->tracks_mask[MEDIA_TYPE_AUDIO][0],
 		source->clip_from);
 
 	*result = &source->base;
@@ -905,7 +905,7 @@ media_set_parse_sequences(
 
 	if (request_params->sequence_ids[0].len == 0)
 	{
-		required_sequences_num = vod_get_number_of_set_bits(request_params->sequences_mask);
+		required_sequences_num = vod_get_number_of_set_bits32(request_params->sequences_mask);
 		required_sequences_num = vod_min(array->count, required_sequences_num);
 	}
 	else

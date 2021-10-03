@@ -1,3 +1,4 @@
+#include "media_format.h"
 #include "parse_utils.h"
 
 static int
@@ -154,7 +155,7 @@ parse_utils_extract_uint32_token(u_char* start_pos, u_char* end_pos, uint32_t* r
 }
 
 u_char*
-parse_utils_extract_track_tokens(u_char* start_pos, u_char* end_pos, uint32_t* result)
+parse_utils_extract_track_tokens(u_char* start_pos, u_char* end_pos, track_mask_t* result)
 {
 	uint32_t stream_index;
 	u_char* next_pos;
@@ -165,7 +166,7 @@ parse_utils_extract_track_tokens(u_char* start_pos, u_char* end_pos, uint32_t* r
 	{
 		for (media_type = 0; media_type < MEDIA_TYPE_COUNT; media_type++)
 		{
-			result[media_type] = 1;
+			vod_set_bit(result[media_type], 0);
 		}
 		return start_pos;
 	}
@@ -193,11 +194,11 @@ parse_utils_extract_track_tokens(u_char* start_pos, u_char* end_pos, uint32_t* r
 		if (stream_index == 0)
 		{
 			// no index => all streams of the media type
-			result[media_type] = 0xffffffff;
+			vod_track_mask_set_all_bits(result[media_type]);
 		}
 		else
 		{
-			result[media_type] |= (1 << (stream_index - 1));
+			vod_set_bit(result[media_type], stream_index - 1);
 		}
 
 		start_pos = next_pos;
