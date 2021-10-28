@@ -7,7 +7,7 @@ VOD_DEPS=
 # version
 #
 VOD_DEFAULT_VERSION=1.11
-VOD_VERSION=`git --git-dir=$ngx_addon_dir/.git describe 2>/dev/null`
+VOD_VERSION=${VOD_VERSION:-`git --git-dir=$ngx_addon_dir/.git describe 2>/dev/null`}
 VOD_VERSION=${VOD_VERSION:-$VOD_DEFAULT_VERSION}
 echo "#define NGINX_VOD_VERSION \""$VOD_VERSION"\"" > $NGX_OBJS/ngx_vod_version.h
 
