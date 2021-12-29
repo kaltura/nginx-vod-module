@@ -1121,6 +1121,20 @@ Sets the maximum supported video metadata size (for MP4 - moov atom size)
 
 Sets the limit on the total size of the frames of a single segment
 
+#### vod_max_frame_count
+* **syntax**: `vod_max_frame_count count`
+* **default**: `1048576`
+* **context**: `http`, `server`, `location`
+
+Sets the limit on the total count of the frames read to serve non segment (e.g. playlist) request.
+
+#### vod_segment_max_frame_count
+* **syntax**: `vod_segment_max_frame_count count`
+* **default**: `65536`
+* **context**: `http`, `server`, `location`
+
+Sets the limit on the total count of the frames read to serve segment request.
+
 #### vod_cache_buffer_size
 * **syntax**: `vod_cache_buffer_size size`
 * **default**: `256K`
