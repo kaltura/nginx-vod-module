@@ -206,8 +206,8 @@ ngx_http_vod_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child)
 	ngx_conf_merge_size_value(conf->initial_read_size, prev->initial_read_size, 4096);
 	ngx_conf_merge_size_value(conf->max_metadata_size, prev->max_metadata_size, 128 * 1024 * 1024);
 	ngx_conf_merge_size_value(conf->max_frames_size, prev->max_frames_size, 16 * 1024 * 1024);
-	ngx_conf_merge_size_value(conf->max_frame_count, prev->max_frame_count, 1024 * 1024);
-	ngx_conf_merge_size_value(conf->segment_max_frame_count, prev->segment_max_frame_count, 64 * 1024);
+	ngx_conf_merge_uint_value(conf->max_frame_count, prev->max_frame_count, 1024 * 1024);
+	ngx_conf_merge_uint_value(conf->segment_max_frame_count, prev->segment_max_frame_count, 64 * 1024);
 	ngx_conf_merge_size_value(conf->cache_buffer_size, prev->cache_buffer_size, 256 * 1024);
 	ngx_conf_merge_size_value(conf->max_upstream_headers_size, prev->max_upstream_headers_size, 4 * 1024);
 
