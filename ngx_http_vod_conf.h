@@ -51,6 +51,8 @@ struct ngx_http_vod_loc_conf_s {
 	size_t initial_read_size;
 	size_t max_metadata_size;
 	size_t max_frames_size;
+	ngx_uint_t max_frame_count;
+	ngx_uint_t segment_max_frame_count;
 	size_t cache_buffer_size;
 	buffer_pool_t* output_buffer_pool;
 	size_t max_upstream_headers_size;

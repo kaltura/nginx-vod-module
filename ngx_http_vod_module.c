@@ -48,9 +48,6 @@
 #define OPEN_FILE_FALLBACK_ENABLED (0x80000000)
 #define MAX_STALE_RETRIES (2)
 
-#define SEGMENT_REQUEST_MAX_FRAME_COUNT (64 * 1024)
-#define NON_SEGMENT_REQUEST_MAX_FRAME_COUNT (1024 * 1024)
-
 enum {
 	// mapping state machine
 	STATE_MAP_INITIAL,
@@ -1512,7 +1509,7 @@ ngx_http_vod_init_parse_params_frames(
 	{
 		request_context->simulation_only = TRUE;
 
-		parse_params->max_frame_count = NON_SEGMENT_REQUEST_MAX_FRAME_COUNT;
+		parse_params->max_frame_count = ctx->submodule_context.conf->max_frame_count;
 		range->timescale = 1000;
 		range->original_clip_time = 0;
 		range->start = 0;
@@ -1530,7 +1527,7 @@ ngx_http_vod_init_parse_params_frames(
 
 	request_context->simulation_only = FALSE;
 
-	parse_params->max_frame_count = SEGMENT_REQUEST_MAX_FRAME_COUNT;
+	parse_params->max_frame_count = ctx->submodule_context.conf->segment_max_frame_count;
 
 	if (cur_source->range != NULL)
 	{
@@ -3689,11 +3686,11 @@ ngx_http_vod_run_state_machine(ngx_http_vod_ctx_t *ctx)
 
 			if ((ctx->request->request_class & (REQUEST_CLASS_MANIFEST | REQUEST_CLASS_OTHER)) != 0)
 			{
-				max_frame_count = NON_SEGMENT_REQUEST_MAX_FRAME_COUNT;
+				max_frame_count = ctx->submodule_context.conf->max_frame_count;
 			}
 			else
 			{
-				max_frame_count = SEGMENT_REQUEST_MAX_FRAME_COUNT;
+				max_frame_count = ctx->submodule_context.conf->segment_max_frame_count;
 			}
 
 #if (NGX_HAVE_LIB_AV_CODEC)
