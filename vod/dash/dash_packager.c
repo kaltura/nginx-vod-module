@@ -857,10 +857,8 @@ dash_packager_write_mpd_period(
 			break;
 
 		case MEDIA_TYPE_AUDIO:
-			
 			reference_track = (*adaptation_set->first) + filtered_clip_offset;
-
-			if (reference_track->media_info.lang_str.len > 0)
+			if (reference_track->media_info.lang_str.len > 0 || reference_track->media_info.label.len > 0)
 			{
 				p = vod_sprintf(p, VOD_DASH_MANIFEST_ADAPTATION_HEADER_AUDIO_LANG, 
 					adapt_id++, 
