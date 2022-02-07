@@ -1,10 +1,11 @@
+from __future__ import print_function
 from ts_utils import decryptTsSegment
 import struct
 import sys
 import os
 
 if len(sys.argv) < 5:
-	print 'Usage:\n\tpython %s <input file> <output file> <aes key hex> <segment index (one based) or 0xIV>' % os.path.basename(__file__)
+	print('Usage:\n\tpython %s <input file> <output file> <aes key hex> <segment index (one based) or 0xIV>' % os.path.basename(__file__))
 	sys.exit(1)
 
 INPUT_FILE = sys.argv[1]
@@ -25,9 +26,9 @@ else:
 	segmentIndex = int(ENC_IV)
 	ENC_IV = '\0' * 12 + struct.pack('>L', segmentIndex)
 
-encryptedData = file(INPUT_FILE, 'rb').read()
+encryptedData = open(INPUT_FILE, 'rb').read()
 decryptedData, error = decryptTsSegment(encryptedData, ENC_KEY, ENC_IV)
 if decryptedData == None:
-	print error
+	print(error)
 	sys.exit(1)
-file(OUTPUT_FILE, 'wb').write(decryptedData)
+open(OUTPUT_FILE, 'wb').write(decryptedData)

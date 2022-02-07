@@ -28,7 +28,7 @@ class TestThreadBase(Thread):
 	def run(self):
 		self.writeOutput('Info: started')
 		index = 0
-		for inputLine in file(self.inputFile):
+		for inputLine in open(self.inputFile):
 			inputLine = inputLine.strip()
 			if len(inputLine) == 0 or inputLine[0] == '#':
 				continue

@@ -276,7 +276,7 @@ class TestThread(stress_base.TestThreadBase):
 			baseUrl = url[:url.rfind('/')] + '/'
 			try:
 				aesKey = urllib2.urlopen(baseUrl + keyUri).read()
-			except urllib2.HTTPError, e:
+			except urllib2.HTTPError as e:
 				self.writeOutput('Error: failed to get the encryption key, code=%s' % e.getcode())
 				return False
 		else:

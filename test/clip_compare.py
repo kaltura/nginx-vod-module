@@ -1,3 +1,4 @@
+from __future__ import print_function
 import http_utils
 import time
 
@@ -149,7 +150,7 @@ def getUrl(url):
 	code, headers, body = http_utils.getUrl(url)
 	print ('Info: get %s took %s' % (url, time.time() - startTime))
 	if code == 0:
-		print body
+		print(body)
 	return (code, body)
 
 def runSingleTest(fileBase, start, end):
@@ -157,17 +158,17 @@ def runSingleTest(fileBase, start, end):
 		return
 	url1 = buildUrl(URL1_FORMAT, fileBase, start, end)
 	url2 = buildUrl(URL2_FORMAT, fileBase, start, end)
-	print 'curling %s' % url1
+	print('curling %s' % url1)
 	code1, data1 = getUrl(url1)
-	print 'curling %s' % url2
+	print('curling %s' % url2)
 	code2, data2 = getUrl(url2)
 	if code1 != code2:
 		if set([code1, code2]) == set([400, 500]):
 			return
-		print 'Error: different codes %s %s' % (code1, code2)
+		print('Error: different codes %s %s' % (code1, code2))
 		return
 	if data1 != data2:
-		print 'Error: %s %s' % (url1, url2)
+		print('Error: %s %s' % (url1, url2))
 
 def runTestSuite(fileBase, testCase):
 	start = testCase['min']
