@@ -1,15 +1,16 @@
+from __future__ import print_function
 import sys
 import os.path
 
 # parse the command line
 scriptName = os.path.basename(sys.argv[0])
 if len(sys.argv) < 3:
-    print 'Usage:\n\t%s <input file> <output file>' % scriptName
+    print('Usage:\n\t%s <input file> <output file>' % scriptName)
     sys.exit(1)
 inputFile, outputFile = sys.argv[1:]
 
 # initialize
-inputData = file(inputFile, 'rb').read()
+inputData = open(inputFile, 'rb').read()
 
 preprocessorMacro = '__%s_H__' % os.path.splitext(os.path.basename(inputFile))[0].upper()
 
@@ -94,4 +95,4 @@ if structName != None:
 
 result += '#endif // %s\n' % preprocessorMacro
 
-file(outputFile, 'wb').write(result)
+open(outputFile, 'wb').write(result)

@@ -1,3 +1,4 @@
+from __future__ import print_function
 import sys
 import re
 import os
@@ -27,11 +28,11 @@ def validateLogParams(fileName, fileData):
         logMessage = logBlock[logBlock.find('"'):logBlock.rfind('"')]
         args = logBlock[logBlock.rfind('"'):]
         if countArgs(args) != logMessage.count('%') + logMessage.count('%*'):
-            print logBlock
+            print(logBlock)
         logBlock = None
 
 if len(sys.argv) < 2:
-    print 'Usage:\n\tpython %s <nginx-vod code root> [<error log file>]' % os.path.basename(__file__)
+    print('Usage:\n\tpython %s <nginx-vod code root> [<error log file>]' % os.path.basename(__file__))
     sys.exit(1)
 
 nginxVodRoot = sys.argv[1]
@@ -45,7 +46,7 @@ for root, dirs, files in os.walk(nginxVodRoot):
     for name in files:
         if os.path.splitext(name)[1] != '.c':
             continue
-        fileData = file(os.path.join(root, name), 'rb').read()
+        fileData = open(os.path.join(root, name), 'rb').read()
         validateLogParams(name, fileData)
         for curLog in re.findall('(?:ngx|vod)_log_(?:debug|error)[^\(]*\([^\)]+\)', fileData):
             logMessage = curLog.split(',')[3].strip()
@@ -74,24 +75,24 @@ for root, dirs, files in os.walk(nginxVodRoot):
             if logFunction.startswith('"'):
                 logFunction = logFunction[1:]
             if realFunction != logFunction:
-                print 'log function mismatch %s' % logMessage
+                print('log function mismatch %s' % logMessage)
             
 
 if errorLog == None:
     sys.exit(0)
             
-errorLogData = file(errorLog, 'rb').read()
+errorLogData = open(errorLog, 'rb').read()
 foundPrefixes = {}
 for logPrefix in logPrefixes:
     logPos = errorLogData.find(logPrefix)
     if logPos > 0:
         foundPrefixes[logPrefix] = errorLogData[(errorLogData.rfind('\n', 0, logPos) + 1):errorLogData.find('\n', logPos)]
 
-print 'not covered:'
+print('not covered:')
 for logPrefix, logMessage in logMessages:
     if not foundPrefixes.has_key(logPrefix):
-        print '\t' + logMessage
+        print('\t' + logMessage)
 
-print 'covered:'
+print('covered:')
 for curLine in foundPrefixes.values():
-    print '\t' + curLine[:140]
+    print('\t' + curLine[:140])

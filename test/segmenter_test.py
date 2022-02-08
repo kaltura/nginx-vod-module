@@ -1,6 +1,8 @@
+from __future__ import print_function
 import itertools
 import sys
 import os
+from functools import reduce
 
 confMatrix = [
 	[
@@ -189,18 +191,18 @@ def getTestUrls():
 					
 				# build the url
 				jsonComb = list(baseJsonComb) + list(liveJsonComb)
-				url = '/' + locName + ''.join(map(lambda (x): '/%s/%s' % x, jsonComb)) + \
+				url = '/' + locName + ''.join(map(lambda x: '/%s/%s' % x, jsonComb)) + \
 					'/time/@time@' + \
 					'/' + fileByProtocol[confComb[0][0]]
 				result.append(url)
 	return result
 
 if len(sys.argv) < 2:
-	print 'Usage:\n\tpython %s urls/conf' % os.path.basename(__file__)
+	print('Usage:\n\tpython %s urls/conf' % os.path.basename(__file__))
 	sys.exit(1)
 
 if sys.argv[1] == 'conf':
-	print getConf()
+	print(getConf())
 else:
 	for url in getTestUrls():
-		print hostHeader, url
+		print(hostHeader, url)
