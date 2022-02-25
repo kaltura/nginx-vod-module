@@ -31,7 +31,7 @@
 
 #define NUM_OF_INLINE_TAGS_SUPPORTED 3	 //iub
 
-//#define ASSUME_STYLE_SUPPORT
+//#define ASSUME_SCC_STYLE_SUPPORT
 
 static const int utf8_len[80] =
 {
@@ -395,7 +395,7 @@ static void scc_clean_known_mem(request_context_t* request_context, scc_track_t 
 	return;
 }
 
-#ifdef ASSUME_STYLE_SUPPORT
+#ifdef ASSUME_SCC_STYLE_SUPPORT
 static char* output_one_style(char* p)
 {//TODO: using style index, output name and modify the rest of this function
 		int len;
@@ -422,7 +422,7 @@ static char* output_one_style(char* p)
 
 		return p;
 }
-#endif //ASSUME_STYLE_SUPPORT
+#endif //ASSUME_SCC_STYLE_SUPPORT
 
 static vod_status_t
 scc_reader_init(
@@ -889,11 +889,11 @@ scc_parse_frames(
 			}
 			len = 2; vod_memcpy(p, "\r\n", len);										p += len;
 		}
-#ifdef ASSUME_STYLE_SUPPORT
+#ifdef ASSUME_SCC_STYLE_SUPPORT
 		vod_memcpy(p, FIXED_WEBVTT_VOICE_START_STR, FIXED_WEBVTT_VOICE_START_WIDTH);	p += FIXED_WEBVTT_VOICE_START_WIDTH;
 		len = 28; vod_sprintf((u_char*)p, "RAFIK INSERT STYLE NAME HERE", len);			p += len;
 		vod_memcpy(p, FIXED_WEBVTT_VOICE_END_STR, FIXED_WEBVTT_VOICE_END_WIDTH);		p += FIXED_WEBVTT_VOICE_END_WIDTH;
-#endif //ASSUME_STYLE_SUPPORT
+#endif //ASSUME_SCC_STYLE_SUPPORT
 
 		vod_memcpy(p, event_textp, event_len);											p += event_len;
 
@@ -930,16 +930,16 @@ scc_parse_frames(
 	// We now insert header and all Style definitions
 	header->data					= (u_char*)pfixed;
 	len = sizeof(WEBVTT_HEADER_NEWLINES) - 1; vod_memcpy(p, WEBVTT_HEADER_NEWLINES, len);  p+=len;
-#ifdef ASSUME_STYLE_SUPPORT
-	int stylecounter;
-	/*for (stylecounter = 0; (stylecounter < SCC_NUM_OF_STYLES_INSERTED); stylecounter++)
+#ifdef ASSUME_SCC_STYLE_SUPPORT
+	/*int stylecounter;
+	for (stylecounter = 0; (stylecounter < SCC_NUM_OF_STYLES_INSERTED); stylecounter++)
 	{
 		scc_style_t* cur_style = scc_track->styles + stylecounter;
 		if (cur_style->b_output_in_cur_segment)
 			p = output_one_style(p);
 
 	}*/
-#endif //ASSUME_STYLE_SUPPORT
+#endif //ASSUME_SCC_STYLE_SUPPORT
 	header->len						= (size_t)(p - pfixed);
 
 	// now we got all the info from scc_track, deallocate its memory
