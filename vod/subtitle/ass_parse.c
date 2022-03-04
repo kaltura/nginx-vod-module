@@ -477,6 +477,23 @@ void mystrtoi32(char **p, uint32_t *res)
 	*res = FFMINMAX(temp_res, 0, 0xFFFFFFFF);
 }
 
+inline uint32_t color_reverse(uint32_t x)
+{
+    uint32_t alpha = (x & 0xFF000000) >> 24;
+    if (alpha == 00 )
+    {
+    	// this is an SSA color, alpha needs to be set to 0xFF
+    	alpha = 0xFF;
+    }
+    return
+    // Source is in format: 0xAARRGGBB or 0xRRGGBB
+        alpha                    | //______AA
+        ((x & 0x00FF0000) >>  8) | //____RR__
+        ((x & 0x0000FF00) <<  8) | //__GG____
+        ((x & 0x000000FF) << 24);  //BB______
+    // Return value is in format:  0xBBGGRRAA
+}
+
 uint32_t parse_color_tag(char *str)
 {
 	uint32_t color = 0;
@@ -485,7 +502,7 @@ uint32_t parse_color_tag(char *str)
 		++str;
 
 	mystrtoi32(&str, &color);
-	return color;
+	return color_reverse(color);
 }
 
 // Return a boolean value for a string
@@ -600,10 +617,10 @@ static void set_default_style(ass_style_t *style, bool_t alloc_names)
 		style->font_name		= strdup("Arial");
 	}
 	style->font_size			= 18;
-	style->primary_colour		= 0x00ffffff;
-	style->secondary_colour		= 0x00ffff00;
-	style->outline_colour		= 0x00000000;
-	style->back_colour			= 0x80000000;
+	style->primary_colour		= 0xffffffff; //white
+	style->secondary_colour		= 0xff0000ff; //red for karaoke
+	style->outline_colour		= 0x000000ff; //black
+	style->back_colour			= 0x00000000; //transparent
 	style->bold					= FALSE;
 	style->italic				= FALSE;
 	style->underline			= FALSE;
@@ -617,7 +634,7 @@ static void set_default_style(ass_style_t *style, bool_t alloc_names)
 	style->border_style			= 1;
 	style->outline				= 2;
 	style->shadow				= 0;
-	style->alignment			= 2;
+	style->alignment			= 2;    // bottom center for either ASS/SSA, default for captions
 	style->margin_l = style->margin_r = style->margin_v = 20;
 	style->encoding				= 0;
 }
@@ -758,24 +775,36 @@ static int process_event_tail(ass_track_t *track, ass_event_t *event, char *str)
 }
 
 /**
- * \brief converts numpad-style align to align.
+ * \brief converts numpad-style align to SSA align.
  */
 int numpad2align(int val)
 {
-	if (val < -INT_MAX)
-		// Pick an alignment somewhat arbitrarily. VSFilter handles
-		// INT32_MIN as a mix of 1, 2 and 3, so prefer one of those values.
-		val = 2;
-	else if (val < 0)
-		val = -val;
-	int res = ((val - 1) % 3) + 1;  // horizontal alignment
-	if (val <= 3)
-		res |= VALIGN_SUB;
-	else if (val <= 6)
-		res |= VALIGN_CENTER;
+	if ((val < 1) || (val > 9))
+		return 2;
+	else if (val < 4)
+		return val;
+	else if (val < 7)
+		return val + 5;
 	else
-		res |= VALIGN_TOP;
-	return res;
+		return val - 2;
+
+	return 2;
+}
+/**
+ * \brief converts numpad-style align to SSA align.
+ */
+int align2numpad(int val)
+{
+	if ((val < 1) || (val > 11) || (val == 4) || (val == 8))
+		return 2;
+	else if (val < 4)
+		return val;
+	else if (val < 8)
+		return val + 2;
+	else
+		return val - 5;
+
+	return 2;
 }
 
 /**
@@ -843,6 +872,8 @@ static int process_style(ass_track_t *track, char *str, request_context_t* reque
 			target->font_size			= atoi(token);
 		} else if (!ass_strcasecmp(tname, "PrimaryColour")) {
 			target->primary_colour		= parse_color_tag(token);
+		} else if (!ass_strcasecmp(tname, "SecondaryColour")) {
+			target->secondary_colour	= parse_color_tag(token);
 		} else if (!ass_strcasecmp(tname, "OutlineColour")) {
 			target->outline_colour 		= parse_color_tag(token);
 		} else if (!ass_strcasecmp(tname, "BackColour")) {
@@ -868,10 +899,7 @@ static int process_style(ass_track_t *track, char *str, request_context_t* reque
 			target->margin_v			= atoi(token);
 		} else if (!ass_strcasecmp(tname, "Outline")) {
 			target->outline				= atoi(token);
-
 		/*
-		} else if (!ass_strcasecmp(tname, "SecondaryColour")) {
-			target->secondary_colour	= parse_color_tag(token);
 		} else if (!ass_strcasecmp(tname, "Shadow")) {
 			target->shadow				= atoi(token);
 		} else if (!ass_strcasecmp(tname, "Spacing")) {
@@ -892,15 +920,10 @@ static int process_style(ass_track_t *track, char *str, request_context_t* reque
 	// this will destroy SSA's TertiaryColour, but i'm not going to use it anyway
 	if (track->track_type == TRACK_TYPE_SSA)
 		style->outline_colour = style->back_colour;
-	if (track->track_type == TRACK_TYPE_ASS)
+	if (track->track_type == TRACK_TYPE_SSA)
 	{
-		style->alignment = numpad2align(style->alignment);
+		style->alignment = align2numpad(style->alignment);
 	}
-	// VSFilter compatibility
-	else if (style->alignment == 8)
-		style->alignment = 3;
-	else if (style->alignment == 4)
-		style->alignment = 11;
 
 	style->scale_x		= FFMAX(style->scale_x, 0.) / 100.;
 	style->scale_y		= FFMAX(style->scale_y, 0.) / 100.;
@@ -1028,9 +1051,6 @@ static int process_events_line(ass_track_t *track, char *str, request_context_t*
 	}
 	else if (!strncmp(str, "Dialogue:", 9))
 	{
-		// This should never be reached for embedded subtitles.
-		// They have slightly different format and are parsed in ass_process_chunk,
-		// called directly from demuxer
 		int eid;
 		ass_event_t *event;
 

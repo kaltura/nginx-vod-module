@@ -13,10 +13,13 @@
 #define NUM_OF_INLINE_TAGS_SUPPORTED 3	 //ibu
 #define NUM_OF_TAGS_ALLOWED_PER_LINE 1
 
-#define ASSUME_STYLE_SUPPORT
+//#define ASSUME_STYLE_SUPPORT
+//#define SHAKA_COMPLIANT   // disable all style elements that SHAKA player can't parse
 //#define ASSUME_CSS_SUPPORT
 #ifdef ASSUME_STYLE_SUPPORT
 #undef ASSUME_CSS_SUPPORT
+#else
+#undef SHAKA_COMPLIANT
 #endif
 
 #define PAIROF(type, name, w, str)											\
@@ -24,20 +27,27 @@ static const int      FIXED_WEBVTT_ ## type ## _ ## name ## _WIDTH = w;		\
 static const char*    FIXED_WEBVTT_ ## type ## _ ## name ## _STR   = str;
 
 PAIROF(CUE, 	NAME, 		8,	"c%07d");
-PAIROF(ESCAPE,	FOR_RTL,	5,	"&lrm;")
 PAIROF(HEADER,	NEWLINES,	10,	WEBVTT_HEADER_NEWLINES)
+/* we keep all the logic for inserting rtl, but don't insert it now to keep Shaka happy (temporarily) */
+#ifdef SHAKA_COMPLIANT
+PAIROF(ESCAPE,	FOR_RTL,	0,	"")
+#else
+PAIROF(ESCAPE,	FOR_RTL,	5,	"&lrm;")
+#endif
 
 
 // STYLE_SUPPORT will insert dynamic styles with the names used in the ASS/SSA file
 // CSS_SUPPORT will use static style classes defined in ./css/crstyles.css
 // They are mutually exclusive
 #ifdef ASSUME_STYLE_SUPPORT
-PAIROF(STYLE, 	START, 		22,	"STYLE\r\n::cue(v[voice=\"")
-PAIROF(STYLE, 	END,		4,	"\"]) ")
-PAIROF(BRACES,	START,		3,	"{\r\n")
-PAIROF(BRACES,	END,		3,	"}\r\n")
-PAIROF(VOICE,	START,		3,	"<v ")
-PAIROF(VOICE,	END,		1,	">")
+PAIROF(STYLE, 		START, 	13,	"STYLE\r\n::cue(")
+PAIROF(STYLE, 		END,	2,	") ")
+PAIROF(BRACES,		START,	3,	"{\r\n")
+PAIROF(BRACES,		END,	3,	"}\r\n")
+PAIROF(VOICEOPEN,	START,	1,	"<")
+PAIROF(VOICEOPEN,	END,	1,	">")
+PAIROF(VOICECLOSE,	START,	2,	"</")
+PAIROF(VOICECLOSE,	END,	1,	">")
 #endif
 #ifdef ASSUME_CSS_SUPPORT
 PAIROF(CLASSOPEN,	START,	2,	"<c")
@@ -64,38 +74,52 @@ PAIROF(TREBUCHET,	FONT,	9,	"trebuchet")
 
 typedef enum
 {
-	TAG_TYPE_NEWLINE_SMALL	= 0,
-	TAG_TYPE_NEWLINE_LARGE	= 1,
-	TAG_TYPE_AMPERSANT		= 2,
-	TAG_TYPE_SMALLERTHAN	= 3,
-	TAG_TYPE_BIGGERTHAN		= 4,
+	TAG_TYPE_NEWLINE_SS     = 0,
+	TAG_TYPE_NEWLINE_LL     = 1,
+	TAG_TYPE_NEWLINE_SL     = 2,
+	TAG_TYPE_NEWLINE_LS     = 3,
+	TAG_TYPE_NEWLINE_SMALL	= 4,
+	TAG_TYPE_NEWLINE_LARGE	= 5,
+	TAG_TYPE_AMPERSANT		= 6,
+	TAG_TYPE_SMALLERTHAN	= 7,
+	TAG_TYPE_BIGGERTHAN		= 8,
 
-	TAG_TYPE_OPEN_BRACES	= 5,
-	TAG_TYPE_CLOSE_BRACES	= 6,
+	TAG_TYPE_OPEN_BRACES	= 9,
+	TAG_TYPE_CLOSE_BRACES	= 10,
 
-// all starts should be in even index, all ends should be in odd index. This logic is assumed
-	TAG_TYPE_IBU_DATUM		= 7,
-	TAG_TYPE_ITALIC_END		= 7,
-	TAG_TYPE_ITALIC_START	= 8,
-	TAG_TYPE_BOLD_END		= 9,
-	TAG_TYPE_BOLD_START		= 10,
-	TAG_TYPE_UNDER_END		= 11,
-	TAG_TYPE_UNDER_START	= 12,
+	TAG_TYPE_ICLIP          = 11,
+	TAG_TYPE_ALIGN_ASS      = 12,
 
-	TAG_TYPE_UNKNOWN_TAG	= 13,
-	TAG_TYPE_NONE			= 14
+// all starts should be in even index, all ends should be in odd index. THIS LOGIC IS ASSUMED
+	TAG_TYPE_IBU_DATUM		= 13,
+	TAG_TYPE_ITALIC_END		= 13,
+	TAG_TYPE_ITALIC_START	= 14,
+	TAG_TYPE_BOLD_END		= 15,
+	TAG_TYPE_BOLD_START		= 16,
+	TAG_TYPE_UNDER_END		= 17,
+	TAG_TYPE_UNDER_START	= 18,
+
+	TAG_TYPE_UNKNOWN_TAG	= 19,
+	TAG_TYPE_NONE			= 20
 } ass_tag_idx_t;
 
 static const char* tag_strings[TAG_TYPE_NONE] =
 {
+	"\\n\\n",
+	"\\N\\N",
+	"\\n\\N",
+	"\\N\\n",
 	"\\n",
 	"\\N",
 	"&",
 	"<",
 	">",
-	
+
 	"{",
 	"}",
+
+	"\\iclip",   // has to come before \\i so it gets replaced first
+	"\\an",      // has to come before \\a so it gets replaced first
 
 	"\\i0",
 	"\\i",
@@ -109,6 +133,10 @@ static const char* tag_strings[TAG_TYPE_NONE] =
 static const int tag_string_len[TAG_TYPE_NONE][2] =
 {
 	// index 0 is size of ASS tag, index 1 is size of replacement webVTT tag
+	{4,2},
+	{4,2},
+	{4,2},
+	{4,2},
 	{2,2},
 	{2,2},
 	{1,5},
@@ -117,6 +145,9 @@ static const int tag_string_len[TAG_TYPE_NONE][2] =
 
 	{1,0},
 	{1,0},
+
+	{6,0},
+	{3,0},
 
 	{3,4},
 	{2,3},
@@ -131,9 +162,16 @@ static const char* tag_replacement_strings[TAG_TYPE_NONE] =
 {
 	"\r\n",
 	"\r\n",
+	"\r\n",
+	"\r\n",
+	"\r\n",
+	"\r\n",
 	"&amp;",
 	"&lt;",
 	"&gt;",
+
+	"",
+	"",
 
 	"",
 	"",
@@ -244,7 +282,7 @@ void swap_events(ass_event_t* nxt, ass_event_t* cur)
 	vod_memcpy( cur, &tmp, sizeof(ass_event_t));
 }
 
-static int split_event_text_to_chunks(char *src, int srclen, bool_t rtl, u_char **textp, int *evlen, bool_t *ibu_flags, uint32_t *max_run, request_context_t* request_context)
+static int split_event_text_to_chunks(char *src, int srclen, bool_t rtl, u_char **textp, int *evlen, bool_t *ibu_flags, uint32_t *max_run, uint32_t *final_alignment, request_context_t* request_context)
 {
 	// a chunk is part of the text that will be added with a specific voice/style. So we increment chunk only when we need a different style applied
 	// Number of chunks is at least 1 if len is > 0
@@ -254,6 +292,7 @@ static int split_event_text_to_chunks(char *src, int srclen, bool_t rtl, u_char 
 	int chunkidx 		= 0;
 	uint32_t cur_run	= 0;
 	u_char *text_start	= textp[chunkidx];
+	bool_t inlined_align_found = FALSE;
 
 	if ((src == NULL) || (srclen < 1) || (srclen > MAX_STR_SIZE_EVNT_CHUNK))
 	{
@@ -332,14 +371,19 @@ static int split_event_text_to_chunks(char *src, int srclen, bool_t rtl, u_char 
 						}
 					} break;
 
+					case (TAG_TYPE_NEWLINE_SS):
+					case (TAG_TYPE_NEWLINE_LL):
+					case (TAG_TYPE_NEWLINE_SL):
+					case (TAG_TYPE_NEWLINE_LS):
 					case (TAG_TYPE_NEWLINE_LARGE):
 					case (TAG_TYPE_NEWLINE_SMALL):
 					{
 						if (cur_run > *max_run)
 						{
 							*max_run = cur_run; // we don't add the size of \r\n since they are not visible on screen.
-							cur_run = 0;		// max_run holds the longest run of visible characters on any line.
+												// max_run holds the longest run of visible characters on any line.
 						}
+						cur_run = 0;
 
 						textp[chunkidx] = vod_copy(textp[chunkidx], tag_replacement_strings[tagidx], tag_string_len[tagidx][1]);
 						if (rtl)
@@ -354,6 +398,37 @@ static int split_event_text_to_chunks(char *src, int srclen, bool_t rtl, u_char 
 					{
 						cur_run++;
 						textp[chunkidx] = vod_copy(textp[chunkidx], tag_replacement_strings[tagidx], tag_string_len[tagidx][1]);
+					} break;
+
+					case (TAG_TYPE_ICLIP):
+					{
+						// ignore all characters till the next "\\" or ")", since we don't support these tags
+						if (bBracesOpen && (*curloc != '}') && (*curloc != '\\') && (*curloc != ')'))
+						{
+							char*  nearest;
+							char*  nearslash = vod_strchr(curloc, '\\');
+							char*  nearparen = vod_strchr(curloc, ')');
+							if (nearslash == NULL)  nearslash = nearparen;
+							if (nearparen == NULL)  nearparen = nearslash;
+							nearest = FFMIN(nearslash, nearparen);
+							srcidx = (int)(FFMAX(nearest, curloc+1) - src);
+						}
+					} break;
+
+					case (TAG_TYPE_ALIGN_ASS):
+					{
+						textp[chunkidx] = vod_copy(textp[chunkidx], tag_replacement_strings[tagidx], tag_string_len[tagidx][1]);
+						if (inlined_align_found == FALSE)
+						{
+							const char *al_str = curloc;
+							int al_val = atoi(al_str);
+							if ((al_val > 0) && (al_val < 10))
+							{
+								inlined_align_found = TRUE;
+								*final_alignment = (uint32_t)(al_val);
+							}
+							srcidx++;
+						}
 					} break;
 
 					case (TAG_TYPE_OPEN_BRACES):
@@ -394,7 +469,10 @@ static int split_event_text_to_chunks(char *src, int srclen, bool_t rtl, u_char 
 			if (cur_char != 0xD8 && cur_char != 0xD9)
 				cur_run++;
 
-			textp[chunkidx] = vod_copy(textp[chunkidx], src + srcidx, 1);
+			if (cur_char != 0) {
+				// copy the char from input to output, unless it is end of string (\u0000)
+				textp[chunkidx] = vod_copy(textp[chunkidx], src + srcidx, 1);
+			}
 			srcidx++;
 		}
 	}
@@ -455,48 +533,49 @@ static u_char* output_one_style(ass_style_t* cur_style, u_char* p)
 
 		p = vod_copy(p, "font-family: \"", 14);
 		p = vod_copy(p, cur_style->font_name, vod_strlen(cur_style->font_name));
-		p = vod_copy(p, "\", sans-serif;\r\n", 16);
+		if ( !vod_strncmp(cur_style->font_name, "Times New Roman", 15) )
+		{
+			p = vod_copy(p, "\", serif;\r\n", 11);
+		}
+		else
+		{
+			p = vod_copy(p, "\", sans-serif;\r\n", 16);
+		}
 		p = vod_sprintf(p, "font-size: %03uDpx;\r\n", cur_style->font_size);
 
-		/*if (cur_style->bold)
-		{
-			p = vod_copy(p, "font-weight: bold;\r\n", 20);
-		}
-		if (cur_style->italic)
-		{
-			p = vod_copy(p, "font-style: italic;\r\n", 21);
-		}
-		// This will inherit the outline_colour (and shadow) if border_style==1, otherwise it inherits primary_colour
-		if (cur_style->underline)
-		{
-			// available styles are: solid | double | dotted | dashed | wavy
-			// available lines are: underline || overline || line-through || blink
-			p = vod_copy(p, "text-decoration: solid underline;\r\n", 35);
-		}
-		else if (cur_style->strike_out)
+#ifdef SHAKA_COMPLIANT
+		// this has to be enforced, dangerous if left to inherit parent CSS
+		// we use outline color to color the background, so we can compare to ASS
+		p = vod_copy(p, "background-color: #", 19);
+		p = vod_sprintf(p, "%08uxD;\r\n", cur_style->outline_colour);
+#else
+		if (cur_style->strike_out)
 		{
 			// available lines are: underline || overline || line-through || blink
 			p = vod_copy(p, "text-decoration: solid line-through;\r\n", 38);
-		}*/
-
+		}
 		if (cur_style->border_style == 1 /*&& ass_track->type == TRACK_TYPE_ASS*/)
 		{
 			// webkit is not supported by all players, stick to adding outline using text-shadow
 			p = vod_copy(p, "text-shadow: ", 13);
 			// add outline in 4 directions with the outline color
 			p = vod_sprintf(p,
-				"#%08uxD -%01uDpx 0px, #%08uxD 0px %01uDpx, #%08uxD 0px -%01uDpx, #%08uxD %01uDpx 0px, #%08uxD %01uDpx %01uDpx 0px;\r\n",
-				cur_style->outline_colour, cur_style->outline,
-				cur_style->outline_colour, cur_style->outline,
-				cur_style->outline_colour, cur_style->outline,
-				cur_style->outline_colour, cur_style->outline,
-				cur_style->back_colour, cur_style->shadow, cur_style->shadow);
+				"#%08uxD -2px 0px 2px, #%08uxD 0px 2px 2px, #%08uxD 0px -2px 2px, #%08uxD 2px 0px 2px;\r\n",
+				cur_style->outline_colour,
+				cur_style->outline_colour,
+				cur_style->outline_colour,
+				cur_style->outline_colour);
+			// this has to be enforced, dangerous if left to inherit parent CSS
+			p = vod_copy(p, "background-color: #", 19);
+			p = vod_sprintf(p, "%08uxD;\r\n", 0x00000000);
 		}
 		else
 		{
 			p = vod_copy(p, "background-color: #", 19);
 			p = vod_sprintf(p, "%08uxD;\r\n", cur_style->back_colour);
 		}
+#endif
+
 		p = vod_copy(p, FIXED_WEBVTT_BRACES_END_STR, FIXED_WEBVTT_BRACES_END_WIDTH);
 		p = vod_copy(p, "\r\n", 2);
 
@@ -767,9 +846,10 @@ ass_parse_frames(
 
 		bool_t  ibu_flags[NUM_OF_INLINE_TAGS_SUPPORTED] = {cur_style->italic, cur_style->bold, cur_style->underline};
 		uint32_t max_run = 0;
+		uint32_t final_alignment = cur_style->alignment;
 		int  num_chunks_in_text =	split_event_text_to_chunks(cur_event->text, vod_strlen(cur_event->text),
 									cur_style->right_to_left_language, event_textp, event_len,
-									ibu_flags, &max_run, request_context);
+									ibu_flags, &max_run, &final_alignment, request_context);
 
 		// allocate the output frame
 		cur_frame = vod_array_push(&frames);
@@ -801,17 +881,13 @@ ass_parse_frames(
 		p = vod_copy(p, "\r\n", 2);
 		// timestamps will be inserted here, we now insert positioning and alignment changes
 		{
-			bool_t	bleft = FALSE, bright = FALSE;
-			if ((cur_style->alignment & 1) == 0)			//center alignment  2/6/10
-			{
-				// do nothing
-			}
-			else if (((cur_style->alignment - 1) & 3) == 0)	//left	 alignment  1/5/9
+			bool_t	bleft = FALSE, bright = FALSE; // default is 2, so both are FALSE
+			if      ((final_alignment == 1) || (final_alignment == 4) || (final_alignment == 7))	// left alignment  1/4/7
 			{
 				bleft  = TRUE;
 			}
-			else
-			{												//right	 alignment  3/7/11
+			else if ((final_alignment == 3) || (final_alignment == 6) || (final_alignment == 9))	// right alignment 3/6/9
+			{
 				bright = TRUE;
 			}
 
@@ -825,15 +901,16 @@ ass_parse_frames(
 				// center/middle means we are giving the coordinate of the center/middle point
 				int line, sizeH, pos;
 
-				if (cur_style->alignment >= VALIGN_CENTER)		//middle alignment  for values 9,10,11
-				{
-					line = 7;
-				} else if (cur_style->alignment < VALIGN_TOP)	//bottom alignment  for values 1, 2, 3
+				if (final_alignment < 4)	    // bottom alignment  for values 1, 2, 3
 				{
 					marg_v = 100 - marg_v;
 					line = FFMINMAX((marg_v+4) >> 3, 0, 12);
 				}
-				else											//top alignment is the default assumption
+				else if (final_alignment < 7)	// middle alignment  for values 4, 5, 6
+				{
+					line = 7;
+				}
+				else							// top alignment is the default assumption
 				{
 					line = FFMINMAX((marg_v+4) >> 3, 0, 12);
 				}
@@ -841,15 +918,15 @@ ass_parse_frames(
 				// cap horizontal size to more than 2x to make sure we don't break lines with generic font
 				// cap horizontal size to no more than 3x to make sure we allow right and left aligned events on same line
 				sizeH = FFMINMAX(marg_r - marg_l, (int)(max_run*2), (int)(max_run*3));
-				if ((!bleft) && (!bright))						//center alignment  2/6/10
+				if ((!bleft) && (!bright))						//center alignment  2/5/8
 				{
 					pos = FFMINMAX((marg_r + marg_l + 1)/2, sizeH/2, 100 - sizeH/2);
 				}
-				else if (bleft)									//left   alignment  1/5/9
+				else if (bleft)									//left   alignment  1/4/7
 				{
 					pos = FFMINMAX(marg_l, 0, 100 - sizeH);
 				}
-				else											//right  alignment  3/7/11
+				else											//right  alignment  3/6/9
 				{
 					pos = FFMINMAX(marg_r, sizeH, 100);
 				}
@@ -879,9 +956,9 @@ ass_parse_frames(
 			p = vod_copy(p, "\r\n", 2);
 		}
 #ifdef ASSUME_STYLE_SUPPORT
-		p = vod_copy(p, FIXED_WEBVTT_VOICE_START_STR, FIXED_WEBVTT_VOICE_START_WIDTH);
+		p = vod_copy(p, FIXED_WEBVTT_VOICEOPEN_START_STR, FIXED_WEBVTT_VOICEOPEN_START_WIDTH);
 		p = vod_sprintf(p, cur_style->name, vod_strlen(cur_style->name));
-		p = vod_copy(p, FIXED_WEBVTT_VOICE_END_STR, FIXED_WEBVTT_VOICE_END_WIDTH);
+		p = vod_copy(p, FIXED_WEBVTT_VOICEOPEN_END_STR, FIXED_WEBVTT_VOICEOPEN_END_WIDTH);
 #endif //ASSUME_STYLE_SUPPORT
 
 #ifdef ASSUME_CSS_SUPPORT
@@ -966,9 +1043,14 @@ ass_parse_frames(
 		{
 			 p = vod_copy(p, event_textp[chunkcounter], event_len[chunkcounter]);
 		}
+#ifdef ASSUME_STYLE_SUPPORT
+		p = vod_copy(p, FIXED_WEBVTT_VOICECLOSE_START_STR, FIXED_WEBVTT_VOICECLOSE_START_WIDTH);
+		p = vod_sprintf(p, cur_style->name, vod_strlen(cur_style->name));
+		p = vod_copy(p, FIXED_WEBVTT_VOICECLOSE_END_STR, FIXED_WEBVTT_VOICECLOSE_END_WIDTH);
+#endif //ASSUME_STYLE_SUPPORT
 #ifdef ASSUME_CSS_SUPPORT
 		p = vod_copy(p, FIXED_WEBVTT_CLASSCLOSE_FULL_STR, FIXED_WEBVTT_CLASSCLOSE_FULL_WIDTH);
-#endif
+#endif //ASSUME_CSS_SUPPORT
 		p = vod_copy(p, "\r\n", 2);
 		// we still need an empty line after each event/cue
 		p = vod_copy(p, "\r\n", 2);

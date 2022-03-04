@@ -4,10 +4,6 @@
 // includes
 #include "../media_format.h"
 
-#define VALIGN_SUB 0
-#define VALIGN_CENTER 8
-#define VALIGN_TOP 4
-
 #define FFMAX(a,b) ((a) > (b) ? (a) : (b))
 #define FFMIN(a,b) ((a) > (b) ? (b) : (a))
 #define FFMINMAX(c,a,b) FFMIN(FFMAX(c, a), b)
@@ -49,7 +45,7 @@ typedef struct ass_style
 	int			border_style;  // 1 means Outline + Shadow, 3 means Opaque box
 	int			outline;
 	int			shadow;
-	int			alignment;
+	int			alignment;     // in numpad format
 	int			margin_l;
 	int			margin_r;
 	int			margin_v;
@@ -73,7 +69,6 @@ typedef struct ass_event
 	int			margin_v;
 	char		*effect;
 	char		*text;
-	bool_t		right_to_left_language;
 } ass_event_t;
 
 /*
