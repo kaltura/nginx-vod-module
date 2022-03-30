@@ -13,7 +13,7 @@
 #define NUM_OF_INLINE_TAGS_SUPPORTED 3	 //ibu
 #define NUM_OF_TAGS_ALLOWED_PER_LINE 1
 
-//#define ASSUME_STYLE_SUPPORT
+#define ASSUME_STYLE_SUPPORT
 //#define SHAKA_COMPLIANT   // disable all style elements that SHAKA player can't parse
 //#define ASSUME_CSS_SUPPORT
 #ifdef ASSUME_STYLE_SUPPORT
@@ -72,6 +72,21 @@ PAIROF(TREBUCHET,	FONT,	9,	"trebuchet")
 #endif
 
 
+// we use the formula MAX_CHARS_PER_LINE[font-size] = rount(-73.65088*LOG(font-size) + 167.6338)
+static const uint32_t MAX_CHARS_PER_LINE[101] =
+{ 100,                                                 // idx 0
+  100, 100, 100, 100, 100, 100, 100, 100,  97,  94,    // idx 1 to 10
+   91,  88,  86,  83,  81,  79,  77,  75,  73,  72,    // idx 11 to 20
+   70,  69,  67,  66,  65,  63,  62,  61,  60,  59,    // idx 21 to 30
+   58,  57,  56,  55,  54,  53,  52,  51,  50,  50,    // idx 31 to 40
+   49,  48,  47,  47,  46,  45,  44,  44,  43,  43,    // idx 41 to 50
+   42,  41,  41,  40,  39,  39,  38,  38,  37,  37,    // idx 51 to 60
+   36,  36,  35,  35,  34,  34,  33,  33,  32,  32,    // idx 61 to 70
+   31,  31,  30,  30,  30,  29,  29,  28,  28,  27,    // idx 71 to 80
+   27,  27,  26,  26,  26,  25,  25,  24,  24,  24,    // idx 81 to 90
+   23,  23,  23,  22,  22,  22,  21,  21,  21,  20     // idx 91 to 100
+};
+
 typedef enum
 {
 	TAG_TYPE_NEWLINE_SS     = 0,
@@ -99,8 +114,9 @@ typedef enum
 	TAG_TYPE_UNDER_END		= 17,
 	TAG_TYPE_UNDER_START	= 18,
 
-	TAG_TYPE_UNKNOWN_TAG	= 19,
-	TAG_TYPE_NONE			= 20
+	TAG_TYPE_SPACE			= 19,
+	TAG_TYPE_UNKNOWN_TAG	= 20,
+	TAG_TYPE_NONE			= 21
 } ass_tag_idx_t;
 
 static const char* tag_strings[TAG_TYPE_NONE] =
@@ -128,6 +144,7 @@ static const char* tag_strings[TAG_TYPE_NONE] =
 	"\\u0",
 	"\\u",
 
+	" ",
 	"\\"
 };
 static const int tag_string_len[TAG_TYPE_NONE][2] =
@@ -156,6 +173,7 @@ static const int tag_string_len[TAG_TYPE_NONE][2] =
 	{3,4},
 	{2,3},
 
+	{1,1},
 	{1,0}
 };
 static const char* tag_replacement_strings[TAG_TYPE_NONE] =
@@ -183,6 +201,7 @@ static const char* tag_replacement_strings[TAG_TYPE_NONE] =
 	"</u>",
 	"<u>",
 
+	" ",
 	""
 };
 
@@ -282,7 +301,17 @@ void swap_events(ass_event_t* nxt, ass_event_t* cur)
 	vod_memcpy( cur, &tmp, sizeof(ass_event_t));
 }
 
-static int split_event_text_to_chunks(char *src, int srclen, bool_t rtl, u_char **textp, int *evlen, bool_t *ibu_flags, uint32_t *max_run, uint32_t *final_alignment, request_context_t* request_context)
+static int split_event_text_to_chunks(
+	char *src,
+	int srclen,
+	bool_t rtl,
+	u_char **textp,
+	int *evlen,
+	bool_t *ibu_flags,
+	uint32_t *max_run,
+	uint32_t allowed_run,
+	uint32_t *final_alignment,
+	request_context_t* request_context)
 {
 	// a chunk is part of the text that will be added with a specific voice/style. So we increment chunk only when we need a different style applied
 	// Number of chunks is at least 1 if len is > 0
@@ -320,6 +349,8 @@ static int split_event_text_to_chunks(char *src, int srclen, bool_t rtl, u_char 
 
 	while (srcidx < srclen)
 	{
+		// we use a hardcoded max number of visible characters set to 64, to enforce wrapping for very long lines
+		//
 		for (tagidx = 0; tagidx < TAG_TYPE_NONE; tagidx++)
 		{
 			if (vod_strncmp(src+srcidx, tag_strings[tagidx], tag_string_len[tagidx][0]) == 0)
@@ -328,7 +359,8 @@ static int split_event_text_to_chunks(char *src, int srclen, bool_t rtl, u_char 
 				srcidx += tag_string_len[tagidx][0];
 				curloc = src + srcidx;
 
-				switch (tagidx) {
+				switch (tagidx)
+				{
 					case (TAG_TYPE_ITALIC_END):
 					case (TAG_TYPE_BOLD_END):
 					case (TAG_TYPE_UNDER_END):
@@ -389,6 +421,34 @@ static int split_event_text_to_chunks(char *src, int srclen, bool_t rtl, u_char 
 						if (rtl)
 						{
 							 textp[chunkidx] = vod_copy(textp[chunkidx], FIXED_WEBVTT_ESCAPE_FOR_RTL_STR, FIXED_WEBVTT_ESCAPE_FOR_RTL_WIDTH);
+						}
+					} break;
+
+					case (TAG_TYPE_SPACE):
+					{
+						if (!bBracesOpen)
+						{
+							if (cur_run > allowed_run)
+							{
+								// replace the space with \r\n to wrap the line at a word break, and end current run of visible chars
+								if (cur_run > *max_run)
+								{
+									*max_run = cur_run; // we don't add the size of \r\n since they are not visible on screen.
+														// max_run holds the longest run of visible characters on any line.
+								}
+								cur_run = 0;
+
+								textp[chunkidx] = vod_copy(textp[chunkidx], "\r\n", 2);
+								if (rtl)
+								{
+									 textp[chunkidx] = vod_copy(textp[chunkidx], FIXED_WEBVTT_ESCAPE_FOR_RTL_STR, FIXED_WEBVTT_ESCAPE_FOR_RTL_WIDTH);
+								}
+							}
+							else
+							{
+								textp[chunkidx] = vod_copy(textp[chunkidx], tag_replacement_strings[tagidx], tag_string_len[tagidx][1]);
+								cur_run++;
+							}
 						}
 					} break;
 
@@ -608,6 +668,11 @@ ass_reader_init(
 		ctx);
 }
 
+/**
+ * \brief Parse the .ass/.ssa file, measure max_duration, delete what was parsed
+ *
+ * \return int VOD_OK or any of the VOD_ error enums
+*/
 static vod_status_t
 ass_parse(
 	request_context_t* request_context,
@@ -618,6 +683,7 @@ ass_parse(
 {
 	ass_track_t *ass_track;
 	vod_status_t ret_status;
+	// The following call parses the entire ASS/SSA source file into ass_track structure
 	ass_track = parse_memory((char *)(source->data), source->len, request_context);
 
 	if (ass_track == NULL)
@@ -644,7 +710,8 @@ ass_parse(
 
 /**
  * \brief Parse the .ass/.ssa file, convert to webvtt, output all cues as frames
- * In the following function event == frame == cue. All words point to the text in ASS/media-struct/WebVTT.
+ * In the following function event (ASS) == frame (Nginx) == cue (VTT).
+ * All 3 names point to the text in a single fragment of dialogue or signage.
  *
  * \output vtt_track->media_info.extra_data		(WEBVTT header + all STYLE cues)
  * \output vtt_track->total_frames_duration		(sum of output frame durations)
@@ -659,7 +726,7 @@ ass_parse(
  *
  * individual cues in the frames array
  * \output cur_frame->duration					(start time of next  output event - start time of current event)
- * if last event to be output but not last in file:	(start time of next		 event - start time of current event)
+ * if last event to be output but not last in file:	(start time of next event - start time of current event)
  * if last event in whole file:					(end time of current output event - start time of current event)
  * \output cur_frame->offset
  * \output cur_frame->size
@@ -847,9 +914,10 @@ ass_parse_frames(
 		bool_t  ibu_flags[NUM_OF_INLINE_TAGS_SUPPORTED] = {cur_style->italic, cur_style->bold, cur_style->underline};
 		uint32_t max_run = 0;
 		uint32_t final_alignment = cur_style->alignment;
+		uint32_t max_chars_allowed = cur_style->font_size <= 100 ? MAX_CHARS_PER_LINE[cur_style->font_size] : 20;
 		int  num_chunks_in_text =	split_event_text_to_chunks(cur_event->text, vod_strlen(cur_event->text),
 									cur_style->right_to_left_language, event_textp, event_len,
-									ibu_flags, &max_run, &final_alignment, request_context);
+									ibu_flags, &max_run, max_chars_allowed, &final_alignment, request_context);
 
 		// allocate the output frame
 		cur_frame = vod_array_push(&frames);
@@ -896,7 +964,7 @@ ass_parse_frames(
 			marg_v = ((cur_event->margin_v > 0) ? cur_event->margin_v : cur_style->margin_v) * 100 / ass_track->play_res_y; // top assumed
 			// All the margX variables are percentages in rounded integer values.
 			// line is integer in range of [0 - 12] given 16 rows of lines in the frame.
-			if (marg_l || marg_r || marg_v)
+			// if (marg_l || marg_r || marg_v)
 			{
 				// center/middle means we are giving the coordinate of the center/middle point
 				int line, sizeH, pos;
@@ -915,9 +983,9 @@ ass_parse_frames(
 					line = FFMINMAX((marg_v+4) >> 3, 0, 12);
 				}
 
-				// cap horizontal size to more than 2x to make sure we don't break lines with generic font
-				// cap horizontal size to no more than 3x to make sure we allow right and left aligned events on same line
-				sizeH = FFMINMAX(marg_r - marg_l, (int)(max_run*2), (int)(max_run*3));
+				// sizeH should match the width of the max_run of characters, relative to max_allowed_run
+				// of characters allowed for this global style font-size
+				sizeH = FFMIN((int)max_run * 100 / (int)max_chars_allowed, 100);
 				if ((!bleft) && (!bright))						//center alignment  2/5/8
 				{
 					pos = FFMINMAX((marg_r + marg_l + 1)/2, sizeH/2, 100 - sizeH/2);
