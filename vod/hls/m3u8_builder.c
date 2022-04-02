@@ -799,17 +799,20 @@ m3u8_builder_append_index_url(
 	{
 		// absolute url only
 		p = vod_copy(p, base_url->data, base_url->len);
-		if (main_track->file_info.uri.len != 0 &&
-			(sub_track == NULL || vod_str_equals(main_track->file_info.uri, sub_track->file_info.uri)))
+		if (p[-1] != '/')
 		{
-			p = vod_copy(p, main_track->file_info.uri.data, main_track->file_info.uri.len);
-			write_sequence_index = FALSE;		// no need to pass the sequence index since we have a direct uri
+			if (main_track->file_info.uri.len != 0 &&
+				(sub_track == NULL || vod_str_equals(main_track->file_info.uri, sub_track->file_info.uri)))
+			{
+				p = vod_copy(p, main_track->file_info.uri.data, main_track->file_info.uri.len);
+				write_sequence_index = FALSE;		// no need to pass the sequence index since we have a direct uri
+			}
+			else
+			{
+				p = vod_copy(p, media_set->uri.data, media_set->uri.len);
+			}
+			*p++ = '/';
 		}
-		else
-		{
-			p = vod_copy(p, media_set->uri.data, media_set->uri.len);
-		}
-		*p++ = '/';
 	}
 
 	p = vod_copy(p, prefix->data, prefix->len);
