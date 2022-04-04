@@ -1,7 +1,7 @@
 ## nginx-vod-module tests
 
 the accompanied python scripts test the nginx-vod-module, each test script has an associated template file
-that contains environment specific parameters. the template file should be copied and edited to match the 
+that contains environment specific parameters. the template file should be copied and edited to match the
 specific environment on which the tests are run.
 the tests assume that nginx is running with the accompanied nginx.conf file.
 
@@ -24,7 +24,7 @@ sanity + coverage tests, e.g.:
   3. file not found
 
 in order to run the tests nginx should be compiled with the --with-debug switch
-  
+
 ### hls_compare.py
 
 compares the nginx-vod hls implementation to some reference implementation
@@ -59,3 +59,9 @@ this folder contains a stress test for the buffer cache module. in order to exec
 this folder contains tests for the json parser module. in order to execute the test, run:
  * NGX_ROOT=/path/to/nginx/sources VOD_ROOT=/path/to/nginx/vod bash build.sh
  * ./jsontest
+
+### bitset
+
+this folder contains tests for the light bitset implementation. in order to execute the test, run:
+ * NGX_ROOT=/path/to/nginx/sources VOD_ROOT=/path/to/nginx/vod bash build.sh
+ * ./bitsettest

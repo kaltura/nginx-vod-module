@@ -1,3 +1,4 @@
+from __future__ import print_function
 from mpeg_ts_defs import *
 import manifest_utils
 import mp4_utils
@@ -68,7 +69,7 @@ def getDashFragmentsInfo(urls):
 		urlPath = url.split('?')[0]
 		if not urlPath.endswith('.m4s'):
 			continue
-		print '.',
+		print('.', end=' ')
 		result += getDashFragmentInfo(url)
 	return result
 
@@ -138,7 +139,7 @@ def getHdsFragmentsInfo(urls):
 	for url in urls:
 		if not 'Seg1-Frag' in url:
 			continue
-		print '.',
+		print('.', end=' ')
 		result += getHdsFragmentInfo(url)
 	return result
 
@@ -235,7 +236,7 @@ def getHlsFragmentsInfo(urls):
 			baseUrls.append(baseUrl)
 		if not urlPath.endswith('.ts'):
 			continue
-		print '.',
+		print('.', end=' ')
 		if baseUrl in baseUrls:
 			fileIndex = baseUrls.index(baseUrl) + 1
 		else:
@@ -275,7 +276,7 @@ def getMssFragmentInfo(url):
 def getMssFragmentsInfo(urls):
 	result = []
 	for url in urls:
-		print '.',
+		print('.', end=' ')
 		result += getMssFragmentInfo(url)
 	return result
 	
@@ -309,11 +310,11 @@ TIMESCALE = {
 baseUrl = URL.rsplit('/', 1)[0] + '/'
 urls = manifest_utils.getManifestUrls(baseUrl, d, mimeType, headers)
 
-print 'processing %s urls' % len(urls)
+print('processing %s urls' % len(urls))
 fragmentInfos = PARSER_BY_MIME_TYPE[mimeType](urls)
 timescale = TIMESCALE[mimeType]
 
-print ''
+print('')
 
 # group the results
 byStream = {}
@@ -409,6 +410,6 @@ for segIndex in bySegIndex.keys():
 			'maxurl=%s' % maxPtsInfo[0]])
 
 for cells in sorted(errors):
-	print cells[0] + ', ' + '\n\t'.join(cells[2:]) + '\n'
+	print(cells[0] + ', ' + '\n\t'.join(cells[2:]) + '\n')
 			
-print 'done'
+print('done')

@@ -14,6 +14,8 @@
 #define PATH_PERF_COUNTERS_CLOSE "</performance_counters>\r\n"
 #define PERF_COUNTER_FORMAT "<sum>%uA</sum>\r\n<count>%uA</count>\r\n<max>%uA</max>\r\n<max_time>%uA</max_time>\r\n<max_pid>%uA</max_pid>\r\n"
 
+#define PROM_STATUS_PREFIX								\
+	"nginx_vod_build_info{version=\"" NGINX_VOD_VERSION "\"} 1\n\n"
 #define PROM_VOD_CACHE_METRIC_FORMAT "vod_cache_%V{cache=\"%V\"} %uA\n"
 #define PROM_PERF_COUNTER_METRICS						\
 	"vod_perf_counter_sum{action=\"%V\"} %uA\n"			\
@@ -291,7 +293,7 @@ ngx_http_vod_status_prom_handler(ngx_http_request_t *r)
 		names_len += cur_stat->name.len;
 	}
 
-	result_size = 0;
+	result_size = sizeof(PROM_STATUS_PREFIX) - 1;
 	for (i = 0; i < vod_array_entries(cache_infos); i++)
 	{
 		cur_cache = *(ngx_buffer_cache_t **)((u_char*)conf + cache_infos[i].conf_offset);
@@ -322,6 +324,8 @@ ngx_http_vod_status_prom_handler(ngx_http_request_t *r)
 	}
 
 	response.data = p;
+
+	p = ngx_copy(p, PROM_STATUS_PREFIX, sizeof(PROM_STATUS_PREFIX) - 1);
 
 	for (i = 0; i < vod_array_entries(cache_infos); i++)
 	{

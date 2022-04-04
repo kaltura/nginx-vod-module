@@ -1,3 +1,4 @@
+from __future__ import print_function
 from test_base import *
 from threading import Thread
 import commands
@@ -189,7 +190,7 @@ class AsyncHttpRequest(Thread):
 	def run(self):
 		try:
 			self.response = urllib2.urlopen(urllib2.Request(self.url)).read()
-		except urllib2.HTTPError, e:
+		except urllib2.HTTPError as e:
 			self.status = e.getcode()
 
 INITIAL_CONTENT = 'hello'
@@ -215,7 +216,7 @@ class TestThread(Thread):
 	def issueRequest(self, url):
 		try:
 			return (urllib2.urlopen(urllib2.Request(url)).read(), None)
-		except urllib2.HTTPError, e:
+		except urllib2.HTTPError as e:
 			return (None, e.getcode())
 
 	def doValidate(self, response, elapsedTime, validateInitial, validateMidway, validateFinal, hasPostBlockType = False):
@@ -240,11 +241,11 @@ class TestThread(Thread):
 		if testType == 'fail' and status == 500:
 			return
 		if not validate(response, status):
-			print '%s - %s %s %s' % (id, test, response, status)
+			print('%s - %s %s %s' % (id, test, response, status))
 		
 	def runSyncTest(self, test):
 		if DEBUG_HANDLE_LEAK:
-			print 'Running %s' % test['index']
+			print('Running %s' % test['index'])
 		#print 'Running %s' % test
 		
 		testName, prepare, validateInitial, change, validateMidway, validateFinal, cleanup = test['test']
@@ -264,7 +265,7 @@ class TestThread(Thread):
 		if test['initialCacheLoad']:
 			response = self.issueRequest(BASE_URL + fileName)
 			if not validateInitial(*response):
-				print 'Error1 - %s %s' % (test, response)
+				print('Error1 - %s %s' % (test, response))
 			# wait until it will expire
 			time.sleep(CACHE_INACTIVE_TIME)
 			
@@ -292,7 +293,7 @@ class TestThread(Thread):
 			ar.join()
 			response = (ar.response, ar.status)
 			if not validateInitial(*response):
-				print 'Error1.5 - %s %s' % (test, response)
+				print('Error1.5 - %s %s' % (test, response))
 			if change != None:
 				change(fileName)
 			if cleanup != None:
@@ -321,7 +322,7 @@ class TestThread(Thread):
 				time.sleep(.01)
 			
 			if not ar2.isAlive():
-				print 'Unexpected, second request not locked, %s %s %s %s' % (ar.status, ar.response, ar2.status, ar2.response)
+				print('Unexpected, second request not locked, %s %s %s %s' % (ar.status, ar.response, ar2.status, ar2.response))
 		
 		# sleep before change
 		self.issueAndValidate('Error2', test, test['requestBeforeSleep1'], fileName, validateInitial)
@@ -352,7 +353,7 @@ class TestThread(Thread):
 		response = (ar.response, ar.status)
 		if not (ar.status == 500 and test['blockType'] == 'fail'):
 			if not self.doValidate(response, time.time() - changeTime, validateInitial, validateMidway, validateFinal, 'post' in [test['blockType'], test['secondBlockType']]):
-				print 'Error6 - %s %s' % (test, response)
+				print('Error6 - %s %s' % (test, response))
 
 		if ar2 != None:	
 			# final state
@@ -360,7 +361,7 @@ class TestThread(Thread):
 			response = (ar2.response, ar2.status)
 			if not (ar2.status == 500 and test['secondBlockType'] == 'fail'):
 				if not self.doValidate(response, time.time() - changeTime, validateInitial, validateMidway, validateFinal, 'post' in [test['blockType'], test['secondBlockType']]):
-					print 'Error7 - %s %s' % (test, response)
+					print('Error7 - %s %s' % (test, response))
 			
 		# cleanup
 		if cleanup != None:
@@ -382,7 +383,7 @@ class TestThread(Thread):
 			
 			currentHandles = self.getUnrefHandles()
 			if initialHandles != currentHandles:
-				print 'handle leak %s != %s in test %s' % (initialHandles, currentHandles, self.tests[curPos]['index'])
+				print('handle leak %s != %s in test %s' % (initialHandles, currentHandles, self.tests[curPos]['index']))
 			
 			curPos += self.count
 			self.completeCount += 1
@@ -539,7 +540,7 @@ for i in xrange(THREAD_COUNT):
 # start threads
 for thread in threads:
 	thread.start()
-print 'Started, running %s tests in %s threads' % (len(allOptions), len(threads))
+print('Started, running %s tests in %s threads' % (len(allOptions), len(threads)))
 
 # wait until all threads complete
 lastCount = 0
@@ -560,4 +561,4 @@ while True:
 		
 	time.sleep(5)
 
-print 'Done !'
+print('Done !')

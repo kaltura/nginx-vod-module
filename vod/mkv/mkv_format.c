@@ -779,15 +779,16 @@ mkv_metadata_parse(
 
 			// Note: it is not possible for the sequence to have a language without a label,
 			//              since a default label will be assigned according to the language
-			if (sequence->language != 0)
+			if (sequence->lang_str.len != 0)
 			{
+				track.language = sequence->lang_str;
 				lang_id = sequence->language;
 			}
 		}
 
 		// is this track required ?
 		track_index = track_indexes[media_type]++;
-		if ((parse_params->required_tracks_mask[media_type] & (1 << track_index)) == 0)
+		if (!vod_is_bit_set(parse_params->required_tracks_mask[media_type], track_index))
 		{
 			continue;
 		}
@@ -807,10 +808,10 @@ mkv_metadata_parse(
 			return VOD_BAD_DATA;
 		}
 
-		if (metadata->base.tracks.nelts >= MAX_TRACK_COUNT)
+		if (metadata->base.tracks.nelts > MAX_TRACK_COUNT)
 		{
 			vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-				"mkv_metadata_parse: track count exceeded the limit");
+				"mkv_metadata_parse: track count exceeded the limit of %i", (ngx_int_t)MAX_TRACK_COUNT);
 			return VOD_BAD_REQUEST;
 		}
 
@@ -864,6 +865,7 @@ mkv_metadata_parse(
 			break;
 		}
 
+		cur_track->media_info.lang_str = track.language;
 		cur_track->media_info.language = lang_id;
 		if (track.name.len > 0)
 		{
@@ -872,6 +874,10 @@ mkv_metadata_parse(
 		else if (lang_id > 0)
 		{
 			lang_get_native_name(lang_id, &cur_track->media_info.label);
+		}
+		else
+		{
+			cur_track->media_info.label = track.language;
 		}
 		cur_track->media_info.media_type = media_type;
 		cur_track->media_info.codec_id = cur_codec->codec_id;

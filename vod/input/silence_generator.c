@@ -32,7 +32,7 @@ silence_generator_parse(
 	source->sequence = context->sequence;
 	source->range = context->range;
 	source->clip_time = context->clip_time;
-	source->tracks_mask[MEDIA_TYPE_AUDIO] = 1;
+	vod_set_bit(source->tracks_mask[MEDIA_TYPE_AUDIO], 0);
 
 	if (context->duration == UINT_MAX)
 	{
@@ -102,8 +102,9 @@ silence_generator_generate(
 	track->media_info.duration_millis = parse_params->clip_to - parse_params->clip_from;
 	track->media_info.full_duration = (uint64_t)track->media_info.duration_millis * track->media_info.timescale;
 	track->media_info.duration = track->media_info.full_duration;
-	track->media_info.label = sequence->label;
+	track->media_info.lang_str = sequence->lang_str;
 	track->media_info.language = sequence->language;
+	track->media_info.label = sequence->label;
 
 	rc = media_format_finalize_track(
 		request_context,
@@ -196,6 +197,6 @@ silence_generator_generate(
 
 media_generator_t silence_generator = {
 	VOD_CODEC_FLAG(AAC),
-	{ 0, 1, 0 },
+	{ {0}, {1}, {0} },
 	silence_generator_generate
 };

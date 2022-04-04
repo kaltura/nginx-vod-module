@@ -1,3 +1,4 @@
+from __future__ import print_function
 import commands
 import sys
 import re
@@ -11,7 +12,7 @@ IGNORE_LIST = set([
 	])
 
 if len(sys.argv) < 2:
-	print 'Usage:\n\tpython %s <source root> [<object root> [<object use only last folder>]]' % os.path.basename(__file__)
+	print('Usage:\n\tpython %s <source root> [<object root> [<object use only last folder>]]' % os.path.basename(__file__))
 	sys.exit(1)
 
 sourceRoot = sys.argv[1]
@@ -33,12 +34,12 @@ for root, dirs, files in os.walk(sourceRoot):
 		fileExt = os.path.splitext(name)[1]
 		fullPath = os.path.join(root, name)
 		if fileExt == '.h':
-			fileData = file(fullPath, 'rb').read()
+			fileData = open(fullPath, 'rb').read()
 			wordsByHeaderFiles.update(set(re.findall(r'\b(\w+)\b', fileData)))
 			continue
 		if fileExt != '.c':
 			continue
-		fileData = file(fullPath, 'rb').read()
+		fileData = open(fullPath, 'rb').read()
 		wordsByFile[fullPath] = set(re.findall(r'\b(\w+)\b', fileData))
 		if objectRoot == '':
 			# detect exports from code
@@ -63,7 +64,7 @@ for root, dirs, files in os.walk(sourceRoot):
 				if len(funcName) > 0:
 					funcNames.append(funcName)
 
-print 'Found %s exports' % len(funcNames)
+print('Found %s exports' % len(funcNames))
 
 for funcName in funcNames:
 	if funcName in IGNORE_LIST:
@@ -73,4 +74,4 @@ for funcName in funcNames:
 		if funcName in words:
 			fileCount += 1
 	if fileCount < 2:
-		print funcName, funcName in wordsByHeaderFiles
+		print(funcName, funcName in wordsByHeaderFiles)

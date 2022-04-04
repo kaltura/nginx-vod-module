@@ -84,7 +84,7 @@
 #define VOD_DASH_MANIFEST_ADAPTATION_HEADER_AUDIO_LANG							\
 	"    <AdaptationSet\n"														\
 	"        id=\"%uD\"\n"														\
-	"        lang=\"%s\"\n"														\
+	"        lang=\"%V\"\n"														\
 	"        label=\"%V\"\n"													\
 	"        segmentAlignment=\"true\">\n"
 
@@ -113,7 +113,7 @@
 #define VOD_DASH_MANIFEST_ADAPTATION_HEADER_SUBTITLE_SMPTE_TT					\
 	"    <AdaptationSet\n"														\
 	"        contentType=\"text\"\n"											\
-	"        lang=\"%s\"\n"														\
+	"        lang=\"%V\"\n"														\
 	"        label=\"%V\">\n"
 
 #define VOD_DASH_MANIFEST_REPRESENTATION_HEADER_SUBTITLE_SMPTE_TT				\
@@ -133,7 +133,7 @@
 #define VOD_DASH_MANIFEST_ADAPTATION_SUBTITLE_VTT								\
 	"    <AdaptationSet\n"														\
 	"        contentType=\"text\"\n"											\
-	"        lang=\"%s\"\n"														\
+	"        lang=\"%V\"\n"														\
 	"        label=\"%V\"\n"													\
 	"        mimeType=\"text/vtt\">\n"											\
 	"      <Representation\n"													\
@@ -297,6 +297,7 @@ static dash_codec_info_t dash_codecs[VOD_CODEC_ID_COUNT] = {
 	{ vod_string("audio/webm"),	vod_string("webm"), vod_string("webm")	},		// vorbis
 	{ vod_string("audio/webm"),	vod_string("webm"), vod_string("webm")	},		// opus
 	{ vod_null_string,			vod_null_string,	vod_null_string		},		// volumemap
+	{ vod_null_string,			vod_null_string,	vod_null_string		},		// flac
 
 	{ vod_string("application/mp4"), vod_string("mp4"),	vod_string("ttml") },	// webvtt
 };
@@ -861,7 +862,7 @@ dash_packager_write_mpd_period(
 			{
 				p = vod_sprintf(p, VOD_DASH_MANIFEST_ADAPTATION_HEADER_AUDIO_LANG, 
 					adapt_id++, 
-					lang_get_rfc_5646_name(reference_track->media_info.language),
+					&reference_track->media_info.lang_str,
 					&reference_track->media_info.label);
 			}
 			else
@@ -888,7 +889,7 @@ dash_packager_write_mpd_period(
 			{
 				reference_track = (*adaptation_set->first) + filtered_clip_offset;
 				p = vod_sprintf(p, VOD_DASH_MANIFEST_ADAPTATION_HEADER_SUBTITLE_SMPTE_TT,
-					lang_get_rfc_5646_name(reference_track->media_info.language),
+					&reference_track->media_info.lang_str,
 					&reference_track->media_info.label);
 				break;
 			}
@@ -920,7 +921,7 @@ dash_packager_write_mpd_period(
 
 			lang_code = lang_get_rfc_5646_name(cur_track->media_info.language);
 			p = vod_sprintf(p, VOD_DASH_MANIFEST_ADAPTATION_SUBTITLE_VTT,
-				lang_code,
+				&cur_track->media_info.lang_str,
 				&cur_track->media_info.label,
 				lang_code,
 				subtitle_adapt_id++, 
@@ -1381,7 +1382,7 @@ dash_packager_build_mpd(
 			(sizeof(VOD_DASH_MANIFEST_REPRESENTATION_HEADER_VIDEO) - 1 + MAX_TRACK_SPEC_LENGTH + MAX_MIME_TYPE_SIZE + MAX_CODEC_NAME_SIZE + 3 * VOD_INT32_LEN + VOD_DASH_MAX_FRAME_RATE_LEN +
 			sizeof(VOD_DASH_MANIFEST_REPRESENTATION_FOOTER) - 1) * media_set->track_count[MEDIA_TYPE_VIDEO] +
 			// audio adaptations
-			(sizeof(VOD_DASH_MANIFEST_ADAPTATION_HEADER_AUDIO_LANG) - 1 + sizeof(VOD_DASH_MANIFEST_AUDIO_CHANNEL_CONFIG_EAC3) - 1 + 2 * VOD_INT32_LEN + LANG_ISO639_3_LEN +
+			(sizeof(VOD_DASH_MANIFEST_ADAPTATION_HEADER_AUDIO_LANG) - 1 + sizeof(VOD_DASH_MANIFEST_AUDIO_CHANNEL_CONFIG_EAC3) - 1 + 2 * VOD_INT32_LEN +
 			sizeof(VOD_DASH_MANIFEST_ADAPTATION_FOOTER) - 1) * context.adaptation_sets.count[ADAPTATION_TYPE_AUDIO] +
 			// audio representations
 			(sizeof(VOD_DASH_MANIFEST_REPRESENTATION_HEADER_AUDIO) - 1 + MAX_TRACK_SPEC_LENGTH + MAX_MIME_TYPE_SIZE + MAX_CODEC_NAME_SIZE + 2 * VOD_INT32_LEN +
@@ -1395,7 +1396,7 @@ dash_packager_build_mpd(
 	case SUBTITLE_FORMAT_WEBVTT:
 		base_period_size +=
 			// subtitle adaptations
-			(sizeof(VOD_DASH_MANIFEST_ADAPTATION_SUBTITLE_VTT) - 1 + 2 * LANG_ISO639_3_LEN + VOD_INT32_LEN +
+			(sizeof(VOD_DASH_MANIFEST_ADAPTATION_SUBTITLE_VTT) - 1 + LANG_ISO639_3_LEN + VOD_INT32_LEN +
 			context.base_url.len + conf->subtitle_file_name_prefix.len + MAX_CLIP_SPEC_LENGTH + MAX_TRACK_SPEC_LENGTH) *
 			context.adaptation_sets.count[ADAPTATION_TYPE_SUBTITLE];
 		break;
@@ -1403,7 +1404,7 @@ dash_packager_build_mpd(
 	default: // SUBTITLE_FORMAT_SMPTE_TT
 		base_period_size +=
 			// subtitle adaptations
-			(sizeof(VOD_DASH_MANIFEST_ADAPTATION_HEADER_SUBTITLE_SMPTE_TT) - 1 + LANG_ISO639_3_LEN +
+			(sizeof(VOD_DASH_MANIFEST_ADAPTATION_HEADER_SUBTITLE_SMPTE_TT) - 1 +
 			sizeof(VOD_DASH_MANIFEST_ADAPTATION_FOOTER) - 1) * context.adaptation_sets.count[ADAPTATION_TYPE_SUBTITLE] +
 			// subtitle representations
 			(sizeof(VOD_DASH_MANIFEST_REPRESENTATION_HEADER_SUBTITLE_SMPTE_TT) - 1 + MAX_TRACK_SPEC_LENGTH +
@@ -1437,7 +1438,7 @@ dash_packager_build_mpd(
 			case MEDIA_TYPE_AUDIO:
 			case MEDIA_TYPE_SUBTITLE:
 				cur_track = (*adaptation_set->first) + filtered_clip_offset;
-				result_size += cur_track->media_info.label.len;
+				result_size += cur_track->media_info.label.len + cur_track->media_info.lang_str.len;
 				break;
 			}
 		}

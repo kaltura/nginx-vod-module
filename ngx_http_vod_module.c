@@ -50,8 +50,6 @@
 #define OPEN_FILE_FALLBACK_ENABLED (0x80000000)
 #define MAX_STALE_RETRIES (2)
 
-#define SEGMENT_REQUEST_MAX_FRAME_COUNT (64 * 1024)
-#define NON_SEGMENT_REQUEST_MAX_FRAME_COUNT (1024 * 1024)
 
 enum {
 	// mapping state machine
@@ -1418,7 +1416,7 @@ static void
 ngx_http_vod_get_sequence_tracks_mask(
 	request_params_t* request_params,
 	media_sequence_t* sequence,
-	uint32_t** result)
+	track_mask_t** result)
 {
 	sequence_tracks_mask_t* sequence_tracks_mask;
 	ngx_str_t* cur_sequence_id;
@@ -1454,13 +1452,13 @@ ngx_http_vod_get_sequence_tracks_mask(
 static void
 ngx_http_vod_init_parse_params_metadata(
 	ngx_http_vod_ctx_t *ctx,
-	uint32_t* tracks_mask,
+	track_mask_t* tracks_mask,
 	media_parse_params_t* parse_params)
 {
 	const ngx_http_vod_request_t* request = ctx->request;
 	media_clip_source_t* cur_source = ctx->cur_source;
 	segmenter_conf_t* segmenter = ctx->submodule_context.media_set.segmenter_conf;
-	uint32_t* request_tracks_mask;
+	track_mask_t* request_tracks_mask;
 	uint32_t media_type;
 
 	if (request != NULL)
@@ -1486,7 +1484,7 @@ ngx_http_vod_init_parse_params_metadata(
 
 	for (media_type = 0; media_type < MEDIA_TYPE_COUNT; media_type++)
 	{
-		tracks_mask[media_type] = cur_source->tracks_mask[media_type] & request_tracks_mask[media_type];
+		vod_track_mask_and_bits(tracks_mask[media_type], cur_source->tracks_mask[media_type], request_tracks_mask[media_type]);
 	}
 	parse_params->required_tracks_mask = tracks_mask;
 	parse_params->langs_mask = ctx->submodule_context.request_params.langs_mask;
@@ -1516,7 +1514,7 @@ ngx_http_vod_init_parse_params_frames(
 	{
 		request_context->simulation_only = TRUE;
 
-		parse_params->max_frame_count = NON_SEGMENT_REQUEST_MAX_FRAME_COUNT;
+		parse_params->max_frame_count = ctx->submodule_context.conf->max_frame_count;
 		range->timescale = 1000;
 		range->original_clip_time = 0;
 		range->start = 0;
@@ -1534,7 +1532,7 @@ ngx_http_vod_init_parse_params_frames(
 
 	request_context->simulation_only = FALSE;
 
-	parse_params->max_frame_count = SEGMENT_REQUEST_MAX_FRAME_COUNT;
+	parse_params->max_frame_count = ctx->submodule_context.conf->segment_max_frame_count;
 
 	if (cur_source->range != NULL)
 	{
@@ -1646,7 +1644,7 @@ ngx_http_vod_parse_metadata(
 	request_context_t* request_context = &ctx->submodule_context.request_context;
 	media_range_t range;
 	vod_status_t rc;
-	uint32_t tracks_mask[MEDIA_TYPE_COUNT];
+	track_mask_t tracks_mask[MEDIA_TYPE_COUNT];
 
 	// initialize clipping params
 	if (cur_source->clip_to == ULLONG_MAX)
@@ -3453,6 +3451,7 @@ ngx_http_vod_generator_matches(
 	media_generator_t* generator)
 {
 	uint32_t media_type;
+	track_mask_t track_mask_temp;
 
 	if ((parse_params->codecs_mask & generator->codec_mask) == 0)
 	{
@@ -3461,7 +3460,8 @@ ngx_http_vod_generator_matches(
 
 	for (media_type = 0; media_type < MEDIA_TYPE_COUNT; media_type++)
 	{
-		if ((parse_params->required_tracks_mask[media_type] & generator->track_mask[media_type]) != 0)
+		vod_track_mask_and_bits(track_mask_temp, parse_params->required_tracks_mask[media_type], generator->tracks_mask[media_type]);
+		if (vod_track_mask_is_any_bit_set(track_mask_temp))
 		{
 			return 1;
 		}
@@ -3477,7 +3477,7 @@ ngx_http_vod_run_generators(ngx_http_vod_ctx_t *ctx)
 	media_parse_params_t parse_params;
 	media_generator_t* generator;
 	media_range_t range;
-	uint32_t tracks_mask[MEDIA_TYPE_COUNT];
+	track_mask_t tracks_mask[MEDIA_TYPE_COUNT];
 	ngx_int_t rc;
 
 	for (cur_source = ctx->submodule_context.media_set.generators_head;
@@ -3691,11 +3691,11 @@ ngx_http_vod_run_state_machine(ngx_http_vod_ctx_t *ctx)
 
 			if ((ctx->request->request_class & (REQUEST_CLASS_MANIFEST | REQUEST_CLASS_OTHER)) != 0)
 			{
-				max_frame_count = NON_SEGMENT_REQUEST_MAX_FRAME_COUNT;
+				max_frame_count = ctx->submodule_context.conf->max_frame_count;
 			}
 			else
 			{
-				max_frame_count = SEGMENT_REQUEST_MAX_FRAME_COUNT;
+				max_frame_count = ctx->submodule_context.conf->segment_max_frame_count;
 			}
 
 #if (NGX_HAVE_LIB_AV_CODEC)
@@ -3973,8 +3973,8 @@ ngx_http_vod_start_processing_media_file(ngx_http_vod_ctx_t *ctx)
 	if (ctx->request == NULL &&
 		cur_source->clip_from == 0 &&
 		cur_source->clip_to == ULLONG_MAX &&
-		cur_source->tracks_mask[MEDIA_TYPE_AUDIO] == 0xffffffff &&
-		cur_source->tracks_mask[MEDIA_TYPE_VIDEO] == 0xffffffff)
+		vod_track_mask_are_all_bits_set(cur_source->tracks_mask[MEDIA_TYPE_AUDIO]) &&
+		vod_track_mask_are_all_bits_set(cur_source->tracks_mask[MEDIA_TYPE_VIDEO]))
 	{
 		ctx->state = STATE_DUMP_OPEN_FILE;
 
@@ -5246,14 +5246,15 @@ ngx_http_vod_map_media_set_apply(ngx_http_vod_ctx_t *ctx, ngx_str_t* mapping, in
 	if (mapped_media_set.sequence_count == 1 &&
 		mapped_media_set.timing.durations == NULL &&
 		mapped_media_set.sequences[0].clips[0]->type == MEDIA_CLIP_SOURCE &&
-		!mapped_media_set.has_multi_sequences)
+		!mapped_media_set.has_multi_sequences &&
+		mapped_media_set.closed_captions == NULL)
 	{
 		mapped_source = (media_clip_source_t*)*mapped_media_set.sequences[0].clips;
 
 		if (mapped_source->clip_from == 0 &&
 			mapped_source->clip_to == ULLONG_MAX &&
-			mapped_source->tracks_mask[MEDIA_TYPE_AUDIO] == 0xffffffff &&
-			mapped_source->tracks_mask[MEDIA_TYPE_VIDEO] == 0xffffffff)
+			vod_track_mask_are_all_bits_set(mapped_source->tracks_mask[MEDIA_TYPE_AUDIO]) &&
+			vod_track_mask_are_all_bits_set(mapped_source->tracks_mask[MEDIA_TYPE_VIDEO]))
 		{
 			// TODO: drop the sequence when request params filter by id and the id does not match
 
@@ -5262,6 +5263,7 @@ ngx_http_vod_map_media_set_apply(ngx_http_vod_ctx_t *ctx, ngx_str_t* mapping, in
 			ctx->submodule_context.media_set.segmenter_conf = mapped_media_set.segmenter_conf;
 			sequence = cur_source->sequence;
 			sequence->mapped_uri = mapped_source->mapped_uri;
+			sequence->lang_str = mapped_media_set.sequences->lang_str;
 			sequence->language = mapped_media_set.sequences->language;
 			sequence->label = mapped_media_set.sequences->label;
 			sequence->id = mapped_media_set.sequences->id;
@@ -5577,8 +5579,8 @@ ngx_http_vod_handler(ngx_http_request_t *r)
 	{
 		request = NULL;
 		request_params.sequences_mask = 1;
-		request_params.tracks_mask[MEDIA_TYPE_VIDEO] = 0xffffffff;
-		request_params.tracks_mask[MEDIA_TYPE_AUDIO] = 0xffffffff;
+		vod_track_mask_set_all_bits(request_params.tracks_mask[MEDIA_TYPE_VIDEO]);
+		vod_track_mask_set_all_bits(request_params.tracks_mask[MEDIA_TYPE_AUDIO]);
 
 		rc = ngx_http_vod_parse_uri_path(
 			r,

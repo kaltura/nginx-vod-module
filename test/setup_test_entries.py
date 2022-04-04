@@ -1,3 +1,4 @@
+from __future__ import print_function
 from KalturaClient import *
 from KalturaClient.Plugins.Core import *
 from mp4_utils import *
@@ -113,7 +114,7 @@ for conversionProfile in client.conversionProfile.list().objects:
         sourceOnlyConvProfileId = conversionProfile.id
 
 if sourceOnlyConvProfileId == None:
-    print 'Failed to find a source only conversion profile'
+    print('Failed to find a source only conversion profile')
     sys.exit(1)
 
 def getTimeScaleOffset():
@@ -316,7 +317,7 @@ if atomExists('moov.trak.mdia.minf.stbl.ctts'):
     ]
 
 def uploadTestEntry(refId, generator):
-    print 'uploading %s' % refId
+    print('uploading %s' % refId)
     newEntry = client.media.add(entry=KalturaMediaEntry(name=refId, referenceId=refId, mediaType=KalturaMediaType.VIDEO, conversionProfileId=sourceOnlyConvProfileId))
     uploadToken = client.uploadToken.add(uploadToken=KalturaUploadToken())
     client.media.addContent(entryId=newEntry.id, resource=KalturaUploadedFileTokenResource(token=uploadToken.id))
@@ -340,10 +341,10 @@ for refId, generator, tests in TEST_CASES:
     entryMap[entryId] = (refId, tests)
 
 # print the test uris
-print 'result:'
+print('result:')
 flavors = client.flavorAsset.list(filter=KalturaFlavorAssetFilter(flavorParamsIdEqual=0, entryIdIn=','.join(entryMap.keys())),
                                   pager=KalturaFilterPager(pageSize=500)).objects
 for flavor in flavors:
     refId, tests = entryMap[flavor.entryId]
     for uriPrefix, fileName, statusCode, message in tests:
-        print '%s %s/p/%s/sp/%s00/serveFlavor/entryId/%s/v/%s/flavorId/%s/%s %s %s' % (refId, uriPrefix, PARTNER_ID, PARTNER_ID, flavor.entryId, flavor.version, flavor.id, fileName, statusCode, message)
+        print('%s %s/p/%s/sp/%s00/serveFlavor/entryId/%s/v/%s/flavorId/%s/%s %s %s' % (refId, uriPrefix, PARTNER_ID, PARTNER_ID, flavor.entryId, flavor.version, flavor.id, fileName, statusCode, message))

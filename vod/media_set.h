@@ -60,6 +60,7 @@ struct media_sequence_s {
 	vod_str_t stripped_uri;
 	vod_str_t id;
 	vod_str_t label;
+	vod_str_t lang_str;
 	language_id_t language;
 	uint32_t bitrate[MEDIA_TYPE_COUNT];
 	uint32_t avg_bitrate[MEDIA_TYPE_COUNT];
@@ -106,7 +107,7 @@ typedef struct media_notification_s {
 
 typedef struct {
 	vod_str_t id;
-	language_id_t language;
+	vod_str_t language;
 	vod_str_t label;
 } media_closed_captions_t;
 
@@ -123,6 +124,7 @@ typedef struct {
 	vod_str_t id;
 	uint32_t type;
 	uint32_t original_type;					// will contain live in case of a live playlist that was forced to vod
+	bool_t is_live_event;					// causes HLS playlist type to be event and infinite live_window_duration
 	media_clip_timing_t timing;
 	bool_t original_use_discontinuity;		// will be different than use_discontinuity in case force_continuous_timestamps is enabled
 	bool_t use_discontinuity;
@@ -166,7 +168,7 @@ typedef struct {
 
 typedef struct {
 	int32_t index;			// positive = sequence index (-f1), negative = index into sequence_ids (-s1)
-	uint32_t tracks_mask[MEDIA_TYPE_COUNT];
+	track_mask_t tracks_mask[MEDIA_TYPE_COUNT];
 } sequence_tracks_mask_t;
 
 typedef struct {
@@ -177,10 +179,10 @@ typedef struct {
 	uint32_t pts_delay;
 	uint32_t sequences_mask;
 	vod_str_t sequence_ids[MAX_SEQUENCE_IDS];
-	uint32_t tracks_mask[MEDIA_TYPE_COUNT];
+	track_mask_t tracks_mask[MEDIA_TYPE_COUNT];
 	sequence_tracks_mask_t* sequence_tracks_mask;
 	sequence_tracks_mask_t* sequence_tracks_mask_end;
-	uint8_t* langs_mask;			// [LANG_MASK_SIZE]
+	uint64_t* langs_mask;			// [LANG_MASK_SIZE]
 	uint32_t version;
 	uint32_t width;
 	uint32_t height;

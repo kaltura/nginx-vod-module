@@ -1,3 +1,4 @@
+from __future__ import print_function
 from xml.dom.minidom import parseString
 import http_utils
 import calendar
@@ -6,6 +7,11 @@ import base64
 import math
 import time
 
+try:
+	xrange  # Python 2
+except NameError:
+	xrange = range  # Python 3
+
 CHUNK_LIST_ITEMS_TO_COMPARE = 0
 
 #filter array by taking evenly spaced elements must must include first and last
@@ -13,7 +19,7 @@ def filterChunkList(arr):
 	n = len(arr) - 2
 	m = CHUNK_LIST_ITEMS_TO_COMPARE - 2
 	if CHUNK_LIST_ITEMS_TO_COMPARE > 0 and n > m:
-		print "Taking only %d segments from the %d segments available" % (CHUNK_LIST_ITEMS_TO_COMPARE, len(arr))
+		print("Taking only %d segments from the %d segments available" % (CHUNK_LIST_ITEMS_TO_COMPARE, len(arr)))
 		#Bresenham's line algorithm, but take first and last as well
 		return arr[0:1]+[arr[1 + i * n // m + len(arr) // (2 * m)] for i in range(m)] + [arr[-1]]
 	return arr
@@ -29,10 +35,12 @@ def getAbsoluteUrl(url, baseUrl = ''):
 	if not url.startswith('http://') and not url.startswith('https://'):
 		if baseUrl == '':
 			raise Exception('bad url %s' % url)
-		if baseUrl.endswith('/'):
-			url = baseUrl + url
-		else:
-			url = baseUrl + '/' + url
+		queryPos = baseUrl.find('?')
+		if queryPos >= 0:
+			baseUrl = baseUrl[:queryPos]
+
+		baseUrl = baseUrl[:baseUrl.rfind('/')]
+		url = baseUrl + '/' + url
 	return url
 	
 def getHlsMediaPlaylistUrls(baseUrl, urlContent):
@@ -71,7 +79,7 @@ def getHlsMasterPlaylistUrls(baseUrl, urlContent, headers):
 		code, _, mediaContent = http_utils.getUrl(curUrl, headers)
 		if code != 200 or len(mediaContent) == 0:
 			continue
-		curBaseUrl = curUrl.rsplit('/', 1)[0]
+		curBaseUrl = curUrl.rsplit('/', 1)[0] + '/'
 		result += getHlsMediaPlaylistUrls(curBaseUrl, mediaContent)
 	return result
 

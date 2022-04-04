@@ -113,8 +113,8 @@ ngx_http_vod_volume_map_parse_uri_file_name(
 		return rc;
 	}
 
-	request_params->tracks_mask[MEDIA_TYPE_VIDEO] = 0;
-	request_params->tracks_mask[MEDIA_TYPE_SUBTITLE] = 0;
+	vod_track_mask_reset_all_bits(request_params->tracks_mask[MEDIA_TYPE_VIDEO]);
+	vod_track_mask_reset_all_bits(request_params->tracks_mask[MEDIA_TYPE_SUBTITLE]);
 
 	return NGX_OK;
 }

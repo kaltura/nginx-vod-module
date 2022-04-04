@@ -16,8 +16,13 @@
 #define vod_div_ceil(x, y) (((x) + (y) - 1) / (y))
 #define vod_array_entries(x) (sizeof(x) / sizeof(x[0]))
 
-#define vod_is_bit_set(mask, index) (((mask)[(index) >> 3] >> ((index) & 7)) & 1)
-#define vod_set_bit(mask, index) (mask)[(index) >> 3] |= 1 << ((index) & 7)
+// bit sets
+#define vod_array_length_for_bits(i) (((i) + 63) >> 6)
+#define vod_is_bit_set(mask, index) (((mask)[(index) / 64] >> ((index) % 64)) & 1)
+#define vod_set_bit(mask, index) ((mask)[(index) / 64] |= ((uint64_t)1 << ((index) % 64)))
+#define vod_reset_bit(mask, index) ((mask)[(index) / 64] &= ~((uint64_t)1 << ((index) % 64)))
+#define vod_set_all_bits(mask, max_bits) vod_memset((mask), 0xff, sizeof(uint64_t) * vod_array_length_for_bits(max_bits));
+#define vod_reset_all_bits(mask, max_bits) vod_memzero((mask), sizeof(uint64_t) * vod_array_length_for_bits(max_bits));
 
 #define vod_no_flag_set(mask, f) (((mask) & (f)) == 0)
 #define vod_all_flags_set(mask, f) (((mask) & (f)) == (f))
@@ -358,7 +363,103 @@ enum {
 // functions
 int vod_get_int_print_len(uint64_t n);
 
-uint32_t vod_get_number_of_set_bits(uint32_t i);
+#if defined(__GNUC__) || defined(__clang__)
+// On x86 this still uses the slow SWAR algorithm unless "-mpopcnt"
+// is set or any other flag that implies it like "-mavx2"
+#define vod_get_number_of_set_bits32(i) __builtin_popcount(i)
+#define vod_get_number_of_set_bits64(i) __builtin_popcountll(i)
+#define vod_get_trailing_zeroes64(i) __builtin_ctzll(i)
+#else
+#define VOD_IMPLEMENT_BIT_COUNT
+uint32_t vod_get_number_of_set_bits32(uint32_t i);
+uint32_t vod_get_number_of_set_bits64(uint64_t i);
+uint32_t vod_get_trailing_zeroes64(uint64_t i);
+#endif
+
+// bit sets
+// always assumes max_bits = n * 64.
+// -> n = max_bits / 64 (integer division)
+// -> residual elements are not handled!
+static vod_inline uint32_t
+vod_get_number_of_set_bits_in_mask(
+	uint64_t* mask,
+	uint32_t max_bits)
+{
+	uint32_t i;
+	uint32_t result = 0;
+	// due to inlining, the loop is unrolled and optimized
+	for (i = 0; i < max_bits / 64; i++)
+	{
+		result += vod_get_number_of_set_bits64(mask[i]);
+	}
+	return result;
+}
+
+static vod_inline bool_t
+vod_are_all_bits_set(
+	uint64_t* mask,
+	uint32_t max_bits)
+{
+	uint32_t i;
+	for (i = 0; i < max_bits / 64; i++)
+	{
+		if (mask[i] != ~(uint64_t)0)
+		{
+			return FALSE;
+		}
+	}
+
+	return TRUE;
+}
+
+static vod_inline bool_t
+vod_is_any_bit_set(
+	uint64_t* mask,
+	uint32_t max_bits)
+{
+	uint32_t i;
+	for (i = 0; i < max_bits / 64; i++)
+	{
+		if (mask[i] != (uint64_t)0)
+		{
+			return TRUE;
+		}
+	}
+
+	return FALSE;
+}
+
+static vod_inline int32_t
+vod_get_lowest_bit_set(
+	uint64_t* mask,
+	uint32_t max_bits)
+{
+	uint32_t i;
+	for (i = 0; max_bits / 64; i++)
+	{
+		if (mask[i] != (uint64_t)0)
+		{
+			return i * 64 + vod_get_trailing_zeroes64(mask[i]);
+		}
+	}
+
+	// well defined result in case no bit is set
+	return -1;
+}
+
+static vod_inline void
+vod_and_bits(
+	uint64_t* dst,
+	uint64_t* a,
+	uint64_t* b,
+	uint32_t max_bits)
+{
+	uint32_t i;
+	for (i = 0; i < vod_array_length_for_bits(max_bits); i++)
+	{
+		dst[i] = a[i] & b[i];
+	}
+}
 
 u_char* vod_append_hex_string(u_char* p, const u_char* buffer, uint32_t buffer_size);
 

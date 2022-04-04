@@ -85,10 +85,13 @@ ngx_http_vod_create_loc_conf(ngx_conf_t *cf)
 	conf->initial_read_size = NGX_CONF_UNSET_SIZE;
 	conf->max_metadata_size = NGX_CONF_UNSET_SIZE;
 	conf->max_frames_size = NGX_CONF_UNSET_SIZE;
+	conf->max_frame_count = NGX_CONF_UNSET_UINT;
+	conf->segment_max_frame_count = NGX_CONF_UNSET_UINT;
 	conf->cache_buffer_size = NGX_CONF_UNSET_SIZE;
 	conf->max_upstream_headers_size = NGX_CONF_UNSET_SIZE;
 	conf->ignore_edit_list = NGX_CONF_UNSET;
 	conf->parse_hdlr_name = NGX_CONF_UNSET;
+	conf->parse_udta_name = NGX_CONF_UNSET;
 	conf->max_mapping_response_size = NGX_CONF_UNSET_SIZE;
 
 	conf->metadata_cache = NGX_CONF_UNSET_PTR;
@@ -203,9 +206,11 @@ ngx_http_vod_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child)
 	ngx_conf_merge_size_value(conf->initial_read_size, prev->initial_read_size, 4096);
 	ngx_conf_merge_size_value(conf->max_metadata_size, prev->max_metadata_size, 128 * 1024 * 1024);
 	ngx_conf_merge_size_value(conf->max_frames_size, prev->max_frames_size, 16 * 1024 * 1024);
+	ngx_conf_merge_uint_value(conf->max_frame_count, prev->max_frame_count, 1024 * 1024);
+	ngx_conf_merge_uint_value(conf->segment_max_frame_count, prev->segment_max_frame_count, 64 * 1024);
 	ngx_conf_merge_size_value(conf->cache_buffer_size, prev->cache_buffer_size, 256 * 1024);
 	ngx_conf_merge_size_value(conf->max_upstream_headers_size, prev->max_upstream_headers_size, 4 * 1024);
-	
+
 	if (conf->output_buffer_pool == NULL)
 	{
 		conf->output_buffer_pool = prev->output_buffer_pool;
@@ -213,6 +218,7 @@ ngx_http_vod_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child)
 
 	ngx_conf_merge_value(conf->ignore_edit_list, prev->ignore_edit_list, 0);
 	ngx_conf_merge_value(conf->parse_hdlr_name, prev->parse_hdlr_name, 0);
+	ngx_conf_merge_value(conf->parse_udta_name, prev->parse_udta_name, 0);
 
 	conf->parse_flags = 0;
 	if (!conf->ignore_edit_list)
@@ -222,6 +228,10 @@ ngx_http_vod_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child)
 	if (conf->parse_hdlr_name)
 	{
 		conf->parse_flags |= PARSE_FLAG_HDLR_NAME;
+	}
+	if (conf->parse_udta_name)
+	{
+		conf->parse_flags |= PARSE_FLAG_UDTA_NAME;
 	}
 
 	if (conf->upstream_extra_args == NULL)
@@ -1023,6 +1033,20 @@ ngx_command_t ngx_http_vod_commands[] = {
 	offsetof(ngx_http_vod_loc_conf_t, max_frames_size),
 	NULL },
 
+	{ ngx_string("vod_max_frame_count"),
+	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1,
+	ngx_conf_set_num_slot,
+	NGX_HTTP_LOC_CONF_OFFSET,
+	offsetof(ngx_http_vod_loc_conf_t, max_frame_count),
+	NULL },
+
+	{ ngx_string("vod_segment_max_frame_count"),
+	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1,
+	ngx_conf_set_num_slot,
+	NGX_HTTP_LOC_CONF_OFFSET,
+	offsetof(ngx_http_vod_loc_conf_t, segment_max_frame_count),
+	NULL },
+
 	{ ngx_string("vod_cache_buffer_size"),
 	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1,
 	ngx_conf_set_size_slot,
@@ -1042,6 +1066,13 @@ ngx_command_t ngx_http_vod_commands[] = {
 	ngx_conf_set_flag_slot,
 	NGX_HTTP_LOC_CONF_OFFSET,
 	offsetof(ngx_http_vod_loc_conf_t, parse_hdlr_name),
+	NULL },
+
+	{ ngx_string("vod_parse_udta_name"),
+	NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1,
+	ngx_conf_set_flag_slot,
+	NGX_HTTP_LOC_CONF_OFFSET,
+	offsetof(ngx_http_vod_loc_conf_t, parse_udta_name),
 	NULL },
 
 	// upstream parameters - only for mapped/remote modes

@@ -6,7 +6,7 @@
 
 // constants
 #define LANG_ISO639_3_LEN (3)
-#define LANG_MASK_SIZE ((VOD_LANG_COUNT + 7) >> 3)
+#define LANG_MASK_SIZE vod_array_length_for_bits(VOD_LANG_COUNT)
 
 // macros
 #define iso639_3_str_to_int(x) \

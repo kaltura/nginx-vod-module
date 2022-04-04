@@ -11,10 +11,26 @@
 #define rescale_time(time, cur_scale, new_scale) ((((uint64_t)(time)) * (new_scale) + (cur_scale) / 2) / (cur_scale))
 #define rescale_time_neg(time, cur_scale, new_scale) ((time) >= 0 ? rescale_time(time, cur_scale, new_scale) : -rescale_time(-(time), cur_scale, new_scale))
 
+#define vod_track_mask_set_all_bits(mask) vod_set_all_bits((mask), MAX_TRACK_COUNT)
+#define vod_track_mask_reset_all_bits(mask) vod_reset_all_bits((mask), MAX_TRACK_COUNT)
+#define vod_track_mask_get_number_of_set_bits(mask) vod_get_number_of_set_bits_in_mask((mask), MAX_TRACK_COUNT)
+#define vod_track_mask_are_all_bits_set(mask) vod_are_all_bits_set((mask), MAX_TRACK_COUNT)
+#define vod_track_mask_is_any_bit_set(mask) vod_is_any_bit_set((mask), MAX_TRACK_COUNT)
+#define vod_track_mask_get_lowest_bit_set(mask) vod_get_lowest_bit_set((mask), MAX_TRACK_COUNT)
+#define vod_track_mask_and_bits(dst, a, b) vod_and_bits((dst), (a), (b), MAX_TRACK_COUNT)
 // constants
 #define MAX_CODEC_NAME_SIZE (64)
 #define MAX_FRAME_SIZE (10 * 1024 * 1024)
-#define MAX_TRACK_COUNT (1024)
+#ifdef NGX_VOD_MAX_TRACK_COUNT
+#if NGX_VOD_MAX_TRACK_COUNT % 64 != 0
+#error MAX_TRACK_COUNT must be a multiple of 64!
+#endif
+#define MAX_TRACK_COUNT (NGX_VOD_MAX_TRACK_COUNT)
+#define MAX_TRACK_INDEX_LEN (sizeof(ngx_value(NGX_VOD_MAX_TRACK_COUNT)) - 1)
+#else
+#define MAX_TRACK_COUNT (64)
+#define MAX_TRACK_INDEX_LEN (2)
+#endif
 #define MAX_DURATION_SEC (1000000)
 #define MAX_CLIP_DURATION (90000000)		// 25h
 #define MAX_SEQUENCE_DURATION (864000000)		// 10 days
@@ -33,7 +49,8 @@
 #define PARSE_FLAG_SAVE_RAW_ATOMS		(0x00000010)		// mp4 only
 #define PARSE_FLAG_EDIT_LIST			(0x00000020)
 #define PARSE_FLAG_HDLR_NAME			(0x00000040)
-#define PARSE_FLAG_CODEC_TRANSFER_CHAR	(0x00000080)
+#define PARSE_FLAG_UDTA_NAME			(0x00000080)
+#define PARSE_FLAG_CODEC_TRANSFER_CHAR	(0x00000100)
 
 // frames
 #define PARSE_FLAG_FRAMES_DURATION		(0x00010000)
@@ -151,6 +168,8 @@ enum {			// mp4 only
 	RTA_COUNT
 };
 
+// types
+typedef uint64_t track_mask_t[vod_array_length_for_bits(MAX_TRACK_COUNT)];
 // parse params
 typedef struct {
 	uint64_t start;			// relative to clip_from
@@ -160,8 +179,8 @@ typedef struct {
 } media_range_t;
 
 typedef struct {
-	uint32_t* required_tracks_mask;
-	uint8_t* langs_mask;
+	track_mask_t* required_tracks_mask;
+	uint64_t* langs_mask;
 	uint32_t clip_from;
 	uint32_t clip_to;
 	media_range_t* range;
@@ -219,6 +238,7 @@ typedef struct media_info_s {
 	int64_t start_time;			// temporary during parsing
 	uint64_t codec_delay;
 	language_id_t language;
+	vod_str_t lang_str;
 	vod_str_t label;
 	union {
 		video_media_info_t video;

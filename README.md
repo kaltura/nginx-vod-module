@@ -20,9 +20,9 @@
 
 * Fallback support for file not found in local/mapped modes (useful in multi-datacenter environments)
 
-* Video codecs: H264, H265 (DASH/HLS), VP9 (DASH)
+* Video codecs: H264, H265 (DASH/HLS), VP8 (DASH), VP9 (DASH), AV1 (DASH)
 
-* Audio codecs: AAC, MP3 (HLS/HDS/MSS), AC-3 (DASH/HLS), E-AC-3 (DASH/HLS), OPUS (DASH)
+* Audio codecs: AAC, MP3 (HLS/HDS/MSS), AC-3 (DASH/HLS), E-AC-3 (DASH/HLS), VORBIS (DASH), OPUS (DASH), FLAC (HLS), DTS (HLS)
 
 * Captions support -
 
@@ -126,12 +126,14 @@ In this case, the `load_module` directive should be used in nginx.conf in order 
 Optional recommended settings:
 1. `--with-file-aio` - enable asynchronous I/O support, highly recommended, relevant only to local and mapped modes
 2. `--with-threads` (nginx 1.7.11+) - enable asynchronous file open using thread pool (also requires `vod_open_file_thread_pool` in nginx.conf), relevant only to local and mapped modes
-3. `--with-cc-opt="-O3"` - enable additional compiler optimizations (we saw about 8% reduction in the mp4 parse time
+3. `--with-cc-opt="-O3 -mpopcnt"` - enable additional compiler optimizations (we saw about 8% reduction in the mp4 parse time
 	and frame processing time compared to the nginx default `-O`)
 
 Debug settings:
 1. `--with-debug` - enable debug messages (also requires passing `debug` in the `error_log` directive in nginx.conf).
 2. `--with-cc-opt="-O0"` - disable compiler optimizations (for debugging with gdb)
+C Macro Configurations:
+1. `--with-cc-opt="-DNGX_VOD_MAX_TRACK_COUNT=256 -mavx2"` - increase the maximum track count (preferably to multiples of 64). It's recommended to enable vector extensions (AVX2) as well.
 
 ### Installation
 
@@ -159,7 +161,7 @@ For Ubuntu 16.04, 16.10 add this repo:
 For Ubuntu 20.04 add this repo:
 ```
 # wget -O - http://installrepo.kaltura.org/repo/aptn/focal/kaltura-deb-256.gpg.key|apt-key add -
-# echo "deb [arch=amd64] http://installrepo.kaltura.org/repo/apt/xenial propus main" > /etc/apt/sources.list.d/kaltura.list
+# echo "deb [arch=amd64] http://installrepo.kaltura.org/repo/aptn/focal quasar main" > /etc/apt/sources.list.d/kaltura.list
 ```
 
 
@@ -451,7 +453,7 @@ Mandatory fields:
 
 Optional fields:
 * `id` - a string that identifies the set. The id can be retrieved by `$vod_set_id`.
-* `playlistType` - string, can be set to `live` or `vod`, default is `vod`.
+* `playlistType` - string, can be set to `live`, `vod` or `event` (only supported for HLS playlists), default is `vod`.
 * `durations` - an array of integers representing clip durations in milliseconds.
 	This field is mandatory if the mapping contains more than a single clip per sequence.
 	If specified, this array must contain at least one element and up to 128 elements.
@@ -479,6 +481,12 @@ Optional fields:
 	Setting this parameter is equivalent to passing /clipFrom/ on the URL.
 * `clipTo` - integer, contains a timestamp indicating where the returned stream should end.
 	Setting this parameter is equivalent to passing /clipTo/ on the URL.
+* `cache` - boolean, if set to false, the mapping response will not be saved to cache (vod_mapping_cache).
+	The default value is true.
+* `closedCaptions` - array of closed captions objects (see below), containing languages and ids
+	of any embedded CEA-608 / CEA-708 captions. If an empty array is provided, the module will output
+	`CLOSED-CAPTIONS=NONE` on each `EXT-X-STREAM-INF` tag. If the list does not appear in the JSON, the 
+	module will not output any `CLOSED-CAPTIONS` fields in the playlist.
 
 Live fields:
 * `firstClipTime` - integer, mandatory for all live playlists unless `clipTimes` is specified.
@@ -519,6 +527,8 @@ Live fields:
 * `liveWindowDuration` - integer, optional, provides a way to override `vod_live_window_duration`
 	specified in the configuration. If the value exceeds the absolute value specified in
 	`vod_live_window_duration`, it is ignored.
+* `timeOffset` - integer, sets an offset that should be applied to the server clock when serving
+	live requests. This parameter can be used to test future/past events.
 
 #### Sequence
 
@@ -581,8 +591,8 @@ Optional fields:
 * `clipFrom` - an integer that specifies an offset in milliseconds, from the beginning of the
 	media file, from which to start loading frames
 
-* `encryptionKey` - a base64 encoded string containing the key (128 bit) that should be used
-	to decrypt the media file.
+* `encryptionKey` - a base64 encoded string containing the key (128/192/256 bit) that should be used
+	to decrypt the file.
 * `encryptionIv` - a base64 encoded string containing the iv (128 bit) that should be used
 	to decrypt the file.
 * `encryptionScheme` - the encryption scheme that was used to encrypt the file. Currently,
@@ -649,6 +659,15 @@ Mandatory fields:
 * `id` - a string that identifies the notification, this id can be referenced by `vod_notification_uri`
 	using the variable `$vod_notification_id`
 
+#### Closed Captions
+
+Mandatory fields:
+* `id` - a string that identifies the embedded captions. This will become the `INSTREAM-ID` field and must
+have one of the following values: `CC1`, `CC3`, `CC3`, `CC4`, or `SERVICEn`, where `n` is between 1 and 63.
+* `label` - a friendly string that indicates the language of the closed caption track.
+
+Optional fields:
+* `language` - a 3-letter (ISO-639-2) language code that indicates the language of the closed caption track.
 ### Security
 
 #### Authorization
@@ -1117,6 +1136,19 @@ Sets the maximum supported video metadata size (for MP4 - moov atom size)
 
 Sets the limit on the total size of the frames of a single segment
 
+#### vod_max_frame_count
+* **syntax**: `vod_max_frame_count count`
+* **default**: `1048576`
+* **context**: `http`, `server`, `location`
+
+Sets the limit on the total count of the frames read to serve non segment (e.g. playlist) request.
+
+#### vod_segment_max_frame_count
+* **syntax**: `vod_segment_max_frame_count count`
+* **default**: `65536`
+* **context**: `http`, `server`, `location`
+
+Sets the limit on the total count of the frames read to serve segment request.
 #### vod_cache_buffer_size
 * **syntax**: `vod_cache_buffer_size size`
 * **default**: `256K`
@@ -1671,6 +1703,13 @@ padding is added as needed.
 
 When enabled, an ID3 TEXT frame will be outputted in each TS segment, containing a JSON with the absolute segment timestamp.
 The timestamp is measured in milliseconds since the epoch (unixtime x 1000), the JSON structure is: `{"timestamp":1459779115000}`
+#### vod_hls_mpegts_align_pts
+* **syntax**: `vod_hls_mpegts_align_pts on/off`
+* **default**: `off`
+* **context**: `http`, `server`, `location`
+
+When enabled, the module will shift back the dts timestamps by the pts delay of the initial frame.
+This can help keep the pts timestamps aligned across multiple renditions.
 
 ### Configuration directives - MSS
 
@@ -1756,6 +1795,12 @@ When enabled, the module ignores any edit lists (elst) in the MP4 file.
 * **context**: `http`, `server`, `location`
 
 When enabled, the module parses the name field of the hdlr MP4 atom, and uses it as the stream label.
+#### vod_parse_udta_name
+* **syntax**: `vod_parse_udta_name on/off`
+* **default**: `off`
+* **context**: `http`, `server`, `location`
+
+When enabled, the module parses the name atom child of the udta MP4 atom, and uses it as the stream label.
 
 ### Nginx variables
 

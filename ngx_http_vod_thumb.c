@@ -312,8 +312,8 @@ ngx_http_vod_thumb_parse_uri_file_name(
 	
 	request_params->segment_time = time;
 	request_params->segment_time_type = time_type;
-	request_params->tracks_mask[MEDIA_TYPE_AUDIO] = 0;
-	request_params->tracks_mask[MEDIA_TYPE_SUBTITLE] = 0;
+	vod_track_mask_reset_all_bits(request_params->tracks_mask[MEDIA_TYPE_AUDIO]);
+	vod_track_mask_reset_all_bits(request_params->tracks_mask[MEDIA_TYPE_SUBTITLE]);
 
 	return NGX_OK;
 }

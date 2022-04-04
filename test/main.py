@@ -696,7 +696,7 @@ class UpstreamTestSuite(TestSuite):
         try:
             response = urllib2.urlopen(request).read()
             assertEquals(response.strip(), 'BAD STATUS LINE')
-        except urllib2.HTTPError, e:
+        except urllib2.HTTPError as e:
             assertEquals(e.getcode(), 502)        # returns 502 in case the request was 'in memory'
             
         self.logTracker.assertContains('upstream sent no valid HTTP/1.0 header')

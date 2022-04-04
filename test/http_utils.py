@@ -1,5 +1,4 @@
-from httplib import BadStatusLine
-from httplib import IncompleteRead
+from httplib import BadStatusLine, IncompleteRead, InvalidURL
 from StringIO import StringIO
 from g2o_params import *
 import urlparse
@@ -30,7 +29,7 @@ def readDecode(f):
 	gzipFile = gzip.GzipFile(fileobj=StringIO(body))
 	try:
 		return gzipFile.read()
-	except IOError, e:
+	except IOError as e:
 		return 'Error: failed to decode gzip'
 
 def getUrl(url, extraHeaders={}):
@@ -40,17 +39,19 @@ def getUrl(url, extraHeaders={}):
 	try:
 		f = urllib2.urlopen(request)
 		body = readDecode(f)
-	except urllib2.HTTPError, e:
+	except urllib2.HTTPError as e:
 		return e.getcode(), parseHttpHeaders(e.info().headers), readDecode(e)
-	except urllib2.URLError, e:
+	except urllib2.URLError as e:
 		return 0, {}, 'Error: request failed %s %s' % (url, e)
-	except BadStatusLine, e:
+	except BadStatusLine as e:
 		return 0, {}, 'Error: request failed %s %s' % (url, e)
-	except socket.error, e:
+	except socket.error as e:
 		return 0, {}, 'Error: got socket error %s %s' % (url, e)
-	except IncompleteRead, e:
+	except IncompleteRead as e:
 		return 0, {}, 'Error: got incomplete read error %s %s' % (url, e)
-		
+	except InvalidURL as e:
+		return 0, {}, 'Error: got invalid url error %s %s' % (url, e)
+
 	# validate content length
 	contentLength = f.info().getheader('content-length')
 	if contentLength != None and contentLength != '%s' % len(body):

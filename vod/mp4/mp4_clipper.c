@@ -1506,7 +1506,7 @@ mp4_clipper_process_moov_atom_callback(void* ctx, atom_info_t* atom_info)
 	if (media_type != MEDIA_TYPE_NONE)
 	{
 		track_index = context->track_indexes[media_type]++;
-		if ((context->parse_params.required_tracks_mask[media_type] & (1 << track_index)) == 0)
+		if (!vod_is_bit_set(context->parse_params.required_tracks_mask[media_type], track_index))
 		{
 			return VOD_OK;
 		}
