@@ -93,7 +93,7 @@
 	"      <AudioChannelConfiguration\n"										\
 	"          schemeIdUri=\"urn:mpeg:dash:23003:3:"							\
 								"audio_channel_configuration:2011\"\n"			\
-	"          value=\"1\"/>\n"
+	"          value=\"2\"/>\n"
 
 #define VOD_DASH_MANIFEST_AUDIO_CHANNEL_CONFIG_EAC3								\
 	"      <AudioChannelConfiguration\n"										\
