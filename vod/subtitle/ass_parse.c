@@ -1132,6 +1132,30 @@ static int process_line(ass_track_t *track, char *str, request_context_t* reques
 }
 
 /**
+ * \brief Remove special characters from all style names
+ * \param track output ass_track_t pointer
+*/
+void purify_style_names(ass_track_t *track)
+{
+	int st_counter;
+	for (st_counter = 0; st_counter < track->n_styles; st_counter++)
+	{
+		ass_style_t *style = track->styles + st_counter;
+		char *p_st = style->name;
+		while (1)
+		{
+			if (*p_st == '\0')
+				break;
+			else if (*p_st == ' ' || *p_st == '/' || *p_st == '\\' || *p_st == '*' || *p_st == '#' || *p_st == '\r' || *p_st == '\n')
+				*p_st = '_';
+
+			p_st++;
+		}
+	}
+	return;
+}
+
+/**
  * \brief Process all text in an ASS/SSA file
  * \param track output ass_track_t pointer
  * \param str utf-8 string to parse, zero-terminated
@@ -1165,6 +1189,9 @@ static int process_text(ass_track_t *track, char *str, request_context_t* reques
 			break;
 		p = q;
 	}
+	// event->style is an integer that points to one of the saved styles.
+	// change style name strings to replace confusing characters like /, *, space with '_'
+	purify_style_names(track);
 	return retval;
 }
 
