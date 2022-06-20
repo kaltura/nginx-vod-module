@@ -196,7 +196,7 @@ hls_muxer_init_id3_stream(
 	if (sequence_id->len != 0)
 	{
 		sequence_id_escape = vod_escape_json(NULL, sequence_id->data, sequence_id->len);
-		data_size = sizeof(ID3_TEXT_JSON_SEQUENCE_ID_PREFIX_FORMAT) + VOD_INT64_LEN + 
+		data_size = sizeof(ID3_TEXT_JSON_SEQUENCE_ID_PREFIX_FORMAT) + VOD_INT64_LEN +
 			sequence_id->len + sequence_id_escape +
 			sizeof(ID3_TEXT_JSON_SEQUENCE_ID_SUFFIX);
 	}
@@ -907,7 +907,7 @@ hls_muxer_simulation_write_frame(hls_muxer_stream_state_t* selected_stream, inpu
 	selected_stream->filter.simulated_flush_frame(&selected_stream->filter_context, last_frame);
 }
 
-static void 
+static void
 hls_muxer_simulation_set_segment_limit(
 	hls_muxer_state_t* state,
 	uint64_t segment_end,
@@ -1278,29 +1278,28 @@ hls_muxer_simulate_get_segment_sizes(
         hls_mpegts_muxer_conf_t* muxer_conf,
         hls_encryption_params_t* encryption_params,
         media_set_t* media_set,
-        vod_array_t* segments_sizes,
-        void* context)
+        uint32_t* bandwidth,
+        uint32_t* avg_bandwidth)
 {
     hls_muxer_stream_state_t* selected_stream;
     segment_duration_item_t* cur_item;
     segment_duration_item_t* last_item;
     hls_muxer_state_t state;
     input_frame_t* cur_frame;
-    uint32_t cur_frame_time;
-
-    uint32_t frame_size = 0;
-    uint32_t frame_start_time = 0;
-    uint32_t first_frame_time = 0;
-    uint32_t end_time;
     uint32_t segment_index = 0;
+    uint32_t segment_bandwidth[segment_durations->segment_count];
+
     uint64_t cur_frame_dts;
-    uint64_t cur_frame_time_offset;
     uint32_t repeat_count;
     uint64_t segment_end;
     bool_t simulation_supported;
     bool_t last_frame;
     vod_status_t rc;
-    uint32_t segment_size = 0;
+
+    uint32_t largest_segment = 0;
+    uint32_t sum_segments = 0;
+    uint32_t valid_segments = 0;
+
 #if (VOD_DEBUG)
     off_t cur_frame_start;
 #endif // VOD_DEBUG
@@ -1312,6 +1311,7 @@ hls_muxer_simulate_get_segment_sizes(
     {
         return VOD_OK;
     }
+
     // initialize the muxer
     rc = hls_muxer_init_base(
             &state,
@@ -1369,6 +1369,9 @@ hls_muxer_simulate_get_segment_sizes(
             if (repeat_count <= 0)
             {
                 cur_item++;
+                vod_log_error(VOD_LOG_ERR, state.request_context->log, 0,
+                              "hls_muxer_simulate_get_segment_sizes: next segment duration");
+
                 if (cur_item >= last_item)
                 {
                     vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
@@ -1380,7 +1383,10 @@ hls_muxer_simulate_get_segment_sizes(
             }
 
             repeat_count--;
+            vod_log_error(VOD_LOG_ERR, state.request_context->log, 0,
+                          "hls_muxer_simulate_get_segment_sizes: %L %L", segment_end, cur_item->duration);
             segment_end += cur_item->duration;
+
 
             if (repeat_count <= 0 && (cur_item + 1 >= last_item || cur_item[1].discontinuity))
             {
@@ -1391,7 +1397,13 @@ hls_muxer_simulate_get_segment_sizes(
                 hls_muxer_simulation_set_segment_limit(&state, segment_end, segment_durations->timescale);
             }
 
-            // start the next segment
+
+            vod_log_error(VOD_LOG_ERR, state.request_context->log, 0,
+                          "hls_muxer_simulate_get_segment_sizes: segment %L %L", segment_index + 1,  state.queue.cur_offset );
+            segment_bandwidth[segment_index] = cur_item->duration > 0 ? (state.queue.cur_offset / ((float)cur_item->duration/(float)segment_durations->timescale)): -1;
+
+
+
             mpegts_encoder_simulated_start_segment(&state.queue);
             segment_index++;
 
@@ -1399,7 +1411,6 @@ hls_muxer_simulate_get_segment_sizes(
         // update the stream state
         cur_frame = selected_stream->cur_frame;
         selected_stream->cur_frame++;
-        cur_frame_time_offset = selected_stream->next_frame_time_offset;
         cur_frame_dts = selected_stream->next_frame_time_offset;
         selected_stream->next_frame_time_offset += cur_frame->duration;
 
@@ -1416,7 +1427,6 @@ hls_muxer_simulate_get_segment_sizes(
         cur_frame_start = state.queue.cur_offset;
 #endif // VOD_DEBUG
 
-        segment_size += cur_frame->size;
         hls_muxer_simulation_write_frame(
                 selected_stream,
                 cur_frame,
@@ -1434,73 +1444,25 @@ hls_muxer_simulate_get_segment_sizes(
 				cur_frame_dts);
 		}
 #endif // VOD_DEBUG
-
-
-        if (!selected_stream->is_first_segment_frame && selected_stream->prev_key_frame)
-        {
-            // get the frame time
-            cur_frame_time = rescale_time(selected_stream->prev_frame_pts, HLS_TIMESCALE, 1000);		// in millis
-            if (frame_size != 0)
-            {
-                if (cur_frame_time > frame_start_time)
-                {
-                    vod_log_error(VOD_LOG_ERR, state.request_context->log, 0,
-                                  "hls_muxer_simulate_get_segment_sizes: segment %L size %L", segment_index, segment_size);
-                    segment_size = 0;
-                }
-            }
-            else
-            {
-                first_frame_time = cur_frame_time;
-            }
-
-            // save the info of the current keyframe
-
-            frame_size = selected_stream->mpegts_encoder_state.last_frame_end_pos -
-                         selected_stream->mpegts_encoder_state.last_frame_start_pos;
-            frame_start_time = cur_frame_time;
-        }
-
-        if (last_frame && cur_frame[0].key_frame)
-        {
-            // get the frame time
-            cur_frame_time = rescale_time(cur_frame_time_offset + cur_frame[0].pts_delay, HLS_TIMESCALE, 1000);		// in millis
-            if (frame_size != 0)
-            {
-                if (cur_frame_time > frame_start_time)
-                {
-                    vod_log_error(VOD_LOG_ERR, state.request_context->log, 0,
-                                  "hls_muxer_simulate_get_segment_sizes: segment %L size %L", segment_index, segment_size);
-                    segment_size = 0;
-                }
-            }
-            else
-            {
-                first_frame_time = cur_frame_time;
-            }
-
-            // save the info of the current keyframe
-            frame_size = selected_stream->mpegts_encoder_state.cur_frame_end_pos -
-                         selected_stream->mpegts_encoder_state.cur_frame_start_pos;
-            frame_start_time = cur_frame_time;
-
-        }
-
-        selected_stream->prev_key_frame = cur_frame->key_frame;
-        selected_stream->prev_frame_pts = cur_frame_time_offset + cur_frame->pts_delay;
-        selected_stream->is_first_segment_frame = FALSE;
     }
 
     done:
 
-    // call the callback for the last frame
-    end_time = first_frame_time + state.video_duration;
-    if (frame_size != 0 && end_time > frame_start_time)
-    {
-        vod_log_error(VOD_LOG_ERR, state.request_context->log, 0,
-                      "hls_muxer_simulate_get_segment_sizes: segment %L size %L", segment_index, segment_size);
 
+
+    for (uint32_t i = 0; i < segment_durations->segment_count; i++) {
+        if (segment_bandwidth[i] > largest_segment) {
+            largest_segment = segment_bandwidth[i];
+        }
+        if (segment_bandwidth[i] > 100) {
+            sum_segments += segment_bandwidth[i];
+            valid_segments++;
+        }
+        vod_log_error(VOD_LOG_ERR, state.request_context->log, 0,
+                      "hls_muxer_simulate_get_segment_sizes: segment %L %L kbit/s", i + 1, segment_bandwidth[i] / 1024 * 8);
     }
 
+    *avg_bandwidth = sum_segments / valid_segments * 8 ;
+    *bandwidth = largest_segment * 8;
     return VOD_OK;
 }

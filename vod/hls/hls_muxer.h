@@ -119,7 +119,7 @@ vod_status_t hls_muxer_simulate_get_segment_sizes(
         hls_mpegts_muxer_conf_t* muxer_conf,
         hls_encryption_params_t* encryption_params,
         media_set_t* media_set,
-        vod_array_t* segments_sizes,
-        void* context);
+        uint32_t* bandwidth,
+        uint32_t* avg_bandwidth);
 
 #endif // __HLS_MUXER_H__

@@ -1076,8 +1076,6 @@ m3u8_builder_write_variants(
 	media_track_t* tracks[MEDIA_TYPE_COUNT];
 	media_info_t* video = NULL;
 	media_info_t* audio = NULL;
-	uint32_t bitrate;
-	uint32_t avg_bitrate;
 	uint32_t muxed_tracks = adaptation_set->type == ADAPTATION_TYPE_MUXED ? MEDIA_TYPE_COUNT : 1;
 
 	vod_memzero(tracks, sizeof(tracks));
@@ -1086,8 +1084,11 @@ m3u8_builder_write_variants(
 		cur_track_ptr < adaptation_set->last;
 		cur_track_ptr += muxed_tracks)
 	{
-        vod_array_t segments_sizes;
-        hls_muxer_simulate_get_segment_sizes(request_context, segment_durations, muxer_conf, encryption_params, media_set, &segments_sizes, request_context);
+        uint32_t bandwidth;
+        uint32_t avg_bandwidth;
+        hls_muxer_simulate_get_segment_sizes(request_context, segment_durations, muxer_conf, encryption_params, media_set, &bandwidth, &avg_bandwidth);
+        vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+                      "m3u8_builder_write_variants: %L %L", bandwidth, avg_bandwidth);
 
         // get the audio / video tracks
 		if (muxed_tracks == MEDIA_TYPE_COUNT)
@@ -1105,8 +1106,6 @@ m3u8_builder_write_variants(
 		if (tracks[MEDIA_TYPE_VIDEO] != NULL)
 		{
 			video = &tracks[MEDIA_TYPE_VIDEO]->media_info;
-			bitrate = video->bitrate;
-			avg_bitrate = video->avg_bitrate;
 			if (group_audio_track != NULL)
 			{
 				audio = &group_audio_track->media_info;
@@ -1120,17 +1119,9 @@ m3u8_builder_write_variants(
 				audio = NULL;
 			}
 
-			if (audio != NULL)
-			{
-				bitrate += audio->bitrate;
-				if (avg_bitrate != 0)
-				{
-					avg_bitrate += audio->avg_bitrate;
-				}
-			}
 
 			p = vod_sprintf(p, m3u8_stream_inf_video,
-				bitrate,
+                bandwidth,
 				(uint32_t)video->u.video.width,
 				(uint32_t)video->u.video.height,
 				(uint32_t)(video->timescale / video->min_frame_duration),
@@ -1153,16 +1144,14 @@ m3u8_builder_write_variants(
 				audio = &tracks[MEDIA_TYPE_AUDIO]->media_info;
 			}
 
-			avg_bitrate = audio->avg_bitrate;
-			p = vod_sprintf(p, m3u8_stream_inf_audio, audio->bitrate, &audio->codec_name);
+
+			p = vod_sprintf(p, m3u8_stream_inf_audio, bandwidth, &audio->codec_name);
 		}
 
 		*p++ = '\"';
 
-		if (avg_bitrate != 0)
-		{
-			p = vod_sprintf(p, m3u8_average_bandwidth, avg_bitrate);
-		}
+    	p = vod_sprintf(p, m3u8_average_bandwidth, avg_bandwidth);
+
 
 		if (tracks[MEDIA_TYPE_VIDEO] != NULL)
 		{
