@@ -41,6 +41,8 @@ vod_status_t m3u8_builder_build_master_playlist(
 	vod_uint_t encryption_method,
 	vod_str_t* base_url,
 	media_set_t* media_set,
+    hls_mpegts_muxer_conf_t* muxer_conf,
+    hls_encryption_params_t* encryption_params,
 	vod_str_t* result);
 
 vod_status_t m3u8_builder_build_index_playlist(

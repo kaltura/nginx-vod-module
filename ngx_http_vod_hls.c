@@ -258,7 +258,38 @@ ngx_http_vod_hls_handle_master_playlist(
 {
 	ngx_http_vod_loc_conf_t* conf = submodule_context->conf;
 	ngx_str_t base_url = ngx_null_string;
-	vod_status_t rc;
+    hls_encryption_params_t encryption_params;
+    vod_status_t rc;
+
+#if (NGX_HAVE_OPENSSL_EVP)
+    rc = ngx_http_vod_hls_init_encryption_params(&encryption_params, submodule_context, container_format);
+	if (rc != NGX_OK)
+	{
+		return rc;
+	}
+
+	if (encryption_params.type != HLS_ENC_NONE)
+	{
+		if (conf->hls.encryption_key_uri != NULL)
+		{
+			if (ngx_http_complex_value(
+				submodule_context->r,
+				conf->hls.encryption_key_uri,
+				&encryption_params.key_uri) != NGX_OK)
+			{
+				ngx_log_debug0(NGX_LOG_DEBUG_HTTP, submodule_context->request_context.log, 0,
+					"ngx_http_vod_hls_handle_index_playlist: ngx_http_complex_value failed");
+				return NGX_ERROR;
+			}
+		}
+		else
+		{
+			encryption_params.key_uri.len = 0;
+		}
+	}
+#else
+    encryption_params.type = HLS_ENC_NONE;
+#endif // NGX_HAVE_OPENSSL_EVP
 
 	if (conf->hls.absolute_master_urls)
 	{
@@ -275,6 +306,8 @@ ngx_http_vod_hls_handle_master_playlist(
 		conf->hls.encryption_method,
 		&base_url,
 		&submodule_context->media_set,
+        &conf->hls.mpegts_muxer_config,
+        &encryption_params,
 		response);
 	if (rc != VOD_OK)
 	{
@@ -873,8 +906,8 @@ ngx_http_vod_hls_handle_vtt_segment(
 }
 
 static const ngx_http_vod_request_t hls_master_request = {
-	0,
-	PARSE_FLAG_DURATION_LIMITS_AND_TOTAL_SIZE | PARSE_FLAG_KEY_FRAME_BITRATE | PARSE_FLAG_CODEC_NAME | PARSE_FLAG_PARSED_EXTRA_DATA_SIZE | PARSE_FLAG_CODEC_TRANSFER_CHAR,
+        REQUEST_FLAG_SINGLE_TRACK_PER_MEDIA_TYPE | REQUEST_FLAG_PARSE_ALL_CLIPS,
+        PARSE_FLAG_FRAMES_ALL_EXCEPT_OFFSETS | PARSE_FLAG_PARSED_EXTRA_DATA_SIZE,
 	REQUEST_CLASS_OTHER,
 	SUPPORTED_CODECS | VOD_CODEC_FLAG(WEBVTT),
 	HLS_TIMESCALE,
