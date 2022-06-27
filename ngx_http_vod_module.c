@@ -5048,13 +5048,14 @@ ngx_http_vod_handle_thumb_redirect(
 	media_set_t* media_set)
 {
 	ngx_http_request_t* r = ctx->submodule_context.r;
-	ngx_str_t location;
+	ngx_table_elt_t* location;
+	ngx_str_t url;
 	ngx_int_t rc;
 
 	rc = ngx_http_vod_thumb_get_url(
 		&ctx->submodule_context,
 		media_set->has_multi_sequences ? (uint32_t)(1 << media_set->sequences[0].index) : 0xffffffff,
-		&location);
+		&url);
 	if (rc != NGX_OK)
 	{
 		return rc;
@@ -5067,17 +5068,22 @@ ngx_http_vod_handle_thumb_redirect(
 
 	r->headers_out.status = NGX_HTTP_MOVED_TEMPORARILY;
 
-	ngx_http_clear_location(r);
-
-	r->headers_out.location = ngx_list_push(&r->headers_out.headers);
-	if (r->headers_out.location == NULL)
+	location = ngx_list_push(&r->headers_out.headers);
+	if (location == NULL)
 	{
 		return NGX_HTTP_INTERNAL_SERVER_ERROR;
 	}
 
-	r->headers_out.location->hash = 1;
-	ngx_str_set(&r->headers_out.location->key, "Location");
-	r->headers_out.location->value = location;
+	location->hash = 1;
+#if (nginx_version >= 1023000)
+	location->next = NULL;
+#endif
+	ngx_str_set(&location->key, "Location");
+	location->value = url;
+
+	ngx_http_clear_location(r);
+
+	r->headers_out.location = location;
 
 	return r->headers_out.status;
 }
