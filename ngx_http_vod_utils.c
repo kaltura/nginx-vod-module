@@ -428,14 +428,89 @@ found:
     return NGX_OK;
 }
 
+#if (nginx_version >= 1023000)
+static ngx_table_elt_t *
+ngx_http_vod_push_cache_control(ngx_http_request_t *r)
+{
+	ngx_table_elt_t  *cc;
+
+	cc = r->headers_out.cache_control;
+
+	if (cc == NULL) {
+
+		cc = ngx_list_push(&r->headers_out.headers);
+		if (cc == NULL) {
+			return NULL;
+		}
+
+		r->headers_out.cache_control = cc;
+		cc->next = NULL;
+
+		cc->hash = 1;
+		ngx_str_set(&cc->key, "Cache-Control");
+
+	} else {
+		for (cc = cc->next; cc; cc = cc->next) {
+			cc->hash = 0;
+		}
+
+		cc = r->headers_out.cache_control;
+		cc->next = NULL;
+	}
+
+	return cc;
+}
+#else
+static ngx_table_elt_t *
+ngx_http_vod_push_cache_control(ngx_http_request_t *r)
+{
+	ngx_uint_t        i;
+	ngx_table_elt_t  *cc, **ccp;
+
+	ccp = r->headers_out.cache_control.elts;
+
+	if (ccp == NULL) {
+
+		if (ngx_array_init(&r->headers_out.cache_control, r->pool,
+			1, sizeof(ngx_table_elt_t *))
+			!= NGX_OK)
+		{
+			return NULL;
+		}
+
+		ccp = ngx_array_push(&r->headers_out.cache_control);
+		if (ccp == NULL) {
+			return NULL;
+		}
+
+		cc = ngx_list_push(&r->headers_out.headers);
+		if (cc == NULL) {
+			return NULL;
+		}
+
+		cc->hash = 1;
+		ngx_str_set(&cc->key, "Cache-Control");
+		*ccp = cc;
+
+	} else {
+		for (i = 1; i < r->headers_out.cache_control.nelts; i++) {
+			ccp[i]->hash = 0;
+		}
+
+		cc = ccp[0];
+	}
+
+	return cc;
+}
+#endif
+
 // A run down version of ngx_http_set_expires
 ngx_int_t
 ngx_http_vod_set_expires(ngx_http_request_t *r, time_t expires_time)
 {
-	size_t               len;
-	time_t               now, max_age;
-	ngx_uint_t           i;
-	ngx_table_elt_t     *e, *cc, **ccp;
+	size_t            len;
+	time_t            now, max_age;
+	ngx_table_elt_t  *e, *cc;
 
 	e = r->headers_out.expires;
 
@@ -447,6 +522,9 @@ ngx_http_vod_set_expires(ngx_http_request_t *r, time_t expires_time)
 		}
 
 		r->headers_out.expires = e;
+#if (nginx_version >= 1023000)
+		e->next = NULL;
+#endif
 
 		e->hash = 1;
 		ngx_str_set(&e->key, "Expires");
@@ -455,42 +533,16 @@ ngx_http_vod_set_expires(ngx_http_request_t *r, time_t expires_time)
 	len = sizeof("Mon, 28 Sep 1970 06:00:00 GMT");
 	e->value.len = len - 1;
 
-	ccp = r->headers_out.cache_control.elts;
-
-	if (ccp == NULL) {
-
-		if (ngx_array_init(&r->headers_out.cache_control, r->pool,
-			1, sizeof(ngx_table_elt_t *))
-			!= NGX_OK)
-		{
-			return NGX_ERROR;
-		}
-
-		ccp = ngx_array_push(&r->headers_out.cache_control);
-		if (ccp == NULL) {
-			return NGX_ERROR;
-		}
-
-		cc = ngx_list_push(&r->headers_out.headers);
-		if (cc == NULL) {
-			return NGX_ERROR;
-		}
-
-		cc->hash = 1;
-		ngx_str_set(&cc->key, "Cache-Control");
-		*ccp = cc;
-
-	}
-	else {
-		for (i = 1; i < r->headers_out.cache_control.nelts; i++) {
-			ccp[i]->hash = 0;
-		}
-
-		cc = ccp[0];
+	cc = ngx_http_vod_push_cache_control(r);
+	if (cc == NULL) {
+		e->hash = 0;
+		return NGX_ERROR;
 	}
 
 	e->value.data = ngx_pnalloc(r->pool, len);
 	if (e->value.data == NULL) {
+		e->hash = 0;
+		cc->hash = 0;
 		return NGX_ERROR;
 	}
 
@@ -516,6 +568,7 @@ ngx_http_vod_set_expires(ngx_http_request_t *r, time_t expires_time)
 	cc->value.data = ngx_pnalloc(r->pool,
 		sizeof("max-age=") + NGX_TIME_T_LEN + 1);
 	if (cc->value.data == NULL) {
+		cc->hash = 0;
 		return NGX_ERROR;
 	}
 

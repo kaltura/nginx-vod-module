@@ -367,6 +367,7 @@ ngx_child_request_initial_wev_handler(ngx_http_request_t *r)
 	u->headers_in.headers.last = &u->headers_in.headers.part;
 }
 
+#if !defined(nginx_version) || nginx_version < 1023000
 static void
 ngx_child_request_update_multi_header(
 	ngx_array_t* arr, 
@@ -387,6 +388,7 @@ ngx_child_request_update_multi_header(
 		break;
 	}
 }
+#endif
 
 static ngx_int_t
 ngx_child_request_copy_headers(
@@ -422,6 +424,14 @@ ngx_child_request_copy_headers(
 			"ngx_child_request_copy_headers: ngx_list_init failed");
 		return NGX_ERROR;
 	}
+
+#if defined(nginx_version) && nginx_version >= 1023000
+	// zero all named header fields
+	for (hh = ngx_http_headers_in; hh->name.len; hh++) {
+		ph = (ngx_table_elt_t **)((char *)dest + hh->offset);
+		*ph = NULL;
+	}
+#endif
 
 	output = dest->headers.last->elts;
 
@@ -478,6 +488,12 @@ ngx_child_request_copy_headers(
 			ch->lowcase_key, ch->key.len);
 		if (hh)
 		{
+#if defined(nginx_version) && nginx_version >= 1023000
+			ph = (ngx_table_elt_t **)((char *)dest + hh->offset);
+
+			output->next = *ph;
+			*ph = output;
+#else
 			if ((ch->key.len == sizeof("cookie") - 1 &&
 				ngx_memcmp(ch->lowcase_key, "cookie", sizeof("cookie") - 1) == 0) ||
 				(ch->key.len == sizeof("x-forwarded-for") - 1 &&
@@ -496,6 +512,7 @@ ngx_child_request_copy_headers(
 
 				*ph = output;
 			}
+#endif
 		}
 
 		output++;
@@ -514,6 +531,9 @@ ngx_child_request_copy_headers(
 		{
 			h = output++;
 			h->hash = range_hash;
+#if defined(nginx_version) && nginx_version >= 1023000
+			h->next = NULL;
+#endif
 			h->key = range_key;
 			h->lowcase_key = range_lowcase_key;
 			dest->range = h;
