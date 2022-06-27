@@ -433,7 +433,7 @@ vod_get_lowest_bit_set(
 	uint32_t max_bits)
 {
 	uint32_t i;
-	for (i = 0; max_bits / 64; i++)
+	for (i = 0; i < max_bits / 64; i++)
 	{
 		if (mask[i] != (uint64_t)0)
 		{
