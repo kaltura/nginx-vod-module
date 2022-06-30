@@ -201,12 +201,18 @@ typedef struct {
 } raw_atom_t;
 
 typedef struct {
+	uint8_t profile;
+	uint8_t level;
+} dovi_video_media_info_t;
+
+typedef struct {
 	uint16_t width;
 	uint16_t height;
 	uint32_t nal_packet_size_length;
 	uint32_t initial_pts_delay;
 	uint32_t key_frame_bitrate;
 	uint8_t transfer_characteristics;
+	dovi_video_media_info_t dovi;
 } video_media_info_t;
 
 typedef struct {

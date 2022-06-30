@@ -1996,11 +1996,24 @@ static vod_status_t
 mp4_parser_parse_video_extra_data_atom(void* ctx, atom_info_t* atom_info)
 {
 	metadata_parse_context_t* context = (metadata_parse_context_t*)ctx;
+	dovi_video_media_info_t* dovi;
 	
 	switch (atom_info->name)
 	{
 	case ATOM_NAME_SINF:
 		return mp4_parser_parse_sinf_atom(atom_info, context);
+
+	case ATOM_NAME_DVCC:
+	case ATOM_NAME_DVVC:
+		if (atom_info->size <= 3)
+		{
+			return VOD_OK;
+		}
+
+		dovi = &context->media_info.u.video.dovi;
+		dovi->profile = atom_info->ptr[2] >> 1;
+		dovi->level = ((atom_info->ptr[2] & 1) << 5) | (atom_info->ptr[3] >> 3);
+		return VOD_OK;
 
 	case ATOM_NAME_AVCC:
 	case ATOM_NAME_HVCC:
@@ -2742,11 +2755,13 @@ mp4_parser_process_moov_atom_callback(void* ctx, atom_info_t* atom_info)
 		case FORMAT_AVC1:
 		case FORMAT_h264:
 		case FORMAT_H264:
+		case FORMAT_DVA1:
 			metadata_parse_context.media_info.codec_id = VOD_CODEC_ID_AVC;
 			break;
 
 		case FORMAT_HEV1:
 		case FORMAT_HVC1:
+		case FORMAT_DVH1:
 			metadata_parse_context.media_info.codec_id = VOD_CODEC_ID_HEVC;
 			break;
 

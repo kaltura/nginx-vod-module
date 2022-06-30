@@ -34,6 +34,8 @@
 #define ATOM_NAME_SINF (0x666e6973)		// protection scheme information
 #define ATOM_NAME_AVCC (0x43637661)		// advanced video codec configuration
 #define ATOM_NAME_HVCC (0x43637668)		// high efficiency video codec configuration
+#define ATOM_NAME_DVCC (0x43637664)		// dolby vision codec configuration
+#define ATOM_NAME_DVVC (0x43767664)		// dolby vision codec configuration
 #define ATOM_NAME_VPCC (0x43637076)		// vp9 codec configuration
 #define ATOM_NAME_AV1C (0x43317661)		// av1 codec configuration
 #define ATOM_NAME_ESDS (0x73647365)		// elementary stream description
@@ -65,10 +67,12 @@
 #define FORMAT_AVC1	   (0x31637661)
 #define FORMAT_h264	   (0x34363268)
 #define FORMAT_H264	   (0x34363248)
+#define FORMAT_DVA1	   (0x31617664)
 
 // h265 4cc tags
 #define FORMAT_HEV1	   (0x31766568)
 #define FORMAT_HVC1	   (0x31637668)
+#define FORMAT_DVH1	   (0x31687664)
 
 // vp9 4cc tags
 #define FORMAT_VP09    (0x39307076)
