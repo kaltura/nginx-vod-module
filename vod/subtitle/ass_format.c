@@ -7,8 +7,8 @@
 
 #define ASS_SCRIPT_INFO_HEADER ("[Script Info]")
 
-#define MAX_STR_SIZE_EVNT_CHUNK 1024
-#define MAX_STR_SIZE_ALL_WEBVTT_STYLES 20480
+#define MAX_STR_SIZE_EVNT_CHUNK 64000
+#define MAX_STR_SIZE_ALL_WEBVTT_STYLES 64000
 
 #define NUM_OF_INLINE_TAGS_SUPPORTED 3	 //ibu
 #define NUM_OF_TAGS_ALLOWED_PER_LINE 1
@@ -580,7 +580,7 @@ static void ass_clean_known_mem(request_context_t* request_context, ass_track_t 
 }
 
 #ifdef ASSUME_STYLE_SUPPORT
-static void output_one_style(ass_style_t* cur_style, u_char* p)
+static u_char* output_one_style(ass_style_t* cur_style, u_char* p)
 {
 		p = vod_copy(p, FIXED_WEBVTT_STYLE_START_STR, FIXED_WEBVTT_STYLE_START_WIDTH);
 		p = vod_copy(p, cur_style->name, vod_strlen(cur_style->name));
@@ -638,6 +638,8 @@ static void output_one_style(ass_style_t* cur_style, u_char* p)
 
 		p = vod_copy(p, FIXED_WEBVTT_BRACES_END_STR, FIXED_WEBVTT_BRACES_END_WIDTH);
 		p = vod_copy(p, "\r\n", 2);
+
+		return p;
 }
 #endif //ASSUME_STYLE_SUPPORT
 
@@ -1158,7 +1160,7 @@ ass_parse_frames(
 	{
 		ass_style_t* cur_style = ass_track->styles + stylecounter;
 		if (cur_style->output_in_cur_segment)
-			output_one_style(cur_style, p);
+			p = output_one_style(cur_style, p);
 
 	}
 #endif //ASSUME_STYLE_SUPPORT

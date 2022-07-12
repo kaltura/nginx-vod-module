@@ -26,8 +26,8 @@
 #define FIXED_WEBVTT_ESCAPE_FOR_RTL_STR "&lrm;"
 #define FIXED_WEBVTT_ESCAPE_FOR_RTL_WIDTH 5
 
-#define MAX_STR_SIZE_EVNT_CHUNK		 1024
-#define MAX_STR_SIZE_ALL_WEBVTT_STYLES 20480
+#define MAX_STR_SIZE_EVNT_CHUNK		 64000
+#define MAX_STR_SIZE_ALL_WEBVTT_STYLES 64000
 
 #define NUM_OF_INLINE_TAGS_SUPPORTED 3	 //iub
 
@@ -396,7 +396,7 @@ static void scc_clean_known_mem(request_context_t* request_context, scc_track_t 
 }
 
 #ifdef ASSUME_SCC_STYLE_SUPPORT
-static void output_one_style(char* p)
+static char* output_one_style(char* p)
 {//TODO: using style index, output name and modify the rest of this function
 		int len;
 
@@ -419,6 +419,8 @@ static void output_one_style(char* p)
 
 		vod_memcpy(p, FIXED_WEBVTT_BRACES_END_STR, FIXED_WEBVTT_BRACES_END_WIDTH);			p += FIXED_WEBVTT_BRACES_END_WIDTH;
 		len = 2; vod_memcpy(p, "\r\n", len);												p += len;
+
+		return p;
 }
 #endif //ASSUME_SCC_STYLE_SUPPORT
 
@@ -934,7 +936,7 @@ scc_parse_frames(
 	{
 		scc_style_t* cur_style = scc_track->styles + stylecounter;
 		if (cur_style->b_output_in_cur_segment)
-			output_one_style(p);
+			p = output_one_style(p);
 
 	}*/
 #endif //ASSUME_SCC_STYLE_SUPPORT
