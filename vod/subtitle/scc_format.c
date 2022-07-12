@@ -396,7 +396,7 @@ static void scc_clean_known_mem(request_context_t* request_context, scc_track_t 
 }
 
 #ifdef ASSUME_SCC_STYLE_SUPPORT
-static char* output_one_style(char* p)
+static void output_one_style(char* p)
 {//TODO: using style index, output name and modify the rest of this function
 		int len;
 
@@ -419,8 +419,6 @@ static char* output_one_style(char* p)
 
 		vod_memcpy(p, FIXED_WEBVTT_BRACES_END_STR, FIXED_WEBVTT_BRACES_END_WIDTH);			p += FIXED_WEBVTT_BRACES_END_WIDTH;
 		len = 2; vod_memcpy(p, "\r\n", len);												p += len;
-
-		return p;
 }
 #endif //ASSUME_SCC_STYLE_SUPPORT
 
@@ -936,7 +934,7 @@ scc_parse_frames(
 	{
 		scc_style_t* cur_style = scc_track->styles + stylecounter;
 		if (cur_style->b_output_in_cur_segment)
-			p = output_one_style(p);
+			output_one_style(p);
 
 	}*/
 #endif //ASSUME_SCC_STYLE_SUPPORT

@@ -580,7 +580,7 @@ static void ass_clean_known_mem(request_context_t* request_context, ass_track_t 
 }
 
 #ifdef ASSUME_STYLE_SUPPORT
-static u_char* output_one_style(ass_style_t* cur_style, u_char* p)
+static void output_one_style(ass_style_t* cur_style, u_char* p)
 {
 		p = vod_copy(p, FIXED_WEBVTT_STYLE_START_STR, FIXED_WEBVTT_STYLE_START_WIDTH);
 		p = vod_copy(p, cur_style->name, vod_strlen(cur_style->name));
@@ -638,8 +638,6 @@ static u_char* output_one_style(ass_style_t* cur_style, u_char* p)
 
 		p = vod_copy(p, FIXED_WEBVTT_BRACES_END_STR, FIXED_WEBVTT_BRACES_END_WIDTH);
 		p = vod_copy(p, "\r\n", 2);
-
-		return p;
 }
 #endif //ASSUME_STYLE_SUPPORT
 
@@ -1160,7 +1158,7 @@ ass_parse_frames(
 	{
 		ass_style_t* cur_style = ass_track->styles + stylecounter;
 		if (cur_style->output_in_cur_segment)
-			p = output_one_style(cur_style, p);
+			output_one_style(cur_style, p);
 
 	}
 #endif //ASSUME_STYLE_SUPPORT
