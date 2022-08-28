@@ -43,6 +43,7 @@ ngx_perf_counters_init(ngx_shm_zone_t *shm_zone, void *data)
 	p = ngx_sprintf(shpool->log_ctx, LOG_CONTEXT_FORMAT, &shm_zone->shm.name);
 
 	// allocate the perf couonters state
+	p = ngx_align_ptr(p, sizeof(ngx_atomic_t));
 	state = (ngx_perf_counters_t*)p;
 
 	ngx_memzero(state, sizeof(*state));
