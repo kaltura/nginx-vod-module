@@ -127,7 +127,6 @@ hds_amf0_write_metadata(u_char* p, media_set_t* media_set, media_track_t** track
 	uint64_t duration;
 	uint32_t timescale;
 	uint32_t count;
-	uint32_t bitrate = 0;
 	uint8_t sound_format;
 
 	count = AMF0_COMMON_FIELDS_COUNT;
@@ -155,7 +154,6 @@ hds_amf0_write_metadata(u_char* p, media_set_t* media_set, media_track_t** track
 	if (tracks[MEDIA_TYPE_VIDEO] != NULL)
 	{
 		media_info = &tracks[MEDIA_TYPE_VIDEO]->media_info;
-		bitrate += media_info->bitrate;
 		p = hds_amf0_append_array_number_value(p, &amf0_width, media_info->u.video.width);
 		p = hds_amf0_append_array_number_value(p, &amf0_height, media_info->u.video.height);
 		p = hds_amf0_append_array_number_value(p, &amf0_videodatarate, (double)media_info->bitrate / 1000.0);
@@ -166,7 +164,6 @@ hds_amf0_write_metadata(u_char* p, media_set_t* media_set, media_track_t** track
 	if (tracks[MEDIA_TYPE_AUDIO] != NULL)
 	{
 		media_info = &tracks[MEDIA_TYPE_AUDIO]->media_info;
-		bitrate += media_info->bitrate;
 		p = hds_amf0_append_array_number_value(p, &amf0_audiodatarate, (double)media_info->bitrate / 1000.0);
 		p = hds_amf0_append_array_number_value(p, &amf0_audiosamplerate, media_info->u.audio.sample_rate);
 		p = hds_amf0_append_array_number_value(p, &amf0_audiosamplesize, media_info->u.audio.bits_per_sample);
