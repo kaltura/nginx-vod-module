@@ -1366,6 +1366,10 @@ hls_muxer_simulate_get_segment_sizes(
                 return rc;
             }
             // update the limit for the next segment
+            segment_bandwidth[segment_index] = state.queue.cur_offset / ((float)(cur_item->duration) / (float)(segment_durations->timescale));
+            vod_log_error(VOD_LOG_ERR, state.request_context->log, 0,
+                          "hls_muxer_simulate_get_segment_sizes: segment %12L %12L %12f %12f %12f", segment_index + 1,  state.queue.cur_offset * 8, (float)(cur_item->duration) / (float)(segment_durations->timescale) ,  (state.queue.cur_offset * 8) / ((float)(cur_item->duration) / (float)(segment_durations->timescale)), segment_bandwidth[segment_index]);
+
             if (repeat_count <= 0)
             {
                 cur_item++;
@@ -1383,8 +1387,6 @@ hls_muxer_simulate_get_segment_sizes(
             }
 
             repeat_count--;
-            vod_log_error(VOD_LOG_ERR, state.request_context->log, 0,
-                          "hls_muxer_simulate_get_segment_sizes: %L %L", segment_end, cur_item->duration);
             segment_end += cur_item->duration;
 
 
@@ -1397,10 +1399,6 @@ hls_muxer_simulate_get_segment_sizes(
                 hls_muxer_simulation_set_segment_limit(&state, segment_end, segment_durations->timescale);
             }
 
-
-            vod_log_error(VOD_LOG_ERR, state.request_context->log, 0,
-                          "hls_muxer_simulate_get_segment_sizes: segment %L %L", segment_index + 1,  state.queue.cur_offset );
-            segment_bandwidth[segment_index] = cur_item->duration > 0 ? (state.queue.cur_offset / ((float)cur_item->duration/(float)segment_durations->timescale)): -1;
 
 
 
@@ -1458,8 +1456,9 @@ hls_muxer_simulate_get_segment_sizes(
             sum_segments += segment_bandwidth[i];
             valid_segments++;
         }
-        vod_log_error(VOD_LOG_ERR, state.request_context->log, 0,
-                      "hls_muxer_simulate_get_segment_sizes: segment %L %L kbit/s", i + 1, segment_bandwidth[i] / 1024 * 8);
+
+//        vod_log_error(VOD_LOG_ERR, state.request_context->log, 0,
+//                      "hls_muxer_simulate_get_segment_sizes: segment %L %L kbit/s", i + 1, segment_bandwidth[i] / 1024 * 8);
     }
 
     *avg_bandwidth = sum_segments / valid_segments * 8 ;
