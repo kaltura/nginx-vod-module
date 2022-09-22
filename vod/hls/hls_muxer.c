@@ -1367,8 +1367,8 @@ hls_muxer_simulate_get_segment_sizes(
             }
             // update the limit for the next segment
             segment_bandwidth[segment_index] = state.queue.cur_offset / ((float)(cur_item->duration) / (float)(segment_durations->timescale));
-            vod_log_error(VOD_LOG_ERR, state.request_context->log, 0,
-                          "hls_muxer_simulate_get_segment_sizes: segment %12L %12L %12f %12f %12f", segment_index + 1,  state.queue.cur_offset * 8, (float)(cur_item->duration) / (float)(segment_durations->timescale) ,  (state.queue.cur_offset * 8) / ((float)(cur_item->duration) / (float)(segment_durations->timescale)), segment_bandwidth[segment_index]);
+//            vod_log_error(VOD_LOG_ERR, state.request_context->log, 0,
+//                          "hls_muxer_simulate_get_segment_sizes: segment %12L %12L %12f %12f %12f", segment_index + 1,  state.queue.cur_offset * 8, (float)(cur_item->duration) / (float)(segment_durations->timescale) ,  (state.queue.cur_offset * 8) / ((float)(cur_item->duration) / (float)(segment_durations->timescale)), segment_bandwidth[segment_index]);
 
             if (repeat_count <= 0)
             {
