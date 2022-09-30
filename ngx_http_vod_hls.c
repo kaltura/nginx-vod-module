@@ -261,7 +261,14 @@ ngx_http_vod_hls_handle_master_playlist(
     hls_encryption_params_t encryption_params;
     vod_status_t rc;
 
+    ngx_uint_t container_format;
+
+
+
 #if (NGX_HAVE_OPENSSL_EVP)
+    container_format = ngx_http_vod_hls_get_container_format(
+            &conf->hls,
+            &submodule_context->media_set);
     rc = ngx_http_vod_hls_init_encryption_params(&encryption_params, submodule_context, container_format);
 	if (rc != NGX_OK)
 	{
