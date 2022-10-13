@@ -1,6 +1,7 @@
 #include "m3u8_builder.h"
 #include "hls_muxer.h"
 #include "../manifest_utils.h"
+#include "../mp4/mp4_defs.h"
 
 #if (NGX_HAVE_OPENSSL_EVP)
 #include "../dash/edash_packager.h"
@@ -1041,9 +1042,15 @@ m3u8_builder_ext_x_media_tags_write(
 }
 
 static u_char*
-m3u8_builder_write_video_range(u_char* p, uint8_t transfer_characteristics)
+m3u8_builder_write_video_range(u_char* p, media_info_t* media_info)
 {
-	switch (transfer_characteristics)
+	if (media_info->format == FORMAT_DVH1)
+	{
+		p = vod_copy(p, M3U8_VIDEO_RANGE_PQ, sizeof(M3U8_VIDEO_RANGE_PQ) - 1);
+		return p;
+	}
+
+	switch (media_info->u.video.transfer_characteristics)
 	{
 	case 1:
 		p = vod_copy(p, M3U8_VIDEO_RANGE_SDR, sizeof(M3U8_VIDEO_RANGE_SDR) - 1);
@@ -1162,7 +1169,7 @@ m3u8_builder_write_variants(
 
 		if (tracks[MEDIA_TYPE_VIDEO] != NULL)
 		{
-			p = m3u8_builder_write_video_range(p, video->u.video.transfer_characteristics);
+			p = m3u8_builder_write_video_range(p, video);
 		}
 
 		if (adaptation_sets->count[ADAPTATION_TYPE_AUDIO] > 0 && adaptation_sets->total_count > 1)
@@ -1264,7 +1271,7 @@ m3u8_builder_write_iframe_variants(
 			base_url);
 		*p++ = '\"';
 
-		p = m3u8_builder_write_video_range(p, video->u.video.transfer_characteristics);
+		p = m3u8_builder_write_video_range(p, video);
 
 		*p++ = '\n';
 	}

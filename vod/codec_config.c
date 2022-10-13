@@ -1,6 +1,7 @@
 #include "codec_config.h"
 #include "media_format.h"
 #include "bit_read_stream.h"
+#include "mp4/mp4_defs.h"
 
 #define codec_config_copy_string(target, str)	\
 	{											\
@@ -487,15 +488,45 @@ codec_config_get_av1_codec_name(request_context_t* request_context, media_info_t
 	return VOD_OK;
 }
 
+static vod_status_t
+codec_config_get_dovi_codec_name(request_context_t* request_context, media_info_t* media_info)
+{
+	dovi_video_media_info_t* dovi;
+	u_char* p;
+
+	dovi = &media_info->u.video.dovi;
+
+	p = vod_sprintf(media_info->codec_name.data, "%*s.%02uD.%02uD",
+		(size_t)sizeof(uint32_t),
+		&media_info->format,
+		(uint32_t)dovi->profile,
+		(uint32_t)dovi->level);
+
+	media_info->codec_name.len = p - media_info->codec_name.data;
+
+	return VOD_OK;
+}
+
+
 vod_status_t
 codec_config_get_video_codec_name(request_context_t* request_context, media_info_t* media_info)
 {
 	switch (media_info->codec_id)
 	{
 	case VOD_CODEC_ID_AVC:
+		if (media_info->format == FORMAT_DVA1)
+		{
+			return codec_config_get_dovi_codec_name(request_context, media_info);
+		}
+
 		return codec_config_get_avc_codec_name(request_context, media_info);
 
 	case VOD_CODEC_ID_HEVC:
+		if (media_info->format == FORMAT_DVH1)
+		{
+			return codec_config_get_dovi_codec_name(request_context, media_info);
+		}
+
 		return codec_config_get_hevc_codec_name(request_context, media_info);
 
 	case VOD_CODEC_ID_VP8:
