@@ -518,8 +518,8 @@ ass_track_t * ass_alloc_track(request_context_t *request_context)
 	if (!track)
 		return NULL;
 
-	track->play_res_x = 1920;
-	track->play_res_y = 1080;
+	track->play_res_x = 640;
+	track->play_res_y = 480;
 	track->language = strdup("English (US)");
 	track->title = strdup("English (US)");
 

@@ -959,6 +959,14 @@ ass_parse_frames(
 				bright = TRUE;
 			}
 
+			// empty/non-numeric string would lead to atoi(str) -> 0, replace by default value
+			if (track->play_res_x == 0) {
+				track->play_res_x = 640;
+			}
+			if (track->play_res_y == 0) {
+				track->play_res_y = 480;
+			}
+
 			marg_l = ((cur_event->margin_l > 0) ? cur_event->margin_l : cur_style->margin_l) * 100 / ass_track->play_res_x;
 			marg_r = (ass_track->play_res_x - ((cur_event->margin_r > 0) ? cur_event->margin_r : cur_style->margin_r)) * 100 / ass_track->play_res_x;
 			marg_v = ((cur_event->margin_v > 0) ? cur_event->margin_v : cur_style->margin_v) * 100 / ass_track->play_res_y; // top assumed
