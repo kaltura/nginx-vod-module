@@ -55,6 +55,6 @@ export LD_LIBRARY_PATH LIBRARY_PATH C_INCLUDE_PATH
         --with-ipv6 \
         --with-debug \
         --with-threads \
-        --with-cc-opt="-O3 -mpopcnt" \
+        --with-cc-opt="-O3" \
         $*
 make -j $(nproc)
