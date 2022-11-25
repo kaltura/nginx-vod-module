@@ -1,11 +1,11 @@
 #!/bin/sh
 set -eo nounset                              # Treat unset variables as an error
 
-NGINX_VERSION=`curl 'http://nginx.org/download/' |
+BASE_DOWNLOAD_URI=http://nginx.org/download
+NGINX_VERSION=`curl "$BASE_DOWNLOAD_URI" |
    grep -oP 'href="nginx-\K[0-9]+\.[0-9]+\.[0-9]+' |
    sort -t. -rn -k1,1 -k2,2 -k3,3 | head -1`
-NGINX_URI="http://nginx.org/download/nginx-$NGINX_VERSION.tar.gz"
-
+NGINX_URI="$BASE_DOWNLOAD_URI/nginx-$NGINX_VERSION.tar.gz"
 
 if [ ! -x "`which curl 2>/dev/null`" ];then
         echo "Need to install curl."
