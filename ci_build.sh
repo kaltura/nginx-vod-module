@@ -2,7 +2,7 @@
 set -eo nounset                              # Treat unset variables as an error
 
 BASE_DOWNLOAD_URI=http://nginx.org/download
-NGINX_VERSION=`curl "$BASE_DOWNLOAD_URI" |
+NGINX_VERSION=`curl -L "$BASE_DOWNLOAD_URI" |
    grep -oP 'href="nginx-\K[0-9]+\.[0-9]+\.[0-9]+' |
    sort -t. -rn -k1,1 -k2,2 -k3,3 | head -1`
 NGINX_URI="$BASE_DOWNLOAD_URI/nginx-$NGINX_VERSION.tar.gz"
