@@ -287,7 +287,7 @@ possible to combine more complex JSONs using multi URL.
 #### Adaptive set
 
 As an alternative to using multi URL, an adaptive set can be defined via JSON:
-```
+```json
 {
 	"sequences": [
 		{
