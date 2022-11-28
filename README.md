@@ -1827,7 +1827,7 @@ Note: Configuration directives that can accept variables are explicitly marked a
 ### Sample configurations
 
 #### Local configuration
-
+```nginx
 	http {
 		upstream fallback {
 			server fallback.kaltura.com:80;
@@ -1873,6 +1873,7 @@ Note: Configuration directives that can accept variables are explicitly marked a
 			}
 		}
 	}
+```
 
 #### Mapped configuration
 ```nginx
