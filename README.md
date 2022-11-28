@@ -124,7 +124,7 @@ C Macro Configurations:
 ### Installation
 
 #### RHEL/CentOS 6/7 RPM
-```
+```sh
 # rpm -ihv http://installrepo.kaltura.org/releases/kaltura-release.noarch.rpm
 # yum install kaltura-nginx
 ```
@@ -133,26 +133,26 @@ C Macro Configurations:
 *Ubuntu NOTE: before trying to install kaltura-nginx, you must also make sure the multiverse repo is enabled*
 
 For Debian Wheezy [7], Debian Jessie [8], Ubuntu 14.04 and 14.10, add this repo:
-```
+```sh
 # wget -O - http://installrepo.kaltura.org/repo/apt/debian/kaltura-deb-curr.gpg.key|apt-key add -
 # echo "deb [arch=amd64] http://installrepo.kaltura.org/repo/apt/debian propus main" > /etc/apt/sources.list.d/kaltura.list
 ```
 
 For Ubuntu 16.04, 16.10 add this repo:
-```
+```sh
 # wget -O - http://installrepo.kaltura.org/repo/apt/xenial/kaltura-deb-curr-256.gpg.key|apt-key add -
 # echo "deb [arch=amd64] http://installrepo.kaltura.org/repo/apt/xenial propus main" > /etc/apt/sources.list.d/kaltura.list
 ```
 
 For Ubuntu 20.04 add this repo:
-```
+```sh
 # wget -O - http://installrepo.kaltura.org/repo/aptn/focal/kaltura-deb-256.gpg.key|apt-key add -
 # echo "deb [arch=amd64] http://installrepo.kaltura.org/repo/aptn/focal quasar main" > /etc/apt/sources.list.d/kaltura.list
 ```
 
 
 Then install the kaltura-nginx package:
-```
+```sh
 # apt-get update
 # apt-get install kaltura-nginx
 ```
@@ -761,7 +761,7 @@ The response of the DRM server is a JSON, with the following format:
 ##### Sample configurations
 
 Apple FairPlay HLS:
-```
+```nginx
 location ~ ^/fpshls/p/\d+/(sp/\d+/)?serveFlavor/entryId/([^/]+)/(.*) {
 	vod hls;
 	vod_hls_encryption_method sample-aes;
