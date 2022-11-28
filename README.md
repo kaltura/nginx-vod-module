@@ -1875,7 +1875,7 @@ Note: Configuration directives that can accept variables are explicitly marked a
 	}
 
 #### Mapped configuration
-
+```nginx
 	http {
 		upstream kalapi {
 			server www.kaltura.com:80;
@@ -1936,9 +1936,10 @@ Note: Configuration directives that can accept variables are explicitly marked a
 			}
 		}
 	}
+```
 
 #### Mapped + Remote configuration
-
+```nginx
 	http {
 		upstream jsonupstream {
 			server jsonserver:80;
@@ -1992,9 +1993,10 @@ Note: Configuration directives that can accept variables are explicitly marked a
 			}
 		}
 	}
+```
 
 Set it up so that http://jsonserver:80/test.json returns the following JSON:
-
+```json
 	{
 		"sequences": [{
 			"clips": [{
@@ -2003,11 +2005,12 @@ Set it up so that http://jsonserver:80/test.json returns the following JSON:
 			}]
 		}]
 	}
+```
 
 And use this stream URL - http://nginx-vod-server/hls/test.json/master.m3u8
 
 #### Remote configuration
-
+```nginx
 	http {
 		upstream kalapi {
 			server www.kaltura.com:80;
@@ -2045,7 +2048,7 @@ And use this stream URL - http://nginx-vod-server/hls/test.json/master.m3u8
 			}
 		}
 	}
-
+```
 ### Copyright & License
 
 All code in this project is released under the [AGPLv3 license](http://www.gnu.org/licenses/agpl-3.0.html) unless a different license for a particular library is specified in the applicable library path. 
