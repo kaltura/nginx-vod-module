@@ -31,7 +31,7 @@ jobs:
             libssl-dev \
             libpcre3-dev \
             libxml2-dev \
-            wget \
+            curl \
             unzip \
             libopencore-amrwb0 \
             libopencore-amrnb0 \

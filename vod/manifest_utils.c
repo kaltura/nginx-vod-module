@@ -2,7 +2,6 @@
 
 // internal flags
 #define ADAPTATION_SETS_FLAG_MULTI_AUDIO		(0x1000)
-#define ADAPTATION_SETS_FLAG_IGNORE_SUBTITLES	(0x2000)
 
 // typedefs
 typedef struct {
@@ -452,8 +451,7 @@ track_group_key_init(
 	case MEDIA_TYPE_SUBTITLE:
 		key->codec_id = 0;
 
-		if (track->media_info.label.len == 0 ||
-			(flags & ADAPTATION_SETS_FLAG_IGNORE_SUBTITLES) != 0)
+		if (track->media_info.label.len == 0)
 		{
 			return FALSE;
 		}
@@ -950,8 +948,6 @@ manifest_utils_get_adaptation_sets(
 				"manifest_utils_get_adaptation_sets: no audio/video tracks");
 			return VOD_BAD_REQUEST;
 		}
-
-		flags |= ADAPTATION_SETS_FLAG_IGNORE_SUBTITLES;
 	}
 
 	if (manifest_utils_is_multi_audio(media_set))

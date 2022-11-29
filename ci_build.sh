@@ -1,18 +1,21 @@
 #!/bin/sh
-set -o nounset                              # Treat unset variables as an error
+set -eo nounset                              # Treat unset variables as an error
 
-NGINX_VERSION=1.23.0
-NGINX_URI="http://nginx.org/download/nginx-$NGINX_VERSION.tar.gz"
+BASE_DOWNLOAD_URI=http://nginx.org/download
+NGINX_VERSION=`curl -L "$BASE_DOWNLOAD_URI" |
+   grep -oP 'href="nginx-\K[0-9]+\.[0-9]+\.[0-9]+' |
+   sort -t. -rn -k1,1 -k2,2 -k3,3 | head -1`
+NGINX_URI="$BASE_DOWNLOAD_URI/nginx-$NGINX_VERSION.tar.gz"
 
-
-if [ ! -x "`which wget 2>/dev/null`" ];then
-        echo "Need to install wget."
+if [ ! -x "`which curl 2>/dev/null`" ];then
+        echo "Need to install curl."
         exit 2
 fi
+
 mkdir -p /tmp/builddir/nginx-$NGINX_VERSION
 cp -r . /tmp/builddir/nginx-$NGINX_VERSION/nginx-vod-module
 cd /tmp/builddir
-wget $NGINX_URI -O kaltura-nginx-$NGINX_VERSION.tar.gz
+curl $NGINX_URI > kaltura-nginx-$NGINX_VERSION.tar.gz
 tar zxf kaltura-nginx-$NGINX_VERSION.tar.gz
 mv nginx-$NGINX_VERSION nginx
 cd nginx
@@ -55,6 +58,6 @@ export LD_LIBRARY_PATH LIBRARY_PATH C_INCLUDE_PATH
         --with-ipv6 \
         --with-debug \
         --with-threads \
-        --with-cc-opt="-O3 -mpopcnt" \
+        --with-cc-opt="-O3" \
         $*
 make -j $(nproc)
