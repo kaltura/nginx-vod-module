@@ -55,13 +55,20 @@ volume_map_calc_frame(
 	const float* end;
 	double sum_squares;
 	double sample;
+	int channels;
+
+#if LIBAVUTIL_VERSION_INT >= AV_VERSION_INT(57, 23, 100)
+	channels = frame->ch_layout.nb_channels;
+#else
+	channels = frame->channels;
+#endif
 
 	switch (frame->format)
 	{
 	case AV_SAMPLE_FMT_FLTP:
 		sum_squares = 0;
 		channel_cur = (const float**)frame->extended_data;
-		channel_end = channel_cur + frame->channels;
+		channel_end = channel_cur + channels;
 		for (; channel_cur < channel_end; channel_cur++)
 		{
 			cur = *channel_cur;
@@ -81,7 +88,7 @@ volume_map_calc_frame(
 	}
 
 	result->sum_squares = sum_squares;
-	result->samples = frame->nb_samples * frame->channels;
+	result->samples = frame->nb_samples * channels;
 	return VOD_OK;
 }
 
