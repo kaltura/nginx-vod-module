@@ -3,6 +3,8 @@
 
 [Join the list of organizations using this video packager project](https://github.com/kaltura/nginx-vod-module/issues/730/).
 
+For live video streaming, please use [Media-Framework](https://github.com/kaltura/media-framework/).
+
 ### Features
 
 * On-the-fly repackaging of MP4 files to DASH, HDS, HLS, MSS
