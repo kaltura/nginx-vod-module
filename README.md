@@ -20,7 +20,7 @@
 
 * Fallback support for file not found in local/mapped modes (useful in multi-datacenter environments)
   
-* Video codecs: H264, H265 (DASH/HLS), VP8 (DASH), VP9 (DASH), AV1 (DASH)
+* Video codecs: H264, H265 (DASH/HLS), AV1 (DASH/HLS), VP8 (DASH), VP9 (DASH)
 
 * Audio codecs: AAC, MP3 (HLS/HDS/MSS), AC-3 (DASH/HLS), E-AC-3 (DASH/HLS), VORBIS (DASH), OPUS (DASH), FLAC (HLS), DTS (HLS)
 

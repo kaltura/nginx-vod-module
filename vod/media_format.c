@@ -120,17 +120,20 @@ media_format_finalize_track(
 				break;
 			}
 
-			rc = get_nal_units(
-				request_context,
-				&media_info->extra_data,
-				(parse_type & PARSE_FLAG_EXTRA_DATA) == 0,
-				&media_info->u.video.nal_packet_size_length,
-				&media_info->extra_data);
-			if (rc != VOD_OK)
+			if (get_nal_units != NULL)
 			{
-				vod_log_debug1(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
-					"media_format_finalize_track: get_nal_units failed %i", rc);
-				return rc;
+				rc = get_nal_units(
+					request_context,
+					&media_info->extra_data,
+					(parse_type & PARSE_FLAG_EXTRA_DATA) == 0,
+					&media_info->u.video.nal_packet_size_length,
+					&media_info->extra_data);
+				if (rc != VOD_OK)
+				{
+					vod_log_debug1(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
+						"media_format_finalize_track: get_nal_units failed %i", rc);
+					return rc;
+				}
 			}
 		}
 		else if ((parse_type & PARSE_FLAG_EXTRA_DATA) != 0)

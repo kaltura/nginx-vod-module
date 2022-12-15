@@ -66,16 +66,15 @@ mp4_to_annexb_set_media_info(
 {
 	mp4_to_annexb_state_t* state = get_context(context);
 
-	state->nal_packet_size_length = media_info->u.video.nal_packet_size_length;
-	if (state->nal_packet_size_length < 1 || state->nal_packet_size_length > 4)
-	{
-		vod_log_error(VOD_LOG_ERR, context->request_context->log, 0,
-			"mp4_to_annexb_set_media_info: invalid nal packet size length %uD", state->nal_packet_size_length);
-		return VOD_BAD_DATA;
-	}
-
 	switch (media_info->codec_id)
 	{
+	case VOD_CODEC_ID_AVC:
+		state->unit_type_mask = 0x1F;
+		state->aud_unit_type = AVC_NAL_AUD;
+		state->aud_nal_packet = avc_aud_nal_packet;
+		state->aud_nal_packet_size = sizeof(avc_aud_nal_packet);
+		break;
+
 	case VOD_CODEC_ID_HEVC:
 		if (state->sample_aes)
 		{
@@ -90,12 +89,19 @@ mp4_to_annexb_set_media_info(
 		state->aud_nal_packet_size = sizeof(hevc_aud_nal_packet);
 		break;
 
-	default:		// AVC
-		state->unit_type_mask = 0x1F;
-		state->aud_unit_type = AVC_NAL_AUD;
-		state->aud_nal_packet = avc_aud_nal_packet;
-		state->aud_nal_packet_size = sizeof(avc_aud_nal_packet);
-		break;
+	default:
+		vod_log_error(VOD_LOG_ERR, context->request_context->log, 0,
+			"mp4_to_annexb_set_media_info: codec id %uD is not supported",
+			media_info->codec_id);
+		return VOD_BAD_REQUEST;
+	}
+
+	state->nal_packet_size_length = media_info->u.video.nal_packet_size_length;
+	if (state->nal_packet_size_length < 1 || state->nal_packet_size_length > 4)
+	{
+		vod_log_error(VOD_LOG_ERR, context->request_context->log, 0,
+			"mp4_to_annexb_set_media_info: invalid nal packet size length %uD", state->nal_packet_size_length);
+		return VOD_BAD_DATA;
 	}
 
 	state->extra_data = media_info->extra_data.data;
