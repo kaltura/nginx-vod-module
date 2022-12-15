@@ -16,15 +16,28 @@
 #endif // NGX_HAVE_OPENSSL_EVP
 
 // constants
-#define SUPPORTED_CODECS \
+#define SUPPORTED_CODECS_MP4 \
 	(VOD_CODEC_FLAG(AVC) | \
 	VOD_CODEC_FLAG(HEVC) | \
+	VOD_CODEC_FLAG(AV1) | \
 	VOD_CODEC_FLAG(AAC) | \
 	VOD_CODEC_FLAG(AC3) | \
 	VOD_CODEC_FLAG(EAC3) | \
 	VOD_CODEC_FLAG(MP3) | \
 	VOD_CODEC_FLAG(DTS) | \
 	VOD_CODEC_FLAG(FLAC))
+
+#define SUPPORTED_CODECS_TS \
+	(VOD_CODEC_FLAG(AVC) | \
+	VOD_CODEC_FLAG(HEVC) | \
+	VOD_CODEC_FLAG(AAC) | \
+	VOD_CODEC_FLAG(AC3) | \
+	VOD_CODEC_FLAG(EAC3) | \
+	VOD_CODEC_FLAG(MP3) | \
+	VOD_CODEC_FLAG(DTS))
+
+#define SUPPORTED_CODECS (SUPPORTED_CODECS_MP4 | SUPPORTED_CODECS_TS)
+
 
 // content types
 static u_char m3u8_content_type[] = "application/vnd.apple.mpegurl";
@@ -62,12 +75,15 @@ ngx_http_vod_hls_get_container_format(
 	ngx_http_vod_hls_loc_conf_t* conf,
 	media_set_t* media_set)
 {
+	media_track_t* track;
+
 	if (conf->m3u8_config.container_format != HLS_CONTAINER_AUTO)
 	{
 		return conf->m3u8_config.container_format;
 	}
 
-	if (media_set->filtered_tracks[0].media_info.codec_id == VOD_CODEC_ID_HEVC ||
+	track = media_set->filtered_tracks;
+	if ((track->media_info.media_type == MEDIA_TYPE_VIDEO && track->media_info.codec_id != VOD_CODEC_ID_AVC) ||
 		conf->encryption_method == HLS_ENC_SAMPLE_AES_CENC)
 	{
 		return HLS_CONTAINER_FMP4;
@@ -896,7 +912,7 @@ static const ngx_http_vod_request_t hls_iframes_request = {
 	REQUEST_FLAG_SINGLE_TRACK_PER_MEDIA_TYPE | REQUEST_FLAG_PARSE_ALL_CLIPS,
 	PARSE_FLAG_FRAMES_ALL_EXCEPT_OFFSETS | PARSE_FLAG_PARSED_EXTRA_DATA_SIZE,
 	REQUEST_CLASS_OTHER,
-	SUPPORTED_CODECS,
+	SUPPORTED_CODECS_TS,
 	HLS_TIMESCALE,
 	ngx_http_vod_hls_handle_iframe_playlist,
 	NULL,
@@ -916,7 +932,7 @@ static const ngx_http_vod_request_t hls_ts_segment_request = {
 	REQUEST_FLAG_SINGLE_TRACK_PER_MEDIA_TYPE,
 	PARSE_FLAG_FRAMES_ALL | PARSE_FLAG_PARSED_EXTRA_DATA | PARSE_FLAG_INITIAL_PTS_DELAY,
 	REQUEST_CLASS_SEGMENT,
-	SUPPORTED_CODECS,
+	SUPPORTED_CODECS_TS,
 	HLS_TIMESCALE,
 	NULL,
 	ngx_http_vod_hls_init_ts_frame_processor,
@@ -926,7 +942,7 @@ static const ngx_http_vod_request_t hls_mp4_segment_request = {
 	REQUEST_FLAG_SINGLE_TRACK_PER_MEDIA_TYPE,
 	PARSE_FLAG_FRAMES_ALL | PARSE_FLAG_INITIAL_PTS_DELAY,
 	REQUEST_CLASS_SEGMENT,
-	SUPPORTED_CODECS,
+	SUPPORTED_CODECS_MP4,
 	HLS_TIMESCALE,
 	NULL,
 	ngx_http_vod_hls_init_fmp4_frame_processor,
@@ -936,7 +952,7 @@ static const ngx_http_vod_request_t hls_mp4_segment_request_cbcs = {
 	REQUEST_FLAG_SINGLE_TRACK_PER_MEDIA_TYPE,
 	PARSE_FLAG_FRAMES_ALL | PARSE_FLAG_EXTRA_DATA | PARSE_FLAG_INITIAL_PTS_DELAY,
 	REQUEST_CLASS_SEGMENT,
-	SUPPORTED_CODECS,
+	SUPPORTED_CODECS_MP4,
 	HLS_TIMESCALE,
 	NULL,
 	ngx_http_vod_hls_init_fmp4_frame_processor,
@@ -946,7 +962,7 @@ static const ngx_http_vod_request_t hls_mp4_segment_request_cenc = {
 	REQUEST_FLAG_SINGLE_TRACK_PER_MEDIA_TYPE,
 	PARSE_FLAG_FRAMES_ALL | PARSE_FLAG_PARSED_EXTRA_DATA | PARSE_FLAG_INITIAL_PTS_DELAY,
 	REQUEST_CLASS_SEGMENT,
-	SUPPORTED_CODECS,
+	SUPPORTED_CODECS_MP4,
 	HLS_TIMESCALE,
 	NULL,
 	ngx_http_vod_hls_init_fmp4_frame_processor,
@@ -966,7 +982,7 @@ static const ngx_http_vod_request_t hls_mp4_init_request = {
 	REQUEST_FLAG_SINGLE_TRACK_PER_MEDIA_TYPE,
 	PARSE_BASIC_METADATA_ONLY | PARSE_FLAG_SAVE_RAW_ATOMS,
 	REQUEST_CLASS_OTHER,
-	SUPPORTED_CODECS,
+	SUPPORTED_CODECS_MP4,
 	HLS_TIMESCALE,
 	ngx_http_vod_hls_handle_mp4_init_segment,
 	NULL,

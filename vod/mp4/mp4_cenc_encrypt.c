@@ -162,6 +162,19 @@ mp4_cenc_encrypt_start_frame(mp4_cenc_encrypt_state_t* state)
 static vod_status_t
 mp4_cenc_encrypt_video_init_track(mp4_cenc_encrypt_video_state_t* state, media_track_t* track)
 {
+	switch (track->media_info.codec_id)
+	{
+	case VOD_CODEC_ID_AVC:
+	case VOD_CODEC_ID_HEVC:
+		break;
+
+	default:
+		vod_log_error(VOD_LOG_ERR, state->base.request_context->log, 0,
+			"mp4_cenc_encrypt_video_init_track: codec id %uD is not supported",
+			track->media_info.codec_id);
+		return VOD_BAD_REQUEST;
+	}
+
 	state->nal_packet_size_length = track->media_info.u.video.nal_packet_size_length;
 
 	if (state->nal_packet_size_length < 1 || state->nal_packet_size_length > 4)

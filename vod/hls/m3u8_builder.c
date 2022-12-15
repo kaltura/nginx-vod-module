@@ -1240,7 +1240,7 @@ m3u8_builder_write_iframe_variants(
 
 		video = &tracks[MEDIA_TYPE_VIDEO]->media_info;
 		if (conf->container_format == HLS_CONTAINER_AUTO && 
-			video->codec_id == VOD_CODEC_ID_HEVC)
+			video->codec_id != VOD_CODEC_ID_AVC)
 		{
 			continue;
 		}
