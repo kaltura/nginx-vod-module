@@ -3,7 +3,6 @@
 
 // constants
 #define AUDIO_ENCODER_BITS_PER_SAMPLE (16)
-#define AAC_ENCODER_NAME ("libfdk_aac")
 
 // typedefs
 typedef struct
@@ -16,6 +15,13 @@ typedef struct
 // globals
 static const AVCodec *encoder_codec = NULL;
 static bool_t initialized = FALSE;
+
+static char* aac_encoder_names[] = {
+	"libfdk_aac",
+	"aac",
+	NULL
+};
+
 
 static bool_t
 audio_encoder_is_format_supported(const AVCodec *codec, enum AVSampleFormat sample_fmt)
@@ -36,16 +42,28 @@ audio_encoder_is_format_supported(const AVCodec *codec, enum AVSampleFormat samp
 void
 audio_encoder_process_init(vod_log_t* log)
 {
+	char** name;
+
 	#if LIBAVCODEC_VERSION_INT < AV_VERSION_INT(58, 18, 100)
 		avcodec_register_all();
 	#endif
 
-	encoder_codec = avcodec_find_encoder_by_name(AAC_ENCODER_NAME);
-	if (encoder_codec == NULL)
+	for (name = aac_encoder_names; ; name++)
 	{
-		vod_log_error(VOD_LOG_WARN, log, 0,
-			"audio_encoder_process_init: failed to get AAC encoder, audio encoding is disabled. recompile libavcodec with libfdk_aac to enable it");
-		return;
+		if (*name == NULL)
+		{
+			vod_log_error(VOD_LOG_WARN, log, 0,
+				"audio_encoder_process_init: failed to get AAC encoder, audio encoding is disabled. recompile libavcodec with an aac encoder to enable it");
+			return;
+		}
+
+		encoder_codec = avcodec_find_encoder_by_name(*name);
+		if (encoder_codec != NULL)
+		{
+			vod_log_error(VOD_LOG_INFO, log, 0,
+				"audio_encoder_process_init: using aac encoder \"%s\"", *name);
+			break;
+		}
 	}
 
 	if (!audio_encoder_is_format_supported(encoder_codec, AUDIO_ENCODER_INPUT_SAMPLE_FORMAT))
