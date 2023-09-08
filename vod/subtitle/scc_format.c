@@ -789,12 +789,12 @@ scc_parse_frames(
 		// timestamps will be inserted here, we now insert positioning and alignment changes
 		{
 			unsigned char align;
-			int kk, ll, pos, sizeH = 0, line = 14;
+			int kk, ll, line = 14;
 			int max_num_of_chars_per_line = 0;
 			int lineidx_max_num_of_chars  = line;
 			int min_num_of_chars_per_line = SCC_608_SCREEN_WIDTH;
 			int lineidx_min_num_of_chars  = line;
-			int slots_before_min_chars = 0, slots_after_min_chars = 0, slots_before_max_chars = 0, slots_after_max_chars = 0;
+			int slots_before_min_chars = 0, slots_after_min_chars = 0, slots_before_max_chars = 0;
 			for (kk = 0; kk < 15; kk++)
 			{
 				if (cur_event->row_used[kk] == 1)
@@ -840,40 +840,29 @@ scc_parse_frames(
 				else
 					break;
 			}
-			sizeH = 3 * max_num_of_chars_per_line;
 			slots_after_min_chars = SCC_608_SCREEN_WIDTH - min_num_of_chars_per_line - slots_before_min_chars;
-			slots_after_max_chars = SCC_608_SCREEN_WIDTH - max_num_of_chars_per_line - slots_before_max_chars;
+			
 #ifdef  SCC_TEMP_VERBOSITY
 			vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-			"event number %d, spaces_before=%d, max=%d, spaces_after=%d, lineidx=%d",
-			evntcounter, slots_before_max_chars, max_num_of_chars_per_line, slots_after_max_chars, lineidx_max_num_of_chars);
+			"event number %d, spaces_before=%d, spaces_after=%d, lineidx=%d",
+			evntcounter, slots_before_max_chars, max_num_of_chars_per_line, lineidx_max_num_of_chars);
 #endif
 			if ((slots_after_min_chars ==  slots_before_min_chars   ) ||
 				(slots_after_min_chars == (slots_before_min_chars+1)) ||
 				(slots_after_min_chars == (slots_before_min_chars-1)))
 			{
 				align = SCC_ALIGN_CENTER;
-				pos = 50;
 			}
 			else if (slots_after_min_chars > slots_before_min_chars)
 			{
 				align = SCC_ALIGN_LEFT;
-				pos = 2 + (3 * slots_before_max_chars);
 			}
 			else
 			{
 				align = SCC_ALIGN_RIGHT;
-				pos = 98 - (3 * slots_after_max_chars);
 			}
 
-			len = 10; vod_memcpy(p, " position:", len);									p += len;
-			vod_sprintf((u_char*)p, "%03uD", pos);										p += 3;
-			len =  7; vod_memcpy(p, "% size:", len);									p += len;
-			vod_sprintf((u_char*)p, "%03uD", sizeH);									p += 3;
-			len =  7; vod_memcpy(p, "% line:", len);									p += len;
-			vod_sprintf((u_char*)p, "%02uD", line);										p += 2;
-
-
+			len =  9; vod_memcpy(p, " line:90%%", len);									p += len;
 			len =  7; vod_memcpy(p, " align:", len);									p += len;
 			if (align == SCC_ALIGN_CENTER)
 			{
