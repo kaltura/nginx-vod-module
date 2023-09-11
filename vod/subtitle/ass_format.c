@@ -967,9 +967,6 @@ ass_parse_frames(
 				ass_track->play_res_y = 480;
 			}
 
-			marg_l = ((cur_event->margin_l > 0) ? cur_event->margin_l : cur_style->margin_l) * 100 / ass_track->play_res_x;
-			marg_r = (ass_track->play_res_x - ((cur_event->margin_r > 0) ? cur_event->margin_r : cur_style->margin_r)) * 100 / ass_track->play_res_x;
-			marg_v = ((cur_event->margin_v > 0) ? cur_event->margin_v : cur_style->margin_v) * 100 / ass_track->play_res_y; // top assumed
 			// All the margX variables are percentages in rounded integer values.
 			// line is integer in range of [0 - 12] given 16 rows of lines in the frame.
 			// if (marg_l || marg_r || marg_v)
