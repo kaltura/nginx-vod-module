@@ -894,7 +894,6 @@ ass_parse_frames(
 		// Split the event text into multiple chunks so we can insert each chunk as a separate frame in webVTT, all under a single cue
 		u_char*	event_textp[NUM_OF_TAGS_ALLOWED_PER_LINE];
 		int		event_len  [NUM_OF_TAGS_ALLOWED_PER_LINE];
-		int		marg_l, marg_r, marg_v; // all of these are integer percentage values
 
 		// allocate memory for the chunk pointer itself first
 		for (chunkcounter = 0; chunkcounter < NUM_OF_TAGS_ALLOWED_PER_LINE; chunkcounter++)
