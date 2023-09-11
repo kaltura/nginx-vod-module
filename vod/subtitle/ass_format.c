@@ -970,7 +970,7 @@ ass_parse_frames(
 			// line is integer in range of [0 - 12] given 16 rows of lines in the frame.
 			// if (marg_l || marg_r || marg_v)
 			{
-				p = vod_copy(p, "% line:90%%", 10);
+				p = vod_copy(p, " line:90%%", 9);
 			}
 			// We should only insert this if an alignment override tag {\a...}is in the text, otherwise follow the style's alignment
 			// but for now, insert it all the time till all players can read styles
