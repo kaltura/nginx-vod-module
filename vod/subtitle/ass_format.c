@@ -974,45 +974,7 @@ ass_parse_frames(
 			// line is integer in range of [0 - 12] given 16 rows of lines in the frame.
 			// if (marg_l || marg_r || marg_v)
 			{
-				// center/middle means we are giving the coordinate of the center/middle point
-				int line, sizeH, pos;
-
-				if (final_alignment < 4)	    // bottom alignment  for values 1, 2, 3
-				{
-					marg_v = 100 - marg_v;
-					line = FFMINMAX((marg_v+4) >> 3, 0, 12);
-				}
-				else if (final_alignment < 7)	// middle alignment  for values 4, 5, 6
-				{
-					line = 7;
-				}
-				else							// top alignment is the default assumption
-				{
-					line = FFMINMAX((marg_v+4) >> 3, 0, 12);
-				}
-
-				// sizeH should match the width of the max_run of characters, relative to max_allowed_run
-				// of characters allowed for this global style font-size
-				sizeH = FFMIN((int)max_run * 100 / (int)max_chars_allowed, 100);
-				if ((!bleft) && (!bright))						//center alignment  2/5/8
-				{
-					pos = FFMINMAX((marg_r + marg_l + 1)/2, sizeH/2, 100 - sizeH/2);
-				}
-				else if (bleft)									//left   alignment  1/4/7
-				{
-					pos = FFMINMAX(marg_l, 0, 100 - sizeH);
-				}
-				else											//right  alignment  3/6/9
-				{
-					pos = FFMINMAX(marg_r, sizeH, 100);
-				}
-
-				p = vod_copy(p, " position:", 10);
-				p = vod_sprintf(p, "%03uD", pos);
-				p = vod_copy(p, "% size:", 7);
-				p = vod_sprintf(p, "%03uD", sizeH);
-				p = vod_copy(p, "% line:", 7);
-				p = vod_sprintf(p, "%02uD", line);
+				p = vod_copy(p, "% line:90%%", 10);
 			}
 			// We should only insert this if an alignment override tag {\a...}is in the text, otherwise follow the style's alignment
 			// but for now, insert it all the time till all players can read styles
