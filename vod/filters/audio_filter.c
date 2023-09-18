@@ -315,7 +315,11 @@ audio_filter_init_source(
 		decoder->time_base.den,
 		decoder->sample_rate,
 		av_get_sample_fmt_name(decoder->sample_fmt),
+#if LIBAVFILTER_VERSION_INT >= AV_VERSION_INT(8, 44, 100)
+		decoder->ch_layout.u.mask);
+#else
 		decoder->channel_layout);
+#endif
 
 	avrc = avfilter_graph_create_filter(
 		&source->buffer_src,
@@ -732,8 +736,13 @@ audio_filter_alloc_state(
 	}
 	else
 	{
+#if LIBAVFILTER_VERSION_INT >= AV_VERSION_INT(8, 44, 100)
+		encoder_params.channels = sink_link->ch_layout.nb_channels;
+		encoder_params.channel_layout = sink_link->ch_layout.u.mask;
+#else
 		encoder_params.channels = sink_link->channels;
 		encoder_params.channel_layout = sink_link->channel_layout;
+#endif
 		encoder_params.sample_rate = sink_link->sample_rate;
 		encoder_params.timescale = sink_link->time_base.den;
 		encoder_params.bitrate = output_track->media_info.bitrate;
