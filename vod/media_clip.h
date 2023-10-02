@@ -94,6 +94,7 @@ struct media_clip_source_s {
 
 	media_clip_source_t* next;
 	uint64_t last_offset;
+	vod_str_t id3_tag_label;
 };
 
 typedef struct {

@@ -584,6 +584,7 @@ Optional fields:
 	to decrypt the file.
 * `encryptionScheme` - the encryption scheme that was used to encrypt the file. Currently,
 	only two schemes are supported - `cenc` for MP4 files, `aes-cbc` for caption files.
+* `id3TagLabel` - a string contain label to insert in the data stream. This will be done only when `vod_hls_mpegts_output_id3_timestamps` is ON and the root sequnce has ID
 
 #### Rate filter clip
 

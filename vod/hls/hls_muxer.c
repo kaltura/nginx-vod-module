@@ -11,7 +11,10 @@
 
 #define ID3_TEXT_JSON_FORMAT "{\"timestamp\":%uL}%Z"
 #define ID3_TEXT_JSON_SEQUENCE_ID_PREFIX_FORMAT "{\"timestamp\":%uL,\"sequenceId\":\""
+#define ID3_TEXT_JSON_CLIP_LABEL_FORMAT "\",\"clipLabel\":\""
 #define ID3_TEXT_JSON_SEQUENCE_ID_SUFFIX "\"}"
+
+#define CLIP_LABEL_MAX_SIZE 32
 
 // from ffmpeg mpegtsenc
 #define DEFAULT_PES_HEADER_FREQ 16
@@ -171,6 +174,7 @@ hls_muxer_init_id3_stream(
 	size_t data_size;
 	int64_t timestamp;
 	void* frames_source_context;
+	vod_str_t clip_label;
 
 	cur_stream = state->last_stream;
 
@@ -196,8 +200,9 @@ hls_muxer_init_id3_stream(
 	if (sequence_id->len != 0)
 	{
 		sequence_id_escape = vod_escape_json(NULL, sequence_id->data, sequence_id->len);
-		data_size = sizeof(ID3_TEXT_JSON_SEQUENCE_ID_PREFIX_FORMAT) + VOD_INT64_LEN + 
+		data_size = sizeof(ID3_TEXT_JSON_SEQUENCE_ID_PREFIX_FORMAT) + VOD_INT64_LEN +
 			sequence_id->len + sequence_id_escape +
+			sizeof(ID3_TEXT_JSON_CLIP_LABEL_FORMAT) + CLIP_LABEL_MAX_SIZE +
 			sizeof(ID3_TEXT_JSON_SEQUENCE_ID_SUFFIX);
 	}
 	else
@@ -268,6 +273,14 @@ hls_muxer_init_id3_stream(
 			{
 				p = vod_copy(p, sequence_id->data, sequence_id->len);
 			}
+
+			clip_label = ref_track->file_info.source->id3_tag_label;
+			if (clip_label.len != 0)
+			{
+				p = vod_copy(p, ID3_TEXT_JSON_CLIP_LABEL_FORMAT, sizeof(ID3_TEXT_JSON_CLIP_LABEL_FORMAT) - 1);
+				p = vod_copy(p, clip_label.data, vod_min(CLIP_LABEL_MAX_SIZE, clip_label.len));
+			}
+
 			p = vod_copy(p, ID3_TEXT_JSON_SEQUENCE_ID_SUFFIX, sizeof(ID3_TEXT_JSON_SEQUENCE_ID_SUFFIX));
 
 		}
