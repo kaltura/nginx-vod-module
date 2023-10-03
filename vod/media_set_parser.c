@@ -119,6 +119,7 @@ static json_parser_union_type_def_t media_clip_union_params[] = {
 };
 
 static json_object_value_def_t media_clip_source_params[] = {
+	{ vod_string("id"),	            VOD_JSON_STRING,	offsetof(media_clip_source_t, id), media_set_parse_null_term_string },
 	{ vod_string("path"),			VOD_JSON_STRING,	offsetof(media_clip_source_t, mapped_uri), media_set_parse_null_term_string },
 	{ vod_string("tracks"),			VOD_JSON_STRING,	offsetof(media_clip_source_t, tracks_mask), media_set_parse_tracks_spec },
 	{ vod_string("clipFrom"),		VOD_JSON_INT,		offsetof(media_clip_source_t, clip_from), media_set_parse_int64 },
@@ -126,7 +127,6 @@ static json_object_value_def_t media_clip_source_params[] = {
 	{ vod_string("encryptionKey"),	VOD_JSON_STRING,	offsetof(media_clip_source_t, encryption.key), media_set_parse_base64_string },
 	{ vod_string("encryptionIv"),	VOD_JSON_STRING,	offsetof(media_clip_source_t, encryption.iv), media_set_parse_base64_string },
 	{ vod_string("sourceType"),		VOD_JSON_STRING,	offsetof(media_clip_source_t, source_type), media_set_parse_source_type },
-	{ vod_string("id3TagLabel"),	VOD_JSON_STRING,	offsetof(media_clip_source_t, id3_tag_label), media_set_parse_null_term_string },
 	{ vod_null_string, 0, 0, NULL }
 };
 

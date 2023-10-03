@@ -65,6 +65,7 @@ typedef struct ngx_http_vod_reader_s ngx_http_vod_reader_t;
 struct media_clip_source_s {
 	// base
 	media_clip_t base;
+	vod_str_t id;
 	int64_t clip_time;
 	media_range_t* range;
 	media_track_array_t track_array;
@@ -94,7 +95,6 @@ struct media_clip_source_s {
 
 	media_clip_source_t* next;
 	uint64_t last_offset;
-	vod_str_t id3_tag_label;
 };
 
 typedef struct {

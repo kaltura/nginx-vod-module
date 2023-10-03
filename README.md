@@ -571,6 +571,7 @@ Mandatory fields:
 	an empty captions file (useful in case only some videos in a playlist have captions)
 
 Optional fields:
+* `id` - a string that identifies the source clip
 * `sourceType` - sets the interface that should be used to read the MP4 file, allowed values are:
 	`file` and `http`. By default, the module uses `http` if `vod_remote_upstream_location` is set,
 	and `file` otherwise.
@@ -584,7 +585,6 @@ Optional fields:
 	to decrypt the file.
 * `encryptionScheme` - the encryption scheme that was used to encrypt the file. Currently,
 	only two schemes are supported - `cenc` for MP4 files, `aes-cbc` for caption files.
-* `id3TagLabel` - a string contain label to insert in the data stream. This will be done only when `vod_hls_mpegts_output_id3_timestamps` is ON and the root sequnce has ID
 
 #### Rate filter clip
 
