@@ -105,6 +105,7 @@ static vod_status_t media_set_parse_source(void* ctx, vod_json_object_t* element
 static vod_status_t media_set_parse_clips_array(void* ctx, vod_json_value_t* value, void* dest);
 static vod_status_t media_set_parse_bitrate(void* ctx, vod_json_value_t* value, void* dest);
 static vod_status_t media_set_parse_source_type(void* ctx, vod_json_value_t* value, void* dest);
+static vod_status_t media_set_parse_source_clip_id(void* ctx, vod_json_value_t* value, void* dest);
 
 // constants
 static json_parser_union_type_def_t media_clip_union_params[] = {
@@ -119,7 +120,7 @@ static json_parser_union_type_def_t media_clip_union_params[] = {
 };
 
 static json_object_value_def_t media_clip_source_params[] = {
-	{ vod_string("id"),	            VOD_JSON_STRING,	offsetof(media_clip_source_t, id), media_set_parse_null_term_string },
+	{ vod_string("id"),	            VOD_JSON_STRING,	offsetof(media_clip_source_t, id), media_set_parse_source_clip_id },
 	{ vod_string("path"),			VOD_JSON_STRING,	offsetof(media_clip_source_t, mapped_uri), media_set_parse_null_term_string },
 	{ vod_string("tracks"),			VOD_JSON_STRING,	offsetof(media_clip_source_t, tracks_mask), media_set_parse_tracks_spec },
 	{ vod_string("clipFrom"),		VOD_JSON_INT,		offsetof(media_clip_source_t, clip_from), media_set_parse_int64 },
@@ -318,6 +319,29 @@ media_set_parse_int64(
 	void* dest)
 {
 	*(uint64_t*)dest = value->v.num.num;
+	return VOD_OK;
+}
+
+static vod_status_t
+media_set_parse_source_clip_id(
+	void* ctx,
+	vod_json_value_t* value,
+	void* dest)
+{
+	media_filter_parse_context_t* context = ctx;
+	vod_status_t rc;
+	if (value->v.str.len > CLIP_ID_MAX_SIZE)
+	{
+		vod_log_error(VOD_LOG_ERR, context->request_context->log, 0,
+			"media_set_parse_source_clip_id: invalid size of id: %uz", value->v.str.len);
+		return VOD_BAD_MAPPING;
+	}
+
+	rc = media_set_parse_null_term_string(context, value, dest);
+	if (rc != VOD_OK)
+	{
+		return rc;
+	}
 	return VOD_OK;
 }
 

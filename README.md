@@ -571,7 +571,7 @@ Mandatory fields:
 	an empty captions file (useful in case only some videos in a playlist have captions)
 
 Optional fields:
-* `id` - a string that identifies the source clip
+* `id` - a string that identifies the source clip (maximum 32 bytes)
 * `sourceType` - sets the interface that should be used to read the MP4 file, allowed values are:
 	`file` and `http`. By default, the module uses `http` if `vod_remote_upstream_location` is set,
 	and `file` otherwise.

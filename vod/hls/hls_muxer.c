@@ -14,7 +14,6 @@
 #define ID3_TEXT_JSON_CLIP_ID_FORMAT "\",\"clipId\":\""
 #define ID3_TEXT_JSON_SEQUENCE_ID_SUFFIX "\"}"
 
-#define CLIP_ID_MAX_SIZE 32
 
 // from ffmpeg mpegtsenc
 #define DEFAULT_PES_HEADER_FREQ 16
@@ -278,7 +277,7 @@ hls_muxer_init_id3_stream(
 			if (clip_id.len != 0)
 			{
 				p = vod_copy(p, ID3_TEXT_JSON_CLIP_ID_FORMAT, sizeof(ID3_TEXT_JSON_CLIP_ID_FORMAT) - 1);
-				p = vod_copy(p, clip_id.data, vod_min(CLIP_ID_MAX_SIZE, clip_id.len));
+				p = vod_copy(p, clip_id.data, clip_id.len);
 			}
 
 			p = vod_copy(p, ID3_TEXT_JSON_SEQUENCE_ID_SUFFIX, sizeof(ID3_TEXT_JSON_SEQUENCE_ID_SUFFIX));
