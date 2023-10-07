@@ -399,6 +399,7 @@ VOD_SRCS="$VOD_SRCS                                           \
           $ngx_addon_dir/vod/language_code.c                  \
           $ngx_addon_dir/vod/manifest_utils.c                 \
           $ngx_addon_dir/vod/media_format.c                   \
+          $ngx_addon_dir/vod/media_set.c                      \
           $ngx_addon_dir/vod/media_set_parser.c               \
           $ngx_addon_dir/vod/mkv/ebml.c                       \
           $ngx_addon_dir/vod/mkv/mkv_builder.c                \

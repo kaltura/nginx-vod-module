@@ -594,6 +594,47 @@ ngx_http_vod_set_notification_id_var(ngx_http_request_t *r, ngx_http_variable_va
 }
 
 static ngx_int_t
+ngx_http_vod_set_segment_time_var(ngx_http_request_t *r, ngx_http_variable_value_t *v, uintptr_t data)
+{
+	ngx_http_vod_ctx_t* ctx;
+	media_set_t* media_set;
+	int64_t value;
+	u_char* p;
+
+	ctx = ngx_http_get_module_ctx(r, ngx_http_vod_module);
+	if (ctx == NULL)
+	{
+		v->not_found = 1;
+		return NGX_OK;
+	}
+
+	media_set = &ctx->submodule_context.media_set;
+	if (media_set->filtered_tracks >= media_set->filtered_tracks_end)
+	{
+		v->not_found = 1;
+		return NGX_OK;
+	}
+
+	p = ngx_pnalloc(r->pool, NGX_INT64_LEN);
+	if (p == NULL)
+	{
+		ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+			"ngx_http_vod_set_segment_time_var: ngx_pnalloc failed");
+		return NGX_ERROR;
+	}
+
+	value = media_set_get_segment_time_millis(media_set);
+
+	v->data = p;
+	v->len = ngx_sprintf(p, "%L", value) - p;
+	v->valid = 1;
+	v->no_cacheable = 1;
+	v->not_found = 0;
+
+	return NGX_OK;
+}
+
+static ngx_int_t
 ngx_http_vod_set_segment_duration_var(ngx_http_request_t *r, ngx_http_variable_value_t *v, uintptr_t data)
 {
 	ngx_http_vod_ctx_t *ctx;
@@ -688,6 +729,7 @@ static ngx_http_vod_variable_t ngx_http_vod_variables[] = {
 	DEFINE_VAR(dynamic_mapping),
 	DEFINE_VAR(request_params),
 	DEFINE_VAR(notification_id),
+	DEFINE_VAR(segment_time),
 	DEFINE_VAR(segment_duration),
 	{ ngx_string("vod_frames_bytes_read"), ngx_http_vod_set_uint32_var, offsetof(ngx_http_vod_ctx_t, frames_bytes_read) },
 };
