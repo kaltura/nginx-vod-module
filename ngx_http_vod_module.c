@@ -411,20 +411,32 @@ ngx_http_vod_set_sequence_id_var(ngx_http_request_t *r, ngx_http_variable_value_
 {
 	ngx_http_vod_ctx_t *ctx;
 	ngx_str_t* value;
+	media_sequence_t* cur_sequence;
 
 	ctx = ngx_http_get_module_ctx(r, ngx_http_vod_module);
-	if (ctx == NULL ||
-		ctx->cur_sequence < ctx->submodule_context.media_set.sequences ||
-		ctx->cur_sequence >= ctx->submodule_context.media_set.sequences_end)
+	if (ctx == NULL)
+	{
+		v->not_found = 1;
+		return NGX_OK;
+	}
+	cur_sequence = ctx->cur_sequence;
+
+	if (cur_sequence == NULL && ctx->submodule_context.media_set.sequence_count == 1)
+	{
+		cur_sequence = ctx->submodule_context.media_set.sequences;
+	}
+
+	if (cur_sequence < ctx->submodule_context.media_set.sequences ||
+		cur_sequence >= ctx->submodule_context.media_set.sequences_end)
 	{
 		v->not_found = 1;
 		return NGX_OK;
 	}
 
-	value = &ctx->cur_sequence->id;
+	value = &cur_sequence->id;
 	if (value->len == 0)
 	{
-		value = &ctx->cur_sequence->stripped_uri;
+		value = &cur_sequence->stripped_uri;
 		if (value->len == 0)
 		{
 			v->not_found = 1;
