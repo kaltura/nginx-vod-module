@@ -55,7 +55,7 @@ static codec_id_mapping_t codec_mappings[] = {
 	{ VOD_CODEC_ID_HEVC, AV_CODEC_ID_H265, "h265" },
 	{ VOD_CODEC_ID_VP8, AV_CODEC_ID_VP8, "vp8" },
 	{ VOD_CODEC_ID_VP9, AV_CODEC_ID_VP9, "vp9" },
-#if LIBAVFORMAT_VERSION_INT >= AV_VERSION_INT(60, 16, 100)
+#if LIBAVCODEC_VERSION_INT < AV_VERSION_INT(57, 25, 0)
 	{ VOD_CODEC_ID_AV1, AV_CODEC_ID_AV1, "av1" },
 #endif
 };
