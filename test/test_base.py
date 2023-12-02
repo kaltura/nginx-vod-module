@@ -2,7 +2,7 @@ from __future__ import print_function
 import urllib2
 import os
 
-RUN_ONLY_PATH = ''       # use for running only some tests, e.g. MainTestSuite.RemoteTestSuite.MemoryUpstreamTestSuite
+RUN_ONLY_PATH = ''	   # use for running only some tests, e.g. MainTestSuite.RemoteTestSuite.MemoryUpstreamTestSuite
 NGINX_LOG_PATH = '/var/log/nginx/error.log'
 
 ### Assertions
@@ -19,23 +19,23 @@ def assertIn(needle, haystack):
 	assert(False)
 
 def assertNotIn(needle, haystack):
-    if not needle in haystack:
-        return
-    print('Assertion failed - %s not in %s' % (needle, haystack))
-    assert(False)
-    
+	if not needle in haystack:
+		return
+	print('Assertion failed - %s not in %s' % (needle, haystack))
+	assert(False)
+
 def assertInIgnoreCase(needle, haystack):
 	assertIn(needle.lower(), haystack.lower())
 
 def assertNotInIgnoreCase(needle, haystack):
-    assertNotIn(needle.lower(), haystack.lower())
-    
+	assertNotIn(needle.lower(), haystack.lower())
+
 def assertStartsWith(buffer, prefix):
 	if buffer.startswith(prefix):
 		return
 	print('Assertion failed - %s.startswith(%s)' % (buffer, prefix))
 	assert(False)
-	
+
 def assertEndsWith(buffer, postfix):
 	if buffer.endswith(postfix):
 		return
@@ -48,6 +48,10 @@ def assertRequestFails(url, statusCode, expectedBody = None, headers = {}, postD
 		response = urllib2.urlopen(request, data=postData)
 		assert(False)
 	except urllib2.HTTPError as e:
+		if type(statusCode) == list:
+			assertIn(e.getcode(), statusCode)
+		else:
+			assertEquals(e.getcode(), statusCode)
 		assertEquals(e.getcode(), statusCode)
 		if expectedBody != None:
 			assertEquals(expectedBody, e.read())
@@ -56,7 +60,7 @@ def assertRequestFails(url, statusCode, expectedBody = None, headers = {}, postD
 class CleanupStack:
 	def __init__(self):
 		self.items = []
-		
+
 	def push(self, callback):
 		self.items.append(callback)
 
@@ -94,7 +98,7 @@ class LogTracker:
 class TestSuite(object):
 	level = 0
 	curPath = ''
-	
+
 	def __init__(self):
 		self.prepareTest = None
 
