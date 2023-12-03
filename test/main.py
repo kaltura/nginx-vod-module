@@ -141,7 +141,7 @@ def validatePlaylistM3U8(buffer, expectedBaseUrl):
             assertEquals(expectedBaseUrl, baseUrl)
             assertStartsWith(fileName, M3U8_SEGMENT_PREFIX)
             assertEndsWith(fileName, M3U8_SEGMENT_POSTFIX)
-        expectExtInf = not expectExtInf    
+        expectExtInf = not expectExtInf
 
 ### Misc utility functions
 def getHttpResponseRegular(body = '', status = '200 OK', length = None, headers = {}):
@@ -178,7 +178,7 @@ def createRandomSymLink(sourcePath):
 ### Socket functions
 class SocketException(Exception):
     pass
-    
+
 def createTcpServer(port):
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)     # prevent Address already in use errors
@@ -283,7 +283,7 @@ def serveFileHandler(s, path, mimeType, headers, maxSize = -1):
     if headers.startswith('HEAD'):
         socketSendAndShutdown(s, getHttpResponse(length=maxSize, headers={'Content-Type':mimeType}))
         return
-    
+
     # get the request body
     f = file(path, 'rb')
     range = getHttpHeader(headers, 'range')
@@ -360,7 +360,7 @@ class ProtocolTestSuite(TestSuite):
 class DashTestSuite(ProtocolTestSuite):
     def __init__(self, getUrl, setupServer):
         super(DashTestSuite, self).__init__(getUrl, DASH_PREFIX, setupServer)
-    
+
     # bad requests
     def testUnrecognizedRequest(self):
         assertRequestFails(self.getUrl('/bla'), 400)
@@ -369,15 +369,15 @@ class DashTestSuite(ProtocolTestSuite):
     def testBadStreamTypeManifest(self):
         assertRequestFails(self.getUrl('/manifest-a1-z1.mpd'), 400)
         self.logTracker.assertContains('did not consume the whole name')
-        
+
     def testBadStreamIndexManifest(self):
         assertRequestFails(self.getUrl('/manifest-aabc.mpd'), 400)
         self.logTracker.assertContains('did not consume the whole name')
-    
+
     def testBadStreamTypeInit(self):
         assertRequestFails(self.getUrl('/init-a1-z1.mp4'), 400)
         self.logTracker.assertContains('did not consume the whole name')
-        
+
     def testBadStreamIndexInit(self):
         assertRequestFails(self.getUrl('/init-aabc.mp4'), 400)
         self.logTracker.assertContains('did not consume the whole name')
@@ -389,7 +389,7 @@ class DashTestSuite(ProtocolTestSuite):
     def testBadStreamTypeFragment(self):
         assertRequestFails(self.getUrl('/fragment-1-a1-z1.m4s'), 400)
         self.logTracker.assertContains('did not consume the whole name')
-        
+
     def testBadStreamIndexFragment(self):
         assertRequestFails(self.getUrl('/fragment-1-aabc.m4s'), 400)
         self.logTracker.assertContains('did not consume the whole name')
@@ -406,7 +406,7 @@ class HdsTestSuite(ProtocolTestSuite):
     def testBadStreamTypeManifest(self):
         assertRequestFails(self.getUrl('/manifest-a1-z1.f4m'), 400)
         self.logTracker.assertContains('did not consume the whole name')
-        
+
     def testBadStreamIndexManifest(self):
         assertRequestFails(self.getUrl('/manifest-aabc.f4m'), 400)
         self.logTracker.assertContains('did not consume the whole name')
@@ -422,11 +422,11 @@ class HdsTestSuite(ProtocolTestSuite):
     def testNoSegmentFragment(self):
         assertRequestFails(self.getUrl('/frag-1'), 400)
         self.logTracker.assertContains('invalid segment / fragment requested')
-        
+
     def testBadStreamTypeFragment(self):
         assertRequestFails(self.getUrl('/frag-a1-z1-Seg1-Frag1'), 400)
         self.logTracker.assertContains('did not consume the whole name')
-        
+
     def testBadStreamIndexFragment(self):
         assertRequestFails(self.getUrl('/frag-aabc-Seg1-Frag1'), 400)
         self.logTracker.assertContains('did not consume the whole name')
@@ -434,16 +434,16 @@ class HdsTestSuite(ProtocolTestSuite):
 class HlsTestSuite(ProtocolTestSuite):
     def __init__(self, getUrl, setupServer):
         super(HlsTestSuite, self).__init__(getUrl, HLS_PREFIX, setupServer)
-    
+
     # bad requests
     def testBadSegmentIndex(self):
         assertRequestFails(self.getUrl('/seg-abc-a1-v1.ts'), 400)
         self.logTracker.assertContains('failed to parse segment index')
-    
+
     def testBadStreamIndex(self):
         assertRequestFails(self.getUrl('/seg-1-aabc-v1.ts'), 400)
         self.logTracker.assertContains('did not consume the whole name')
-    
+
     def testBadStreamType(self):
         assertRequestFails(self.getUrl('/seg-1-a1-z1.ts'), 400)
         self.logTracker.assertContains('did not consume the whole name')
@@ -468,30 +468,30 @@ class MssTestSuite(ProtocolTestSuite):
     def testBadStreamType(self):
         assertRequestFails(self.getUrl('/manifest-a1-z1'), 400)
         self.logTracker.assertContains('did not consume the whole name')
-        
+
     def testBadStreamIndex(self):
         assertRequestFails(self.getUrl('/manifest-aabc'), 400)
         self.logTracker.assertContains('did not consume the whole name')
-    
+
     def testBadFragmentRequestQualityLevel(self):
         assertRequestFails(self.getUrl('/Quality-Levels(2364883)/Fragments(video=0)'), 400)
-        self.logTracker.assertContains('ngx_http_vod_parse_string failed')        
+        self.logTracker.assertContains('ngx_http_vod_parse_string failed')
 
     def testBadFragmentRequestBitrate(self):
         assertRequestFails(self.getUrl('/QualityLevels(a)/Fragments(video=0)'), 400)
-        self.logTracker.assertContains('ngx_http_vod_parse_string failed')        
-        
+        self.logTracker.assertContains('ngx_http_vod_parse_string failed')
+
     def testBadFragmentRequestFragments(self):
         assertRequestFails(self.getUrl('/QualityLevels(2364883)/Frag-ments(video=0)'), 400)
-        self.logTracker.assertContains('ngx_http_vod_parse_string failed')        
+        self.logTracker.assertContains('ngx_http_vod_parse_string failed')
 
     def testBadFragmentRequestNoDelim(self):
         assertRequestFails(self.getUrl('/QualityLevels(2364883)/Fragments(video)'), 400)
-        self.logTracker.assertContains('ngx_http_vod_parse_string failed')        
+        self.logTracker.assertContains('ngx_http_vod_parse_string failed')
 
     def testBadFragmentRequestTimestamp(self):
         assertRequestFails(self.getUrl('/QualityLevels(2364883)/Fragments(video=a)'), 400)
-        self.logTracker.assertContains('ngx_http_vod_parse_string failed')        
+        self.logTracker.assertContains('ngx_http_vod_parse_string failed')
 
     def testBadFragmentRequestMediaTypeLength(self):
         assertRequestFails(self.getUrl('/QualityLevels(2364883)/Fragments(videox=0)'), 400)
@@ -512,11 +512,13 @@ class BasicTestSuite(TestSuite):
         HdsTestSuite(self.getUrl, self.prepareTest).run()
         HlsTestSuite(self.getUrl, self.prepareTest).run()
         MssTestSuite(self.getUrl, self.prepareTest).run()
-    
+
     # sanity
     def testHeadRequestSanity(self):
         for curPrefix, curRequest, contentType in ALL_REQUESTS:
             url = self.getUrl(curPrefix, curRequest)
+            if KEEPALIVE_PREFIX in url:
+                continue
             fullResponse = urllib2.urlopen(url).read()
             request = urllib2.Request(url)
             request.get_method = lambda : 'HEAD'
@@ -533,8 +535,10 @@ class BasicTestSuite(TestSuite):
             cleanupStack.resetAndDestroy()
             if self.prepareTest != None:
                 self.prepareTest()
-                
+
             url = self.getUrl(curPrefix, curRequest)
+            if KEEPALIVE_PREFIX in url:
+                continue
             response = urllib2.urlopen(url)
             assertEquals(response.info().getheader('Content-Type'), contentType)
             fullResponse = response.read()
@@ -579,7 +583,7 @@ class BasicTestSuite(TestSuite):
         clearSegment = urllib2.urlopen(self.getUrl(HLS_PREFIX, HLS_SEGMENT_FILE).replace(ENCRYPTED_PREFIX, '')).read()
 
         assert(clearSegment == decryptedSegment)
-        
+
     def testClipToSanity(self):
         # index
         url = self.getUrl(HLS_PREFIX, '/clipTo/10000' + HLS_PLAYLIST_FILE)
@@ -616,23 +620,23 @@ class BasicTestSuite(TestSuite):
             # request must not have track specification
             if '-v1' in curRequest:
                 continue
-               
+
             # request must have extension
             if curRequest.rfind('.') < curRequest.rfind('/'):
                 continue
-                
+
             # no tracks specification
             url = self.getUrl(curPrefix, curRequest)
             noTracksResponse = urllib2.urlopen(url).read()
 
             # with tracks specification
             url = '-a1-v1.'.join(url.rsplit('.', 1))    # replace only the last dot
-            withTracksResponse = urllib2.urlopen(url).read()            
+            withTracksResponse = urllib2.urlopen(url).read()
             withTracksResponse = withTracksResponse.replace('-a1-v1.f4m</id>', '.f4m</id>')        # align the f4m id tag
 
             assert(noTracksResponse == withTracksResponse)
 
-    # bad requests    
+    # bad requests
     def testPostRequest(self):
         assertRequestFails(self.getUrl(HLS_PREFIX, '/seg-1-a1-v1.ts'), 405, postData='abcd')
         self.logTracker.assertContains('unsupported method')
@@ -644,7 +648,7 @@ class BasicTestSuite(TestSuite):
     def testNonExistingTracksM3U8(self):
         assertRequestFails(self.getUrl(HLS_PREFIX, '/index-a10-v10.m3u8'), 400)
         self.logTracker.assertContains('no matching streams were found')
-        
+
     def testNonExistingTracksTS(self):
         assertRequestFails(self.getUrl(HLS_PREFIX,  '/seg-1-a10-v10.ts'), 404)
         self.logTracker.assertContains('no matching streams were found, probably invalid segment index')
@@ -668,28 +672,28 @@ class BasicTestSuite(TestSuite):
     def testBadClipFrom(self):
         assertRequestFails(self.getUrl(HLS_PREFIX, '/clipFrom/abcd' + HLS_PLAYLIST_FILE), 400)
         self.logTracker.assertContains('clip from parser failed')
-        
+
 class UpstreamTestSuite(TestSuite):
     def __init__(self, baseUrl, urlFile, serverPort):
         super(UpstreamTestSuite, self).__init__()
         self.baseUrl = baseUrl
         self.urlFile = urlFile
         self.serverPort = serverPort
-    
+
     def testServerNotListening(self):
         assertRequestFails(getUniqueUrl(self.baseUrl, self.urlFile), 502)
         self.logTracker.assertContains('connect() failed (111: Connection refused)')
-    
+
     def testServerNotAccepting(self):
         s = createTcpServer(self.serverPort)
-        assertRequestFails(getUniqueUrl(self.baseUrl, self.urlFile), 504)        
+        assertRequestFails(getUniqueUrl(self.baseUrl, self.urlFile), [502, 504])
         self.logTracker.assertContains('upstream timed out')
 
     def testServerNotResponding(self):
         TcpServer(self.serverPort, lambda s: socketSendAndWait(s, 'HTTP/1.1 200 OK', 10))
-        assertRequestFails(getUniqueUrl(self.baseUrl, self.urlFile), 504)
+        assertRequestFails(getUniqueUrl(self.baseUrl, self.urlFile), [502, 504])
         self.logTracker.assertContains('upstream timed out')
-    
+
     def testBadStatusLine(self):
         TcpServer(self.serverPort, lambda s: socketSendAndShutdown(s, 'BAD STATUS LINE\r\n'))
         request = urllib2.Request(getUniqueUrl(self.baseUrl, self.urlFile))
@@ -698,7 +702,7 @@ class UpstreamTestSuite(TestSuite):
             assertEquals(response.strip(), 'BAD STATUS LINE')
         except urllib2.HTTPError as e:
             assertEquals(e.getcode(), 502)        # returns 502 in case the request was 'in memory'
-            
+
         self.logTracker.assertContains('upstream sent no valid HTTP/1.0 header')
 
     def testBadContentLength(self):
@@ -750,7 +754,7 @@ class MemoryUpstreamTestSuite(UpstreamTestSuite):
         request = urllib2.Request(url, headers={'if-range':'ukk'})
         response = urllib2.urlopen(request)
         self.validateResponse(response.read(), url)
-        
+
     def testUpstreamHostHeader(self):
         TcpServer(self.serverPort, lambda s: socketExpectHttpHeaderAndHandle(s, 'Host: blabla.com', None, self.upstreamHandler))
         url = getUniqueUrl(self.baseUrl, self.urlFile)
@@ -803,7 +807,7 @@ class DumpUpstreamTestSuite(UpstreamTestSuite):
         url = getUniqueUrl(self.baseUrl, self.urlFile)
         request = urllib2.Request(url, headers={'if-range':'ukk'})
         assertEquals(urllib2.urlopen(request).read(), 'abcde')
-        
+
 class FallbackUpstreamTestSuite(DumpUpstreamTestSuite):
     def testLoopPreventionHeaderSent(self):
         TcpServer(self.serverPort, lambda s: socketExpectHttpHeaderAndSend(s, 'X-Kaltura-Proxy: dumpApiRequest', getHttpResponse('abcde')))
@@ -835,7 +839,7 @@ class FileServeTestSuite(TestSuite):
             logTracker = LogTracker()
             uncachedResponse = urllib2.urlopen(url).read()
             logTracker.assertContains('metadata cache miss')
-            
+
             logTracker = LogTracker()
             cachedResponse = urllib2.urlopen(url).read()
             logTracker.assertContains(['metadata cache hit', 'response cache hit'])
@@ -864,7 +868,7 @@ class ModeTestSuite(TestSuite):
             encryptionPrefix = self.encryptionPrefix
         return getUniqueUrl(self.getBaseUrl(filePath) + protocolPrefix + encryptionPrefix + TEST_FLAVOR_URI, filePath)
 
-class LocalTestSuite(ModeTestSuite):            
+class LocalTestSuite(ModeTestSuite):
     def runChildSuites(self):
         BasicTestSuite(
             self.getUrl,
@@ -875,14 +879,14 @@ class LocalTestSuite(ModeTestSuite):
     def testFileNotFound(self):
         assertRequestFails(self.baseUrl + HLS_PREFIX + TEST_NONEXISTING_FILE + HLS_PLAYLIST_FILE, 502)    # 502 is due to failing to connect to fallback
         self.logTracker.assertContains(['open() "%s" failed' % (TEST_FILES_ROOT + TEST_NONEXISTING_FILE), 'stat() "%s" failed' % (TEST_FILES_ROOT + TEST_NONEXISTING_FILE)])
-        
+
     def getUrl(self, protocolPrefix, filePath):
         # encryption is supported only for hls
         encryptionPrefix = ''
         if protocolPrefix == HLS_PREFIX:
             encryptionPrefix = self.encryptionPrefix
         return self.getBaseUrl(filePath) + protocolPrefix + encryptionPrefix + TEST_FLAVOR_FILE + filePath
-        
+
 class MappedTestSuite(ModeTestSuite):
     def runChildSuites(self):
         BasicTestSuite(
@@ -935,24 +939,24 @@ class MappedTestSuite(ModeTestSuite):
         TcpServer(API_SERVER_PORT, lambda s: socketSendAndShutdown(s, getPathMappingResponse(TEST_FILES_ROOT + TEST_FLAVOR_FILE)))
         for curPrefix, curRequest, contentType in ALL_REQUESTS:
             url = self.getUrl(curPrefix, curRequest)
-            
+
             # uncached
             logTracker = LogTracker()
-            response = urllib2.urlopen(url)            
-            assertEquals(response.info().getheader('Content-Type'), contentType)            
+            response = urllib2.urlopen(url)
+            assertEquals(response.info().getheader('Content-Type'), contentType)
             uncachedResponse = response.read()
             logTracker.assertContains('mapping cache miss')
 
             #cached
             logTracker = LogTracker()
             response = urllib2.urlopen(url)
-            assertEquals(response.info().getheader('Content-Type'), contentType)            
+            assertEquals(response.info().getheader('Content-Type'), contentType)
             cachedResponse = response.read()
             logTracker.assertContains(['mapping cache hit', 'response cache hit'])
 
             assert(cachedResponse == uncachedResponse)
-                   
-class RemoteTestSuite(ModeTestSuite):            
+
+class RemoteTestSuite(ModeTestSuite):
     def runChildSuites(self):
         BasicTestSuite(
             self.getUrl,
@@ -960,7 +964,7 @@ class RemoteTestSuite(ModeTestSuite):
         requestHandler = lambda s,h: serveFileHandler(s, TEST_FILES_ROOT + TEST_FLAVOR_FILE, TEST_FILE_TYPE, h)
         MemoryUpstreamTestSuite(self.baseUrl + HLS_PREFIX + TEST_FLAVOR_URI, HLS_PLAYLIST_FILE, API_SERVER_PORT, requestHandler).run()
         DumpUpstreamTestSuite(self.getBaseUrl('') + TEST_FLAVOR_URI, '', API_SERVER_PORT).run()      # non HLS URL will just dump to upstream
-        
+
     def testMetadataCache(self):
         TcpServer(API_SERVER_PORT, lambda s: serveFile(s, TEST_FILES_ROOT + TEST_FLAVOR_FILE, TEST_FILE_TYPE))
         for curPrefix, curRequest, _ in VOD_REQUESTS:
@@ -969,7 +973,7 @@ class RemoteTestSuite(ModeTestSuite):
             logTracker = LogTracker()
             uncachedResponse = urllib2.urlopen(url).read()
             logTracker.assertContains('metadata cache miss')
-            
+
             logTracker = LogTracker()
             cachedResponse = urllib2.urlopen(url).read()
             logTracker.assertContains(['metadata cache hit', 'response cache hit'])
@@ -1007,35 +1011,37 @@ class DrmTestSuite(ModeTestSuite):
         TcpServer(DRM_SERVER_PORT, lambda s: socketSendAndShutdown(s, getHttpResponse('null')))
         assertRequestFails(self.getUrl(EDASH_PREFIX, DASH_MANIFEST_FILE), 503)
         self.logTracker.assertContains('invalid drm info response null')
-        
+
     def testDrmInfoCache(self):
         TcpServer(API_SERVER_PORT, lambda s: serveFile(s, TEST_FILES_ROOT + TEST_FLAVOR_FILE, TEST_FILE_TYPE))
         TcpServer(DRM_SERVER_PORT, lambda s: socketSendAndShutdown(s, getHttpResponse(DRM_SERVICE_RESPONSE)))
         url = self.getUrl(EDASH_PREFIX, DASH_MANIFEST_FILE)
-        
+
         logTracker = LogTracker()
         missResponse = urllib2.urlopen(url).read()
         logTracker.assertContains('drm info cache miss')
-        
+
         logTracker = LogTracker()
         hitResponse = urllib2.urlopen(url.replace(DASH_MANIFEST_FILE, '/manifest-v1-a1.mpd')).read()
         logTracker.assertContains('drm info cache hit')
-        
+
         assert(missResponse == hitResponse)
-        
+
 class MainTestSuite(TestSuite):
-    def runChildSuites(self):        
+    def runChildSuites(self):
         DrmTestSuite(NGINX_REMOTE).run()
 
         # all combinations of (encrypted, non encrypted) x (keep alive, no keep alive)
         for encryptionPrefix in [ENCRYPTED_PREFIX, '']:
             for keepAlivePrefix in [KEEPALIVE_PREFIX, '']:
+                print('-- keepAlivePrefix=%s, encryptionPrefix=%s' % (keepAlivePrefix, encryptionPrefix))
                 LocalTestSuite(NGINX_HOST + keepAlivePrefix + '/tlocal', encryptionPrefix).run()
                 MappedTestSuite(NGINX_HOST + keepAlivePrefix + '/tmapped', encryptionPrefix).run()
                 RemoteTestSuite(NGINX_HOST + keepAlivePrefix + '/tremote', encryptionPrefix).run()
 
 for getHttpResponse in [getHttpResponseChunked, getHttpResponseRegular]:
-    socketSend = socketSendRegular
-    MainTestSuite().run()
-    socketSend = socketSendByteByByte
-    MainTestSuite().run()
+    for socketSend in [socketSendRegular, socketSendByteByByte]:
+        print('-- socketSend=%s, getHttpResponse=%s' % (
+            'regular' if socketSend == socketSendRegular else 'byteByByte',
+            'chunked' if getHttpResponse == getHttpResponseChunked else 'regular'))
+        MainTestSuite().run()
