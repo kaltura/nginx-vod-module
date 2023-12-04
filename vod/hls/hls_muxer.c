@@ -196,7 +196,7 @@ hls_muxer_init_id3_stream(
 	if (sequence_id->len != 0)
 	{
 		sequence_id_escape = vod_escape_json(NULL, sequence_id->data, sequence_id->len);
-		data_size = sizeof(ID3_TEXT_JSON_SEQUENCE_ID_PREFIX_FORMAT) + VOD_INT64_LEN + 
+		data_size = sizeof(ID3_TEXT_JSON_SEQUENCE_ID_PREFIX_FORMAT) + VOD_INT64_LEN +
 			sequence_id->len + sequence_id_escape +
 			sizeof(ID3_TEXT_JSON_SEQUENCE_ID_SUFFIX);
 	}
@@ -907,7 +907,7 @@ hls_muxer_simulation_write_frame(hls_muxer_stream_state_t* selected_stream, inpu
 	selected_stream->filter.simulated_flush_frame(&selected_stream->filter_context, last_frame);
 }
 
-static void 
+static void
 hls_muxer_simulation_set_segment_limit(
 	hls_muxer_state_t* state,
 	uint64_t segment_end,
@@ -1269,4 +1269,199 @@ hls_muxer_simulation_reset(hls_muxer_state_t* state)
 	}
 
 	state->cur_frame = NULL;
+}
+
+vod_status_t
+hls_muxer_simulate_get_segment_sizes(
+        request_context_t* request_context,
+        segment_durations_t* segment_durations,
+        hls_mpegts_muxer_conf_t* muxer_conf,
+        hls_encryption_params_t* encryption_params,
+        media_set_t* media_set,
+        uint32_t* bandwidth,
+        uint32_t* avg_bandwidth)
+{
+    hls_muxer_stream_state_t* selected_stream;
+    segment_duration_item_t* cur_item;
+    segment_duration_item_t* last_item;
+    hls_muxer_state_t state;
+    input_frame_t* cur_frame;
+    uint32_t segment_index = 0;
+    uint32_t segment_bandwidth[segment_durations->segment_count];
+
+    uint64_t cur_frame_dts;
+    uint32_t repeat_count;
+    uint64_t segment_end;
+    bool_t simulation_supported;
+    bool_t last_frame;
+    vod_status_t rc;
+
+    uint32_t largest_segment = 0;
+    uint32_t sum_segments = 0;
+    uint32_t valid_segments = 0;
+
+#if (VOD_DEBUG)
+    off_t cur_frame_start;
+#endif // VOD_DEBUG
+
+    cur_item = segment_durations->items;
+    last_item = segment_durations->items + segment_durations->item_count;
+
+    if (cur_item >= last_item)
+    {
+        return VOD_OK;
+    }
+
+    // initialize the muxer
+    rc = hls_muxer_init_base(
+            &state,
+            request_context,
+            muxer_conf,
+            encryption_params,
+            0,
+            media_set,
+            &simulation_supported,
+            NULL);
+    if (rc != VOD_OK)
+    {
+        return rc;
+    }
+
+    if (!simulation_supported)
+    {
+        vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+                      "hls_muxer_simulate_get_segment_sizes: simulation not supported for this file, cant create iframe playlist");
+        return VOD_BAD_REQUEST;
+    }
+
+    // initialize the repeat count, segment end, and the per stream limit
+    repeat_count = cur_item->repeat_count - 1;
+    segment_end = cur_item->duration;
+
+    if (repeat_count <= 0 && (cur_item + 1 >= last_item || cur_item[1].discontinuity))
+    {
+        hls_muxer_simulation_set_segment_limit_unlimited(&state);
+    }
+    else
+    {
+        hls_muxer_simulation_set_segment_limit(&state, segment_end, segment_durations->timescale);
+    }
+
+    mpegts_encoder_simulated_start_segment(&state.queue);
+    for (;;)
+    {
+
+        // get a frame
+        for (;;)
+        {
+            // choose a stream for the current frame
+            rc = hls_muxer_choose_stream(&state, &selected_stream);
+            if (rc == VOD_OK)
+            {
+                break;
+            }
+
+            if (rc != VOD_NOT_FOUND)
+            {
+                return rc;
+            }
+            // update the limit for the next segment
+            segment_bandwidth[segment_index] = state.queue.cur_offset / ((float)(cur_item->duration) / (float)(segment_durations->timescale));
+//            vod_log_error(VOD_LOG_ERR, state.request_context->log, 0,
+//                          "hls_muxer_simulate_get_segment_sizes: segment %12L %12L %12f %12f %12f", segment_index + 1,  state.queue.cur_offset * 8, (float)(cur_item->duration) / (float)(segment_durations->timescale) ,  (state.queue.cur_offset * 8) / ((float)(cur_item->duration) / (float)(segment_durations->timescale)), segment_bandwidth[segment_index]);
+
+            if (repeat_count <= 0)
+            {
+                cur_item++;
+                vod_log_error(VOD_LOG_ERR, state.request_context->log, 0,
+                              "hls_muxer_simulate_get_segment_sizes: next segment duration");
+
+                if (cur_item >= last_item)
+                {
+                    vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
+                                   "goto done: done");
+                    goto done;
+                }
+
+                repeat_count = cur_item->repeat_count;
+            }
+
+            repeat_count--;
+            segment_end += cur_item->duration;
+
+
+            if (repeat_count <= 0 && (cur_item + 1 >= last_item || cur_item[1].discontinuity))
+            {
+                hls_muxer_simulation_set_segment_limit_unlimited(&state);
+            }
+            else
+            {
+                hls_muxer_simulation_set_segment_limit(&state, segment_end, segment_durations->timescale);
+            }
+
+
+
+
+            mpegts_encoder_simulated_start_segment(&state.queue);
+            segment_index++;
+
+        }
+        // update the stream state
+        cur_frame = selected_stream->cur_frame;
+        selected_stream->cur_frame++;
+        cur_frame_dts = selected_stream->next_frame_time_offset;
+        selected_stream->next_frame_time_offset += cur_frame->duration;
+
+        // flush any buffered frames if their delay becomes too big
+        hls_muxer_simulation_flush_delayed_streams(&state, selected_stream, cur_frame_dts);
+
+        // check whether this is the last frame of the selected stream in this segment
+        last_frame = ((selected_stream->cur_frame >= selected_stream->cur_frame_part.last_frame &&
+                       selected_stream->cur_frame_part.next == NULL) ||
+                      selected_stream->next_frame_time_offset >= selected_stream->segment_limit);
+
+        // write the frame
+#if (VOD_DEBUG)
+        cur_frame_start = state.queue.cur_offset;
+#endif // VOD_DEBUG
+
+        hls_muxer_simulation_write_frame(
+                selected_stream,
+                cur_frame,
+                cur_frame_dts,
+                last_frame);
+
+#if (VOD_DEBUG)
+        if (cur_frame_start != state.queue.cur_offset)
+		{
+			vod_log_debug4(VOD_LOG_DEBUG_LEVEL, state.request_context->log, 0,
+				"hls_muxer_simulate_get_segment_sizes: wrote frame segment %uD packets %uD-%uD dts %L",
+				segment_index + 1,
+				(uint32_t)(cur_frame_start / MPEGTS_PACKET_SIZE + 1),
+				(uint32_t)(state.queue.cur_offset / MPEGTS_PACKET_SIZE + 1),
+				cur_frame_dts);
+		}
+#endif // VOD_DEBUG
+    }
+
+    done:
+
+
+
+    for (uint32_t i = 0; i < segment_durations->segment_count; i++) {
+        if (segment_bandwidth[i] > largest_segment) {
+            largest_segment = segment_bandwidth[i];
+        }
+        if (segment_bandwidth[i] > 100) {
+            sum_segments += segment_bandwidth[i];
+            valid_segments++;
+        }
+
+//        vod_log_error(VOD_LOG_ERR, state.request_context->log, 0,
+//                      "hls_muxer_simulate_get_segment_sizes: segment %L %L kbit/s", i + 1, segment_bandwidth[i] / 1024 * 8);
+    }
+
+    *avg_bandwidth = sum_segments / valid_segments * 8 ;
+    *bandwidth = largest_segment * 8;
+    return VOD_OK;
 }

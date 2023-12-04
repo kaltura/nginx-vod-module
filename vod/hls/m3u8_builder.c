@@ -1,4 +1,5 @@
 #include "m3u8_builder.h"
+#include "hls_muxer.h"
 #include "../manifest_utils.h"
 #include "../mp4/mp4_defs.h"
 
@@ -1070,15 +1071,17 @@ m3u8_builder_write_variants(
 	m3u8_config_t* conf,
 	vod_str_t* base_url,
 	media_set_t* media_set,
-	media_track_t* group_audio_track)
+	media_track_t* group_audio_track,
+    hls_mpegts_muxer_conf_t* muxer_conf,
+    segment_durations_t* segment_durations,
+    hls_encryption_params_t* encryption_params,
+    request_context_t* request_context)
 {
 	adaptation_set_t* adaptation_set = adaptation_sets->first;
 	media_track_t** cur_track_ptr;
 	media_track_t* tracks[MEDIA_TYPE_COUNT];
 	media_info_t* video = NULL;
 	media_info_t* audio = NULL;
-	uint32_t bitrate;
-	uint32_t avg_bitrate;
 	uint32_t muxed_tracks = adaptation_set->type == ADAPTATION_TYPE_MUXED ? MEDIA_TYPE_COUNT : 1;
 
 	vod_memzero(tracks, sizeof(tracks));
@@ -1087,7 +1090,11 @@ m3u8_builder_write_variants(
 		cur_track_ptr < adaptation_set->last;
 		cur_track_ptr += muxed_tracks)
 	{
-		// get the audio / video tracks
+        uint32_t bandwidth;
+        uint32_t avg_bandwidth;
+
+
+        // get the audio / video tracks
 		if (muxed_tracks == MEDIA_TYPE_COUNT)
 		{
 			tracks[MEDIA_TYPE_VIDEO] = cur_track_ptr[MEDIA_TYPE_VIDEO];
@@ -1099,12 +1106,19 @@ m3u8_builder_write_variants(
 			tracks[adaptation_set->type] = cur_track_ptr[0];
 		}
 
-		// output EXT-X-STREAM-INF
+
+        media_set->filtered_tracks = cur_track_ptr[0];
+        media_set->filtered_tracks_end = cur_track_ptr[0];
+        media_set->total_track_count = 1;
+        hls_muxer_simulate_get_segment_sizes(request_context, segment_durations, muxer_conf, encryption_params, media_set,  &bandwidth, &avg_bandwidth);
+        vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+                      "m3u8_builder_write_variants (bandwidth avg_bandwidth): %L %L", bandwidth, avg_bandwidth);
+
+
+        // output EXT-X-STREAM-INF
 		if (tracks[MEDIA_TYPE_VIDEO] != NULL)
 		{
 			video = &tracks[MEDIA_TYPE_VIDEO]->media_info;
-			bitrate = video->bitrate;
-			avg_bitrate = video->avg_bitrate;
 			if (group_audio_track != NULL)
 			{
 				audio = &group_audio_track->media_info;
@@ -1118,17 +1132,9 @@ m3u8_builder_write_variants(
 				audio = NULL;
 			}
 
-			if (audio != NULL)
-			{
-				bitrate += audio->bitrate;
-				if (avg_bitrate != 0)
-				{
-					avg_bitrate += audio->avg_bitrate;
-				}
-			}
 
 			p = vod_sprintf(p, m3u8_stream_inf_video,
-				bitrate,
+                bandwidth,
 				(uint32_t)video->u.video.width,
 				(uint32_t)video->u.video.height,
 				(uint32_t)(video->timescale / video->min_frame_duration),
@@ -1151,16 +1157,14 @@ m3u8_builder_write_variants(
 				audio = &tracks[MEDIA_TYPE_AUDIO]->media_info;
 			}
 
-			avg_bitrate = audio->avg_bitrate;
-			p = vod_sprintf(p, m3u8_stream_inf_audio, audio->bitrate, &audio->codec_name);
+
+			p = vod_sprintf(p, m3u8_stream_inf_audio, bandwidth, &audio->codec_name);
 		}
 
 		*p++ = '\"';
 
-		if (avg_bitrate != 0)
-		{
-			p = vod_sprintf(p, m3u8_average_bandwidth, avg_bitrate);
-		}
+    	p = vod_sprintf(p, m3u8_average_bandwidth, avg_bandwidth);
+
 
 		if (tracks[MEDIA_TYPE_VIDEO] != NULL)
 		{
@@ -1281,6 +1285,8 @@ m3u8_builder_build_master_playlist(
 	vod_uint_t encryption_method,
 	vod_str_t* base_url,
 	media_set_t* media_set,
+    hls_mpegts_muxer_conf_t* muxer_conf,
+    hls_encryption_params_t* encryption_params,
 	vod_str_t* result)
 {
 	adaptation_sets_t adaptation_sets;
@@ -1299,6 +1305,9 @@ m3u8_builder_build_master_playlist(
 	size_t result_size;
 	u_char* p;
 	bool_t alternative_audio;
+    segment_durations_t segment_durations;
+    segmenter_conf_t* segmenter_conf = media_set->segmenter_conf;
+
 
 	// get the adaptations sets
 	flags = ADAPTATION_SETS_FLAG_SINGLE_LANG_TRACK | ADAPTATION_SETS_FLAG_MULTI_AUDIO_CODEC;
@@ -1464,6 +1473,36 @@ m3u8_builder_build_master_playlist(
 		p = m3u8_builder_closed_captions_write(p, media_set);
 	}
 
+
+    if (segmenter_conf->align_to_key_frames)
+    {
+        rc = segmenter_get_segment_durations_accurate(
+                request_context,
+                segmenter_conf,
+                media_set,
+                NULL,
+                MEDIA_TYPE_NONE,
+                &segment_durations);
+    }
+    else
+    {
+        rc = segmenter_get_segment_durations_estimate(
+                request_context,
+                segmenter_conf,
+                media_set,
+                NULL,
+                MEDIA_TYPE_NONE,
+                &segment_durations);
+    }
+
+
+    if (rc != VOD_OK)
+    {
+        vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+                      "ngx_http_vod_thumb_get_url: result length %uz exceeded allocated length %uz",
+                      result->len, result_size);
+        return rc;
+    }
 	// output variants
 	if (variant_set_count > 1)
 	{
@@ -1478,7 +1517,11 @@ m3u8_builder_build_master_playlist(
 				conf,
 				base_url,
 				media_set,
-				*cur_track_ptr);
+				*cur_track_ptr,
+                muxer_conf,
+                &segment_durations,
+                encryption_params,
+                request_context);
 		}
 	}
 	else
@@ -1489,7 +1532,11 @@ m3u8_builder_build_master_playlist(
 			conf,
 			base_url,
 			media_set,
-			alternative_audio ? adaptation_sets.first_by_type[ADAPTATION_TYPE_AUDIO]->first[0] : NULL);
+			alternative_audio ? adaptation_sets.first_by_type[ADAPTATION_TYPE_AUDIO]->first[0] : NULL,
+            muxer_conf,
+            &segment_durations,
+            encryption_params,
+            request_context);
 	}
 
 	// iframes
