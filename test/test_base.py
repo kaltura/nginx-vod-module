@@ -52,7 +52,6 @@ def assertRequestFails(url, statusCode, expectedBody = None, headers = {}, postD
 			assertIn(e.getcode(), statusCode)
 		else:
 			assertEquals(e.getcode(), statusCode)
-		assertEquals(e.getcode(), statusCode)
 		if expectedBody != None:
 			assertEquals(expectedBody, e.read())
 
