@@ -1689,8 +1689,19 @@ padding is added as needed.
 * **default**: `off`
 * **context**: `http`, `server`, `location`
 
-When enabled, an ID3 TEXT frame will be outputted in each TS segment, containing a JSON with the absolute segment timestamp.
-The timestamp is measured in milliseconds since the epoch (unixtime x 1000), the JSON structure is: `{"timestamp":1459779115000}`
+When enabled, an ID3 TEXT frame is outputted in each TS segment.
+The content of the ID3 TEXT frame can be set using the directive `vod_hls_mpegts_id3_data`.
+
+#### vod_hls_mpegts_id3_data
+* **syntax**: `vod_hls_mpegts_id3_data string`
+* **default**: `{"timestamp":$vod_segment_time,"sequenceId":"$vod_sequence_id"}`
+* **context**: `http`, `server`, `location`
+
+Sets the data of the ID3 TEXT frame outputted in each TS segment, when `vod_hls_mpegts_output_id3_timestamps` is set to `on`.
+When the directive is not set, the ID3 frames contain by default a JSON object of the format `{"timestamp":1459779115000,"sequenceId":"{id}"}`:
+- `timestamp` - an absolute time measured in milliseconds since the epoch (unixtime x 1000).
+- `sequenceId` - the id field of the sequence object, as specified in the mapping JSON. The field is omitted when the sequence id is empty / not specified in the mapping JSON.
+The parameter value can contain variables.
 
 #### vod_hls_mpegts_align_pts
 * **syntax**: `vod_hls_mpegts_align_pts on/off`
@@ -1821,6 +1832,7 @@ The module adds the following nginx variables:
 	`EXPIRED` - the current server time is larger than `expirationTime`
 	`ALLOC_FAILED` - the module failed to allocate memory
 	`UNEXPECTED` - a scenario that is not supposed to happen, most likely a bug in the module
+* `$vod_segment_time` - for segment requests, contains the absolute timestamp of the first frame in the segment, measured in milliseconds since the epoch (unixtime x 1000).
 * `$vod_segment_duration` - for segment requests, contains the duration of the segment in milliseconds
 * `$vod_frames_bytes_read` - for segment requests, total number of bytes read while processing media frames
 

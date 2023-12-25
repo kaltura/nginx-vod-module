@@ -27,7 +27,7 @@ typedef struct {
 	bool_t interleave_frames;
 	bool_t align_frames;
 	bool_t align_pts;
-	bool_t output_id3_timestamps;
+	vod_str_t id3_data;
 } hls_mpegts_muxer_conf_t;
 
 typedef struct {
