@@ -467,6 +467,10 @@ ngx_http_vod_set_clip_id_var(ngx_http_request_t *r, ngx_http_variable_value_t *v
 	}
 
 	cur_clip = ctx->cur_clip;
+	if (cur_clip == NULL && ctx->submodule_context.media_set.clip_count == 1)
+	{
+		cur_clip = (media_clip_t*) ctx->submodule_context.media_set.sources_head;
+	}
 	if (cur_clip == NULL)
 	{
 		goto not_found;
@@ -475,7 +479,11 @@ ngx_http_vod_set_clip_id_var(ngx_http_request_t *r, ngx_http_variable_value_t *v
 	switch (cur_clip->type)
 	{
 	case MEDIA_CLIP_SOURCE:
-		value = &((media_clip_source_t*)cur_clip)->mapped_uri;
+		if (((media_clip_source_t*)cur_clip)->id.len != 0) {
+			value = &((media_clip_source_t*)cur_clip)->id;
+		} else {
+			value = &((media_clip_source_t*)cur_clip)->mapped_uri;
+		}
 		break;
 
 	case MEDIA_CLIP_DYNAMIC:
