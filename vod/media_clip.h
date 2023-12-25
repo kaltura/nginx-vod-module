@@ -64,7 +64,6 @@ typedef struct ngx_http_vod_reader_s ngx_http_vod_reader_t;
 
 struct media_clip_source_s {
 	// base
-	vod_str_t id;
 	media_clip_t base;
 	int64_t clip_time;
 	media_range_t* range;
@@ -75,6 +74,7 @@ struct media_clip_source_s {
 	// TODO: the fields below are not required for generators, consider adding another struct
 
 	// input params
+	vod_str_t id;
 	media_clip_source_type_t source_type;
 	vod_str_t uri;				// original uri
 	uint64_t clip_from;
