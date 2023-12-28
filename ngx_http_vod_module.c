@@ -456,8 +456,10 @@ ngx_http_vod_set_sequence_id_var(ngx_http_request_t *r, ngx_http_variable_value_
 static ngx_int_t
 ngx_http_vod_set_clip_id_var(ngx_http_request_t *r, ngx_http_variable_value_t *v, uintptr_t data)
 {
+	media_clip_source_t* clip_source;
 	ngx_http_vod_ctx_t *ctx;
 	media_clip_t* cur_clip;
+	media_set_t* media_set;
 	ngx_str_t* value;
 
 	ctx = ngx_http_get_module_ctx(r, ngx_http_vod_module);
@@ -467,9 +469,17 @@ ngx_http_vod_set_clip_id_var(ngx_http_request_t *r, ngx_http_variable_value_t *v
 	}
 
 	cur_clip = ctx->cur_clip;
-	if (cur_clip == NULL && ctx->submodule_context.media_set.clip_count == 1)
+	if (cur_clip == NULL)
 	{
-		cur_clip = (media_clip_t*) ctx->submodule_context.media_set.sources_head;
+		media_set = &ctx->submodule_context.media_set;
+		if (media_set->sequence_count == 1 && media_set->clip_count == 1)
+		{
+			cur_clip = media_set->sequences->clips[0];
+		}
+		else
+		{
+			goto not_found;
+		}
 	}
 	if (cur_clip == NULL)
 	{
@@ -479,10 +489,12 @@ ngx_http_vod_set_clip_id_var(ngx_http_request_t *r, ngx_http_variable_value_t *v
 	switch (cur_clip->type)
 	{
 	case MEDIA_CLIP_SOURCE:
-		if (((media_clip_source_t*)cur_clip)->id.len != 0) {
-			value = &((media_clip_source_t*)cur_clip)->id;
+		clip_source = (media_clip_source_t*)cur_clip;
+		if (clip_source->id.len != 0)
+		{
+			value = &clip_source->id;
 		} else {
-			value = &((media_clip_source_t*)cur_clip)->mapped_uri;
+			value = &clip_source->mapped_uri;
 		}
 		break;
 
