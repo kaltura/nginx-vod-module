@@ -481,10 +481,6 @@ ngx_http_vod_set_clip_id_var(ngx_http_request_t *r, ngx_http_variable_value_t *v
 			goto not_found;
 		}
 	}
-	if (cur_clip == NULL)
-	{
-		goto not_found;
-	}
 
 	switch (cur_clip->type)
 	{
