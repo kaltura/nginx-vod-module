@@ -493,7 +493,9 @@ ngx_http_vod_set_clip_id_var(ngx_http_request_t *r, ngx_http_variable_value_t *v
 		if (clip_source->id.len != 0)
 		{
 			value = &clip_source->id;
-		} else {
+		}
+		else
+		{
 			value = &clip_source->mapped_uri;
 		}
 		break;
