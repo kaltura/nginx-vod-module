@@ -98,6 +98,7 @@ void vod_log_error(vod_uint_t level, vod_log_t *log, int err,
 
 #define VOD_INT64_LEN NGX_INT64_LEN
 #define VOD_INT32_LEN NGX_INT32_LEN
+#define VOD_MAX_UINT32_VALUE NGX_MAX_UINT32_VALUE
 #define VOD_MAX_SIZE_T_VALUE NGX_MAX_SIZE_T_VALUE
 #define VOD_MAX_OFF_T_VALUE NGX_MAX_OFF_T_VALUE
 

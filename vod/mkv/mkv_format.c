@@ -9,6 +9,24 @@
 #define BITRATE_ESTIMATE_SEC (5)
 #define FRAMES_PER_PART (160)		// about 4K
 #define MAX_GOP_FRAMES (600)		// 10 sec GOP in 60 fps
+#define MAX_LACES (256)				// the count is stored in one byte
+
+/* when reading the frames, need to read some extra in order to have the headers
+	of the first frame of the next cluster -
+
+	field					max size
+	MKV_ID_CLUSTER			(4)
+	size 					(8)
+	MKV_ID_CLUSTERTIMECODE	(1)
+	size					(1)
+	value					(8)
+	MKV_SIMPLEBLOCK			(1)
+	size					(8)
+	track number			(8)
+	timecode				(2)
+	flags					(1)
+*/
+#define READ_FRAMES_EXTRA_SIZE (42)
 
 // prototypes
 static vod_status_t mkv_parse_seek_entry(ebml_context_t* context, ebml_spec_t* spec, void* dst);
@@ -144,23 +162,23 @@ static ebml_spec_t mkv_spec_index[] = {
 // cluster
 static ebml_spec_t mkv_spec_cluster_fields[] = {
 	{ MKV_ID_CLUSTERTIMECODE,		EBML_UINT,		offsetof(mkv_cluster_t, timecode),			NULL },
-	{ MKV_ID_SIMPLEBLOCK,			EBML_CUSTOM,	0,											mkv_parse_frame },
+	{ MKV_ID_SIMPLEBLOCK,			EBML_CUSTOM | EBML_TRUNCATE_SIZE,	0,						mkv_parse_frame },
 	{ 0, EBML_NONE, 0, NULL }
 };
 
 static ebml_spec_t mkv_spec_cluster[] = {
-	{ MKV_ID_CLUSTER,				EBML_MASTER,	0,											mkv_spec_cluster_fields },
+	{ MKV_ID_CLUSTER,				EBML_MASTER | EBML_TRUNCATE_SIZE,	0,						mkv_spec_cluster_fields },
 	{ 0, EBML_NONE, 0, NULL }
 };
 
 static ebml_spec_t mkv_spec_bitrate_estimate_cluster_fields[] = {
 	{ MKV_ID_CLUSTERTIMECODE,		EBML_UINT,		offsetof(mkv_cluster_t, timecode),			NULL },
-	{ MKV_ID_SIMPLEBLOCK,			EBML_CUSTOM,	0,											mkv_parse_frame_estimate_bitrate },
+	{ MKV_ID_SIMPLEBLOCK,			EBML_CUSTOM | EBML_TRUNCATE_SIZE,	0,						mkv_parse_frame_estimate_bitrate },
 	{ 0, EBML_NONE, 0, NULL }
 };
 
 static ebml_spec_t mkv_spec_bitrate_estimate_cluster[] = {
-	{ MKV_ID_CLUSTER,				EBML_MASTER,	0,											mkv_spec_bitrate_estimate_cluster_fields },
+	{ MKV_ID_CLUSTER,				EBML_MASTER | EBML_TRUNCATE_SIZE,	0,						mkv_spec_bitrate_estimate_cluster_fields },
 	{ 0, EBML_NONE, 0, NULL }
 };
 
@@ -228,10 +246,16 @@ typedef struct {
 
 typedef struct {
 	input_frame_t* frame;
+	frame_list_part_t* part;
+	uint32_t laces;
+} mkv_laced_frame_t;
+
+typedef struct {
+	mkv_laced_frame_t frame;
 	uint64_t timecode;
 	input_frame_t* unsorted_frame;
 	uint64_t unsorted_timecode;
-} frame_timecode_t;
+} mkv_frame_timecode_t;
 
 typedef struct {
 	uint64_t track_number;
@@ -245,7 +269,7 @@ typedef struct {
 	uint64_t total_frames_duration;
 	uint64_t first_timecode;
 
-	vod_array_t gop_frames;		// array of frame_timecode_t
+	vod_array_t gop_frames;		// array of mkv_frame_timecode_t
 	int32_t min_pts_delay;
 } mkv_frame_parse_track_context_t;
 
@@ -811,7 +835,7 @@ mkv_metadata_parse(
 		if (metadata->base.tracks.nelts > MAX_TRACK_COUNT)
 		{
 			vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-				"mkv_metadata_parse: track count exceeded the limit of %i", (ngx_int_t)MAX_TRACK_COUNT);
+				"mkv_metadata_parse: track count exceeded the limit of %i", (vod_int_t)MAX_TRACK_COUNT);
 			return VOD_BAD_REQUEST;
 		}
 
@@ -998,7 +1022,7 @@ mkv_get_read_frames_request(
 		return VOD_BAD_DATA;
 	}
 
-	read_req->read_size = index.cluster_pos - read_req->read_offset;
+	read_req->read_size = index.cluster_pos + READ_FRAMES_EXTRA_SIZE - read_req->read_offset;
 	read_req->read_offset += metadata->base_layout.position_reference;
 
 	return VOD_AGAIN;
@@ -1007,10 +1031,10 @@ mkv_get_read_frames_request(
 static void 
 mkv_sort_gop_frames(vod_array_t* gop_frames)
 {
-	frame_timecode_t* frames = gop_frames->elts;
-	frame_timecode_t* frame1;
-	frame_timecode_t* frame2;
-	input_frame_t* temp_frame;
+	mkv_frame_timecode_t* frames = gop_frames->elts;
+	mkv_frame_timecode_t* frame1;
+	mkv_frame_timecode_t* frame2;
+	mkv_laced_frame_t temp_frame;
 	uint64_t temp_timecode;
 	vod_uint_t index1;
 	vod_uint_t index2;
@@ -1055,10 +1079,48 @@ mkv_sort_gop_frames(vod_array_t* gop_frames)
 }
 
 static void
+mkv_update_laces_duration(mkv_laced_frame_t* laced_frame, uint32_t duration)
+{
+	frame_list_part_t* part;
+	input_frame_t* frame;
+	uint32_t target_duration;
+	uint32_t prev_duration;
+	uint32_t laces;
+	uint32_t i;
+
+	prev_duration = 0;
+	laces = laced_frame->laces;
+
+	part = laced_frame->part;
+	frame = laced_frame->frame;
+	for (i = 0; i < laces; i++)
+	{
+		if (frame >= part->last_frame)
+		{
+			if (part->next == NULL)
+			{
+				// unexpected
+				break;
+			}
+
+			part = part->next;
+			frame = part->first_frame;
+		}
+
+		target_duration = duration * (i + 1) / laces;
+		frame->duration = target_duration - prev_duration;
+
+		frame++;
+		prev_duration = target_duration;
+	}
+}
+
+static void
 mkv_update_frame_timestamps(mkv_frame_parse_track_context_t* context)
 {
-	frame_timecode_t* cur_frame;
-	frame_timecode_t* last_frame;
+	mkv_frame_timecode_t* cur_frame;
+	mkv_frame_timecode_t* last_frame;
+	uint32_t duration;
 	int32_t pts_delay;
 
 	// sort the frames
@@ -1070,7 +1132,7 @@ mkv_update_frame_timestamps(mkv_frame_parse_track_context_t* context)
 	cur_frame = context->gop_frames.elts;
 	last_frame = cur_frame + (context->gop_frames.nelts - 1);
 
-	if (cur_frame->frame != NULL)
+	if (cur_frame->frame.frame != NULL)
 	{
 		// this gop is included in the parsed frames, calculate the pts delay and duration
 		for (; cur_frame < last_frame; cur_frame++)
@@ -1083,7 +1145,12 @@ mkv_update_frame_timestamps(mkv_frame_parse_track_context_t* context)
 			}
 
 			cur_frame->unsorted_frame->pts_delay = pts_delay;
-			cur_frame->frame->duration = cur_frame[1].timecode - cur_frame[0].timecode;
+
+			duration = cur_frame[1].timecode - cur_frame[0].timecode;
+
+			mkv_update_laces_duration(&cur_frame->frame, duration);
+
+			context->total_frames_duration += duration;
 		}
 	}
 	else
@@ -1232,6 +1299,144 @@ mkv_parse_frames_estimate_bitrate(
 }
 
 static vod_status_t
+mkv_parse_laces(ebml_context_t* context, uint8_t flags, uint32_t* lace_sizes)
+{
+	vod_status_t rc;
+	size_t total;
+	uint64_t num;
+	uint32_t laces;
+	uint32_t size;
+	uint32_t i;
+	int64_t delta;
+	uint8_t lace_type;
+	u_char cur;
+
+	lace_type = (flags & 0x06) >> 1;
+	if (lace_type == 0)
+	{
+		// no lacing
+		lace_sizes[0] = context->end_pos - context->cur_pos;
+		return 1;
+	}
+
+	// get number of laces
+	if (context->cur_pos >= context->end_pos)
+	{
+		vod_log_error(VOD_LOG_ERR, context->request_context->log, 0,
+			"mkv_parse_laces: overflow while reading number of laces");
+		return VOD_BAD_DATA;
+	}
+
+	laces = *context->cur_pos + 1;
+	context->cur_pos++;
+
+	switch (lace_type)
+	{
+	case 0x1: // xiph
+		vod_memzero(lace_sizes, (laces - 1) * sizeof(lace_sizes[0]));
+
+		total = 0;
+		for (i = 0; i < laces - 1; i++)
+		{
+			do
+			{
+				if (context->cur_pos >= context->end_pos)
+				{
+					vod_log_error(VOD_LOG_ERR, context->request_context->log, 0,
+						"mkv_parse_laces: overflow while reading xiph lace size");
+					return VOD_BAD_DATA;
+				}
+
+				cur = *context->cur_pos;
+				context->cur_pos++;
+
+				lace_sizes[i] += cur;
+			} while (cur == 0xff);
+
+			total += lace_sizes[i];
+		}
+		break;
+
+	case 0x2: // fixed size
+		size = context->end_pos - context->cur_pos;
+		if (size % laces != 0)
+		{
+			vod_log_error(VOD_LOG_ERR, context->request_context->log, 0,
+				"mkv_parse_laces: invalid fixed size lace, size=%uD, laces=%uD", size, laces);
+			return VOD_BAD_DATA;
+		}
+
+		size /= laces;
+		for (i = 0; i < laces; i++)
+		{
+			lace_sizes[i] = size;
+		}
+		return laces;
+
+	case 0x3: // EBML
+		rc = ebml_read_num(context, &num, 4, 1);
+		if (rc < 0)
+		{
+			vod_log_debug1(VOD_LOG_DEBUG_LEVEL, context->request_context->log, 0,
+				"mkv_parse_laces: ebml_read_num(initial lace size) failed %i", rc);
+			return rc;
+		}
+
+		if (num > VOD_MAX_UINT32_VALUE)
+		{
+			vod_log_error(VOD_LOG_ERR, context->request_context->log, 0,
+				"mkv_parse_laces: invalid ebml lace size %uL", num);
+			return VOD_BAD_DATA;
+		}
+
+		lace_sizes[0] = num;
+		total = num;
+
+		for (i = 1; i < laces - 1; i++)
+		{
+			rc = ebml_read_num(context, &num, 4, 1);
+			if (rc < 0)
+			{
+				vod_log_debug1(VOD_LOG_DEBUG_LEVEL, context->request_context->log, 0,
+					"mkv_parse_laces: ebml_read_num(lace size delta) failed %i", rc);
+				return rc;
+			}
+
+			delta = num - ((1LL << (7 * rc - 1)) - 1);
+			if (delta > (int64_t)(VOD_MAX_UINT32_VALUE - lace_sizes[i - 1]))
+			{
+				vod_log_error(VOD_LOG_ERR, context->request_context->log, 0,
+					"mkv_parse_laces: invalid ebml lace delta %L too big", delta);
+				return VOD_BAD_DATA;
+			}
+
+			if (delta < -(int64_t)lace_sizes[i - 1])
+			{
+				vod_log_error(VOD_LOG_ERR, context->request_context->log, 0,
+					"mkv_parse_laces: invalid ebml lace delta %L too small", delta);
+				return VOD_BAD_DATA;
+			}
+
+			lace_sizes[i] = lace_sizes[i - 1] + delta;
+			total += lace_sizes[i];
+		}
+		break;
+	}
+
+	size = context->end_pos - context->cur_pos;
+	if (size < total)
+	{
+		vod_log_error(VOD_LOG_ERR, context->request_context->log, 0,
+			"mkv_parse_laces: laces total size %uz overflows size left %uD", total, size);
+		return VOD_BAD_DATA;
+	}
+
+	lace_sizes[laces - 1] = size - total;
+
+	return laces;
+}
+
+static vod_status_t
 mkv_parse_frame(
 	ebml_context_t* context, 
 	ebml_spec_t* spec, 
@@ -1241,12 +1446,14 @@ mkv_parse_frame(
 	mkv_frame_parse_track_context_t* track_context;
 	frame_list_part_t* last_frames_part;
 	frame_list_part_t* new_frames_part;
-	frame_timecode_t* gop_frame;
+	mkv_frame_timecode_t* gop_frame;
 	mkv_cluster_t* cluster = dst;
 	input_frame_t* cur_frame;
 	uint64_t frame_timecode;
 	uint64_t track_number;
 	uint32_t key_frame;
+	uint32_t lace_sizes[256];
+	intptr_t laces, i;
 	int16_t timecode;
 	vod_status_t rc;
 	uint8_t flags;
@@ -1308,10 +1515,10 @@ mkv_parse_frame(
 	}
 	gop_frame->timecode = frame_timecode;
 	gop_frame->unsorted_timecode = frame_timecode;
-	gop_frame->frame = NULL;
+	gop_frame->frame.frame = NULL;
 	gop_frame->unsorted_frame = NULL;
 
-	switch (flags)
+	switch (flags & ~0x06)
 	{
 	case 0:
 	case 1:		// discardable
@@ -1333,7 +1540,7 @@ mkv_parse_frame(
 		
 		gop_frame->timecode = frame_timecode;
 		gop_frame->unsorted_timecode = frame_timecode;
-		gop_frame->frame = NULL;
+		gop_frame->frame.frame = NULL;
 		gop_frame->unsorted_frame = NULL;
 
 		switch (frame_parse_context->state)
@@ -1384,58 +1591,80 @@ mkv_parse_frame(
 		return VOD_BAD_DATA;
 	}
 
-	// enforce frame count limit
-	if (track_context->frame_count >= frame_parse_context->max_frame_count)
+	rc = mkv_parse_laces(context, flags, lace_sizes);
+	if (rc < 0)
 	{
-		vod_log_error(VOD_LOG_ERR, context->request_context->log, 0,
-			"mkv_parse_frame: frame count exceeds the limit %uD", frame_parse_context->max_frame_count);
-		return VOD_BAD_DATA;
+		vod_log_debug1(VOD_LOG_DEBUG_LEVEL, context->request_context->log, 0,
+			"mkv_parse_frame: failed to parse lace sizes %i", rc);
+		return rc;
 	}
 
-	last_frames_part = track_context->last_frames_part;
-
-	if (last_frames_part->last_frame >= last_frames_part->first_frame + FRAMES_PER_PART)
+	laces = rc;
+	for (i = 0; i < laces; i++)
 	{
-		// allocate a new part
-		new_frames_part = vod_alloc(context->request_context->pool,
-			sizeof(*new_frames_part) + FRAMES_PER_PART * sizeof(input_frame_t));
-		if (new_frames_part == NULL)
+		// enforce frame count limit
+		if (track_context->frame_count >= frame_parse_context->max_frame_count)
 		{
-			vod_log_debug0(VOD_LOG_DEBUG_LEVEL, context->request_context->log, 0,
-				"mkv_parse_frame: vod_alloc failed");
-			return VOD_ALLOC_FAILED;
+			vod_log_error(VOD_LOG_ERR, context->request_context->log, 0,
+				"mkv_parse_frame: frame count exceeds the limit %uD", frame_parse_context->max_frame_count);
+			return VOD_BAD_DATA;
 		}
 
-		new_frames_part->first_frame = (void*)(new_frames_part + 1);
-		new_frames_part->last_frame = new_frames_part->first_frame;
-		new_frames_part->frames_source = last_frames_part->frames_source;
-		new_frames_part->frames_source_context = last_frames_part->frames_source_context;
-		new_frames_part->clip_to = UINT_MAX;		// XXXXX fix this
+		last_frames_part = track_context->last_frames_part;
 
-		last_frames_part->next = new_frames_part;
-		track_context->last_frames_part = new_frames_part;
-		last_frames_part = new_frames_part;
+		if (last_frames_part->last_frame >= last_frames_part->first_frame + FRAMES_PER_PART)
+		{
+			// allocate a new part
+			new_frames_part = vod_alloc(context->request_context->pool,
+				sizeof(*new_frames_part) + FRAMES_PER_PART * sizeof(input_frame_t));
+			if (new_frames_part == NULL)
+			{
+				vod_log_debug0(VOD_LOG_DEBUG_LEVEL, context->request_context->log, 0,
+					"mkv_parse_frame: vod_alloc failed");
+				return VOD_ALLOC_FAILED;
+			}
+
+			new_frames_part->first_frame = (void*)(new_frames_part + 1);
+			new_frames_part->last_frame = new_frames_part->first_frame;
+			new_frames_part->frames_source = last_frames_part->frames_source;
+			new_frames_part->frames_source_context = last_frames_part->frames_source_context;
+			new_frames_part->clip_to = UINT_MAX;		// XXXXX fix this
+
+			last_frames_part->next = new_frames_part;
+			track_context->last_frames_part = new_frames_part;
+			last_frames_part = new_frames_part;
+		}
+
+		// initialize the new frame (duration & pts delay are initialized later)
+		cur_frame = last_frames_part->last_frame++;
+		cur_frame->key_frame = key_frame;
+		cur_frame->duration = 0;
+		cur_frame->pts_delay = 0;
+
+		cur_frame->offset = (uintptr_t)context->cur_pos;
+		cur_frame->size = lace_sizes[i];
+		context->cur_pos += cur_frame->size;
+
+		if (i == 0)
+		{
+			// add the frame to the gop frames
+			gop_frame->frame.frame = cur_frame;
+			gop_frame->frame.part = last_frames_part;
+			gop_frame->frame.laces = laces;
+
+			gop_frame->unsorted_frame = cur_frame;
+
+			// update the track context
+			if (track_context->frame_count == 0)
+			{
+				track_context->first_timecode = frame_timecode;
+			}
+		}
+
+		track_context->frame_count++;
+		track_context->key_frame_count += key_frame;
+		track_context->total_frames_size += cur_frame->size;
 	}
-
-	// initialize the new frame (duration & pts delay are initialized later)
-	cur_frame = last_frames_part->last_frame++;
-	cur_frame->key_frame = key_frame;
-	cur_frame->offset = (uintptr_t)context->cur_pos;
-	cur_frame->size = context->end_pos - context->cur_pos;
-
-	// add the frame to the gop frames
-	gop_frame->frame = cur_frame;
-	gop_frame->unsorted_frame = cur_frame;
-
-	// update the track context
-	if (track_context->frame_count == 0)
-	{
-		track_context->first_timecode = frame_timecode;
-	}
-	track_context->frame_count++;
-	track_context->key_frame_count += key_frame;
-	track_context->total_frames_size += cur_frame->size;
-	track_context->total_frames_duration += cur_frame->duration;
 
 	return VOD_OK;
 }
@@ -1449,9 +1678,9 @@ mkv_parse_frames(
 {
 	mkv_frame_parse_track_context_t* track_context;
 	mkv_frame_parse_context_t frame_parse_context;
+	mkv_frame_timecode_t* gop_frame;
 	mkv_base_metadata_t* metadata = vod_container_of(base, mkv_base_metadata_t, base);
 	frame_list_part_t* part;
-	frame_timecode_t* gop_frame;
 	input_frame_t* last_frame;
 	input_frame_t* cur_frame;
 	media_track_t* cur_track;
@@ -1509,7 +1738,7 @@ mkv_parse_frames(
 		}
 
 		// initialize the gop frames array
-		if (vod_array_init(&track_context->gop_frames, request_context->pool, 60, sizeof(frame_timecode_t)) != VOD_OK)
+		if (vod_array_init(&track_context->gop_frames, request_context->pool, 60, sizeof(mkv_frame_timecode_t)) != VOD_OK)
 		{
 			vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
 				"mkv_parse_frames: vod_array_init failed");
@@ -1549,7 +1778,7 @@ mkv_parse_frames(
 				}
 				gop_frame->timecode = base->duration;
 				gop_frame->unsorted_timecode = base->duration;
-				gop_frame->frame = NULL;
+				gop_frame->frame.frame = NULL;
 				gop_frame->unsorted_frame = NULL;
 
 				// close the last gop
@@ -1643,7 +1872,7 @@ mkv_prepare_read_frames_request(
 		metadata->end_time = rescale_time(parse_params->range->end, 1000, metadata->base.timescale);
 		metadata->max_frame_count = parse_params->max_frame_count;
 		metadata->parse_frames = TRUE;
-		end_margin = segmenter->max_segment_duration;
+		end_margin = 1000;
 	}
 	else
 	{

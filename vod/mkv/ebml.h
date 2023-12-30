@@ -7,6 +7,8 @@
 #define ebml_read_id(context, id) ebml_read_num(context, id, 4, 0)
 #define is_unknown_size(num, num_bytes) ((num) + 1 == 1ULL << (7 * (num_bytes)))
 
+#define EBML_TRUNCATE_SIZE 0x80
+
 // typedefs
 typedef enum {
 	EBML_NONE,
