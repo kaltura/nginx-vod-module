@@ -1302,12 +1302,12 @@ static vod_status_t
 mkv_parse_laces(ebml_context_t* context, uint8_t flags, uint32_t* lace_sizes)
 {
 	vod_status_t rc;
-	size_t total;
 	uint64_t num;
+	int64_t delta;
+	size_t total;
 	uint32_t laces;
 	uint32_t size;
 	uint32_t i;
-	int64_t delta;
 	uint8_t lace_type;
 	u_char cur;
 
@@ -1330,12 +1330,13 @@ mkv_parse_laces(ebml_context_t* context, uint8_t flags, uint32_t* lace_sizes)
 	laces = *context->cur_pos + 1;
 	context->cur_pos++;
 
+	total = 0;
+
 	switch (lace_type)
 	{
 	case 0x1: // xiph
 		vod_memzero(lace_sizes, (laces - 1) * sizeof(lace_sizes[0]));
 
-		total = 0;
 		for (i = 0; i < laces - 1; i++)
 		{
 			do
