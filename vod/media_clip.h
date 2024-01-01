@@ -74,6 +74,7 @@ struct media_clip_source_s {
 	// TODO: the fields below are not required for generators, consider adding another struct
 
 	// input params
+	vod_str_t id;
 	media_clip_source_type_t source_type;
 	vod_str_t uri;				// original uri
 	uint64_t clip_from;
