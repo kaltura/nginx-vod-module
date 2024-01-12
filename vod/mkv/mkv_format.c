@@ -1016,6 +1016,7 @@ mkv_get_read_frames_request(
 
 	read_req->read_offset = ULLONG_MAX;
 	read_req->flags = 0;
+	initial_time = 0;
 
 	prev_index.cluster_pos = ULLONG_MAX;
 	seen_tracks_mask = 0;
