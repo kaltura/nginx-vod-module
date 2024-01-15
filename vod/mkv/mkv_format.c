@@ -1007,7 +1007,7 @@ mkv_get_read_frames_request(
 	uint64_t done_tracks_mask;
 	uint64_t all_tracks_mask;
 	uint64_t cur_track_mask;
-	uint64_t initial_time = 0;
+	uint64_t initial_time;
 	mkv_index_t prev_index;
 	mkv_index_t index;
 	vod_status_t rc;
@@ -1017,7 +1017,10 @@ mkv_get_read_frames_request(
 	read_req->read_offset = ULLONG_MAX;
 	read_req->flags = 0;
 
+	initial_time = 0;
 	prev_index.cluster_pos = ULLONG_MAX;
+	prev_index.time = 0;
+
 	seen_tracks_mask = 0;
 	done_tracks_mask = 0;
 
