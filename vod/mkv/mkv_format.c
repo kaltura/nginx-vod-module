@@ -1034,6 +1034,7 @@ mkv_get_read_frames_request(
 	mkv_index_t index;
 	vod_status_t rc;
 	size_t extra_read_size;
+	bool_t align_timestamps;
 	bool_t done = FALSE;
 
 	read_req->read_offset = ULLONG_MAX;
@@ -1050,6 +1051,8 @@ mkv_get_read_frames_request(
 	context.cur_pos = metadata->cues.data;
 	context.end_pos = context.cur_pos + metadata->cues.len;
 	context.offset_delta = -1;
+
+	align_timestamps = TRUE;	// XXXX conf param
 
 	// XXXXX optimize this - it may be possible to use the cuetime as the cluster timestamp, and start mid-cluster
 	//		another possible optimization is to read in fixed sizes until the segment is complete (may reduce the total read size)
@@ -1093,12 +1096,21 @@ mkv_get_read_frames_request(
 			done = TRUE;
 		}
 
-		if (read_req->read_offset == ULLONG_MAX &&
-			metadata->start_time < index.time &&
-			prev_index.cluster_pos != ULLONG_MAX)
+		if (read_req->read_offset == ULLONG_MAX)
 		{
-			read_req->read_offset = prev_index.cluster_pos;
-			initial_time = prev_index.time;
+			if (align_timestamps &&
+				metadata->start_time <= index.time)
+			{
+				metadata->start_time = index.time;
+				read_req->read_offset = index.cluster_pos;
+				initial_time = index.time;
+			}
+			else if (metadata->start_time < index.time &&
+				prev_index.cluster_pos != ULLONG_MAX)
+			{
+				read_req->read_offset = prev_index.cluster_pos;
+				initial_time = prev_index.time;
+			}
 		}
 
 		if (done)
@@ -1108,6 +1120,12 @@ mkv_get_read_frames_request(
 
 		if (metadata->end_time <= index.time)
 		{
+			if (align_timestamps)
+			{
+				metadata->end_time = index.time;
+				align_timestamps = FALSE;
+			}
+
 			done_tracks_mask |= cur_track_mask;
 			if ((seen_tracks_mask & ~done_tracks_mask) == 0)
 			{
@@ -1160,9 +1178,11 @@ mkv_get_read_frames_request(
 
 	metadata->read_offset = read_req->read_offset;
 
-	vod_log_debug4(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
-		"mkv_get_read_frames_request: reading offset=%uL, size=%uz, extra=%uz, pos_ref=%uL",
-		read_req->read_offset, read_req->read_size, extra_read_size, metadata->base_layout.position_reference);
+	vod_log_debug6(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
+		"mkv_get_read_frames_request: reading offsets=%uL..%uL (size=%uz, extra=%uz), time=%uL..%uL",
+		read_req->read_offset, read_req->read_offset + read_req->read_size,
+		read_req->read_size, extra_read_size,
+		metadata->start_time, metadata->end_time);
 
 	return VOD_AGAIN;
 }
