@@ -24,6 +24,7 @@ typedef struct {
 	request_context_t* request_context;
 	const u_char* cur_pos;
 	const u_char* end_pos;
+	int64_t offset_delta;
 } ebml_context_t;
 
 typedef struct {

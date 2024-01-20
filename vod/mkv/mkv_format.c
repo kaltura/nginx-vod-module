@@ -32,8 +32,10 @@
 
 // prototypes
 static vod_status_t mkv_parse_seek_entry(ebml_context_t* context, ebml_spec_t* spec, void* dst);
-static vod_status_t mkv_parse_frame(ebml_context_t* context, ebml_spec_t* spec, void* dst);
+static vod_status_t mkv_simple_block(ebml_context_t* context, ebml_spec_t* spec, void* dst);
 static vod_status_t mkv_parse_frame_estimate_bitrate(ebml_context_t* context, ebml_spec_t* spec, void* dst);
+static vod_status_t mkv_block_group(ebml_context_t* context, ebml_spec_t* spec, void* dst);
+static vod_status_t mkv_reference_block(ebml_context_t* context, ebml_spec_t* spec, void* dst);
 
 // raw parsing structs
 typedef struct {
@@ -82,6 +84,10 @@ typedef struct {
 typedef struct {
 	uint64_t timecode;
 } mkv_cluster_t;
+
+typedef struct {
+	vod_str_t block;
+} mkv_block_group_t;
 
 // matroksa specs
 
@@ -163,14 +169,15 @@ static ebml_spec_t mkv_spec_index[] = {
 
 // cluster
 static ebml_spec_t mkv_spec_block_group[] = {
-	{ MKV_ID_BLOCK,					EBML_CUSTOM | EBML_TRUNCATE_SIZE,	0,						mkv_parse_frame },
+	{ MKV_ID_BLOCK,					EBML_BINARY | EBML_TRUNCATE_SIZE,	offsetof(mkv_block_group_t, block), NULL },
+	{ MKV_ID_REFERENCEBLOCK,		EBML_CUSTOM,						0,						mkv_reference_block },
 	{ 0, EBML_NONE, 0, NULL }
 };
 
 static ebml_spec_t mkv_spec_cluster_fields[] = {
 	{ MKV_ID_CLUSTERTIMECODE,		EBML_UINT,		offsetof(mkv_cluster_t, timecode),			NULL },
-	{ MKV_ID_SIMPLEBLOCK,			EBML_CUSTOM | EBML_TRUNCATE_SIZE,	0,						mkv_parse_frame },
-	{ MKV_ID_BLOCKGROUP,			EBML_MASTER | EBML_TRUNCATE_SIZE,	0,						mkv_spec_block_group },
+	{ MKV_ID_SIMPLEBLOCK,			EBML_CUSTOM | EBML_TRUNCATE_SIZE,	0,						mkv_simple_block },
+	{ MKV_ID_BLOCKGROUP,			EBML_CUSTOM | EBML_TRUNCATE_SIZE,	0,						mkv_block_group },
 	{ 0, EBML_NONE, 0, NULL }
 };
 
@@ -246,6 +253,7 @@ typedef struct {
 	uint64_t end_time;
 	uint32_t max_frame_count;
 	bool_t parse_frames;
+	uint64_t read_offset;
 } mkv_base_metadata_t;
 
 typedef struct {
@@ -256,6 +264,7 @@ typedef struct {
 	vod_str_t sections[SECTION_COUNT];
 	mkv_file_layout_t layout;
 	mkv_base_metadata_t result;
+	uint64_t read_offset;
 } mkv_metadata_reader_state_t;
 
 typedef struct {
@@ -296,6 +305,11 @@ typedef struct {
 	mkv_frame_parse_track_context_t* first_track;
 	mkv_frame_parse_track_context_t* last_track;
 } mkv_frame_parse_context_t;
+
+typedef struct {
+	ebml_context_t context;
+	uint32_t references;
+} mkv_block_group_context_t;
 
 typedef struct {
 	uint64_t track_number;
@@ -361,6 +375,7 @@ mkv_metadata_reader_init(
 	context.request_context = request_context;
 	context.cur_pos = buffer->data;
 	context.end_pos = buffer->data + buffer->len;
+	context.offset_delta = -(intptr_t)buffer->data;
 
 	rc = ebml_parse_header(&context, &header);
 	if (rc != VOD_OK)
@@ -469,6 +484,7 @@ mkv_get_file_layout(
 	context.request_context = request_context;
 	context.cur_pos = buffer;
 	context.end_pos = buffer + size;
+	context.offset_delta = -(intptr_t)buffer;
 
 	// ebml header
 	rc = ebml_parse_header(&context, &header);
@@ -585,6 +601,8 @@ mkv_metadata_reader_read(
 			}
 
 			state->state = MRS_READ_SECTION_HEADER;
+			state->read_offset = position->pos;
+
 			result->read_req.read_offset = position->pos;
 			result->read_req.read_size = 0;
 			return VOD_AGAIN;
@@ -595,6 +613,7 @@ mkv_metadata_reader_read(
 		context.request_context = state->request_context;
 		context.cur_pos = start_pos;
 		context.end_pos = buffer->data + buffer->len;
+		context.offset_delta = state->read_offset - (intptr_t)buffer->data;
 
 		// section id
 		rc = ebml_read_id(&context, &id);
@@ -648,6 +667,8 @@ mkv_metadata_reader_read(
 			}
 
 			state->state = MRS_READ_SECTION_DATA;
+			state->read_offset = position->pos;
+
 			result->read_req.read_offset = position->pos;
 			result->read_req.read_size = size;
 			return VOD_AGAIN;
@@ -694,6 +715,7 @@ mkv_metadata_parse(
 	context.request_context = request_context;
 	context.cur_pos = metadata_parts[SECTION_INFO].data;
 	context.end_pos = context.cur_pos + metadata_parts[SECTION_INFO].len;
+	context.offset_delta = -1;
 
 	vod_memzero(&info, sizeof(info));
 	rc = ebml_parse_master(&context, mkv_spec_info, &info);
@@ -1027,6 +1049,7 @@ mkv_get_read_frames_request(
 	context.request_context = request_context;
 	context.cur_pos = metadata->cues.data;
 	context.end_pos = context.cur_pos + metadata->cues.len;
+	context.offset_delta = -1;
 
 	// XXXXX optimize this - it may be possible to use the cuetime as the cluster timestamp, and start mid-cluster
 	//		another possible optimization is to read in fixed sizes until the segment is complete (may reduce the total read size)
@@ -1134,6 +1157,8 @@ mkv_get_read_frames_request(
 	}
 
 	read_req->read_size += extra_read_size;
+
+	metadata->read_offset = read_req->read_offset;
 
 	vod_log_debug4(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
 		"mkv_get_read_frames_request: reading offset=%uL, size=%uz, extra=%uz, pos_ref=%uL",
@@ -1401,6 +1426,7 @@ mkv_parse_frames_estimate_bitrate(
 {
 	mkv_estimate_bitrate_track_context_t* track_context;
 	mkv_estimate_bitrate_context_t context;
+	mkv_base_metadata_t* metadata = vod_container_of(base, mkv_base_metadata_t, base);
 	media_track_t* cur_track;
 	mkv_cluster_t cluster;
 	vod_uint_t i;
@@ -1419,6 +1445,7 @@ mkv_parse_frames_estimate_bitrate(
 	context.context.request_context = request_context;
 	context.context.cur_pos = frame_data->data;
 	context.context.end_pos = frame_data->data + frame_data->len;
+	context.context.offset_delta = metadata->read_offset - (intptr_t)frame_data->data;
 
 	for (i = 0; i < base->tracks.nelts; i++)
 	{
@@ -1592,20 +1619,18 @@ mkv_parse_laces(ebml_context_t* context, uint8_t flags, uint32_t* lace_sizes)
 
 static vod_status_t
 mkv_parse_frame(
+	mkv_frame_parse_context_t* frame_parse_context,
 	ebml_context_t* context, 
-	ebml_spec_t* spec, 
-	void* dst)
+	mkv_cluster_t* cluster,
+	int key_frame)
 {
-	mkv_frame_parse_context_t* frame_parse_context = vod_container_of(context, mkv_frame_parse_context_t, context);
 	mkv_frame_parse_track_context_t* track_context;
 	frame_list_part_t* last_frames_part;
 	frame_list_part_t* new_frames_part;
 	mkv_frame_timecode_t* gop_frame;
-	mkv_cluster_t* cluster = dst;
 	input_frame_t* cur_frame;
 	uint64_t frame_timecode;
 	uint64_t track_number;
-	uint32_t key_frame;
 	uint32_t lace_sizes[256];
 	intptr_t laces, i;
 	int16_t timecode;
@@ -1660,10 +1685,6 @@ mkv_parse_frame(
 
 	frame_timecode = cluster->timecode + timecode;
 
-	vod_log_debug3(VOD_LOG_DEBUG_LEVEL, context->request_context->log, 0,
-		"mkv_parse_frame: track=%uL, timecode=%uL, flags=0x%uxD",
-		track_number, frame_timecode, (uint32_t)flags);
-
 	gop_frame = vod_array_push(&track_context->gop_frames);
 	if (gop_frame == NULL)
 	{
@@ -1676,21 +1697,22 @@ mkv_parse_frame(
 	gop_frame->frame.frame = NULL;
 	gop_frame->unsorted_frame = NULL;
 
-	switch (flags & ~0x06)
+	if (key_frame == -1)
 	{
-	case 0:
-	case 1:		// discardable
+		key_frame = (flags & 0x80) ? 1 : 0;
+	}
+
+	if (!key_frame)
+	{
 		// XXXXX should not cross the clip offset
 
 		if (frame_parse_context->state == FRS_WAIT_START_KEY_FRAME)
 		{
 			return VOD_OK;
 		}
-
-		key_frame = 0;
-		break;
-
-	case 0x80:
+	}
+	else
+	{
 		mkv_update_frame_timestamps(track_context);
 
 		// repush the gop frame following the reset of the array
@@ -1726,6 +1748,10 @@ mkv_parse_frame(
 		case FRS_DONE:
 			track_context->done = TRUE;
 
+			vod_log_debug3(VOD_LOG_DEBUG_LEVEL, context->request_context->log, 0,
+				"mkv_parse_frame: track=%uL, timecode=%uL, key=1, pos=%uL",
+				track_number, frame_timecode, (uint64_t)(uintptr_t)context->cur_pos + context->offset_delta);
+
 			// check whether all tracks are done
 			for (track_context = frame_parse_context->first_track;
 				track_context < frame_parse_context->last_track;
@@ -1739,14 +1765,6 @@ mkv_parse_frame(
 
 			return VOD_DONE;
 		}
-
-		key_frame = 1;
-		break;
-
-	default:
-		vod_log_error(VOD_LOG_ERR, context->request_context->log, 0,
-			"mkv_parse_frame: unsupported frame flags 0x%uxD", (uint32_t)flags);
-		return VOD_BAD_DATA;
 	}
 
 	rc = mkv_parse_laces(context, flags, lace_sizes);
@@ -1822,9 +1840,89 @@ mkv_parse_frame(
 		track_context->frame_count++;
 		track_context->key_frame_count += key_frame;
 		track_context->total_frames_size += cur_frame->size;
+
+		if (laces > 1)
+		{
+			vod_log_debug7(VOD_LOG_DEBUG_LEVEL, context->request_context->log, 0,
+				"mkv_parse_frame: track=%uL, timecode=%uL, key=%d, pos=%uL, size=%uD, lace=%i/%i",
+				track_number, frame_timecode, key_frame, cur_frame->offset + context->offset_delta, cur_frame->size, i + 1, laces);
+		}
+		else
+		{
+			vod_log_debug5(VOD_LOG_DEBUG_LEVEL, context->request_context->log, 0,
+				"mkv_parse_frame: track=%uL, timecode=%uL, key=%d, pos=%uL, size=%uD",
+				track_number, frame_timecode, key_frame, cur_frame->offset + context->offset_delta, cur_frame->size);
+		}
 	}
 
 	return VOD_OK;
+}
+
+static vod_status_t
+mkv_block_group(
+	ebml_context_t* context,
+	ebml_spec_t* spec,
+	void* dst)
+{
+	mkv_frame_parse_context_t* frame_parse_context = vod_container_of(context, mkv_frame_parse_context_t, context);
+	mkv_block_group_context_t block_group_context;
+	mkv_block_group_t block_group;
+	ebml_context_t block_context;
+	mkv_cluster_t* cluster = dst;
+	vod_status_t rc;
+
+	block_group_context.context = *context;
+	block_group_context.references = 0;
+
+	vod_memzero(&block_group, sizeof(block_group));
+
+	rc = ebml_parse_master(&block_group_context.context, mkv_spec_block_group, &block_group);
+	if (rc != VOD_OK)
+	{
+		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, context->request_context->log, 0,
+			"mkv_block_group: ebml_parse_master(block group) failed");
+		return rc;
+	}
+
+	if (block_group.block.len <= 0)
+	{
+		vod_log_error(VOD_LOG_ERR, context->request_context->log, 0,
+			"mkv_block_group: block group without block element");
+		return VOD_BAD_DATA;
+	}
+
+	block_context.request_context = context->request_context;
+	block_context.cur_pos = block_group.block.data;
+	block_context.end_pos = block_group.block.data + block_group.block.len;
+	block_context.offset_delta = context->offset_delta;
+
+	return mkv_parse_frame(frame_parse_context, &block_context, cluster, block_group_context.references == 0);
+
+}
+
+static vod_status_t
+mkv_reference_block(
+	ebml_context_t* context,
+	ebml_spec_t* spec,
+	void* dst)
+{
+	mkv_block_group_context_t* block_group_context = vod_container_of(context, mkv_block_group_context_t, context);
+
+	block_group_context->references++;
+
+	return VOD_OK;
+}
+
+static vod_status_t
+mkv_simple_block(
+	ebml_context_t* context,
+	ebml_spec_t* spec,
+	void* dst)
+{
+	mkv_frame_parse_context_t* frame_parse_context = vod_container_of(context, mkv_frame_parse_context_t, context);
+	mkv_cluster_t* cluster = dst;
+
+	return mkv_parse_frame(frame_parse_context, context, cluster, -1);
 }
 
 static vod_status_t
@@ -1863,6 +1961,7 @@ mkv_parse_frames(
 	frame_parse_context.context.request_context = request_context;
 	frame_parse_context.context.cur_pos = frame_data->data;
 	frame_parse_context.context.end_pos = frame_data->data + frame_data->len;
+	frame_parse_context.context.offset_delta = metadata->read_offset - (intptr_t)frame_data->data;
 	frame_parse_context.start_time = metadata->start_time;
 	frame_parse_context.end_time = metadata->end_time;
 	frame_parse_context.max_frame_count = metadata->max_frame_count;

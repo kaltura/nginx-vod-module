@@ -261,9 +261,9 @@ ebml_parse_element(ebml_context_t* context, ebml_spec_t* spec, void* dest)
 		break;
 
 	case EBML_MASTER:
-		next_context.request_context = context->request_context;
-		next_context.cur_pos = context->cur_pos + size;
-		next_context.end_pos = context->end_pos;
+		next_context = *context;
+		next_context.cur_pos += size;
+
 		context->end_pos = next_context.cur_pos;
 		rc = ebml_parse_master(context, spec->child, cur_dest);
 		if (rc != VOD_OK)
@@ -276,9 +276,9 @@ ebml_parse_element(ebml_context_t* context, ebml_spec_t* spec, void* dest)
 		return VOD_OK;
 
 	case EBML_CUSTOM:
-		next_context.request_context = context->request_context;
-		next_context.cur_pos = context->cur_pos + size;
-		next_context.end_pos = context->end_pos;
+		next_context = *context;
+		next_context.cur_pos += size;
+
 		context->end_pos = next_context.cur_pos;
 		parser = spec->child;
 		rc = parser(context, spec, cur_dest);
