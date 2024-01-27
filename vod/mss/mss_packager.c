@@ -188,12 +188,12 @@ mss_packager_compare_tracks(uintptr_t bitrate_threshold, const media_info_t* mi1
 			(mi1->u.video.height == mi2->u.video.height);
 	}
 
-	if (mi1->label.len == 0 || mi2->label.len == 0)
+	if (mi1->tags.label.len == 0 || mi2->tags.label.len == 0)
 	{
 		return TRUE;
 	}
 
-	return vod_str_equals(mi1->label, mi2->label);
+	return vod_str_equals(mi1->tags.label, mi2->tags.label);
 }
 
 static void 
@@ -255,7 +255,7 @@ mss_packager_remove_redundant_tracks(
 
 			// prefer to remove a track that doesn't have a label, so that we won't lose a language 
 			//	in case of multi language manifest
-			if (track1->media_info.label.len == 0 || track2->media_info.label.len != 0)
+			if (track1->media_info.tags.label.len == 0 || track2->media_info.tags.label.len != 0)
 			{
 				remove = track1;
 			}
@@ -419,7 +419,7 @@ mss_packager_build_manifest(
 	{
 		cur_track = *adaptation_set->first;
 
-		result_size += cur_track->media_info.label.len + cur_track->media_info.lang_str.len;
+		result_size += cur_track->media_info.tags.label.len + cur_track->media_info.tags.lang_str.len;
 	}
 
 	result_size +=
@@ -491,8 +491,8 @@ mss_packager_build_manifest(
 				p = vod_sprintf(p,
 					MSS_STREAM_INDEX_HEADER_LABEL,
 					MSS_STREAM_TYPE_AUDIO,
-					&cur_track->media_info.label,
-					&cur_track->media_info.lang_str,
+					&cur_track->media_info.tags.label,
+					&cur_track->media_info.tags.lang_str,
 					adaptation_set->count,
 					segment_durations[adaptation_set->type].segment_count,
 					MSS_STREAM_TYPE_AUDIO);
@@ -513,8 +513,8 @@ mss_packager_build_manifest(
 			cur_track = *adaptation_set->first;
 			p = vod_sprintf(p,
 				MSS_STREAM_INDEX_HEADER_SUBTITLE,
-				&cur_track->media_info.label,
-				&cur_track->media_info.lang_str,
+				&cur_track->media_info.tags.label,
+				&cur_track->media_info.tags.lang_str,
 				adaptation_set->count,
 				segment_durations[adaptation_set->type].segment_count);
 			break;

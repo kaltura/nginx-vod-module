@@ -462,14 +462,14 @@ hds_packager_build_manifest(
 		{
 			if (adaptation_set->first[MEDIA_TYPE_AUDIO] != NULL)
 			{
-				result_size += adaptation_set->first[MEDIA_TYPE_AUDIO]->media_info.label.len +
-					adaptation_set->first[MEDIA_TYPE_AUDIO]->media_info.lang_str.len;
+				result_size += adaptation_set->first[MEDIA_TYPE_AUDIO]->media_info.tags.label.len +
+					adaptation_set->first[MEDIA_TYPE_AUDIO]->media_info.tags.lang_str.len;
 			}
 		}
 		else
 		{
-			result_size += adaptation_set->first[0]->media_info.label.len +
-				adaptation_set->first[0]->media_info.lang_str.len;
+			result_size += adaptation_set->first[0]->media_info.tags.label.len +
+				adaptation_set->first[0]->media_info.tags.lang_str.len;
 		}
 
 		for (cur_track_ptr = adaptation_set->first; cur_track_ptr < adaptation_set->last; cur_track_ptr += muxed_tracks)
@@ -573,8 +573,8 @@ hds_packager_build_manifest(
 		}
 
 		p = vod_sprintf(p, HDS_MANIFEST_HEADER_LANG, 
-			&track->media_info.label,
-			&track->media_info.lang_str);
+			&track->media_info.tags.label,
+			&track->media_info.tags.lang_str);
 	}
 
 	// bootstrap tags
@@ -704,8 +704,8 @@ hds_packager_build_manifest(
 				{
 					p = vod_sprintf(p, HDS_MEDIA_HEADER_PREFIX_AUDIO_LANG,
 						bitrate / 1000, 
-						&tracks[MEDIA_TYPE_AUDIO]->media_info.label, 
-						&tracks[MEDIA_TYPE_AUDIO]->media_info.lang_str);
+						&tracks[MEDIA_TYPE_AUDIO]->media_info.tags.label,
+						&tracks[MEDIA_TYPE_AUDIO]->media_info.tags.lang_str);
 				}
 				else
 				{

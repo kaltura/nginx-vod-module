@@ -734,10 +734,10 @@ ngx_http_vod_parse_lang_param(ngx_str_t* value, void* output, int offset)
 		return NGX_HTTP_BAD_REQUEST;
 	}
 
-	sequence->lang_str.data = (u_char *)lang_get_rfc_5646_name(result);
-	sequence->lang_str.len = ngx_strlen(sequence->lang_str.data);
-	sequence->language = result;
-	lang_get_native_name(result, &sequence->label);
+	sequence->tags.lang_str.data = (u_char *)lang_get_rfc_5646_name(result);
+	sequence->tags.lang_str.len = ngx_strlen(sequence->tags.lang_str.data);
+	sequence->tags.language = result;
+	lang_get_native_name(result, &sequence->tags.label);
 
 	return VOD_OK;
 }
@@ -1078,9 +1078,10 @@ ngx_http_vod_parse_uri_path(
 		}
 
 		cur_sequence->id.len = 0;
-		cur_sequence->lang_str.len = 0;
-		cur_sequence->language = 0;
-		cur_sequence->label.len = 0;
+		cur_sequence->tags.lang_str.len = 0;
+		cur_sequence->tags.language = 0;
+		cur_sequence->tags.label.len = 0;
+		cur_sequence->tags.is_default = -1;
 		cur_sequence->first_key_frame_offset = 0;
 		cur_sequence->key_frame_durations = NULL;
 		cur_sequence->drm_info = NULL;

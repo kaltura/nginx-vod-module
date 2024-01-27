@@ -441,21 +441,21 @@ track_group_key_init(
 			break;
 		}
 
-		if (track->media_info.label.len == 0)
+		if (track->media_info.tags.label.len == 0)
 		{
 			return FALSE;
 		}
-		key->label = track->media_info.label;
+		key->label = track->media_info.tags.label;
 		break;
 
 	case MEDIA_TYPE_SUBTITLE:
 		key->codec_id = 0;
 
-		if (track->media_info.label.len == 0)
+		if (track->media_info.tags.label.len == 0)
 		{
 			return FALSE;
 		}
-		key->label = track->media_info.label;
+		key->label = track->media_info.tags.label;
 		break;
 
 	default:		// MEDIA_TYPE_NONE
@@ -796,16 +796,16 @@ manifest_utils_is_multi_audio(media_set_t* media_set)
 	for (cur_track = media_set->filtered_tracks; cur_track < last_track; cur_track++)
 	{
 		if (cur_track->media_info.media_type != MEDIA_TYPE_AUDIO ||
-			cur_track->media_info.label.len == 0)
+			cur_track->media_info.tags.label.len == 0)
 		{
 			continue;
 		}
 
 		if (label == NULL)
 		{
-			label = &cur_track->media_info.label;
+			label = &cur_track->media_info.tags.label;
 		}
-		else if (!vod_str_equals(cur_track->media_info.label, *label))
+		else if (!vod_str_equals(cur_track->media_info.tags.label, *label))
 		{
 			return TRUE;
 		}

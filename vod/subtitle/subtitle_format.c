@@ -66,11 +66,8 @@ subtitle_parse(
 	media_base_metadata_t** result)
 {
 	subtitle_base_metadata_t* metadata;
-	media_sequence_t* sequence;
 	media_track_t* track;
-	language_id_t lang_id;
-	vod_str_t lang_str;
-	vod_str_t label;
+	media_tags_t tags;
 	uint64_t duration;
 
 	metadata = vod_alloc(request_context->pool, sizeof(*metadata));
@@ -90,24 +87,18 @@ subtitle_parse(
 	}
 
 	// inherit the sequence language and label
-	sequence = parse_params->source->sequence;
-	if (sequence->label.len != 0)
-	{
-		lang_str = sequence->lang_str;
-		lang_id = sequence->language;
-		label = sequence->label;
-	}
-	else
+	tags = parse_params->source->sequence->tags;
+	if (tags.label.len == 0)
 	{
 		// no language, assume English
-		ngx_str_set(&lang_str, "eng");
-		lang_id = VOD_LANG_EN;
-		lang_get_native_name(lang_id, &label);
+		ngx_str_set(&tags.lang_str, "eng");
+		tags.language = VOD_LANG_EN;
+		lang_get_native_name(tags.language, &tags.label);
 	}
 
 	// filter by language
 	if (parse_params->langs_mask != NULL &&
-		!vod_is_bit_set(parse_params->langs_mask, lang_id))
+		!vod_is_bit_set(parse_params->langs_mask, tags.language))
 	{
 		metadata->base.tracks.nelts = 0;
 		return VOD_OK;
@@ -143,9 +134,7 @@ subtitle_parse(
 	track->media_info.duration = duration;
 	track->media_info.full_duration = full_duration;
 	track->media_info.duration_millis = duration;
-	track->media_info.lang_str = lang_str;
-	track->media_info.language = lang_id;
-	track->media_info.label = label;
+	track->media_info.tags = tags;
 	track->media_info.bitrate = (source->len * 1000 * 8) / full_duration;
 
 	metadata->source = *source;

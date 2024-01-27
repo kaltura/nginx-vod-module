@@ -855,6 +855,7 @@ m3u8_builder_closed_captions_write(
 {
 	media_closed_captions_t* closed_captions;
 	uint32_t index = 0;
+	bool_t is_default;
 
 	for (closed_captions = media_set->closed_captions; closed_captions < media_set->closed_captions_end; closed_captions++)
 	{
@@ -869,7 +870,13 @@ m3u8_builder_closed_captions_write(
 			p = vod_sprintf(p, M3U8_EXT_MEDIA_LANG, &closed_captions->language);
 		}
 
-		if (closed_captions == media_set->closed_captions)
+		is_default = closed_captions->is_default;
+		if (is_default < 0)
+		{
+			is_default = closed_captions == media_set->closed_captions;
+		}
+
+		if (is_default)
 		{
 			p = vod_copy(p, M3U8_EXT_MEDIA_DEFAULT, sizeof(M3U8_EXT_MEDIA_DEFAULT) - 1);
 		}
@@ -921,8 +928,8 @@ m3u8_builder_ext_x_media_tags_get_size(
 	{
 		cur_track = adaptation_set->first[0];
 
-		label_len = cur_track->media_info.label.len;
-		result += vod_max(label_len, default_label.len) + cur_track->media_info.lang_str.len;
+		label_len = cur_track->media_info.tags.label.len;
+		result += vod_max(label_len, default_label.len) + cur_track->media_info.tags.lang_str.len;
 
 		if (base_url->len != 0)
 		{
@@ -948,6 +955,7 @@ m3u8_builder_ext_x_media_tags_write(
 	media_track_t* tracks[MEDIA_TYPE_COUNT];
 	vod_str_t* label;
 	uint32_t group_index;
+	bool_t is_default;
 	char* group_id;
 	char* type;
 
@@ -988,7 +996,7 @@ m3u8_builder_ext_x_media_tags_write(
 			group_index = 0;
 		}
 
-		label = &tracks[media_type]->media_info.label;
+		label = &tracks[media_type]->media_info.tags.label;
 		if (label->len == 0)
 		{
 			label = &default_label;
@@ -1000,13 +1008,19 @@ m3u8_builder_ext_x_media_tags_write(
 			group_index,
 			label);
 
-		if (tracks[media_type]->media_info.lang_str.len > 0)
+		if (tracks[media_type]->media_info.tags.lang_str.len > 0)
 		{
 			p = vod_sprintf(p, M3U8_EXT_MEDIA_LANG,
-				&tracks[media_type]->media_info.lang_str);
+				&tracks[media_type]->media_info.tags.lang_str);
 		}
 
-		if (adaptation_set == first_adaptation_set)
+		is_default = tracks[media_type]->media_info.tags.is_default;
+		if (is_default < 0)
+		{
+			is_default = adaptation_set == first_adaptation_set;
+		}
+
+		if (is_default)
 		{
 			p = vod_copy(p, M3U8_EXT_MEDIA_DEFAULT, sizeof(M3U8_EXT_MEDIA_DEFAULT) - 1);
 		}

@@ -59,9 +59,7 @@ struct media_sequence_s {
 	media_clip_t** clips;						// [clip_count]
 	vod_str_t stripped_uri;
 	vod_str_t id;
-	vod_str_t label;
-	vod_str_t lang_str;
-	language_id_t language;
+	media_tags_t tags;
 	uint32_t bitrate[MEDIA_TYPE_COUNT];
 	uint32_t avg_bitrate[MEDIA_TYPE_COUNT];
 	int64_t first_key_frame_offset;
@@ -109,6 +107,7 @@ typedef struct {
 	vod_str_t id;
 	vod_str_t language;
 	vod_str_t label;
+	bool_t is_default;
 } media_closed_captions_t;
 
 typedef struct {

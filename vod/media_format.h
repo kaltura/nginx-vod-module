@@ -225,6 +225,13 @@ typedef struct {
 	mp4a_config_t codec_config;
 } audio_media_info_t;
 
+typedef struct {
+	language_id_t language;
+	vod_str_t lang_str;
+	vod_str_t label;
+	bool_t is_default;
+} media_tags_t;
+
 typedef struct media_info_s {
 	uint32_t media_type;
 	uint32_t format;
@@ -243,9 +250,7 @@ typedef struct media_info_s {
 	int64_t empty_duration;		// temporary during parsing
 	int64_t start_time;			// temporary during parsing
 	uint64_t codec_delay;
-	language_id_t language;
-	vod_str_t lang_str;
-	vod_str_t label;
+	media_tags_t tags;
 	union {
 		video_media_info_t video;
 		audio_media_info_t audio;

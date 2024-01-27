@@ -326,12 +326,12 @@ dash_packager_compare_tracks(uintptr_t bitrate_threshold, const media_info_t* mi
 			(mi1->u.video.height == mi2->u.video.height);
 	}
 
-	if (mi1->label.len == 0 || mi2->label.len == 0)
+	if (mi1->tags.label.len == 0 || mi2->tags.label.len == 0)
 	{
 		return TRUE;
 	}
 
-	return vod_str_equals(mi1->label, mi2->label);
+	return vod_str_equals(mi1->tags.label, mi2->tags.label);
 }
 
 static void
@@ -858,12 +858,12 @@ dash_packager_write_mpd_period(
 
 		case MEDIA_TYPE_AUDIO:
 			reference_track = (*adaptation_set->first) + filtered_clip_offset;
-			if (reference_track->media_info.lang_str.len > 0 || reference_track->media_info.label.len > 0)
+			if (reference_track->media_info.tags.lang_str.len > 0 || reference_track->media_info.tags.label.len > 0)
 			{
 				p = vod_sprintf(p, VOD_DASH_MANIFEST_ADAPTATION_HEADER_AUDIO_LANG, 
 					adapt_id++, 
-					&reference_track->media_info.lang_str,
-					&reference_track->media_info.label);
+					&reference_track->media_info.tags.lang_str,
+					&reference_track->media_info.tags.label);
 			}
 			else
 			{
@@ -889,8 +889,8 @@ dash_packager_write_mpd_period(
 			{
 				reference_track = (*adaptation_set->first) + filtered_clip_offset;
 				p = vod_sprintf(p, VOD_DASH_MANIFEST_ADAPTATION_HEADER_SUBTITLE_SMPTE_TT,
-					&reference_track->media_info.lang_str,
-					&reference_track->media_info.label);
+					&reference_track->media_info.tags.lang_str,
+					&reference_track->media_info.tags.label);
 				break;
 			}
 
@@ -919,10 +919,10 @@ dash_packager_write_mpd_period(
 				representation_id.len--;
 			}
 
-			lang_code = lang_get_rfc_5646_name(cur_track->media_info.language);
+			lang_code = lang_get_rfc_5646_name(cur_track->media_info.tags.language);
 			p = vod_sprintf(p, VOD_DASH_MANIFEST_ADAPTATION_SUBTITLE_VTT,
-				&cur_track->media_info.lang_str,
-				&cur_track->media_info.label,
+				&cur_track->media_info.tags.lang_str,
+				&cur_track->media_info.tags.label,
 				lang_code,
 				subtitle_adapt_id++, 
 				&cur_base_url,
@@ -1205,7 +1205,7 @@ dash_packager_remove_redundant_tracks(
 
 			// prefer to remove a track that doesn't have a label, so that we won't lose a language 
 			//	in case of multi language manifest
-			if (track1->media_info.label.len == 0 || track2->media_info.label.len != 0)
+			if (track1->media_info.tags.label.len == 0 || track2->media_info.tags.label.len != 0)
 			{
 				remove = track1;
 			}
@@ -1438,7 +1438,7 @@ dash_packager_build_mpd(
 			case MEDIA_TYPE_AUDIO:
 			case MEDIA_TYPE_SUBTITLE:
 				cur_track = (*adaptation_set->first) + filtered_clip_offset;
-				result_size += cur_track->media_info.label.len + cur_track->media_info.lang_str.len;
+				result_size += cur_track->media_info.tags.label.len + cur_track->media_info.tags.lang_str.len;
 				break;
 			}
 		}

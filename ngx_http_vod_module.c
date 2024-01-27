@@ -3577,7 +3577,7 @@ ngx_http_vod_run_generators(ngx_http_vod_ctx_t *ctx)
 		}
 
 		if (parse_params.langs_mask != NULL &&
-			!vod_is_bit_set(parse_params.langs_mask, cur_source->sequence->language))
+			!vod_is_bit_set(parse_params.langs_mask, cur_source->sequence->tags.language))
 		{
 			ngx_memzero(&cur_source->track_array, sizeof(cur_source->track_array));
 			continue;
@@ -5336,9 +5336,7 @@ ngx_http_vod_map_media_set_apply(ngx_http_vod_ctx_t *ctx, ngx_str_t* mapping, in
 			ctx->submodule_context.media_set.segmenter_conf = mapped_media_set.segmenter_conf;
 			sequence = cur_source->sequence;
 			sequence->mapped_uri = mapped_source->mapped_uri;
-			sequence->lang_str = mapped_media_set.sequences->lang_str;
-			sequence->language = mapped_media_set.sequences->language;
-			sequence->label = mapped_media_set.sequences->label;
+			sequence->tags = mapped_media_set.sequences->tags;
 			sequence->id = mapped_media_set.sequences->id;
 			ngx_memcpy(sequence->bitrate, mapped_media_set.sequences->bitrate, sizeof(sequence->bitrate));
 			ngx_memcpy(sequence->avg_bitrate, mapped_media_set.sequences->avg_bitrate, sizeof(sequence->avg_bitrate));

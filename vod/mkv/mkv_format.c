@@ -773,16 +773,16 @@ mkv_metadata_parse(
 
 		// inherit the sequence language and label
 		sequence = parse_params->source->sequence;
-		if (sequence->label.len != 0)
+		if (sequence->tags.label.len != 0)
 		{
-			track.name = sequence->label;
+			track.name = sequence->tags.label;
 
 			// Note: it is not possible for the sequence to have a language without a label,
 			//              since a default label will be assigned according to the language
-			if (sequence->lang_str.len != 0)
+			if (sequence->tags.lang_str.len != 0)
 			{
-				track.language = sequence->lang_str;
-				lang_id = sequence->language;
+				track.language = sequence->tags.lang_str;
+				lang_id = sequence->tags.language;
 			}
 		}
 
@@ -865,19 +865,19 @@ mkv_metadata_parse(
 			break;
 		}
 
-		cur_track->media_info.lang_str = track.language;
-		cur_track->media_info.language = lang_id;
+		cur_track->media_info.tags.lang_str = track.language;
+		cur_track->media_info.tags.language = lang_id;
 		if (track.name.len > 0)
 		{
-			cur_track->media_info.label = track.name;
+			cur_track->media_info.tags.label = track.name;
 		}
 		else if (lang_id > 0)
 		{
-			lang_get_native_name(lang_id, &cur_track->media_info.label);
+			lang_get_native_name(lang_id, &cur_track->media_info.tags.label);
 		}
 		else
 		{
-			cur_track->media_info.label = track.language;
+			cur_track->media_info.tags.label = track.language;
 		}
 		cur_track->media_info.media_type = media_type;
 		cur_track->media_info.codec_id = cur_codec->codec_id;
