@@ -1297,18 +1297,14 @@ mkv_update_frame_timestamps(mkv_frame_parse_track_context_t* context)
 		for (; cur_frame < last_frame; cur_frame++)
 		{
 			pts_delay = cur_frame->unsorted_timecode - cur_frame->timecode;
-
+			cur_frame->unsorted_frame->pts_delay = pts_delay;
 			if (pts_delay < context->min_pts_delay)
 			{
 				context->min_pts_delay = pts_delay;
 			}
 
-			cur_frame->unsorted_frame->pts_delay = pts_delay;
-
 			duration = cur_frame[1].timecode - cur_frame[0].timecode;
-
 			mkv_update_laces_duration(&cur_frame->frame, duration);
-
 			context->total_frames_duration += duration;
 		}
 	}
@@ -1341,12 +1337,12 @@ mkv_estimate_next_frame_timecode(
 	uint64_t max_timecode;
 	uint64_t result;
 
-	cur_frame = context->gop_frames.elts;
-	last_frame = cur_frame + (context->gop_frames.nelts - 1);
-
 	// get the number of pending laces + max timecode
 	laces = 0;
 	max_timecode = 0;
+
+	cur_frame = context->gop_frames.elts;
+	last_frame = cur_frame + (context->gop_frames.nelts - 1);
 	for (; cur_frame < last_frame; cur_frame++)
 	{
 		laces += cur_frame->frame.laces;
