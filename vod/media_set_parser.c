@@ -64,6 +64,7 @@ enum {
 	MEDIA_CLOSED_CAPTIONS_PARAM_ID,
 	MEDIA_CLOSED_CAPTIONS_PARAM_LANGUAGE,
 	MEDIA_CLOSED_CAPTIONS_PARAM_LABEL,
+	MEDIA_CLOSED_CAPTIONS_PARAM_DEFAULT,
 
 	MEDIA_CLOSED_CAPTIONS_PARAM_COUNT
 };
@@ -105,6 +106,7 @@ static vod_status_t media_set_parse_source(void* ctx, vod_json_object_t* element
 static vod_status_t media_set_parse_clips_array(void* ctx, vod_json_value_t* value, void* dest);
 static vod_status_t media_set_parse_bitrate(void* ctx, vod_json_value_t* value, void* dest);
 static vod_status_t media_set_parse_source_type(void* ctx, vod_json_value_t* value, void* dest);
+static vod_status_t media_set_parse_bool(void* ctx, vod_json_value_t* value, void* dest);
 
 // constants
 static json_parser_union_type_def_t media_clip_union_params[] = {
@@ -133,8 +135,9 @@ static json_object_value_def_t media_clip_source_params[] = {
 static json_object_value_def_t media_sequence_params[] = {
 	{ vod_string("id"),				VOD_JSON_STRING,	offsetof(media_sequence_t, id), media_set_parse_null_term_string },
 	{ vod_string("clips"),			VOD_JSON_ARRAY,		offsetof(media_sequence_t, unparsed_clips), media_set_parse_clips_array },
-	{ vod_string("language"),		VOD_JSON_STRING,	offsetof(media_sequence_t, lang_str), media_set_parse_null_term_string },
-	{ vod_string("label"),			VOD_JSON_STRING,	offsetof(media_sequence_t, label), media_set_parse_null_term_string },
+	{ vod_string("language"),		VOD_JSON_STRING,	offsetof(media_sequence_t, tags.lang_str), media_set_parse_null_term_string },
+	{ vod_string("label"),			VOD_JSON_STRING,	offsetof(media_sequence_t, tags.label), media_set_parse_null_term_string },
+	{ vod_string("default"),		VOD_JSON_BOOL,		offsetof(media_sequence_t, tags.is_default), media_set_parse_bool },
 	{ vod_string("bitrate"),		VOD_JSON_OBJECT,	offsetof(media_sequence_t, bitrate), media_set_parse_bitrate },
 	{ vod_string("avg_bitrate"),	VOD_JSON_OBJECT,	offsetof(media_sequence_t, avg_bitrate), media_set_parse_bitrate },
 	{ vod_null_string, 0, 0, NULL }
@@ -150,6 +153,7 @@ static json_object_key_def_t media_closed_captions_params[] = {
 	{ vod_string("id"),								VOD_JSON_STRING, MEDIA_CLOSED_CAPTIONS_PARAM_ID },
 	{ vod_string("language"),						VOD_JSON_STRING, MEDIA_CLOSED_CAPTIONS_PARAM_LANGUAGE },
 	{ vod_string("label"),							VOD_JSON_STRING, MEDIA_CLOSED_CAPTIONS_PARAM_LABEL },
+	{ vod_string("default"),						VOD_JSON_BOOL,   MEDIA_CLOSED_CAPTIONS_PARAM_DEFAULT },
 	{ vod_null_string, 0, 0 } 
 };
 
@@ -523,6 +527,16 @@ media_set_parse_bitrate(
 	return VOD_OK;
 }
 
+static vod_status_t
+media_set_parse_bool(
+	void* ctx,
+	vod_json_value_t* value,
+	void* dest)
+{
+	*(bool_t*)dest = value->v.boolean;
+	return VOD_OK;
+}
+
 vod_status_t
 media_set_map_source(
 	request_context_t* request_context,
@@ -867,6 +881,15 @@ media_set_parse_closed_captions(
 			cur_output->language.len = 0;
 		}
 
+		if (params[MEDIA_CLOSED_CAPTIONS_PARAM_DEFAULT] != NULL)
+		{
+			cur_output->is_default = params[MEDIA_CLOSED_CAPTIONS_PARAM_DEFAULT]->v.boolean;
+		}
+		else
+		{
+			cur_output->is_default = -1;
+		}
+
 		cur_output++;
 	}
 
@@ -952,9 +975,10 @@ media_set_parse_sequences(
 
 		cur_output->id.len = 0;
 		cur_output->unparsed_clips = NULL;
-		cur_output->lang_str.len = 0;
-		cur_output->language = 0;
-		cur_output->label.len = 0;
+		cur_output->tags.lang_str.len = 0;
+		cur_output->tags.language = 0;
+		cur_output->tags.label.len = 0;
+		cur_output->tags.is_default = -1;
 		cur_output->first_key_frame_offset = 0;
 		cur_output->key_frame_durations = NULL;
 		cur_output->drm_info = NULL;
@@ -984,27 +1008,27 @@ media_set_parse_sequences(
 			continue;
 		}
 
-		if (cur_output->lang_str.len != 0)
+		if (cur_output->tags.lang_str.len != 0)
 		{
-			if (cur_output->lang_str.len >= LANG_ISO639_3_LEN)
+			if (cur_output->tags.lang_str.len >= LANG_ISO639_3_LEN)
 			{
-				cur_output->language = lang_parse_iso639_3_code(iso639_3_str_to_int(cur_output->lang_str.data));
-				if (cur_output->language != 0)
+				cur_output->tags.language = lang_parse_iso639_3_code(iso639_3_str_to_int(cur_output->tags.lang_str.data));
+				if (cur_output->tags.language != 0)
 				{
-					cur_output->lang_str.data = (u_char *)lang_get_rfc_5646_name(cur_output->language);
-					cur_output->lang_str.len = ngx_strlen(cur_output->lang_str.data);
+					cur_output->tags.lang_str.data = (u_char *)lang_get_rfc_5646_name(cur_output->tags.language);
+					cur_output->tags.lang_str.len = ngx_strlen(cur_output->tags.lang_str.data);
 				}
 			}
 
-			if (cur_output->label.len == 0)
+			if (cur_output->tags.label.len == 0)
 			{
-				if (cur_output->language != 0)
+				if (cur_output->tags.language != 0)
 				{
-					lang_get_native_name(cur_output->language, &cur_output->label);
+					lang_get_native_name(cur_output->tags.language, &cur_output->tags.label);
 				}
 				else
 				{
-					cur_output->label = cur_output->lang_str;
+					cur_output->tags.label = cur_output->tags.lang_str;
 				}
 			}
 		}
