@@ -7,6 +7,8 @@
 #define ebml_read_id(context, id) ebml_read_num(context, id, 4, 0)
 #define is_unknown_size(num, num_bytes) ((num) + 1 == 1ULL << (7 * (num_bytes)))
 
+#define EBML_TRUNCATE_SIZE 0x80
+
 // typedefs
 typedef enum {
 	EBML_NONE,
@@ -22,6 +24,7 @@ typedef struct {
 	request_context_t* request_context;
 	const u_char* cur_pos;
 	const u_char* end_pos;
+	int64_t offset_delta;
 } ebml_context_t;
 
 typedef struct {

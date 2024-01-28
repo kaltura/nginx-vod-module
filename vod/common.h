@@ -80,6 +80,9 @@
 #define vod_log_debug2(level, log, err, fmt, arg1, arg2)
 #define vod_log_debug3(level, log, err, fmt, arg1, arg2, arg3)
 #define vod_log_debug4(level, log, err, fmt, arg1, arg2, arg3, arg4)
+#define vod_log_debug5(level, log, err, fmt, arg1, arg2, arg3, arg4, arg5)
+#define vod_log_debug6(level, log, err, fmt, arg1, arg2, arg3, arg4, arg5, arg6)
+#define vod_log_debug7(level, log, err, fmt, arg1, arg2, arg3, arg4, arg5, arg6, arg7)
 
 typedef int bool_t;
 typedef int vod_status_t;
@@ -98,6 +101,7 @@ void vod_log_error(vod_uint_t level, vod_log_t *log, int err,
 
 #define VOD_INT64_LEN NGX_INT64_LEN
 #define VOD_INT32_LEN NGX_INT32_LEN
+#define VOD_MAX_UINT32_VALUE NGX_MAX_UINT32_VALUE
 #define VOD_MAX_SIZE_T_VALUE NGX_MAX_SIZE_T_VALUE
 #define VOD_MAX_OFF_T_VALUE NGX_MAX_OFF_T_VALUE
 
@@ -262,6 +266,15 @@ void vod_log_error(vod_uint_t level, vod_log_t *log, int err,
 
 #define vod_log_debug4(level, log, err, fmt, arg1, arg2, arg3, arg4) \
 		ngx_log_debug4(level, log, err, fmt, arg1, arg2, arg3, arg4)
+
+#define vod_log_debug5(level, log, err, fmt, arg1, arg2, arg3, arg4, arg5) \
+		ngx_log_debug5(level, log, err, fmt, arg1, arg2, arg3, arg4, arg5)
+
+#define vod_log_debug6(level, log, err, fmt, arg1, arg2, arg3, arg4, arg5, arg6) \
+		ngx_log_debug6(level, log, err, fmt, arg1, arg2, arg3, arg4, arg5, arg6)
+
+#define vod_log_debug7(level, log, err, fmt, arg1, arg2, arg3, arg4, arg5, arg6, arg7) \
+		ngx_log_debug7(level, log, err, fmt, arg1, arg2, arg3, arg4, arg5, arg6, arg7)
 
 #define vod_errno ngx_errno
 

@@ -97,9 +97,10 @@ ebml_read_num(ebml_context_t* context, uint64_t* result, size_t max_size, int re
 }
 
 static vod_status_t
-ebml_read_size(ebml_context_t* context, uint64_t* result)
+ebml_read_size(ebml_context_t* context, uint64_t* result, bool_t truncate)
 {
 	vod_status_t rc;
+	uint64_t left;
 
 	rc = ebml_read_num(context, result, 8, 1);
 	if (rc < 0)
@@ -109,19 +110,28 @@ ebml_read_size(ebml_context_t* context, uint64_t* result)
 		return rc;
 	}
 
+	left = context->end_pos - context->cur_pos;
 	if (is_unknown_size(*result, rc))
 	{
-		*result = context->end_pos - context->cur_pos;
-	}
-	else if (*result > (uint64_t)(context->end_pos - context->cur_pos))
-	{
-		vod_log_error(VOD_LOG_ERR, context->request_context->log, 0,
-			"ebml_read_size: size %uL greater than the remaining stream bytes %uL", 
-			*result, (uint64_t)(context->end_pos - context->cur_pos));
-		return VOD_BAD_DATA;
+		*result = left;
+		return VOD_OK;
 	}
 
-	return VOD_OK;
+	if (*result <= left)
+	{
+		return VOD_OK;
+	}
+
+	if (truncate)
+	{
+		*result = left;
+		return VOD_OK;
+	}
+
+	vod_log_error(VOD_LOG_ERR, context->request_context->log, 0,
+		"ebml_read_size: size %uL greater than the remaining stream bytes %uL",
+		*result, left);
+	return VOD_BAD_DATA;
 }
 
 static vod_status_t
@@ -194,9 +204,10 @@ ebml_parse_element(ebml_context_t* context, ebml_spec_t* spec, void* dest)
 	uint64_t size;
 	void* cur_dest;
 	vod_status_t rc;
+	ebml_type_t type;
 
 	// size
-	rc = ebml_read_size(context, &size);
+	rc = ebml_read_size(context, &size, spec->type & EBML_TRUNCATE_SIZE);
 	if (rc != VOD_OK)
 	{
 		vod_log_debug1(VOD_LOG_DEBUG_LEVEL, context->request_context->log, 0,
@@ -210,7 +221,8 @@ ebml_parse_element(ebml_context_t* context, ebml_spec_t* spec, void* dest)
 		return VOD_OK;
 	}
 
-	max_size = ebml_max_sizes[spec->type];
+	type = spec->type & ~EBML_TRUNCATE_SIZE;
+	max_size = ebml_max_sizes[type];
 	if (max_size && size > max_size)
 	{
 		vod_log_error(VOD_LOG_ERR, context->request_context->log, 0,
@@ -220,7 +232,7 @@ ebml_parse_element(ebml_context_t* context, ebml_spec_t* spec, void* dest)
 
 	cur_dest = (u_char*)dest + spec->offset;
 
-	switch (spec->type)
+	switch (type)
 	{
 	case EBML_UINT:
 		rc = ebml_read_uint(context, size, cur_dest);
@@ -249,9 +261,9 @@ ebml_parse_element(ebml_context_t* context, ebml_spec_t* spec, void* dest)
 		break;
 
 	case EBML_MASTER:
-		next_context.request_context = context->request_context;
-		next_context.cur_pos = context->cur_pos + size;
-		next_context.end_pos = context->end_pos;
+		next_context = *context;
+		next_context.cur_pos += size;
+
 		context->end_pos = next_context.cur_pos;
 		rc = ebml_parse_master(context, spec->child, cur_dest);
 		if (rc != VOD_OK)
@@ -264,9 +276,9 @@ ebml_parse_element(ebml_context_t* context, ebml_spec_t* spec, void* dest)
 		return VOD_OK;
 
 	case EBML_CUSTOM:
-		next_context.request_context = context->request_context;
-		next_context.cur_pos = context->cur_pos + size;
-		next_context.end_pos = context->end_pos;
+		next_context = *context;
+		next_context.cur_pos += size;
+
 		context->end_pos = next_context.cur_pos;
 		parser = spec->child;
 		rc = parser(context, spec, cur_dest);

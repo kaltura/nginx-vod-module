@@ -64,6 +64,9 @@
 // cluster
 #define MKV_ID_CLUSTERTIMECODE		(0xE7)
 #define MKV_ID_SIMPLEBLOCK			(0xA3)
+#define MKV_ID_BLOCKGROUP			(0xA0)
+#define MKV_ID_BLOCK				(0xA1)
+#define MKV_ID_REFERENCEBLOCK		(0xFB)
 #define MKV_ID_CLUSTER				(0x1F43B675)
 
 // sections
