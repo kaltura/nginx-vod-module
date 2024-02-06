@@ -373,7 +373,7 @@ ngx_http_vod_status_prom_handler(ngx_http_request_t *r)
 		return NGX_HTTP_INTERNAL_SERVER_ERROR;
 	}
 
-	return ngx_http_vod_send_response(r, &response, &xml_content_type);
+	return ngx_http_vod_send_response(r, &response, &text_content_type);
 }
 
 ngx_int_t
