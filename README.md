@@ -1714,6 +1714,13 @@ The parameter value can contain variables.
 When enabled, the module will shift back the dts timestamps by the pts delay of the initial frame.
 This can help keep the pts timestamps aligned across multiple renditions.
 
+#### vod_hls_encryption_output_iv
+* **syntax**: `vod_hls_encryption_output_iv on/off`
+* **default**: `off`
+* **context**: `http`, `server`, `location`
+
+When enabled, the module outputs the `IV` attribute in returned `#EXT-X-KEY` tags. This currently applies when `vod_drm_enabled` is enabled and `vod_hls_encryption_method` is set to `aes-128`, with `vod_hls_encryption_key_format` set to `none` or `identity`.
+
 ### Configuration directives - MSS
 
 #### vod_mss_manifest_file_name_prefix

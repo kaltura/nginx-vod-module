@@ -183,6 +183,16 @@ ngx_http_vod_hls_init_encryption_params(
 		if (drm_info->iv_set)
 		{
 			encryption_params->iv = drm_info->iv;
+
+			// check encryption key method must be aes-128, encryption key format can be "identity" or empty and output_iv set to true then return iv
+			// https://datatracker.ietf.org/doc/html/rfc8216#section-5.2
+			if (conf->hls.encryption_method == HLS_ENC_AES_128 && 
+			(conf->hls.m3u8_config.encryption_key_format.len == 0 || ngx_strncmp(conf->hls.m3u8_config.encryption_key_format.data, "identity", conf->hls.m3u8_config.encryption_key_format.len) == 0) && 
+			conf->hls.output_iv)
+			{
+				encryption_params->return_iv = TRUE;
+			}
+			
 			return NGX_OK;
 		}
 	}
@@ -1116,6 +1126,7 @@ ngx_http_vod_hls_create_loc_conf(
 	conf->align_pts = NGX_CONF_UNSET;
 	conf->output_id3_timestamps = NGX_CONF_UNSET;
 	conf->encryption_method = NGX_CONF_UNSET_UINT;
+	conf->output_iv = NGX_CONF_UNSET;
 	conf->m3u8_config.output_iframes_playlist = NGX_CONF_UNSET;
 	conf->m3u8_config.force_unmuxed_segments = NGX_CONF_UNSET;
 	conf->m3u8_config.container_format = NGX_CONF_UNSET_UINT;
@@ -1131,6 +1142,7 @@ ngx_http_vod_hls_merge_loc_conf(
 	ngx_conf_merge_value(conf->absolute_master_urls, prev->absolute_master_urls, 1);
 	ngx_conf_merge_value(conf->absolute_index_urls, prev->absolute_index_urls, 1);
 	ngx_conf_merge_value(conf->absolute_iframe_urls, prev->absolute_iframe_urls, 0);
+	ngx_conf_merge_value(conf->output_iv, prev->output_iv, 0);
 	ngx_conf_merge_value(conf->m3u8_config.output_iframes_playlist, prev->m3u8_config.output_iframes_playlist, 1);
 
 	ngx_conf_merge_str_value(conf->master_file_name_prefix, prev->master_file_name_prefix, "master");
