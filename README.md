@@ -1719,7 +1719,7 @@ This can help keep the pts timestamps aligned across multiple renditions.
 * **default**: `off`
 * **context**: `http`, `server`, `location`
 
-When enabled, the module outputs the `IV` attribute in returned `#EXT-X-KEY` tags. This currently applies when `vod_drm_enabled` is enabled and `vod_hls_encryption_method` is set to `aes-128`, with `vod_hls_encryption_key_format` set to `none` or `identity`.
+When enabled, the module outputs the `IV` attribute in returned `#EXT-X-KEY` tags.
 
 ### Configuration directives - MSS
 

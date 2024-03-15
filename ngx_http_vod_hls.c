@@ -171,7 +171,7 @@ ngx_http_vod_hls_init_encryption_params(
 	}
 
 	encryption_params->iv = encryption_params->iv_buf;
-	encryption_params->return_iv = FALSE;
+	encryption_params->return_iv = conf->hls.output_iv;
 
 	sequence = &submodule_context->media_set.sequences[0];
 
@@ -183,16 +183,6 @@ ngx_http_vod_hls_init_encryption_params(
 		if (drm_info->iv_set)
 		{
 			encryption_params->iv = drm_info->iv;
-
-			// check encryption key method must be aes-128, encryption key format can be "identity" or empty and output_iv set to true then return iv
-			// https://datatracker.ietf.org/doc/html/rfc8216#section-5.2
-			if (conf->hls.encryption_method == HLS_ENC_AES_128 && 
-			(conf->hls.m3u8_config.encryption_key_format.len == 0 || ngx_strncmp(conf->hls.m3u8_config.encryption_key_format.data, "identity", conf->hls.m3u8_config.encryption_key_format.len) == 0) && 
-			conf->hls.output_iv)
-			{
-				encryption_params->return_iv = TRUE;
-			}
-			
 			return NGX_OK;
 		}
 	}
