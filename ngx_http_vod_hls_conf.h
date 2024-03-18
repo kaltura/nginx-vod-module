@@ -19,6 +19,7 @@ typedef struct
 	ngx_http_complex_value_t* id3_data;
 	vod_uint_t encryption_method;
 	ngx_http_complex_value_t* encryption_key_uri;
+	bool_t output_iv;
 
 	// derived fields
 	m3u8_config_t m3u8_config;

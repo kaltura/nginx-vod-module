@@ -171,7 +171,7 @@ ngx_http_vod_hls_init_encryption_params(
 	}
 
 	encryption_params->iv = encryption_params->iv_buf;
-	encryption_params->return_iv = FALSE;
+	encryption_params->return_iv = conf->hls.output_iv;
 
 	sequence = &submodule_context->media_set.sequences[0];
 
@@ -1116,6 +1116,7 @@ ngx_http_vod_hls_create_loc_conf(
 	conf->align_pts = NGX_CONF_UNSET;
 	conf->output_id3_timestamps = NGX_CONF_UNSET;
 	conf->encryption_method = NGX_CONF_UNSET_UINT;
+	conf->output_iv = NGX_CONF_UNSET;
 	conf->m3u8_config.output_iframes_playlist = NGX_CONF_UNSET;
 	conf->m3u8_config.force_unmuxed_segments = NGX_CONF_UNSET;
 	conf->m3u8_config.container_format = NGX_CONF_UNSET_UINT;
@@ -1131,6 +1132,7 @@ ngx_http_vod_hls_merge_loc_conf(
 	ngx_conf_merge_value(conf->absolute_master_urls, prev->absolute_master_urls, 1);
 	ngx_conf_merge_value(conf->absolute_index_urls, prev->absolute_index_urls, 1);
 	ngx_conf_merge_value(conf->absolute_iframe_urls, prev->absolute_iframe_urls, 0);
+	ngx_conf_merge_value(conf->output_iv, prev->output_iv, 0);
 	ngx_conf_merge_value(conf->m3u8_config.output_iframes_playlist, prev->m3u8_config.output_iframes_playlist, 1);
 
 	ngx_conf_merge_str_value(conf->master_file_name_prefix, prev->master_file_name_prefix, "master");
