@@ -12,6 +12,7 @@
 #define M3U8_HEADER_VOD "#EXT-X-PLAYLIST-TYPE:VOD\n"
 #define M3U8_HEADER_EVENT "#EXT-X-PLAYLIST-TYPE:EVENT\n"
 #define M3U8_HEADER_PART2 "#EXT-X-VERSION:%d\n#EXT-X-MEDIA-SEQUENCE:%uD\n"
+#define M3U8_DISCONTINUITY_SEQUENCE "#EXT-X-DISCONTINUITY-SEQUENCE:%uD\n"
 
 #define M3U8_EXT_MEDIA_BASE "#EXT-X-MEDIA:TYPE=%s,GROUP-ID=\"%s%uD\",NAME=\"%V\","
 #define M3U8_EXT_MEDIA_LANG "LANGUAGE=\"%V\","
@@ -473,6 +474,7 @@ m3u8_builder_build_index_playlist(
 		sizeof(M3U8_HEADER_PART1) + VOD_INT64_LEN +
 		sizeof(M3U8_HEADER_EVENT) +
 		sizeof(M3U8_HEADER_PART2) + VOD_INT64_LEN + VOD_INT32_LEN +
+		sizeof(M3U8_DISCONTINUITY_SEQUENCE) + VOD_INT32_LEN +
 		segment_length * segment_durations.segment_count +
 		segment_durations.discontinuities * (sizeof(m3u8_discontinuity) - 1) +
 		(sizeof(m3u8_map_prefix) - 1 +
@@ -662,6 +664,16 @@ m3u8_builder_build_index_playlist(
 		M3U8_HEADER_PART2,
 		container_format == HLS_CONTAINER_FMP4 ? 6 : conf->m3u8_version, 
 		segment_durations.items[0].segment_index + 1);
+
+	if (media_set->type == MEDIA_SET_LIVE && 
+		media_set->use_discontinuity &&
+		media_set->initial_clip_index != INVALID_CLIP_INDEX)
+	{
+		p = vod_sprintf(
+			p,
+			M3U8_DISCONTINUITY_SEQUENCE,
+			media_set->initial_clip_index);
+	}
 
 	if (container_format == HLS_CONTAINER_FMP4)
 	{
