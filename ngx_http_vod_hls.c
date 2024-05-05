@@ -295,7 +295,7 @@ ngx_http_vod_hls_get_default_id3_data(ngx_http_vod_submodule_context_t* submodul
 		data_size = sizeof(ID3_TEXT_JSON_FORMAT) + VOD_INT64_LEN;
 	}
 
-	timestamp = media_set_get_segment_time_millis(media_set);
+	timestamp = media_set_get_segment_time_millis(&submodule_context->request_context, media_set);
 
 	p = ngx_pnalloc(submodule_context->request_context.pool, data_size);
 	if (p == NULL)

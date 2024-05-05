@@ -187,7 +187,6 @@ typedef struct {
 	uint32_t height;
 } request_params_t;
 
-
-int64_t media_set_get_segment_time_millis(media_set_t* media_set);
+int64_t media_set_get_segment_time_millis(request_context_t* request_context , media_set_t* media_set);
 
 #endif //__MEDIA_SET_H__

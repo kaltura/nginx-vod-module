@@ -653,7 +653,7 @@ ngx_http_vod_set_segment_time_var(ngx_http_request_t *r, ngx_http_variable_value
 		return NGX_ERROR;
 	}
 
-	value = media_set_get_segment_time_millis(media_set);
+	value = media_set_get_segment_time_millis(&ctx->submodule_context.request_context, media_set);
 
 	v->data = p;
 	v->len = ngx_sprintf(p, "%L", value) - p;
