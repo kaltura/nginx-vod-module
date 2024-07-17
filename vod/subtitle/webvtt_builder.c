@@ -36,6 +36,7 @@ webvtt_builder_build(
 	input_frame_t* last_frame;
 	uint64_t start_time;
 	uint64_t base_time;
+    uint64_t segment_start_time = media_set->segment_start_time;
 	uint32_t id_size;
 	size_t result_size;
 	u_char* end;
@@ -115,21 +116,25 @@ webvtt_builder_build(
 				last_frame = part->last_frame;
 			}
 
-			src = (u_char*)(uintptr_t)cur_frame->offset;
+			if (start_time >= segment_start_time) {
+				src = (u_char * )(uintptr_t)
+				cur_frame->offset;
 
-			// cue identifier
-			id_size = cur_frame->key_frame;
-			p = vod_copy(p, src, id_size);
-			src += id_size;
+				// cue identifier
+				id_size = cur_frame->key_frame;
+				p = vod_copy(p, src, id_size);
+				src += id_size;
 
-			// cue timings
-			p = webvtt_builder_write_timestamp(p, start_time);
-			p = vod_copy(p, WEBVTT_TIMESTAMP_DELIM, sizeof(WEBVTT_TIMESTAMP_DELIM) - 1);
-			p = webvtt_builder_write_timestamp(p, start_time + cur_frame->pts_delay);
+				// cue timings
+				p = webvtt_builder_write_timestamp(p, start_time);
+				p = vod_copy(p, WEBVTT_TIMESTAMP_DELIM, sizeof(WEBVTT_TIMESTAMP_DELIM) - 1);
+				p = webvtt_builder_write_timestamp(p, start_time + cur_frame->pts_delay);
+
+				// cue settings list + cue payload
+				p = vod_copy(p, src, cur_frame->size - id_size);
+			}
+
 			start_time += cur_frame->duration;
-
-			// cue settings list + cue payload
-			p = vod_copy(p, src, cur_frame->size - id_size);
 		}
 	}
 
