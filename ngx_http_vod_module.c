@@ -1539,6 +1539,14 @@ ngx_http_vod_init_parse_params_metadata(
 		parse_params->parse_type |= ctx->submodule_context.conf->parse_flags;
 		parse_params->codecs_mask = request->codecs_mask;
 	}
+	else
+	{
+		parse_params->parse_type = 0;
+		if (ctx->submodule_context.conf->segmenter.align_to_key_frames)
+		{
+			parse_params->parse_type |= PARSE_FLAG_ALIGN_TO_KEYFRAME;
+		}
+	}
 
 	request_tracks_mask = ctx->submodule_context.request_params.tracks_mask;
 	if (ctx->submodule_context.request_params.sequence_tracks_mask != NULL)

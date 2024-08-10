@@ -93,6 +93,7 @@ enum {
 	MP4_CLIPPER_TRAK_INDEX_STSZ_DATA,
 	MP4_CLIPPER_TRAK_INDEX_STCO_HEADER,
 	MP4_CLIPPER_TRAK_INDEX_STCO_DATA,
+	MP4_CLIPPER_TRAK_INDEX_EDTS_ATOM,
 
 	MP4_CLIPPER_TRAK_INDEX_COUNT
 };
@@ -126,6 +127,7 @@ typedef struct {
 	size_t data_size;
 	size_t atom_size;
 	uint32_t entries;
+	uint64_t prefix;
 } stts_clip_result_t;
 
 typedef struct {
@@ -197,6 +199,7 @@ typedef struct {
 	size_t stbl_atom_size;
 	size_t minf_atom_size;
 	size_t mdia_atom_size;
+	size_t edts_atom_size;
 	size_t trak_atom_size;
 } parsed_trak_t;
 
@@ -531,9 +534,90 @@ mp4_clipper_mdhd_update_atom(u_char* p, mdhd_clip_result_t* mdhd)
 
 // stts
 static vod_status_t
+mp4_clipper_stts_seek_to_keyframe(
+	parse_trak_atom_context_t* context,
+	stts_iterator_state_t* iterator,
+	atom_info_t* stss_atom,
+	uint64_t* prefix)
+{
+	vod_status_t rc;
+	uint32_t* first_entry;
+	uint32_t* entry;
+	uint64_t initial_duration;
+	uint32_t sample_duration;
+	uint32_t sample_count;
+	uint32_t entry_index;
+	uint32_t key_index;
+	uint32_t entries;
+	uint32_t count;
+	uint32_t left;
+
+	if (stss_atom->size <= 0)
+	{
+		return VOD_OK;
+	}
+
+	rc = mp4_parser_validate_stss_atom(context->request_context, stss_atom, &entries);
+	if (rc != VOD_OK)
+	{
+		return rc;
+	}
+
+	if (entries <= 0)
+	{
+		vod_log_error(VOD_LOG_ERR, context->request_context->log, 0,
+			"mp4_clipper_stts_seek_to_keyframe: zero entries");
+		return VOD_BAD_DATA;
+	}
+
+	// first the last key frame before iterator->frame_index
+	first_entry = (uint32_t*)(stss_atom->ptr + sizeof(stss_atom_t));
+	entry_index = mp4_parser_find_stss_entry(iterator->frame_index, first_entry, entries);
+	entry = first_entry + entry_index;
+	if (entry_index > 0 && (entry_index >= entries || parse_be32(entry) > iterator->frame_index + 1))
+	{
+		entry--;
+	}
+
+	key_index = parse_be32(entry) - 1;
+
+	// seek back to key_index
+	initial_duration = iterator->accum_duration;
+	sample_count = parse_be32(iterator->cur_entry->count);
+	while (iterator->frame_index > key_index)
+	{
+		if (iterator->sample_count >= sample_count)
+		{
+			iterator->cur_entry--;
+			iterator->sample_count = 0;
+			sample_count = parse_be32(iterator->cur_entry->count);
+			continue;
+		}
+
+		count = sample_count - iterator->sample_count;
+		left = iterator->frame_index - key_index;
+		if (count > left)
+		{
+			count = left;
+		}
+
+		sample_duration = parse_be32(iterator->cur_entry->duration);
+
+		iterator->sample_count += count;
+		iterator->frame_index -= count;
+		iterator->accum_duration -= count * sample_duration;
+	}
+
+	*prefix = initial_duration - iterator->accum_duration;
+
+	return VOD_OK;
+}
+
+static vod_status_t
 mp4_clipper_stts_clip_data(
 	parse_trak_atom_context_t* context,
 	atom_info_t* atom_info,
+	atom_info_t* stss_atom,
 	stts_clip_result_t* result, 
 	uint32_t* first_frame, 
 	uint32_t* last_frame)
@@ -574,6 +658,15 @@ mp4_clipper_stts_clip_data(
 				"mp4_clipper_stts_clip_data: clip from longer than video duration");
 			return VOD_BAD_REQUEST;
 		}
+
+		if (context->parse_params.parse_type & PARSE_FLAG_ALIGN_TO_KEYFRAME)
+		{
+			rc = mp4_clipper_stts_seek_to_keyframe(context, &iterator, stss_atom, &result->prefix);
+			if (rc != VOD_OK)
+			{
+				return rc;
+			}
+		}
 	}
 
 	result->first_entry = iterator.cur_entry;
@@ -584,7 +677,8 @@ mp4_clipper_stts_clip_data(
 	{
 		// Note: the below was done to match nginx mp4, may be better to do 
 		// clip_to = (((uint64_t)context->parse_params.clip_to * context->timescale) / 1000);
-		clip_to = iterator.accum_duration + (((uint64_t)(context->parse_params.clip_to - context->parse_params.clip_from) * context->timescale) / 1000);
+		clip_to = iterator.accum_duration + result->prefix +
+			(((uint64_t)(context->parse_params.clip_to - context->parse_params.clip_from) * context->timescale) / 1000);
 	}
 	else
 	{
@@ -1538,6 +1632,7 @@ mp4_clipper_process_moov_atom_callback(void* ctx, atom_info_t* atom_info)
 	rc = mp4_clipper_stts_clip_data(
 		&parse_context, 
 		&parsed_trak->atoms[TRAK_ATOM_STTS], 
+		&parsed_trak->atoms[TRAK_ATOM_STSS],
 		&parsed_trak->stts, 
 		&parse_context.first_frame, 
 		&parse_context.last_frame);
@@ -1545,6 +1640,8 @@ mp4_clipper_process_moov_atom_callback(void* ctx, atom_info_t* atom_info)
 	{
 		return rc;
 	}
+
+	parsed_trak->mdhd.duration += parsed_trak->stts.prefix;
 
 	if (parse_context.first_frame >= parse_context.last_frame)
 	{
@@ -1628,8 +1725,15 @@ mp4_clipper_process_moov_atom_callback(void* ctx, atom_info_t* atom_info)
 		full_atom_size(parsed_trak->atoms[TRAK_ATOM_HDLR]) +
 		parsed_trak->minf_atom_size;
 
+	if (parsed_trak->stts.prefix > 0)
+	{
+		parsed_trak->edts_atom_size = 2 * ATOM_HEADER_SIZE + sizeof(elst_atom_t) + sizeof(elst64_entry_t);
+		context->result.alloc_size += parsed_trak->edts_atom_size;
+	}
+
 	parsed_trak->trak_atom_size = ATOM_HEADER_SIZE +
 		full_atom_size(parsed_trak->atoms[TRAK_ATOM_TKHD]) +
+		parsed_trak->edts_atom_size +
 		parsed_trak->mdia_atom_size;
 
 	context->result.moov_atom_size += parsed_trak->trak_atom_size;
@@ -1650,6 +1754,26 @@ mp4_clipper_process_moov_atom_callback(void* ctx, atom_info_t* atom_info)
 }
 
 static u_char*
+mp4_clipper_edts_write_atom(u_char* p, parsed_trak_t* parsed_trak)
+{
+	size_t elst_atom_size;
+
+	elst_atom_size = parsed_trak->edts_atom_size - ATOM_HEADER_SIZE;
+
+	write_atom_header(p, parsed_trak->edts_atom_size, 'e', 'd', 't', 's');
+	write_atom_header(p, elst_atom_size, 'e', 'l', 's', 't');
+
+	write_be32(p, 1 << 24);		// version = 1
+	write_be32(p, 1);			// entries
+	write_be64(p, parsed_trak->tkhd.duration);
+	write_be64(p, parsed_trak->stts.prefix);
+	write_be16(p, 1);			// media_rate
+	write_be16(p, 0);			// reserved
+
+	return p;
+}
+
+static u_char*
 mp4_clipper_trak_write_atom(u_char* p, void* write_context, parsed_trak_t* parsed_trak, bool_t copy_data, int64_t chunk_pos_diff)
 {
 	if (copy_data)
@@ -1657,6 +1781,12 @@ mp4_clipper_trak_write_atom(u_char* p, void* write_context, parsed_trak_t* parse
 		write_atom_header(p, parsed_trak->trak_atom_size, 't', 'r', 'a', 'k');
 		copy_full_atom(p, parsed_trak->atoms[TRAK_ATOM_TKHD]);
 		mp4_clipper_tkhd_update_atom(p - parsed_trak->atoms[TRAK_ATOM_TKHD].size, &parsed_trak->tkhd);
+
+		if (parsed_trak->edts_atom_size > 0)
+		{
+			p = mp4_clipper_edts_write_atom(p, parsed_trak);
+		}
+
 		write_atom_header(p, parsed_trak->mdia_atom_size, 'm', 'd', 'i', 'a');
 		copy_full_atom(p, parsed_trak->atoms[TRAK_ATOM_MDHD]);
 		mp4_clipper_mdhd_update_atom(p - parsed_trak->atoms[TRAK_ATOM_MDHD].size, &parsed_trak->mdhd);
@@ -1677,6 +1807,13 @@ mp4_clipper_trak_write_atom(u_char* p, void* write_context, parsed_trak_t* parse
 		// trak.tkhd
 		mp4_clipper_tkhd_update_atom((u_char*)parsed_trak->atoms[TRAK_ATOM_TKHD].ptr, &parsed_trak->tkhd);
 		write_full_atom(write_context, MP4_CLIPPER_TRAK_INDEX_TKHD_ATOM, parsed_trak->atoms[TRAK_ATOM_TKHD]);
+
+		if (parsed_trak->edts_atom_size > 0)
+		{
+			// trak.edts
+			p = mp4_clipper_edts_write_atom(p, parsed_trak);
+			mp4_clipper_write_tail(write_context, MP4_CLIPPER_TRAK_INDEX_EDTS_ATOM, p - parsed_trak->edts_atom_size, parsed_trak->edts_atom_size);
+		}
 
 		// trak.mdia
 		write_atom_header(p, parsed_trak->mdia_atom_size, 'm', 'd', 'i', 'a');
