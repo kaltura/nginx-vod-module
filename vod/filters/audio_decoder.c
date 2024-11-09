@@ -1,25 +1,49 @@
 #include "audio_decoder.h"
 
 // globals
-static const AVCodec *decoder_codec = NULL;
-static bool_t initialized = FALSE;
+static const AVCodec *decoder_codecs[VOD_CODEC_ID_COUNT];
+
+typedef struct {
+	const char *name;
+	uint32_t vod_codec;
+	enum AVCodecID av_codec;
+} audio_codec_mapping_t;
+
+static audio_codec_mapping_t audio_codec_mapping[] = {
+	{ "aac",    VOD_CODEC_ID_AAC,     AV_CODEC_ID_AAC    },
+	{ "ac3",    VOD_CODEC_ID_AC3,     AV_CODEC_ID_AC3    },
+	{ "eac3",   VOD_CODEC_ID_EAC3,    AV_CODEC_ID_EAC3   },
+	{ "mp3",    VOD_CODEC_ID_MP3,     AV_CODEC_ID_MP3    },
+	{ "dts",    VOD_CODEC_ID_DTS,     AV_CODEC_ID_DTS    },
+	{ "vorbis", VOD_CODEC_ID_VORBIS,  AV_CODEC_ID_VORBIS },
+	{ "opus",   VOD_CODEC_ID_OPUS,    AV_CODEC_ID_OPUS   },
+
+	{ NULL,     VOD_CODEC_ID_INVALID, AV_CODEC_ID_NONE   }
+};
 
 void
 audio_decoder_process_init(vod_log_t* log)
 {
+	audio_codec_mapping_t* mapping;
+	const AVCodec* decoder_codec;
+
 	#if LIBAVCODEC_VERSION_INT < AV_VERSION_INT(58, 18, 100)
 		avcodec_register_all();
 	#endif
 
-	decoder_codec = avcodec_find_decoder(AV_CODEC_ID_AAC);
-	if (decoder_codec == NULL)
-	{
-		vod_log_error(VOD_LOG_WARN, log, 0,
-			"audio_decoder_process_init: failed to get AAC decoder, audio decoding is disabled");
-		return;
-	}
+	vod_memzero(decoder_codecs, sizeof(decoder_codecs));
 
-	initialized = TRUE;
+	for (mapping = audio_codec_mapping; mapping->vod_codec != VOD_CODEC_ID_INVALID; mapping++)
+	{
+		decoder_codec = avcodec_find_decoder(mapping->av_codec);
+		if (decoder_codec == NULL)
+		{
+			vod_log_error(VOD_LOG_WARN, log, 0,
+				"audio_decoder_process_init: failed to get %s decoder, audio decoding for this codec is disabled", mapping->name);
+		}
+
+		decoder_codecs[mapping->vod_codec] = decoder_codec;
+	}
 }
 
 static vod_status_t
@@ -27,10 +51,12 @@ audio_decoder_init_decoder(
 	audio_decoder_state_t* state,
 	media_info_t* media_info)
 {
+	const AVCodec *decoder_codec;
 	AVCodecContext* decoder;
 	int avrc;
 
-	if (media_info->codec_id != VOD_CODEC_ID_AAC)
+	decoder_codec = decoder_codecs[media_info->codec_id];
+	if (decoder_codec == NULL)
 	{
 		vod_log_error(VOD_LOG_ERR, state->request_context->log, 0,
 			"audio_decoder_init_decoder: codec id %uD not supported", media_info->codec_id);
@@ -88,13 +114,6 @@ audio_decoder_init(
 	input_frame_t* last_frame;
 	input_frame_t* cur_frame;
 	vod_status_t rc;
-
-	if (!initialized)
-	{
-		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-			"audio_decoder_init: module failed to initialize successfully");
-		return VOD_UNEXPECTED;
-	}
 
 	state->request_context = request_context;
 

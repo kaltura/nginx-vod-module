@@ -5,9 +5,6 @@
 #include "../media_set.h"
 #include <libavcodec/avcodec.h>
 
-// constants
-#define VOLUME_MAP_INPUT_SAMPLE_FORMAT (AV_SAMPLE_FMT_FLTP)
-
 // audio filter encoder functions
 vod_status_t volume_map_encoder_init(
 	request_context_t* request_context,
@@ -34,5 +31,7 @@ vod_status_t volume_map_writer_init(
 
 vod_status_t volume_map_writer_process(
 	void* state);
+
+enum AVSampleFormat volume_map_encoder_get_format();
 
 #endif // __VOLUME_MAP_H__

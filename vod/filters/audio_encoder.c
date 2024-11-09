@@ -1,5 +1,6 @@
 #include "audio_encoder.h"
 #include "audio_filter.h"
+#include "../mp4/mp4_defs.h"
 
 // constants
 #define AUDIO_ENCODER_BITS_PER_SAMPLE (16)
@@ -14,30 +15,13 @@ typedef struct
 
 // globals
 static const AVCodec *encoder_codec = NULL;
-static bool_t initialized = FALSE;
+static enum AVSampleFormat audio_encoder_format = AV_SAMPLE_FMT_NONE;
 
 static char* aac_encoder_names[] = {
 	"libfdk_aac",
 	"aac",
 	NULL
 };
-
-
-static bool_t
-audio_encoder_is_format_supported(const AVCodec *codec, enum AVSampleFormat sample_fmt)
-{
-	const enum AVSampleFormat *p;
-
-	for (p = codec->sample_fmts; *p != AV_SAMPLE_FMT_NONE; p++)
-	{
-		if (*p == sample_fmt)
-		{
-			return TRUE;
-		}
-	}
-
-	return FALSE;
-}
 
 void
 audio_encoder_process_init(vod_log_t* log)
@@ -66,14 +50,7 @@ audio_encoder_process_init(vod_log_t* log)
 		}
 	}
 
-	if (!audio_encoder_is_format_supported(encoder_codec, AUDIO_ENCODER_INPUT_SAMPLE_FORMAT))
-	{
-		vod_log_error(VOD_LOG_WARN, log, 0,
-			"audio_encoder_process_init: encoder does not support the required input format, audio encoding is disabled");
-		return;
-	}
-
-	initialized = TRUE;
+	audio_encoder_format = *encoder_codec->sample_fmts;
 }
 
 vod_status_t
@@ -87,7 +64,7 @@ audio_encoder_init(
 	AVCodecContext* encoder;
 	int avrc;
 
-	if (!initialized)
+	if (audio_encoder_format == AV_SAMPLE_FMT_NONE)
 	{
 		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
 			"audio_encoder_init: module failed to initialize successfully");
@@ -113,7 +90,7 @@ audio_encoder_init(
 
 	state->encoder = encoder;
 
-	encoder->sample_fmt = AUDIO_ENCODER_INPUT_SAMPLE_FORMAT;
+	encoder->sample_fmt = audio_encoder_format;
 	encoder->time_base.num = 1;
 	encoder->time_base.den = params->timescale;
 	encoder->sample_rate = params->sample_rate;
@@ -326,6 +303,8 @@ audio_encoder_update_media_info(
 		return VOD_UNEXPECTED;
 	}
 
+	media_info->format = FORMAT_MP4A;
+	media_info->codec_id = VOD_CODEC_ID_AAC;
 	media_info->timescale = encoder->time_base.den;
 	media_info->bitrate = encoder->bit_rate;
 
@@ -356,4 +335,10 @@ audio_encoder_update_media_info(
 	media_info->extra_data.len = encoder->extradata_size;
 
 	return VOD_OK;
+}
+
+enum AVSampleFormat
+audio_encoder_get_format()
+{
+	return audio_encoder_format;
 }

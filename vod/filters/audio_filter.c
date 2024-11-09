@@ -33,12 +33,12 @@
 
 // typedefs
 typedef struct {
-	enum AVSampleFormat format;
 	void (*free)(void* context);
 	size_t (*get_frame_size)(void* context);
 	vod_status_t (*write)(void* context, AVFrame* frame);
 	vod_status_t(*flush)(void* context);
 	vod_status_t(*update_media_info)(void* context, media_info_t* media_info);
+	enum AVSampleFormat (*get_format)();
 } audio_filter_encoder_t;
 
 typedef struct
@@ -58,21 +58,21 @@ typedef struct
 
 // constants
 static audio_filter_encoder_t libav_encoder = {
-	AUDIO_ENCODER_INPUT_SAMPLE_FORMAT,
 	audio_encoder_free,
 	audio_encoder_get_frame_size,
 	audio_encoder_write_frame,
 	audio_encoder_flush,
 	audio_encoder_update_media_info,
+	audio_encoder_get_format,
 };
 
 static audio_filter_encoder_t volume_map_encoder = {
-	VOLUME_MAP_INPUT_SAMPLE_FORMAT,
 	NULL,
 	NULL,
 	volume_map_encoder_write_frame,
 	NULL,
 	volume_map_encoder_update_media_info,
+	volume_map_encoder_get_format,
 };
 
 #endif
@@ -394,7 +394,7 @@ audio_filter_init_sink(
 	}
 
 	// configure the buffer sink
-	out_sample_fmts[0] = sink->encoder->format;
+	out_sample_fmts[0] = sink->encoder->get_format();
 	out_sample_fmts[1] = -1;
 	avrc = av_opt_set_int_list(
 		sink->buffer_sink,

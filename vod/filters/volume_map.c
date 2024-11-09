@@ -4,6 +4,7 @@
 #include "../write_buffer.h"
 
 // constants
+#define VOLUME_MAP_INPUT_SAMPLE_FORMAT (AV_SAMPLE_FMT_FLTP)
 #define RMS_LEVEL_PRECISION (100)
 #define RMS_LEVEL_FORMAT "%uD.%02uD\n"
 
@@ -446,4 +447,10 @@ volume_map_writer_process(void* context)
 			state->flush_pts = pts + state->interval;
 		}
 	}
+}
+
+enum AVSampleFormat
+volume_map_encoder_get_format()
+{
+	return VOLUME_MAP_INPUT_SAMPLE_FORMAT;
 }

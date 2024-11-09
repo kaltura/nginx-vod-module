@@ -5,9 +5,6 @@
 #include "../media_format.h"
 #include <libavcodec/avcodec.h>
 
-// constants
-#define AUDIO_ENCODER_INPUT_SAMPLE_FORMAT (AV_SAMPLE_FMT_S16)
-
 //typedefs
 typedef struct
 {
@@ -44,5 +41,7 @@ vod_status_t audio_encoder_flush(
 vod_status_t audio_encoder_update_media_info(
 	void* context,
 	media_info_t* media_info);
+
+enum AVSampleFormat audio_encoder_get_format();
 
 #endif // __AUDIO_ENCODER_H__
