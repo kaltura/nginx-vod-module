@@ -2820,6 +2820,18 @@ ngx_http_vod_update_track_timescale(
 			}
 		}
 
+		if (track->media_info.avg_frame_duration != 0)
+		{
+			track->media_info.avg_frame_duration =
+				rescale_time(track->media_info.avg_frame_duration, cur_timescale, new_timescale);
+			if (track->media_info.avg_frame_duration == 0)
+			{
+				ngx_log_error(NGX_LOG_WARN, ctx->submodule_context.request_context.log, 0,
+					"ngx_http_vod_update_track_timescale: avg frame duration is zero following rescale");
+				track->media_info.avg_frame_duration = 1;
+			}
+		}
+
 		track->media_info.u.video.initial_pts_delay =
 			rescale_time(track->media_info.u.video.initial_pts_delay, cur_timescale, new_timescale);
 	}

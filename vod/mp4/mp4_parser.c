@@ -626,6 +626,9 @@ mp4_parser_parse_stts_atom_frame_duration_only(atom_info_t* atom_info, frames_pa
 	const stts_entry_t* cur_entry;
 	uint32_t entries;
 	uint32_t cur_duration;
+	uint32_t cur_count;
+	uint64_t sum_duration = 0;
+	uint32_t frames_count = 0;
 	vod_status_t rc;
 
 	rc = mp4_parser_validate_stts_data(context->request_context, atom_info, &entries);
@@ -645,10 +648,14 @@ mp4_parser_parse_stts_atom_frame_duration_only(atom_info_t* atom_info, frames_pa
 	for (; cur_entry < last_entry; cur_entry++)
 	{
 		cur_duration = parse_be32(cur_entry->duration);
+		cur_count = parse_be32(cur_entry->count);
 		if (cur_duration == 0)
 		{
 			continue;
 		}
+
+		sum_duration += cur_duration * cur_count;
+		frames_count += cur_count;
 
 		if (cur_duration != 0 && (media_info->min_frame_duration == 0 || cur_duration < media_info->min_frame_duration))
 		{
@@ -660,6 +667,22 @@ mp4_parser_parse_stts_atom_frame_duration_only(atom_info_t* atom_info, frames_pa
 	{
 		vod_log_error(VOD_LOG_ERR, context->request_context->log, 0,
 			"mp4_parser_parse_stts_atom_frame_duration_only: min frame duration is zero");
+		return VOD_BAD_DATA;
+	}
+
+	if (frames_count == 0)
+	{
+		vod_log_error(VOD_LOG_ERR, context->request_context->log, 0,
+			"mp4_parser_parse_stts_atom_frame_duration_only: frames count is zero");
+		return VOD_BAD_DATA;
+	}
+
+	media_info->avg_frame_duration = (uint32_t)(sum_duration / frames_count);
+
+	if (media_info->avg_frame_duration == 0)
+	{
+		vod_log_error(VOD_LOG_ERR, context->request_context->log, 0,
+			"mp4_parser_parse_stts_atom_frame_duration_only: avg frame duration is zero");
 		return VOD_BAD_DATA;
 	}
 

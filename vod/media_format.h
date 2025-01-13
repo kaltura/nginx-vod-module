@@ -244,6 +244,7 @@ typedef struct media_info_s {
 	uint32_t bitrate;
 	uint32_t avg_bitrate;
 	uint32_t min_frame_duration;	// valid only for video		XXXXX move to video_media_info_t
+	uint32_t avg_frame_duration;
 	uint32_t codec_id;
 	vod_str_t codec_name;
 	vod_str_t extra_data;

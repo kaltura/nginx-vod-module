@@ -1145,8 +1145,8 @@ m3u8_builder_write_variants(
 				bitrate,
 				(uint32_t)video->u.video.width,
 				(uint32_t)video->u.video.height,
-				(uint32_t)(video->timescale / video->min_frame_duration),
-				(uint32_t)((((uint64_t)video->timescale * 1000) / video->min_frame_duration) % 1000),
+				(uint32_t)(video->timescale / video->avg_frame_duration),
+				(uint32_t)((((uint64_t)video->timescale * 1000) / video->avg_frame_duration) % 1000),
 				&video->codec_name);
 			if (audio != NULL)
 			{
