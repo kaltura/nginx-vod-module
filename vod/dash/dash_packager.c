@@ -59,21 +59,23 @@
 #define VOD_DASH_MANIFEST_ADAPTATION_HEADER_VIDEO								\
 	"    <AdaptationSet\n"														\
 	"        id=\"%uD\"\n"														\
+	"        mimeType=\"%V\"\n"													\
+	"        subsegmentAlignment=\"true\"\n"									\
+	"        subsegmentStartsWithSAP=\"1\"\n"									\
 	"        segmentAlignment=\"true\"\n"										\
 	"        maxWidth=\"%uD\"\n"												\
 	"        maxHeight=\"%uD\"\n"												\
-	"        maxFrameRate=\"%V\">\n"
+ 	"        startWithSAP=\"1\">\n"												\
 
 #define VOD_DASH_MANIFEST_REPRESENTATION_HEADER_VIDEO							\
 	"      <Representation\n"													\
 	"          id=\"%V\"\n"														\
-	"          mimeType=\"%V\"\n"												\
 	"          codecs=\"%V\"\n"													\
 	"          width=\"%uD\"\n"													\
 	"          height=\"%uD\"\n"												\
 	"          frameRate=\"%V\"\n"												\
+	"          scanType=\"progressive\"\n"										\
 	"          sar=\"1:1\"\n"													\
-	"          startWithSAP=\"1\"\n"											\
 	"          bandwidth=\"%uD\">\n"
 
 #define VOD_DASH_MANIFEST_ADAPTATION_HEADER_AUDIO								\
@@ -84,6 +86,7 @@
 #define VOD_DASH_MANIFEST_ADAPTATION_HEADER_AUDIO_LANG							\
 	"    <AdaptationSet\n"														\
 	"        id=\"%uD\"\n"														\
+	"        mimeType=\"%V\"\n"													\
 	"        lang=\"%V\"\n"														\
 	"        label=\"%V\"\n"													\
 	"        segmentAlignment=\"true\">\n"
@@ -108,7 +111,11 @@
 	"          codecs=\"%V\"\n"													\
 	"          audioSamplingRate=\"%uD\"\n"										\
 	"          startWithSAP=\"1\"\n"											\
-	"          bandwidth=\"%uD\">\n"
+	"          bandwidth=\"%uD\">\n"											\
+ 	"          <AudioChannelConfiguration\n"									\
+	"              schemeIdUri=\"urn:mpeg:dash:23003:3:"						\
+					    			"audio_channel_configuration:2011\"\n"		\
+	"              value=\"%uD\"/>\n"
 
 #define VOD_DASH_MANIFEST_ADAPTATION_HEADER_SUBTITLE_SMPTE_TT					\
 	"    <AdaptationSet\n"														\
@@ -671,6 +678,8 @@ dash_packager_write_frame_rate(
 	}
 }
 
+
+
 static uint32_t
 dash_packager_get_eac3_channel_config(media_info_t* media_info)
 {
@@ -851,6 +860,7 @@ dash_packager_write_mpd_period(
 			p = vod_sprintf(p,
 				VOD_DASH_MANIFEST_ADAPTATION_HEADER_VIDEO,
 				adapt_id++,
+				&dash_codecs[reference_track->media_info.codec_id].mime_type,
 				max_width,
 				max_height,
 				&frame_rate);
@@ -860,8 +870,9 @@ dash_packager_write_mpd_period(
 			reference_track = (*adaptation_set->first) + filtered_clip_offset;
 			if (reference_track->media_info.tags.lang_str.len > 0 || reference_track->media_info.tags.label.len > 0)
 			{
-				p = vod_sprintf(p, VOD_DASH_MANIFEST_ADAPTATION_HEADER_AUDIO_LANG, 
-					adapt_id++, 
+				p = vod_sprintf(p, VOD_DASH_MANIFEST_ADAPTATION_HEADER_AUDIO_LANG,
+					adapt_id++,
+                    &dash_codecs[reference_track->media_info.codec_id].mime_type,
 					&reference_track->media_info.tags.lang_str,
 					&reference_track->media_info.tags.label);
 			}
@@ -878,8 +889,9 @@ dash_packager_write_mpd_period(
 			}
 			else
 			{
-				p = vod_copy(p, VOD_DASH_MANIFEST_AUDIO_CHANNEL_CONFIG,
-					sizeof(VOD_DASH_MANIFEST_AUDIO_CHANNEL_CONFIG) - 1);
+			//	p = vod_copy(p, VOD_DASH_MANIFEST_AUDIO_CHANNEL_CONFIG,
+			//		sizeof(VOD_DASH_MANIFEST_AUDIO_CHANNEL_CONFIG) - 1);
+            // We'll go for a per Representation Approach
 			}
 			break;
 
@@ -1016,7 +1028,6 @@ dash_packager_write_mpd_period(
 				p = vod_sprintf(p,
 					VOD_DASH_MANIFEST_REPRESENTATION_HEADER_VIDEO,
 					&representation_id,
-					&dash_codecs[cur_track->media_info.codec_id].mime_type,
 					&cur_track->media_info.codec_name,
 					(uint32_t)cur_track->media_info.u.video.width,
 					(uint32_t)cur_track->media_info.u.video.height,
@@ -1032,7 +1043,10 @@ dash_packager_write_mpd_period(
 					&dash_codecs[cur_track->media_info.codec_id].mime_type,
 					&cur_track->media_info.codec_name,
 					cur_track->media_info.u.audio.sample_rate,
-					cur_track->media_info.bitrate);
+					cur_track->media_info.bitrate,
+                    cur_track->media_info.u.audio.channels
+                                          );
+
 				break;
 
 			case MEDIA_TYPE_SUBTITLE:
