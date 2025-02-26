@@ -127,10 +127,10 @@ ngx_feature_test="iconv_open(NULL, NULL);"
 ngx_feature="clock_gettime()"
 ngx_feature_name="NGX_HAVE_CLOCK_GETTIME"
 ngx_feature_run=no
-ngx_feature_incs="#include <sched.h>"
+ngx_feature_incs="#include <time.h>"
 ngx_feature_path=
 ngx_feature_libs=
-ngx_feature_test="clock_gettime()"
+ngx_feature_test="clockid_t c; clock_gettime(c, NULL)"
 . auto/feature
 
 if [ $ngx_found != yes ]; then
