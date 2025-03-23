@@ -181,7 +181,7 @@ typedef struct {
 	track_mask_t tracks_mask[MEDIA_TYPE_COUNT];
 	sequence_tracks_mask_t* sequence_tracks_mask;
 	sequence_tracks_mask_t* sequence_tracks_mask_end;
-	uint64_t* langs_mask;			// [LANG_MASK_SIZE]
+	vod_str_t* langs;
 	uint32_t version;
 	uint32_t width;
 	uint32_t height;

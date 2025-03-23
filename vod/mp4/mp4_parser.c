@@ -2889,9 +2889,8 @@ mp4_parser_process_moov_atom_callback(void* ctx, atom_info_t* atom_info)
 	}
 
 	// filter by language
-	if (context->parse_params.langs_mask != NULL &&
-		metadata_parse_context.media_info.media_type == MEDIA_TYPE_AUDIO &&
-		!vod_is_bit_set(context->parse_params.langs_mask, metadata_parse_context.media_info.tags.language))
+	if (metadata_parse_context.media_info.media_type == MEDIA_TYPE_AUDIO &&
+		!media_format_lang_exists(context->parse_params.langs, &metadata_parse_context.media_info.tags.lang_str))
 	{
 		return VOD_OK;
 	}

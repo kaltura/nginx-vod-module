@@ -97,8 +97,7 @@ subtitle_parse(
 	}
 
 	// filter by language
-	if (parse_params->langs_mask != NULL &&
-		!vod_is_bit_set(parse_params->langs_mask, tags.language))
+	if (!media_format_lang_exists(parse_params->langs, &tags.lang_str))
 	{
 		metadata->base.tracks.nelts = 0;
 		return VOD_OK;

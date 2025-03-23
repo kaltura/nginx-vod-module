@@ -35,6 +35,7 @@
 #define MAX_DURATION_SEC (1000000)
 #define MAX_CLIP_DURATION (90000000)		// 25h
 #define MAX_SEQUENCE_DURATION (864000000)		// 10 days
+#define MAX_LANGUAGE_COUNT (4)
 
 // read flags
 #define MEDIA_READ_FLAG_REALLOC_BUFFER	(0x1)
@@ -180,7 +181,7 @@ typedef struct {
 
 typedef struct {
 	track_mask_t* required_tracks_mask;
-	uint64_t* langs_mask;
+	ngx_str_t* langs;
 	uint32_t clip_from;
 	uint32_t clip_to;
 	media_range_t* range;
@@ -400,6 +401,8 @@ typedef struct {
 } media_format_t;
 
 // functions
+bool_t media_format_lang_exists(vod_str_t* langs, vod_str_t* lang);
+
 vod_status_t media_format_finalize_track(
 	request_context_t* request_context,
 	int parse_type,

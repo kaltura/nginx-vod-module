@@ -1554,7 +1554,7 @@ ngx_http_vod_init_parse_params_metadata(
 		vod_track_mask_and_bits(tracks_mask[media_type], cur_source->tracks_mask[media_type], request_tracks_mask[media_type]);
 	}
 	parse_params->required_tracks_mask = tracks_mask;
-	parse_params->langs_mask = ctx->submodule_context.request_params.langs_mask;
+	parse_params->langs = ctx->submodule_context.request_params.langs;
 	parse_params->source = cur_source;
 }
 
@@ -3576,8 +3576,7 @@ ngx_http_vod_run_generators(ngx_http_vod_ctx_t *ctx)
 			continue;
 		}
 
-		if (parse_params.langs_mask != NULL &&
-			!vod_is_bit_set(parse_params.langs_mask, cur_source->sequence->tags.language))
+		if (!media_format_lang_exists(parse_params.langs, &cur_source->sequence->tags.lang_str))
 		{
 			ngx_memzero(&cur_source->track_array, sizeof(cur_source->track_array));
 			continue;

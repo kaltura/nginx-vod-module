@@ -867,9 +867,8 @@ mkv_metadata_parse(
 		}
 
 		// filter by language
-		if (parse_params->langs_mask != NULL &&
-			media_type == MEDIA_TYPE_AUDIO &&
-			!vod_is_bit_set(parse_params->langs_mask, lang_id))
+		if (media_type == MEDIA_TYPE_AUDIO &&
+			!media_format_lang_exists(parse_params->langs, &track.language))
 		{
 			continue;
 		}

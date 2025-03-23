@@ -1013,11 +1013,6 @@ media_set_parse_sequences(
 			if (cur_output->tags.lang_str.len >= LANG_ISO639_3_LEN)
 			{
 				cur_output->tags.language = lang_parse_iso639_3_code(iso639_3_str_to_int(cur_output->tags.lang_str.data));
-				if (cur_output->tags.language != 0)
-				{
-					cur_output->tags.lang_str.data = (u_char *)lang_get_rfc_5646_name(cur_output->tags.language);
-					cur_output->tags.lang_str.len = ngx_strlen(cur_output->tags.lang_str.data);
-				}
 			}
 
 			if (cur_output->tags.label.len == 0)

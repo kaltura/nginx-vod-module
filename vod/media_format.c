@@ -3,6 +3,30 @@
 #include "avc_parser.h"
 #include "hevc_parser.h"
 
+bool_t
+media_format_lang_exists(vod_str_t* langs, vod_str_t* lang)
+{
+	vod_str_t* cur;
+	vod_str_t* last;
+
+	if (langs == NULL)
+	{
+		return TRUE;
+	}
+
+	last = langs + MAX_LANGUAGE_COUNT;
+	for (cur = langs; cur < last && cur->len != 0; cur++)
+	{
+		if (lang->len == cur->len &&
+			vod_strncasecmp(lang->data, cur->data, cur->len) == 0)
+		{
+			return TRUE;
+		}
+	}
+
+	return FALSE;
+}
+
 vod_status_t
 media_format_finalize_track(
 	request_context_t* request_context, 
@@ -159,6 +183,13 @@ media_format_finalize_track(
 	{
 		media_info->extra_data.data = NULL;
 		media_info->extra_data.len = 0;
+	}
+
+	// output short (ISO-639-1) language codes when possible
+	if (media_info->tags.language != 0 && media_info->tags.lang_str.len == LANG_ISO639_3_LEN)
+	{
+		media_info->tags.lang_str.data = (u_char *)lang_get_rfc_5646_name(media_info->tags.language);
+		media_info->tags.lang_str.len = ngx_strlen(media_info->tags.lang_str.data);
 	}
 
 	return VOD_OK;

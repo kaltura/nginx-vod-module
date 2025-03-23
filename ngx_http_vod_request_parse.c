@@ -218,6 +218,8 @@ ngx_http_vod_parse_uri_file_name(
 	sequence_tracks_mask_t* sequence_tracks_mask;
 	ngx_str_t* cur_sequence_id;
 	ngx_str_t* last_sequence_id;
+	ngx_str_t* cur_lang;
+	ngx_str_t* last_lang;
 	track_mask_t default_tracks_mask;
 	track_mask_t* tracks_mask;
 	uint32_t segment_index_shift;
@@ -227,7 +229,6 @@ ngx_http_vod_parse_uri_file_name(
 	uint32_t pts_delay;
 	uint32_t version;
 	bool_t tracks_mask_updated;
-	language_id_t lang_id;
 
 	if (flags & PARSE_FILE_NAME_MULTI_STREAMS_PER_TYPE)
 	{
@@ -480,35 +481,38 @@ ngx_http_vod_parse_uri_file_name(
 	// languages
 	if (*start_pos == 'l')
 	{
-		result->langs_mask = ngx_pcalloc(r->pool, LANG_MASK_SIZE * sizeof(result->langs_mask[0]));
-		if (result->langs_mask == NULL)
+		result->langs = ngx_pcalloc(r->pool, MAX_LANGUAGE_COUNT * sizeof(result->langs[0]));
+		if (result->langs == NULL)
 		{
 			ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
 				"ngx_http_vod_parse_uri_file_name: ngx_palloc failed");
 			return ngx_http_vod_status_to_ngx_error(r, VOD_ALLOC_FAILED);
 		}
 
+		cur_lang = result->langs;
+		last_lang = cur_lang + MAX_LANGUAGE_COUNT;
+
 		for (;;)
 		{
 			start_pos++;		// skip the l
-			if (start_pos + LANG_ISO639_3_LEN > end_pos)
+
+			if (cur_lang >= last_lang)
 			{
 				ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
-					"ngx_http_vod_parse_uri_file_name: language specifier length must be 3 characters");
+					"ngx_http_vod_parse_uri_file_name: the number of language codes exceeds the limit");
 				return ngx_http_vod_status_to_ngx_error(r, VOD_BAD_REQUEST);
 			}
 
-			lang_id = lang_parse_iso639_3_code(iso639_3_str_to_int(start_pos));
-			if (lang_id == 0)
+			cur_lang->data = start_pos;
+
+			while (start_pos < end_pos && *start_pos != '-')
 			{
-				ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
-					"ngx_http_vod_parse_uri_file_name: failed to parse language specifier %*s", (size_t)3, start_pos);
-				return ngx_http_vod_status_to_ngx_error(r, VOD_BAD_REQUEST);
+				start_pos++;
 			}
 
-			vod_set_bit(result->langs_mask, lang_id);
+			cur_lang->len = start_pos - cur_lang->data;
 
-			start_pos += LANG_ISO639_3_LEN;
+			cur_lang++;
 
 			skip_dash(start_pos, end_pos);
 
