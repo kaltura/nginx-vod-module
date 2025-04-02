@@ -898,6 +898,9 @@ mkv_metadata_parse(
 
 		vod_memzero(cur_track, sizeof(*cur_track));
 
+		// inherit the sequence tags
+		cur_track->media_info.tags = sequence->tags;
+
 		switch (track.type)
 		{
 		case MKV_TRACK_TYPE_VIDEO:

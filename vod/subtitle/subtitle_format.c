@@ -86,7 +86,7 @@ subtitle_parse(
 		return VOD_OK;
 	}
 
-	// inherit the sequence language and label
+	// inherit the sequence tags
 	tags = parse_params->source->sequence->tags;
 	if (tags.label.len == 0)
 	{

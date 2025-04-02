@@ -2726,6 +2726,11 @@ mp4_parser_process_moov_atom_callback(void* ctx, atom_info_t* atom_info)
 	vod_memzero(&metadata_parse_context, sizeof(metadata_parse_context));
 	metadata_parse_context.request_context = context->request_context;
 	metadata_parse_context.parse_params = context->parse_params;
+
+	// inherit the sequence tags
+	sequence = context->parse_params.source->sequence;
+	metadata_parse_context.media_info.tags = sequence->tags;
+
 	rc = mp4_parser_parse_hdlr_atom(&trak_atom_infos.hdlr, &metadata_parse_context);
 	if (rc != VOD_OK)
 	{
@@ -2867,7 +2872,6 @@ mp4_parser_process_moov_atom_callback(void* ctx, atom_info_t* atom_info)
 	}
 
 	// inherit the sequence language and label
-	sequence = context->parse_params.source->sequence;
 	if (sequence->tags.label.len != 0)
 	{
 		metadata_parse_context.media_info.tags.label = sequence->tags.label;
