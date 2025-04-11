@@ -4,6 +4,7 @@
 #include <libavcodec/avcodec.h>
 
 #if (VOD_HAVE_LIB_SW_SCALE)
+#include <math.h>
 #include <libswscale/swscale.h>
 #include <libavutil/imgutils.h>
 #endif // VOD_HAVE_LIB_SW_SCALE
@@ -15,6 +16,8 @@ typedef struct
 	request_context_t* request_context;
 	write_callback_t write_callback;
 	void* write_context;
+	uint32_t requested_width;
+	uint32_t requested_height;
 
 	// libavcodec
 	AVCodecContext *decoder;
@@ -327,8 +330,6 @@ thumb_grabber_init_state(
 	thumb_grabber_state_t* state;
 	vod_pool_cleanup_t *cln;
 	vod_status_t rc;
-	uint32_t output_width;
-	uint32_t output_height;
 	uint32_t frame_index;
 
 	if (decoder_codec[track->media_info.codec_id] == NULL)
@@ -386,47 +387,8 @@ thumb_grabber_init_state(
 	{
 		return rc;
 	}
-
-	if (request_params->width != 0)
-	{
-		output_width = request_params->width;
-		if (request_params->height != 0)
-		{
-			output_height = request_params->height;
-		}
-		else
-		{
-			output_height = ((uint64_t)track->media_info.u.video.height * request_params->width) / track->media_info.u.video.width;
-		}
-	}
-	else
-	{
-		if (request_params->height != 0)
-		{
-			output_width = ((uint64_t)track->media_info.u.video.width * request_params->height) / track->media_info.u.video.height;
-			output_height = request_params->height;
-		}
-		else
-		{
-			output_width = track->media_info.u.video.width;
-			output_height = track->media_info.u.video.height;
-		}
-	}
-
-	if (output_width <= 0 || output_height <= 0)
-	{
-		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-			"thumb_grabber_init_state: output width/height is zero");
-		return VOD_BAD_REQUEST;
-	}
-
-	// TODO: postpone the initialization of the encoder to after a frame is decoded
-
-	rc = thumb_grabber_init_encoder(request_context, output_width, output_height, &state->encoder);
-	if (rc != VOD_OK)
-	{
-		return rc;
-	}
+	state->requested_width = request_params->width;
+	state->requested_height = request_params->height;
 
 	state->decoded_frame = av_frame_alloc();
 	if (state->decoded_frame == NULL)
@@ -573,6 +535,52 @@ thumb_grabber_decode_frame(thumb_grabber_state_t* state, u_char* buffer)
 	return VOD_OK;
 }
 
+vod_status_t
+thumb_grabber_init_encoder_internal(thumb_grabber_state_t* state)
+{
+	int output_width, output_height;
+#if (VOD_HAVE_LIB_SW_SCALE)
+	AVRational aspect = state->decoder->sample_aspect_ratio;
+	if (aspect.num == 0 || aspect.den == 0) {
+		aspect.num = 1;
+		aspect.den = 1;
+	}
+	double aspect_d = (double)aspect.num / (double)aspect.den;
+	if (state->requested_width != 0)
+	{
+		output_width = state->requested_width;
+		if (state->requested_height != 0)
+		{
+			output_height = state->requested_height;
+		}
+		else
+		{
+			output_height = lround(
+				((double)(state->decoded_frame->height * state->requested_width))
+				/ ((double)state->decoded_frame->width * aspect_d)
+			);
+		}
+	}
+	else if (state->requested_height != 0)
+	{
+		output_height = state->requested_height;
+		output_width = lround(
+			((double)(state->decoded_frame->width * state->requested_height) * aspect_d)
+			/ (double)state->decoded_frame->height
+		);
+	}
+	else
+	{
+		output_width = lround((double)state->decoded_frame->width * aspect_d);
+		output_height = state->decoded_frame->height;
+	}
+#else
+	output_width = state->decoded_frame.width;
+	output_height = state->decoded_frame.height;
+#endif
+	return thumb_grabber_init_encoder(state->request_context, output_width, output_height, &state->encoder);
+}
+
 #if (VOD_HAVE_LIB_SW_SCALE)
 static vod_status_t
 thumb_grabber_resize_frame(thumb_grabber_state_t* state)
@@ -594,7 +602,7 @@ thumb_grabber_resize_frame(thumb_grabber_state_t* state)
 
 	output_frame->width = state->encoder->width;
 	output_frame->height = state->encoder->height;
-	output_frame->format = AV_PIX_FMT_YUV420P;
+	output_frame->format = AV_PIX_FMT_YUVJ420P;
 
 	sws_ctx = sws_getContext(
 		input_frame->width, input_frame->height, input_frame->format,
@@ -660,9 +668,18 @@ thumb_grabber_write_frame(thumb_grabber_state_t* state)
 		return VOD_UNEXPECTED;
 	}
 
+	if (!state->encoder) {
+		rc = thumb_grabber_init_encoder_internal(state);
+		if (rc != VOD_OK)
+		{
+			return rc;
+		}
+	}
+
 #if (VOD_HAVE_LIB_SW_SCALE)
 	if (state->encoder->width != state->decoded_frame->width ||
-		state->encoder->height != state->decoded_frame->height)
+		state->encoder->height != state->decoded_frame->height ||
+		state->decoder->pix_fmt != AV_PIX_FMT_YUVJ420P)
 	{
 		rc = thumb_grabber_resize_frame(state);
 		if (rc != VOD_OK)
