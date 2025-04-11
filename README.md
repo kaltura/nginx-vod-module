@@ -532,6 +532,9 @@ Optional fields:
 * `label` - a friendly string that identifies the sequence. If a language is specified,
 	a default label will be automatically derived by it - e.g. if language is `ita`, 
 	by default `italiano` will be used as the label.
+* `roles` - an array of DASH role schemes as defined in ISO/IEC 23009-1 Section 5.8.5.5. For roles
+	such as `caption` or `description`, the label must be explicitly specified. The default label
+	does not take roles into account.
 * `default` - a boolean that sets the value of the DEFAULT attribute of EXT-X-MEDIA tags using this sequence.
 	If not specified, the first EXT-X-MEDIA tag in each group returns DEFAULT=YES, while the others return DEFAULT=NO.
 * `bitrate` - an object that can be used to set the bitrate for the different media types,

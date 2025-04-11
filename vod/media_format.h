@@ -230,6 +230,7 @@ typedef struct {
 	vod_str_t lang_str;
 	vod_str_t label;
 	bool_t is_default;
+	vod_array_t roles;
 } media_tags_t;
 
 typedef struct media_info_s {

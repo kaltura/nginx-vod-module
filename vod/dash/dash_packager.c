@@ -64,6 +64,9 @@
 	"        maxHeight=\"%uD\"\n"												\
 	"        maxFrameRate=\"%V\">\n"
 
+#define VOD_DASH_MANIFEST_ADAPTATION_ROLE										\
+	"      <Role schemeIdUri=\"urn:mpeg:dash:role:2011\" value=\"%V\"/>\n"
+
 #define VOD_DASH_MANIFEST_REPRESENTATION_HEADER_VIDEO							\
 	"      <Representation\n"													\
 	"          id=\"%V\"\n"														\
@@ -127,20 +130,21 @@
 #define VOD_DASH_MANIFEST_REPRESENTATION_FOOTER									\
 	"      </Representation>\n"
 
-#define VOD_DASH_MANIFEST_ADAPTATION_FOOTER										\
-	"    </AdaptationSet>\n"
-
-#define VOD_DASH_MANIFEST_ADAPTATION_SUBTITLE_VTT								\
+#define VOD_DASH_MANIFEST_ADAPTATION_HEADER_SUBTITLE_VTT						\
 	"    <AdaptationSet\n"														\
 	"        contentType=\"text\"\n"											\
 	"        lang=\"%V\"\n"														\
 	"        label=\"%V\"\n"													\
-	"        mimeType=\"text/vtt\">\n"											\
+	"        mimeType=\"text/vtt\">\n"
+
+#define VOD_DASH_MANIFEST_REPRESENTATION_SUBTITLE_VTT					\
 	"      <Representation\n"													\
 	"          id=\"textstream_%s_%uD\"\n"										\
 	"          bandwidth=\"0\">\n"												\
 	"        <BaseURL>%V%V-%s%V.vtt</BaseURL>\n"								\
-	"      </Representation>\n"													\
+	"      </Representation>\n"
+
+#define VOD_DASH_MANIFEST_ADAPTATION_FOOTER										\
 	"    </AdaptationSet>\n"
 
 
@@ -200,6 +204,7 @@
 #define MAX_INDEX_SHIFT_LENGTH (sizeof("i-") + VOD_INT32_LEN)
 #define MAX_MIME_TYPE_SIZE (sizeof("video/webm") - 1)
 #define MAX_FILE_EXT_SIZE (sizeof("webm") - 1)
+#define MAX_ROLE_SIZE (32)
 
 //typedefs
 typedef struct {
@@ -671,6 +676,20 @@ dash_packager_write_frame_rate(
 	}
 }
 
+static u_char*
+dash_packager_write_roles(u_char* p, media_info_t* media_info)
+{
+	vod_str_t* role = media_info->tags.roles.elts;
+	vod_str_t* last_role = role + media_info->tags.roles.nelts;
+
+	for (; role < last_role; role++)
+	{
+		p = vod_sprintf(p, VOD_DASH_MANIFEST_ADAPTATION_ROLE, role);
+	}
+
+	return p;
+}
+
 static uint32_t
 dash_packager_get_eac3_channel_config(media_info_t* media_info)
 {
@@ -919,16 +938,23 @@ dash_packager_write_mpd_period(
 				representation_id.len--;
 			}
 
-			lang_code = lang_get_rfc_5646_name(cur_track->media_info.tags.language);
-			p = vod_sprintf(p, VOD_DASH_MANIFEST_ADAPTATION_SUBTITLE_VTT,
+			p = vod_sprintf(p, VOD_DASH_MANIFEST_ADAPTATION_HEADER_SUBTITLE_VTT,
 				&cur_track->media_info.tags.lang_str,
-				&cur_track->media_info.tags.label,
+				&cur_track->media_info.tags.label);
+
+			p = dash_packager_write_roles(p, &cur_track->media_info);
+
+			lang_code = lang_get_rfc_5646_name(cur_track->media_info.tags.language);
+			p = vod_sprintf(p, VOD_DASH_MANIFEST_REPRESENTATION_SUBTITLE_VTT,
 				lang_code,
 				subtitle_adapt_id++, 
 				&cur_base_url,
 				&context->conf->subtitle_file_name_prefix,
 				clip_spec,
 				&representation_id);
+
+			p = vod_sprintf(p, VOD_DASH_MANIFEST_ADAPTATION_FOOTER);
+
 			continue;
 		}
 
@@ -939,6 +965,8 @@ dash_packager_write_mpd_period(
 				p,
 				reference_track);
 		}
+
+		p = dash_packager_write_roles(p, &reference_track->media_info);
 
 		// get the segment index start number
 		start_number = (*cur_duration_items)[0].segment_index;
@@ -1377,12 +1405,14 @@ dash_packager_build_mpd(
 		sizeof(VOD_DASH_MANIFEST_PERIOD_HEADER_START_DURATION) - 1 + 5 * VOD_INT32_LEN +
 			// video adaptations
 			(sizeof(VOD_DASH_MANIFEST_ADAPTATION_HEADER_VIDEO) - 1 + 3 * VOD_INT32_LEN + VOD_DASH_MAX_FRAME_RATE_LEN +
+			(sizeof(VOD_DASH_MANIFEST_ADAPTATION_ROLE) - 1 + MAX_ROLE_SIZE) * 3 +
 			sizeof(VOD_DASH_MANIFEST_ADAPTATION_FOOTER) - 1) * context.adaptation_sets.count[ADAPTATION_TYPE_VIDEO] +
 			// video representations
 			(sizeof(VOD_DASH_MANIFEST_REPRESENTATION_HEADER_VIDEO) - 1 + MAX_TRACK_SPEC_LENGTH + MAX_MIME_TYPE_SIZE + MAX_CODEC_NAME_SIZE + 3 * VOD_INT32_LEN + VOD_DASH_MAX_FRAME_RATE_LEN +
 			sizeof(VOD_DASH_MANIFEST_REPRESENTATION_FOOTER) - 1) * media_set->track_count[MEDIA_TYPE_VIDEO] +
 			// audio adaptations
 			(sizeof(VOD_DASH_MANIFEST_ADAPTATION_HEADER_AUDIO_LANG) - 1 + sizeof(VOD_DASH_MANIFEST_AUDIO_CHANNEL_CONFIG_EAC3) - 1 + 2 * VOD_INT32_LEN +
+			(sizeof(VOD_DASH_MANIFEST_ADAPTATION_ROLE) - 1 + MAX_ROLE_SIZE) * 3 +
 			sizeof(VOD_DASH_MANIFEST_ADAPTATION_FOOTER) - 1) * context.adaptation_sets.count[ADAPTATION_TYPE_AUDIO] +
 			// audio representations
 			(sizeof(VOD_DASH_MANIFEST_REPRESENTATION_HEADER_AUDIO) - 1 + MAX_TRACK_SPEC_LENGTH + MAX_MIME_TYPE_SIZE + MAX_CODEC_NAME_SIZE + 2 * VOD_INT32_LEN +
@@ -1396,8 +1426,12 @@ dash_packager_build_mpd(
 	case SUBTITLE_FORMAT_WEBVTT:
 		base_period_size +=
 			// subtitle adaptations
-			(sizeof(VOD_DASH_MANIFEST_ADAPTATION_SUBTITLE_VTT) - 1 + LANG_ISO639_3_LEN + VOD_INT32_LEN +
-			context.base_url.len + conf->subtitle_file_name_prefix.len + MAX_CLIP_SPEC_LENGTH + MAX_TRACK_SPEC_LENGTH) *
+			(sizeof(VOD_DASH_MANIFEST_ADAPTATION_HEADER_SUBTITLE_VTT) - 1 + LANG_ISO639_3_LEN + VOD_INT32_LEN +
+			// subtitle roles
+			(sizeof(VOD_DASH_MANIFEST_ADAPTATION_ROLE) - 1 + MAX_ROLE_SIZE) * 3 +
+			// subtitle representation
+			sizeof(VOD_DASH_MANIFEST_REPRESENTATION_SUBTITLE_VTT) - 1 + context.base_url.len + conf->subtitle_file_name_prefix.len + MAX_CLIP_SPEC_LENGTH + MAX_TRACK_SPEC_LENGTH +
+			sizeof(VOD_DASH_MANIFEST_ADAPTATION_FOOTER) - 1) *
 			context.adaptation_sets.count[ADAPTATION_TYPE_SUBTITLE];
 		break;
 
