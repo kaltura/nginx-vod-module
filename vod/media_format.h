@@ -229,6 +229,9 @@ typedef struct {
 	language_id_t language;
 	vod_str_t lang_str;
 	vod_str_t label;
+	bool_t is_forced;
+	vod_str_t characteristics;
+	bool_t is_autoselect;
 	bool_t is_default;
 } media_tags_t;
 

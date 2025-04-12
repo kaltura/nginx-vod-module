@@ -15,8 +15,11 @@
 
 #define M3U8_EXT_MEDIA_BASE "#EXT-X-MEDIA:TYPE=%s,GROUP-ID=\"%s%uD\",NAME=\"%V\","
 #define M3U8_EXT_MEDIA_LANG "LANGUAGE=\"%V\","
-#define M3U8_EXT_MEDIA_DEFAULT "AUTOSELECT=YES,DEFAULT=YES,"
-#define M3U8_EXT_MEDIA_NON_DEFAULT "AUTOSELECT=NO,DEFAULT=NO,"
+#define M3U8_EXT_MEDIA_DEFAULT "DEFAULT=YES,"
+#define M3U8_EXT_MEDIA_NON_DEFAULT "DEFAULT=NO,"
+#define M3U8_EXT_MEDIA_AUTOSELECT "AUTOSELECT=YES,"
+#define M3U8_EXT_MEDIA_FORCED "FORCED=YES,"
+#define M3U8_EXT_MEDIA_CHARACTERISTICS "CHARACTERISTICS=\"%V\","
 #define M3U8_EXT_MEDIA_URI "URI=\""
 #define M3U8_EXT_MEDIA_INSTREAM_ID "INSTREAM-ID=\"%V\""
 
@@ -37,6 +40,8 @@
 
 #define M3U8_VIDEO_RANGE_SDR ",VIDEO-RANGE=SDR"
 #define M3U8_VIDEO_RANGE_PQ ",VIDEO-RANGE=PQ"
+
+#define MAX_CHARACTERISTICS_SIZE (128)
 
 // constants
 static const u_char m3u8_header[] = "#EXTM3U\n";
@@ -917,6 +922,9 @@ m3u8_builder_ext_x_media_tags_get_size(
 		sizeof(M3U8_EXT_MEDIA_GROUP_ID_AUDIO) - 1 +
 		sizeof(M3U8_EXT_MEDIA_LANG) - 1 +
 		sizeof(M3U8_EXT_MEDIA_DEFAULT) - 1 +
+		sizeof(M3U8_EXT_MEDIA_AUTOSELECT) - 1 +
+		sizeof(M3U8_EXT_MEDIA_CHARACTERISTICS) - 1 + MAX_CHARACTERISTICS_SIZE +
+		sizeof(M3U8_EXT_MEDIA_FORCED) - 1 +
 		sizeof(M3U8_EXT_MEDIA_CHANNELS) - 1 + VOD_INT32_LEN +
 		sizeof(M3U8_EXT_MEDIA_URI) - 1 +
 		base_url_len +
@@ -1024,9 +1032,21 @@ m3u8_builder_ext_x_media_tags_write(
 		{
 			p = vod_copy(p, M3U8_EXT_MEDIA_DEFAULT, sizeof(M3U8_EXT_MEDIA_DEFAULT) - 1);
 		}
-		else
+
+		if (tracks[media_type]->media_info.tags.is_autoselect > 0)
 		{
-			p = vod_copy(p, M3U8_EXT_MEDIA_NON_DEFAULT, sizeof(M3U8_EXT_MEDIA_NON_DEFAULT) - 1);
+			p = vod_copy(p, M3U8_EXT_MEDIA_AUTOSELECT, sizeof(M3U8_EXT_MEDIA_AUTOSELECT) - 1);
+		}
+
+		if (tracks[media_type]->media_info.tags.characteristics.len != 0)
+		{
+			p = vod_sprintf(p, M3U8_EXT_MEDIA_CHARACTERISTICS,
+				&tracks[media_type]->media_info.tags.characteristics);
+		}
+
+		if (tracks[media_type]->media_info.tags.is_forced > 0 && media_type == MEDIA_TYPE_SUBTITLE)
+		{
+			p = vod_copy(p, M3U8_EXT_MEDIA_FORCED, sizeof(M3U8_EXT_MEDIA_FORCED) - 1);
 		}
 
 		if (media_type == MEDIA_TYPE_AUDIO)

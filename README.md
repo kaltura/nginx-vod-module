@@ -534,6 +534,11 @@ Optional fields:
 	by default `italiano` will be used as the label.
 * `default` - a boolean that sets the value of the DEFAULT attribute of EXT-X-MEDIA tags using this sequence.
 	If not specified, the first EXT-X-MEDIA tag in each group returns DEFAULT=YES, while the others return DEFAULT=NO.
+* `autoselect` - a boolean that sets the value of the AUTOSELECT attribute of EXT-X-MEDIA tags using this sequence.
+* `characteristics` - a string of HLS characteristics as defined in [RFC 8216 Section 4.3.4.1](https://datatracker.ietf.org/doc/html/rfc8216#section-4.3.4.1).
+	For characteristics such as `public.easy-to-read` or `public.accessibility.*`, the label must be explicitly
+	specified. The default label does not take characteristics into account.
+* `forced` - a boolean that sets the value of the FORCED attribute of EXT-X-MEDIA tags using this sequence.
 * `bitrate` - an object that can be used to set the bitrate for the different media types,
 	in bits per second. For example, `{"v": 900000, "a": 64000}`. If the bitrate is not supplied,
 	nginx-vod-module will estimate it based on the last clip in the sequence.
