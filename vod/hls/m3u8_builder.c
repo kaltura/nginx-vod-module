@@ -954,7 +954,8 @@ m3u8_builder_ext_x_media_tags_write(
 	adaptation_set_t* adaptation_set;
 	media_track_t* tracks[MEDIA_TYPE_COUNT];
 	vod_str_t* label;
-	uint32_t group_index;
+	uint32_t group_index = 0;
+	uint32_t last_group_index = UINT_MAX;
 	bool_t is_default;
 	char* group_id;
 	char* type;
@@ -991,10 +992,6 @@ m3u8_builder_ext_x_media_tags_write(
 		{
 			group_index = tracks[media_type]->media_info.codec_id - VOD_CODEC_ID_AUDIO;
 		}
-		else
-		{
-			group_index = 0;
-		}
 
 		label = &tracks[media_type]->media_info.tags.label;
 		if (label->len == 0)
@@ -1017,7 +1014,8 @@ m3u8_builder_ext_x_media_tags_write(
 		is_default = tracks[media_type]->media_info.tags.is_default;
 		if (is_default < 0)
 		{
-			is_default = adaptation_set == first_adaptation_set;
+			is_default = adaptation_set == first_adaptation_set || group_index != last_group_index;
+			last_group_index = group_index;
 		}
 
 		if (is_default)
