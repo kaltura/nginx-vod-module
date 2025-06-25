@@ -440,7 +440,7 @@ dfxp_parse(
 
 	if (xmlParseDocument(ctxt) != 0 ||
 		ctxt->myDoc == NULL ||
-		(!ctxt->wellFormed && !ctxt->recovery))
+		!ctxt->wellFormed)
 	{
 		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
 			"dfxp_parse: xml parsing failed");
