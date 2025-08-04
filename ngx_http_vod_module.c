@@ -216,7 +216,7 @@ typedef struct {
 static ngx_int_t ngx_http_vod_run_state_machine(ngx_http_vod_ctx_t *ctx);
 static ngx_int_t ngx_http_vod_send_notification(ngx_http_vod_ctx_t *ctx);
 static ngx_int_t ngx_http_vod_init_process(ngx_cycle_t *cycle);
-static void ngx_http_vod_exit_process();
+static void ngx_http_vod_exit_process(ngx_cycle_t *);
 
 static ngx_int_t ngx_http_vod_init_file_reader_with_fallback(ngx_http_request_t *r, ngx_str_t* path, uint32_t flags, void** context);
 static ngx_int_t ngx_http_vod_init_file_reader(ngx_http_request_t *r, ngx_str_t* path, uint32_t flags, void** context);
@@ -3397,7 +3397,7 @@ ngx_http_vod_init_process(ngx_cycle_t *cycle)
 }
 
 static void 
-ngx_http_vod_exit_process()
+ngx_http_vod_exit_process(ngx_cycle_t *)
 {
 #if (VOD_HAVE_ICONV)
 	webvtt_exit_process();
