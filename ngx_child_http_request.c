@@ -187,6 +187,18 @@ ngx_child_request_wev_handler(ngx_http_request_t *r)
 			rc = NGX_OK;
 			b->last = b->pos;
 			break;
+			
+        case NGX_HTTP_BAD_REQUEST:
+            rc = NGX_HTTP_FORBIDDEN;
+            break;
+
+        case NGX_HTTP_UNAUTHORIZED:
+            rc = NGX_HTTP_FORBIDDEN;
+            break;
+
+        case NGX_HTTP_NOT_FOUND:
+            rc = NGX_HTTP_NOT_FOUND;
+            break;
 
 		default:
 			if (u->headers_in.status_n != 0)
