@@ -1949,6 +1949,9 @@ segmenter_get_segment_durations_accurate(
 
 	align_to_key_frames = conf->align_to_key_frames && main_track->media_info.media_type == MEDIA_TYPE_VIDEO;
 
+	segment_start = main_track->first_frame_time_offset;
+	accum_duration = main_track->first_frame_time_offset;
+
 	// bootstrap segments
 	if (conf->bootstrap_segments_count > 0)
 	{
