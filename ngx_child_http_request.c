@@ -409,6 +409,31 @@ ngx_child_request_copy_headers(
 	ngx_uint_t count;
 	ngx_int_t rc;
 
+	// validate arguments (defensive: see crash at dest->headers.last->elts)
+	if (r == NULL || src == NULL || dest == NULL || params == NULL)
+	{
+		ngx_log_t *log = (r != NULL && r->connection != NULL)
+			? r->connection->log
+			: ngx_cycle->log;
+
+		ngx_log_error(NGX_LOG_ERR, log, 0,
+			"ngx_child_request_copy_headers: invalid args "
+			"r:%p src:%p dest:%p params:%p",
+			r, src, dest, params);
+		return NGX_ERROR;
+	}
+
+	if (r->pool == NULL)
+	{
+		ngx_log_t *log = (r->connection != NULL && r->connection->log != NULL)
+			? r->connection->log
+			: ngx_cycle->log;
+
+		ngx_log_error(NGX_LOG_ERR, log, 0,
+			"ngx_child_request_copy_headers: request pool is null");
+		return NGX_ERROR;
+	}
+
 	// get the total header count
 	count = 0;
 	for (part = &src->headers.part; part; part = part->next)
@@ -416,22 +441,43 @@ ngx_child_request_copy_headers(
 		count += part->nelts;
 	}
 
+#if defined(nginx_version) && nginx_version >= 1023000
+	/*
+	 * Zero named header field pointers BEFORE ngx_list_init().
+	 * On nginx >= 1.23.0 ngx_http_headers_in[].offset may point at fields
+	 * embedded inside ngx_http_headers_in_t that overlap with the freshly
+	 * initialized dest->headers list head (part/last/elts). If we clear
+	 * them after ngx_list_init() we corrupt the list and the subsequent
+	 * dest->headers.last->elts dereference fails, breaking child/subrequest
+	 * creation (e.g. mapping subrequest in vod_mode mapped).
+	 */
+	for (hh = ngx_http_headers_in; hh->name.len; hh++) {
+		ph = (ngx_table_elt_t **)((char *) dest + hh->offset);
+		*ph = NULL;
+	}
+#endif
+
 	// allocate dest array
 	rc = ngx_list_init(&dest->headers, r->pool, count + 2, sizeof(ngx_table_elt_t));
 	if (rc != NGX_OK)
 	{
-		ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+		ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
 			"ngx_child_request_copy_headers: ngx_list_init failed");
 		return NGX_ERROR;
 	}
 
-#if defined(nginx_version) && nginx_version >= 1023000
-	// zero all named header fields
-	for (hh = ngx_http_headers_in; hh->name.len; hh++) {
-		ph = (ngx_table_elt_t **)((char *)dest + hh->offset);
-		*ph = NULL;
+	// post-condition: ngx_list_init must set headers.last to &headers.part
+	// with a valid elts buffer. If something corrupted dest (or dest itself
+	// is invalid) we would crash on the next line - check explicitly.
+	if (dest->headers.last == NULL || dest->headers.last->elts == NULL)
+	{
+		ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
+			"ngx_child_request_copy_headers: destination headers list "
+			"is not properly initialized last:%p elts:%p",
+			dest->headers.last,
+			dest->headers.last != NULL ? dest->headers.last->elts : NULL);
+		return NGX_ERROR;
 	}
-#endif
 
 	output = dest->headers.last->elts;
 
@@ -660,6 +706,16 @@ ngx_child_request_start(
 		return rc;
 	}
 
+	// guard against unexpected subrequest state - sr must be a valid
+	// request with headers_in usable by ngx_child_request_copy_headers
+	if (sr == NULL)
+	{
+		ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
+			"ngx_child_request_start: ngx_http_subrequest returned "
+			"null subrequest (rc=%i)", rc);
+		return NGX_ERROR;
+	}
+
 	// set the context of the subrequest
 	ngx_http_set_ctx(sr, child_ctx, ngx_http_vod_module);
 
@@ -681,6 +737,9 @@ ngx_child_request_start(
 	rc = ngx_child_request_copy_headers(r, params, &sr->headers_in, &r->headers_in);
 	if (rc != NGX_OK)
 	{
+		ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
+			"ngx_child_request_start: ngx_child_request_copy_headers "
+			"failed %i", rc);
 		return rc;
 	}
 
