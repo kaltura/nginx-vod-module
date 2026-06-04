@@ -430,7 +430,7 @@ dfxp_parse(
 		return VOD_ALLOC_FAILED;
 	}
 
-	xmlCtxtUseOptions(ctxt, XML_PARSE_RECOVER | XML_PARSE_NOWARNING | XML_PARSE_NONET);
+	xmlCtxtUseOptions(ctxt, XML_PARSE_RECOVER | XML_PARSE_NOWARNING | XML_PARSE_NONET | XML_PARSE_NOBLANKS);
 	
 	ctxt->sax->setDocumentLocator = NULL;
 	ctxt->sax->error = dfxp_xml_sax_error;
