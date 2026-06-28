@@ -208,6 +208,11 @@ edash_packager_build_mpd(
 
 	for (cur_track = media_set->filtered_tracks; cur_track < media_set->filtered_tracks_end; cur_track++)
 	{
+		if (cur_track->media_info.media_type > MEDIA_TYPE_AUDIO)	// ignore subtitles
+		{
+			continue;
+		}
+
 		drm_info = (drm_info_t*)cur_track->file_info.drm_info;
 
 		representation_tags_size += sizeof(VOD_EDASH_MANIFEST_CONTENT_PROTECTION_CENC) - 1;

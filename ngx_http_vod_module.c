@@ -3737,7 +3737,10 @@ ngx_http_vod_run_state_machine(ngx_http_vod_ctx_t *ctx)
 #if (NGX_HAVE_LIBXML2)
 			if (ctx->cpix != NULL)
 			{
-				rc = cpix_init_drm_info(&ctx->submodule_context.request_context, &ctx->submodule_context.media_set, ctx->cpix);
+				rc = cpix_init_drm_info(
+					&ctx->submodule_context.request_context,
+					&ctx->submodule_context.media_set,
+					ctx->cpix);
 				if (rc != VOD_OK)
 				{
 					ngx_log_debug1(NGX_LOG_DEBUG_HTTP, ctx->submodule_context.request_context.log, 0,

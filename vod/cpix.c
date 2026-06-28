@@ -891,10 +891,14 @@ cpix_init_drm_info(
 			continue;
 		}
 
-		// derive the clip index from clip_start_time
-		for (; clip_index + 1 < timing->total_count && track->clip_start_time >= (int64_t) timing->times[clip_index + 1]; clip_index++);
+		if (timing->times != NULL)
+		{
+			// derive the clip index from clip_start_time
+			for (; clip_index + 1 < timing->total_count && track->clip_start_time >= (int64_t) timing->times[clip_index + 1]; clip_index++);
+		}
 
-		drm_info = cpix_get_track_info(request_context, cpix, track, clip_index, timing->times[clip_index]);
+		drm_info = cpix_get_track_info(request_context, cpix, track, clip_index,
+			timing->times != NULL ? timing->times[clip_index] : 0);
 		if (drm_info == NULL)
 		{
 			vod_log_error(VOD_LOG_ERR, request_context->log, 0,
