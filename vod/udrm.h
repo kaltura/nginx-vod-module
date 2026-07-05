@@ -11,6 +11,10 @@
 typedef struct {
 	u_char system_id[DRM_SYSTEM_ID_SIZE];
 	vod_str_t data;
+	vod_str_t dash_data;
+	vod_str_t mss_data;
+	vod_str_t hls_media_signaling;
+	vod_str_t hls_master_signaling;
 } drm_system_info_t;
 
 typedef struct {

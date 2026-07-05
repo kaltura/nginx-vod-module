@@ -24,7 +24,7 @@ mp4_cenc_passthrough_init(mp4_cenc_passthrough_context_t* context, media_sequenc
 		if (cur_track->frames.frames_source != &mp4_cenc_decrypt_frames_source ||
 			vod_memcmp(
 				mp4_cenc_decrypt_get_key(cur_track->frames.frames_source_context), 
-				((drm_info_t*)sequence->drm_info)->key, 
+				((drm_info_t*)cur_track->file_info.drm_info)->key, 
 				DRM_KEY_SIZE) != 0)
 		{
 			return FALSE;

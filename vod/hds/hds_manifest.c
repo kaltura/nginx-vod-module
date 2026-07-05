@@ -373,6 +373,7 @@ hds_packager_build_manifest(
 	media_track_t** cur_track_ptr;
 	media_track_t* tracks_array[MEDIA_TYPE_COUNT];
 	media_track_t* track;
+	drm_info_t* drm_info;
 	vod_str_t* drm_metadata;
 	uint32_t initial_muxed_tracks;
 	uint32_t muxed_tracks;
@@ -477,10 +478,12 @@ hds_packager_build_manifest(
 			if (cur_track_ptr[0] != NULL)
 			{
 				cur_sequence = cur_track_ptr[0]->file_info.source->sequence;
+				drm_info = cur_track_ptr[0]->file_info.drm_info;
 			}
 			else
 			{
 				cur_sequence = cur_track_ptr[1]->file_info.source->sequence;
+				drm_info = cur_track_ptr[1]->file_info.drm_info;
 			}
 
 			switch (media_set->type)
@@ -514,7 +517,7 @@ hds_packager_build_manifest(
 
 			if (drm_enabled)
 			{
-				drm_metadata = &((drm_info_t*)cur_sequence->drm_info)->pssh_array.first->data;
+				drm_metadata = &drm_info->pssh_array.first->data;
 
 				result_size += drm_metadata->len;
 			}
@@ -638,13 +641,15 @@ hds_packager_build_manifest(
 				if (cur_track_ptr[0] != NULL)
 				{
 					cur_sequence = cur_track_ptr[0]->file_info.source->sequence;
+					drm_info = cur_track_ptr[0]->file_info.drm_info;
 				}
 				else
 				{
 					cur_sequence = cur_track_ptr[1]->file_info.source->sequence;
+					drm_info = cur_track_ptr[1]->file_info.drm_info;
 				}
 
-				drm_metadata = &((drm_info_t*)cur_sequence->drm_info)->pssh_array.first->data;
+				drm_metadata = &drm_info->pssh_array.first->data;
 
 				p = vod_sprintf(p, HDS_DRM_ADDITIONAL_HEADER_PREFIX, index);
 				p = vod_copy(p, drm_metadata->data, drm_metadata->len);

@@ -248,9 +248,32 @@ filter_validate_consistent_codecs(
 	return VOD_OK;
 }
 
+static void
+filter_update_expanded_clip_times(media_set_t* media_set)
+{
+	media_track_t* last_track;
+	media_track_t* cur_track;
+	uint64_t* original_times;
+	uint64_t* times;
+
+	cur_track = media_set->filtered_tracks + media_set->clip_count * media_set->total_track_count;
+	times = media_set->timing.times + media_set->clip_count;
+	original_times = media_set->timing.original_times + media_set->clip_count;
+
+	for (; cur_track < media_set->filtered_tracks_end; times++, original_times++)
+	{
+		for (last_track = cur_track + media_set->total_track_count; cur_track < last_track; cur_track++)
+		{
+			cur_track->clip_start_time = *times;
+			cur_track->original_clip_time = *original_times;
+		}
+	}
+}
+
 vod_status_t
 filter_init_filtered_clips(
 	request_context_t* request_context,
+	request_params_t* request_params,
 	media_set_t* media_set,
 	bool_t parsed_frames)
 {
@@ -262,6 +285,7 @@ filter_init_filtered_clips(
 	media_clip_t* input_clip;
 	media_track_t* new_track;
 	uint32_t track_count[MEDIA_TYPE_COUNT];
+	uint32_t clip_count;
 	uint32_t clip_index;
 	uint32_t media_type;
 	uint32_t cur_count;
@@ -271,10 +295,22 @@ filter_init_filtered_clips(
 	vod_memzero(media_set->track_count, sizeof(media_set->track_count));
 	media_set->total_track_count = 0;
 
+	clip_count = media_set->clip_count;
+	if (media_set->type == MEDIA_SET_VOD &&
+		media_set->clip_count == 1 &&
+		media_set->timing.total_count > 1 &&
+		request_params->segment_index == INVALID_SEGMENT_INDEX &&
+		request_params->segment_time == INVALID_SEGMENT_TIME &&
+		request_params->clip_index == INVALID_CLIP_INDEX)
+	{
+		// the media set was initialized with "consistent media info" expand the tracks to all clips
+		clip_count = media_set->timing.total_count;
+	}
+
 	// allocate the filtered clips
 	output_clip = vod_alloc(
 		request_context->pool,
-		sizeof(output_clip[0]) * media_set->sequence_count * media_set->clip_count);
+		sizeof(output_clip[0]) * media_set->sequence_count * clip_count);
 	if (output_clip == NULL)
 	{
 		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
@@ -359,14 +395,14 @@ filter_init_filtered_clips(
 
 		// initialize the filtered clips array
 		sequence->filtered_clips = output_clip;
-		output_clip += media_set->clip_count;
+		output_clip += clip_count;
 		sequence->filtered_clips_end = output_clip;
 	}
 
 	// allocate the output tracks
 	init_state.output_track = vod_alloc(
 		request_context->pool,
-		sizeof(*init_state.output_track) * media_set->total_track_count * media_set->clip_count);
+		sizeof(*init_state.output_track) * media_set->total_track_count * clip_count);
 	if (init_state.output_track == NULL)
 	{
 		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
@@ -378,17 +414,24 @@ filter_init_filtered_clips(
 
 	media_set->filtered_tracks = init_state.output_track;
 
-	for (clip_index = 0; clip_index < media_set->clip_count; clip_index++)
+	for (clip_index = 0; clip_index < clip_count; clip_index++)
 	{
 		for (sequence = media_set->sequences;
 			sequence < media_set->sequences_end;
 			sequence++)
 		{
-			input_clip = sequence->clips[clip_index];
+			if (clip_index < media_set->clip_count)
+			{
+				input_clip = sequence->clips[clip_index];
+			}
+			else
+			{
+				input_clip = sequence->clips[0];	// copy from the first clip when using "consistent media info"
+			}
+
 			output_clip = &sequence->filtered_clips[clip_index];
 
 			output_clip->first_track = init_state.output_track;
-
 			vod_memzero(output_clip->ref_track, sizeof(output_clip->ref_track));
 
 			// initialize the state
@@ -455,6 +498,10 @@ filter_init_filtered_clips(
 	}
 
 	media_set->filtered_tracks_end = init_state.output_track;
+
+	filter_update_expanded_clip_times(media_set);
+
+	media_set->clip_count = clip_count;
 
 	if (media_set->timing.durations == NULL)
 	{

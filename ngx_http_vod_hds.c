@@ -99,7 +99,7 @@ ngx_http_vod_hds_init_frame_processor(
 
 	if (submodule_context->conf->drm_enabled)
 	{
-		drm_info = submodule_context->media_set.sequences[0].drm_info;
+		drm_info = submodule_context->media_set.filtered_tracks[0].file_info.drm_info;
 
 		encryption_params.type = HDS_ENC_SELECTIVE;
 		encryption_params.key = drm_info->key;

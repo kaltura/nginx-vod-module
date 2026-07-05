@@ -8,6 +8,7 @@
 // functions
 vod_status_t filter_init_filtered_clips(
 	request_context_t* request_context,
+	request_params_t* request_params,
 	media_set_t* media_set,
 	bool_t parsed_frames);
 

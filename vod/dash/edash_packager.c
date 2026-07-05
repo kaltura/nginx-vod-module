@@ -31,6 +31,18 @@
 	"</cenc:pssh>\n"																\
 	"        </ContentProtection>\n"
 
+#define VOD_EDASH_MANIFEST_CONTENT_PROTECTION_EXT_PART1								\
+	"        <ContentProtection xmlns:cenc=\"urn:mpeg:cenc:2013\" schemeIdUri=\"urn:uuid:"
+
+#define VOD_EDASH_MANIFEST_CONTENT_PROTECTION_EXT_PART2								\
+	"\" cenc:default_KID=\""
+
+#define VOD_EDASH_MANIFEST_CONTENT_PROTECTION_EXT_PART3								\
+	"\">\n          "
+
+#define VOD_EDASH_MANIFEST_CONTENT_PROTECTION_EXT_PART4								\
+	"\n        </ContentProtection>\n"
+
 // TODO: remove this - always generate a default_KID for PlayReady
 #define VOD_EDASH_MANIFEST_CONTENT_PROTECTION_PLAYREADY_PART1						\
 	"        <ContentProtection xmlns:mspr=\"urn:microsoft:playready\" schemeIdUri=\"urn:uuid:"
@@ -73,6 +85,11 @@ edash_packager_write_pssh(u_char* p, drm_system_info_t* cur_info)
 	bool_t pssh_v1 = edash_pssh_v1(cur_info);
 	size_t pssh_atom_size;
 
+	if (cur_info->data.len <= 0)
+	{
+		return p;
+	}
+
 	pssh_atom_size = ATOM_HEADER_SIZE + sizeof(pssh_atom_t) + cur_info->data.len;
 	if (pssh_v1)
 	{
@@ -114,7 +131,17 @@ edash_packager_write_content_protection(void* ctx, u_char* p, media_track_t* tra
 	p = vod_copy(p, VOD_EDASH_MANIFEST_CONTENT_PROTECTION_CENC, sizeof(VOD_EDASH_MANIFEST_CONTENT_PROTECTION_CENC) - 1);
 	for (cur_info = drm_info->pssh_array.first; cur_info < drm_info->pssh_array.last; cur_info++)
 	{
-		if (vod_memcmp(cur_info->system_id, edash_playready_system_id, sizeof(edash_playready_system_id)) == 0)
+		if (cur_info->dash_data.len != 0)
+		{
+			p = vod_copy(p, VOD_EDASH_MANIFEST_CONTENT_PROTECTION_EXT_PART1, sizeof(VOD_EDASH_MANIFEST_CONTENT_PROTECTION_EXT_PART1) - 1);
+			p = mp4_cenc_encrypt_write_guid(p, cur_info->system_id);
+			p = vod_copy(p, VOD_EDASH_MANIFEST_CONTENT_PROTECTION_EXT_PART2, sizeof(VOD_EDASH_MANIFEST_CONTENT_PROTECTION_EXT_PART2) - 1);
+			p = mp4_cenc_encrypt_write_guid(p, drm_info->key_id);
+			p = vod_copy(p, VOD_EDASH_MANIFEST_CONTENT_PROTECTION_EXT_PART3, sizeof(VOD_EDASH_MANIFEST_CONTENT_PROTECTION_EXT_PART3) - 1);
+			p = vod_copy(p, cur_info->dash_data.data, cur_info->dash_data.len);
+			p = vod_copy(p, VOD_EDASH_MANIFEST_CONTENT_PROTECTION_EXT_PART4, sizeof(VOD_EDASH_MANIFEST_CONTENT_PROTECTION_EXT_PART4) - 1);
+		}
+		else if (vod_memcmp(cur_info->system_id, edash_playready_system_id, sizeof(edash_playready_system_id)) == 0)
 		{
 			if (context->write_playready_kid)
 			{
@@ -168,29 +195,44 @@ edash_packager_build_mpd(
 {
 	write_content_protection_context_t context;
 	dash_manifest_extensions_t extensions;
-	media_sequence_t* cur_sequence;
 	drm_system_info_t* cur_info;
 	tags_writer_t content_prot_writer;
+	media_track_t* cur_track;
 	drm_info_t* drm_info;
 	size_t representation_tags_size;
-	size_t cur_drm_tags_size;
 	size_t cur_pssh_size;
 	size_t max_pssh_size = 0;
 	vod_status_t rc;
 
 	representation_tags_size = 0;
 
-	for (cur_sequence = media_set->sequences; cur_sequence < media_set->sequences_end; cur_sequence++)
+	for (cur_track = media_set->filtered_tracks; cur_track < media_set->filtered_tracks_end; cur_track++)
 	{
-		drm_info = (drm_info_t*)cur_sequence->drm_info;
+		if (cur_track->media_info.media_type > MEDIA_TYPE_AUDIO)	// ignore subtitles
+		{
+			continue;
+		}
 
-		cur_drm_tags_size = sizeof(VOD_EDASH_MANIFEST_CONTENT_PROTECTION_CENC) - 1;
+		drm_info = (drm_info_t*)cur_track->file_info.drm_info;
+
+		representation_tags_size += sizeof(VOD_EDASH_MANIFEST_CONTENT_PROTECTION_CENC) - 1;
 
 		for (cur_info = drm_info->pssh_array.first; cur_info < drm_info->pssh_array.last; cur_info++)
 		{
-			if (vod_memcmp(cur_info->system_id, edash_playready_system_id, sizeof(edash_playready_system_id)) == 0)
+			if (cur_info->dash_data.len != 0)
 			{
-				cur_drm_tags_size +=
+				representation_tags_size +=
+					sizeof(VOD_EDASH_MANIFEST_CONTENT_PROTECTION_EXT_PART1) - 1 +
+					VOD_GUID_LENGTH +
+					sizeof(VOD_EDASH_MANIFEST_CONTENT_PROTECTION_EXT_PART2) - 1 +
+					VOD_GUID_LENGTH +
+					sizeof(VOD_EDASH_MANIFEST_CONTENT_PROTECTION_EXT_PART3) - 1 +
+					cur_info->dash_data.len +
+					sizeof(VOD_EDASH_MANIFEST_CONTENT_PROTECTION_EXT_PART4) - 1;
+			}
+			else if (vod_memcmp(cur_info->system_id, edash_playready_system_id, sizeof(edash_playready_system_id)) == 0)
+			{
+				representation_tags_size +=
 					sizeof(VOD_EDASH_MANIFEST_CONTENT_PROTECTION_PLAYREADY_V2_PART1) - 1 +
 					VOD_GUID_LENGTH +
 					sizeof(VOD_EDASH_MANIFEST_CONTENT_PROTECTION_PLAYREADY_V2_PART2) - 1 +
@@ -207,7 +249,7 @@ edash_packager_build_mpd(
 					max_pssh_size = cur_pssh_size;
 				}
 
-				cur_drm_tags_size +=
+				representation_tags_size +=
 					sizeof(VOD_EDASH_MANIFEST_CONTENT_PROTECTION_CENC_PART1) - 1 +
 					VOD_GUID_LENGTH +
 					sizeof(VOD_EDASH_MANIFEST_CONTENT_PROTECTION_CENC_PART2) - 1 +
@@ -219,8 +261,6 @@ edash_packager_build_mpd(
 				continue;
 			}
 		}
-
-		representation_tags_size += cur_drm_tags_size * cur_sequence->total_track_count;
 	}
 
 	context.write_playready_kid = conf->write_playready_kid;
@@ -293,7 +333,7 @@ edash_packager_build_init_mp4(
 	bool_t size_only,
 	vod_str_t* result)
 {
-	drm_info_t* drm_info = (drm_info_t*)media_set->sequences[0].drm_info;
+	drm_info_t* drm_info = (drm_info_t*)media_set->filtered_tracks[0].file_info.drm_info;
 	atom_writer_t* stsd_atom_writers;
 	atom_writer_t* ppssh_atom_writer;
 	atom_writer_t pssh_atom_writer;
@@ -321,6 +361,11 @@ edash_packager_build_init_mp4(
 		pssh_atom_writer.atom_size = 0;
 		for (cur_info = drm_info->pssh_array.first; cur_info < drm_info->pssh_array.last; cur_info++)
 		{
+			if (cur_info->data.len <= 0)
+			{
+				continue;
+			}
+
 			pssh_atom_writer.atom_size += ATOM_HEADER_SIZE + sizeof(pssh_atom_t) + cur_info->data.len;
 			if (edash_pssh_v1(cur_info))
 			{

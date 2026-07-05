@@ -50,8 +50,8 @@ static const uint8_t piff_uuid[] = {
 static u_char*
 mss_playready_write_protection_tag(void* context, u_char* p, media_set_t* media_set)
 {
-	// Note: taking only the first sequence, in mss all renditions must have the same key
-	drm_info_t* drm_info = (drm_info_t*)media_set->sequences[0].drm_info;
+	// Note: taking only the first track, in mss all renditions must have the same key
+	drm_info_t* drm_info = (drm_info_t*)media_set->filtered_tracks[0].file_info.drm_info;
 	drm_system_info_t* cur_info;
 	vod_str_t base64;
 
@@ -61,9 +61,16 @@ mss_playready_write_protection_tag(void* context, u_char* p, media_set_t* media_
 		p = vod_copy(p, VOD_MSS_PLAYREADY_PROTECTION_HEADER_PREFIX, sizeof(VOD_MSS_PLAYREADY_PROTECTION_HEADER_PREFIX) - 1);
 		p = mp4_cenc_encrypt_write_guid(p, cur_info->system_id);
 		p = vod_copy(p, VOD_MSS_PLAYREADY_PROTECTION_HEADER_DELIMITER, sizeof(VOD_MSS_PLAYREADY_PROTECTION_HEADER_DELIMITER) - 1);
-		base64.data = p;
-		vod_encode_base64(&base64, &cur_info->data);
-		p += base64.len;
+		if (cur_info->mss_data.len > 0)
+		{
+			p = vod_copy(p, cur_info->mss_data.data, cur_info->mss_data.len);
+		}
+		else
+		{
+			base64.data = p;
+			vod_encode_base64(&base64, &cur_info->data);
+			p += base64.len;
+		}
 		p = vod_copy(p, VOD_MSS_PLAYREADY_PROTECTION_HEADER_SUFFIX, sizeof(VOD_MSS_PLAYREADY_PROTECTION_HEADER_SUFFIX) - 1);
 	}
 	p = vod_copy(p, VOD_MSS_PLAYREADY_PROTECTION_SUFFIX, sizeof(VOD_MSS_PLAYREADY_PROTECTION_SUFFIX) - 1);
@@ -77,8 +84,8 @@ mss_playready_build_manifest(
 	media_set_t* media_set,
 	vod_str_t* result)
 {
-	// Note: taking only the first sequence, in mss all renditions must have the same key
-	drm_info_t* drm_info = (drm_info_t*)media_set->sequences[0].drm_info;
+	// Note: taking only the first track, in mss all renditions must have the same key
+	drm_info_t* drm_info = (drm_info_t*)media_set->filtered_tracks[0].file_info.drm_info;
 	drm_system_info_t* cur_info;
 	size_t extra_tags_size;
 
@@ -89,8 +96,16 @@ mss_playready_build_manifest(
 			sizeof(VOD_MSS_PLAYREADY_PROTECTION_HEADER_PREFIX) - 1 +
 			VOD_GUID_LENGTH + 
 			sizeof(VOD_MSS_PLAYREADY_PROTECTION_HEADER_DELIMITER) - 1 +
-			vod_base64_encoded_length(cur_info->data.len) + 
 			sizeof(VOD_MSS_PLAYREADY_PROTECTION_HEADER_SUFFIX) - 1;
+
+		if (cur_info->mss_data.len > 0)
+		{
+			extra_tags_size += cur_info->mss_data.len;
+		}
+		else
+		{
+			extra_tags_size += vod_base64_encoded_length(cur_info->data.len);
+		}
 	}
 
 	return mss_packager_build_manifest(

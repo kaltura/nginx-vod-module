@@ -177,7 +177,7 @@ ngx_http_vod_hls_init_encryption_params(
 
 	if (conf->drm_enabled)
 	{
-		drm_info = sequence->drm_info;
+		drm_info = submodule_context->media_set.filtered_tracks[0].file_info.drm_info;
 		encryption_params->key = drm_info->key;
 
 		if (drm_info->iv_set)
@@ -717,7 +717,7 @@ ngx_http_vod_hls_handle_mp4_init_segment(
 		break;
 
 	case HLS_ENC_SAMPLE_AES_CENC:
-		drm_info = (drm_info_t*)submodule_context->media_set.sequences[0].drm_info;
+		drm_info = (drm_info_t*)submodule_context->media_set.filtered_tracks[0].file_info.drm_info;
 
 		rc = mp4_init_segment_get_encrypted_stsd_writers(
 			&submodule_context->request_context,

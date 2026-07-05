@@ -38,6 +38,7 @@
 
 #if (NGX_HAVE_LIBXML2)
 #include "vod/subtitle/dfxp_format.h"
+#include "vod/cpix.h"
 #endif // NGX_HAVE_LIBXML2
 
 // macros
@@ -161,6 +162,11 @@ struct ngx_http_vod_ctx_s {
 
 	// mapping
 	ngx_http_vod_mapping_context_t mapping;
+
+#if (NGX_HAVE_LIBXML2)
+	// drm
+	cpix_data_t *cpix;
+#endif
 
 	// read metadata state
 	ngx_buf_t read_buffer;
@@ -1237,6 +1243,50 @@ ngx_http_vod_copy_drm_info(ngx_http_vod_ctx_t *ctx)
 	}
 }
 
+static ngx_int_t
+ngx_http_vod_parse_drm_info(
+	ngx_http_vod_ctx_t *ctx,
+	ngx_str_t* drm_info,
+	bool_t* single_key)
+{
+	ngx_http_vod_loc_conf_t *conf;
+	request_context_t *request_context;
+	ngx_int_t rc;
+
+	request_context = &ctx->submodule_context.request_context;
+
+	conf = ctx->submodule_context.conf;
+	*single_key = conf->drm_single_key;
+
+#if (NGX_HAVE_LIBXML2)
+	if (drm_info->len > 0 && drm_info->data[0] == '<' &&
+		ctx->cur_sequence == ctx->submodule_context.media_set.sequences)
+	{
+		rc = cpix_parse(request_context, drm_info, &ctx->cpix);
+		if (rc != NGX_OK)
+		{
+			ngx_log_debug1(NGX_LOG_DEBUG_HTTP, request_context->log, 0,
+				"ngx_http_vod_parse_drm_info: invalid cpix response %V", drm_info);
+			return NGX_HTTP_SERVICE_UNAVAILABLE;
+		}
+
+		*single_key = TRUE;
+
+		return NGX_OK;
+	}
+#endif
+
+	rc = conf->submodule.parse_drm_info(&ctx->submodule_context, drm_info, &ctx->cur_sequence->drm_info);
+	if (rc != NGX_OK)
+	{
+		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, request_context->log, 0,
+			"ngx_http_vod_parse_drm_info: invalid drm info response %V", drm_info);
+		return NGX_HTTP_SERVICE_UNAVAILABLE;
+	}
+
+	return NGX_OK;
+}
+
 static void
 ngx_http_vod_drm_info_request_finished(void* context, ngx_int_t rc, ngx_buf_t* response, ssize_t content_length)
 {
@@ -1244,6 +1294,7 @@ ngx_http_vod_drm_info_request_finished(void* context, ngx_int_t rc, ngx_buf_t* r
 	ngx_http_vod_ctx_t *ctx;
 	ngx_http_request_t *r = context;
 	ngx_str_t drm_info;
+	bool_t single_key;
 
 	ctx = ngx_http_get_module_ctx(r, ngx_http_vod_module);
 	conf = ctx->submodule_context.conf;
@@ -1272,13 +1323,9 @@ ngx_http_vod_drm_info_request_finished(void* context, ngx_int_t rc, ngx_buf_t* r
 	ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0, 
 		"ngx_http_vod_drm_info_request_finished: result %V", &drm_info);
 
-	// parse the drm info
-	rc = conf->submodule.parse_drm_info(&ctx->submodule_context, &drm_info, &ctx->cur_sequence->drm_info);
+	rc = ngx_http_vod_parse_drm_info(ctx, &drm_info, &single_key);
 	if (rc != NGX_OK)
 	{
-		ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
-			"ngx_http_vod_drm_info_request_finished: invalid drm info response %V", &drm_info);
-		rc = NGX_HTTP_SERVICE_UNAVAILABLE;
 		goto finalize_request;
 	}
 
@@ -1302,7 +1349,7 @@ ngx_http_vod_drm_info_request_finished(void* context, ngx_int_t rc, ngx_buf_t* r
 		}
 	}
 
-	if (conf->drm_single_key)
+	if (single_key)
 	{
 		ngx_http_vod_copy_drm_info(ctx);
 		ctx->cur_sequence = ctx->submodule_context.media_set.sequences_end;
@@ -1340,6 +1387,7 @@ ngx_http_vod_state_machine_get_drm_info(ngx_http_vod_ctx_t *ctx)
 	ngx_str_t base_uri;
 	ngx_md5_t md5;
 	uint32_t cache_token;
+	bool_t single_key;
 
 	for (;
 		ctx->cur_sequence < ctx->submodule_context.media_set.sequences_end;
@@ -1382,11 +1430,9 @@ ngx_http_vod_state_machine_get_drm_info(ngx_http_vod_ctx_t *ctx)
 				ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
 					"ngx_http_vod_state_machine_get_drm_info: drm info cache hit, size is %uz", drm_info.len);
 
-				rc = conf->submodule.parse_drm_info(&ctx->submodule_context, &drm_info, &ctx->cur_sequence->drm_info);
+				rc = ngx_http_vod_parse_drm_info(ctx, &drm_info, &single_key);
 				if (rc != NGX_OK)
 				{
-					ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
-						"ngx_http_vod_state_machine_get_drm_info: invalid drm info in cache %V", &drm_info);
 					return rc;
 				}
 
@@ -1395,7 +1441,7 @@ ngx_http_vod_state_machine_get_drm_info(ngx_http_vod_ctx_t *ctx)
 					ctx->child_request_key, 
 					cache_token);
 
-				if (conf->drm_single_key)
+				if (single_key)
 				{
 					ngx_http_vod_copy_drm_info(ctx);
 					ctx->cur_sequence = ctx->submodule_context.media_set.sequences_end - 1;
@@ -3678,6 +3724,7 @@ ngx_http_vod_run_state_machine(ngx_http_vod_ctx_t *ctx)
 
 			rc = filter_init_filtered_clips(
 				&ctx->submodule_context.request_context,
+				&ctx->submodule_context.request_params,
 				&ctx->submodule_context.media_set, 
 				(ctx->request->parse_type & PARSE_FLAG_FRAMES_DURATION) != 0);
 			if (rc != VOD_OK)
@@ -3686,6 +3733,22 @@ ngx_http_vod_run_state_machine(ngx_http_vod_ctx_t *ctx)
 					"ngx_http_vod_run_state_machine: filter_init_filtered_clips failed %i", rc);
 				return ngx_http_vod_status_to_ngx_error(ctx->submodule_context.r, rc);
 			}
+
+#if (NGX_HAVE_LIBXML2)
+			if (ctx->cpix != NULL)
+			{
+				rc = cpix_init_drm_info(
+					&ctx->submodule_context.request_context,
+					&ctx->submodule_context.media_set,
+					ctx->cpix);
+				if (rc != VOD_OK)
+				{
+					ngx_log_debug1(NGX_LOG_DEBUG_HTTP, ctx->submodule_context.request_context.log, 0,
+						"ngx_http_vod_run_state_machine: cpix_init_drm_info failed %i", rc);
+					return ngx_http_vod_status_to_ngx_error(ctx->submodule_context.r, rc);
+				}
+			}
+#endif
 
 			rc = ngx_http_vod_validate_streams(ctx);
 			if (rc != NGX_OK)

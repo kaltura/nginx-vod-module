@@ -216,6 +216,11 @@ udrm_parse_response(
 			}
 			cur_output_pssh->data.len = pssh_values[PSSH_PARAM_DATA]->v.str.len;
 		}
+
+		cur_output_pssh->dash_data.len = 0;
+		cur_output_pssh->mss_data.len = 0;
+		cur_output_pssh->hls_media_signaling.len = 0;
+		cur_output_pssh->hls_master_signaling.len = 0;
 	}
 
 	*output = result;

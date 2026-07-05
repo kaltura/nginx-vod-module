@@ -662,7 +662,7 @@ mkv_builder_frame_writer_init(
 	if (encryption_type == MKV_ENCRYPTED)
 	{
 		// init the aes ctr
-		rc = mp4_aes_ctr_init(&state->cipher, request_context, ((drm_info_t*)sequence->drm_info)->key);
+		rc = mp4_aes_ctr_init(&state->cipher, request_context, ((drm_info_t*)first_track->file_info.drm_info)->key);
 		if (rc != VOD_OK)
 		{
 			return rc;
