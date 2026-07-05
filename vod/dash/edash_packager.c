@@ -38,7 +38,7 @@
 	"\" cenc:default_KID=\""
 
 #define VOD_EDASH_MANIFEST_CONTENT_PROTECTION_EXT_PART3								\
-	"\">\n"																			\
+	"\">\n          "
 
 #define VOD_EDASH_MANIFEST_CONTENT_PROTECTION_EXT_PART4								\
 	"\n        </ContentProtection>\n"
