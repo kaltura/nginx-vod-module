@@ -35,7 +35,7 @@ typedef struct {
 	ngx_str_node_t sn;
 	drm_info_t info;
 	drm_system_info_t systems[CPIX_MAX_KEY_DRM_SYSTEMS];
-	cpix_usage_rules_t usage_rules;
+	ngx_list_t usage_rules;		// cpix_usage_rules_t
 } cpix_content_key_t;
 
 struct cpix_data_s {
@@ -239,7 +239,10 @@ cpix_parse_node_content_key(void* context, xmlNode* node)
 		info->iv_set = TRUE;
 	}
 
-	cpix_parse_init_usage_rules(ctx->request_context, &key->usage_rules);
+	if (ngx_list_init(&key->usage_rules, request_context->pool, 1, sizeof(cpix_usage_rules_t)) != NGX_OK)
+	{
+		return VOD_ALLOC_FAILED;
+	}
 
 	hash = vod_crc32_short(kid.data, kid.len);
 
@@ -636,6 +639,7 @@ static vod_status_t
 cpix_parse_node_rule(void* context, xmlNode* node)
 {
 	cpix_parse_rule_ctx_t rule_ctx;
+	cpix_usage_rules_t* rules;
 	cpix_content_key_t* key;
 	cpix_parse_ctx_t* ctx = context;
 	vod_str_t kid;
@@ -651,8 +655,17 @@ cpix_parse_node_rule(void* context, xmlNode* node)
 		return VOD_BAD_DATA;
 	}
 
+	// each rule defines a separate content key context, a key may be referenced by multiple rules
+	rules = ngx_list_push(&key->usage_rules);
+	if (rules == NULL)
+	{
+		return VOD_ALLOC_FAILED;
+	}
+
+	cpix_parse_init_usage_rules(ctx->request_context, rules);
+
 	rule_ctx.ctx = ctx;
-	rule_ctx.rules = &key->usage_rules;
+	rule_ctx.rules = rules;
 
 	return xml_parse_nodes(&rule_ctx, node->children, cpix_node_usage_rule);
 }
@@ -820,6 +833,54 @@ cpix_usage_rules_match_period(
 }
 
 
+static bool_t
+cpix_content_key_match(
+	cpix_content_key_t* key,
+	media_info_t* media_info,
+	uint32_t clip_index,
+	uint64_t clip_time)
+{
+	cpix_usage_rules_t* cur;
+	cpix_usage_rules_t* data;
+	ngx_list_part_t* part;
+	vod_uint_t i;
+
+	if (key->usage_rules.part.nelts == 0)
+	{
+		// no usage rules - the key matches all tracks
+		return TRUE;
+	}
+
+	part = &key->usage_rules.part;
+	data = part->elts;
+
+	for (i = 0 ;; i++)
+	{
+		if (i >= part->nelts)
+		{
+			if (part->next == NULL)
+			{
+				break;
+			}
+
+			part = part->next;
+			data = part->elts;
+			i = 0;
+		}
+
+		cur = &data[i];
+
+		if (cpix_usage_rules_match_media_info(cur, media_info) &&
+			cpix_usage_rules_match_period(cur, clip_index, clip_time))
+		{
+			return TRUE;
+		}
+	}
+
+	return FALSE;
+}
+
+
 static drm_info_t*
 cpix_get_track_info(
 	request_context_t* request_context,
@@ -852,12 +913,7 @@ cpix_get_track_info(
 
 		cur = &data[i];
 
-		if (!cpix_usage_rules_match_media_info(&cur->usage_rules, &track->media_info))
-		{
-			continue;
-		}
-
-		if (!cpix_usage_rules_match_period(&cur->usage_rules, clip_index, clip_time))
+		if (!cpix_content_key_match(cur, &track->media_info, clip_index, clip_time))
 		{
 			continue;
 		}
