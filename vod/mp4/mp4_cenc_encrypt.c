@@ -59,7 +59,7 @@ mp4_cenc_encrypt_init_state(
 	const u_char* iv)
 {
 	media_sequence_t* sequence = &media_set->sequences[0];
-	drm_info_t* drm_info = (drm_info_t*)sequence->drm_info;
+	drm_info_t* drm_info = (drm_info_t*)media_set->filtered_tracks[0].file_info.drm_info;
 	vod_status_t rc;
 	uint64_t iv_int;
 	u_char* p;

@@ -940,6 +940,7 @@ mkv_metadata_parse(
 
 		cur_track->media_info.tags.lang_str = track.language;
 		cur_track->media_info.tags.language = lang_id;
+		cur_track->media_info.tags.is_default = sequence->tags.is_default;
 		if (track.name.len > 0)
 		{
 			cur_track->media_info.tags.label = track.name;

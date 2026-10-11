@@ -1,10 +1,8 @@
 #include "../media_format.h"
 #include "../media_clip.h"
 #include "../media_set.h"
+#include "../xml.h"
 #include "subtitle_format.h"
-
-#include <libxml/parser.h>
-#include <libxml/tree.h>
 
 #define DFXP_PREFIX "<tt"
 #define DFXP_XML_PREFIX1 "<?xml"
@@ -18,9 +16,9 @@
 #define DFXP_ELEMENT_BR (u_char*)"br"
 #define DFXP_ELEMENT_SPAN (u_char*)"span"
 
-#define DFXP_ATTR_BEGIN (u_char*)"begin"
-#define DFXP_ATTR_END (u_char*)"end"
-#define DFXP_ATTR_DUR (u_char*)"dur"
+#define DFXP_ATTR_BEGIN "begin"
+#define DFXP_ATTR_END "end"
+#define DFXP_ATTR_DUR "dur"
 
 static vod_status_t
 dfxp_reader_init(
@@ -53,24 +51,6 @@ dfxp_reader_init(
 	return subtitle_reader_init(
 		request_context,
 		ctx);
-}
-
-// a simplified version of xmlGetProp that does not copy memory, but is also limited to a single child
-static xmlChar* 
-dfxp_get_xml_prop(xmlNode* node, xmlChar* name)
-{
-	xmlAttrPtr prop;
-
-	prop = xmlHasProp(node, name);
-	if (prop == NULL ||
-		prop->children == NULL ||
-		prop->children->next != NULL ||
-		(prop->children->type != XML_TEXT_NODE && prop->children->type != XML_CDATA_SECTION_NODE))
-	{
-		return NULL;
-	}
-
-	return prop->children->content;
 }
 
 static int64_t 
@@ -231,14 +211,14 @@ dfxp_get_end_time(xmlNode *cur_node)
 	int64_t dur;
 	
 	// prefer the end attribute
-	attr = dfxp_get_xml_prop(cur_node, DFXP_ATTR_END);
+	attr = xml_get_prop(cur_node, DFXP_ATTR_END);
 	if (attr != NULL)
 	{
 		return dfxp_parse_timestamp(attr);
 	}
 	
 	// fall back to dur + start
-	attr = dfxp_get_xml_prop(cur_node, DFXP_ATTR_DUR);
+	attr = xml_get_prop(cur_node, DFXP_ATTR_DUR);
 	if (attr == NULL)
 	{
 		return -1;
@@ -250,7 +230,7 @@ dfxp_get_end_time(xmlNode *cur_node)
 		return -1;
 	}
 	
-	attr = dfxp_get_xml_prop(cur_node, DFXP_ATTR_BEGIN);
+	attr = xml_get_prop(cur_node, DFXP_ATTR_BEGIN);
 	if (attr == NULL)
 	{
 		return -1;
@@ -327,80 +307,6 @@ dfxp_get_duration(xmlDoc *doc)
 	return result;
 }
 
-static void
-dfxp_strip_new_lines(u_char* buf, size_t n)
-{
-	u_char* end;
-	u_char* p;
-
-	end = buf + n;
-
-	for (p = buf; p < end; p++)
-	{
-		if (*p == CR || *p == LF)
-		{
-			*p = ' ';
-		}
-	}
-}
-
-// copied from ngx_http_xslt_sax_error
-static void vod_cdecl
-dfxp_xml_sax_error(void *data, const char *msg, ...)
-{
-	xmlParserCtxtPtr ctxt = data;
-	request_context_t* request_context;
-	va_list args;
-	u_char buf[VOD_MAX_ERROR_STR];
-	size_t n;
-
-	request_context = ctxt->sax->_private;
-
-	buf[0] = '\0';
-
-	va_start(args, msg);
-	n = (size_t)vsnprintf((char *)buf, VOD_MAX_ERROR_STR, msg, args);
-	va_end(args);
-
-	while (--n && (buf[n] == CR || buf[n] == LF)) { /* void */ }
-
-	dfxp_strip_new_lines(buf, n);
-
-	vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-		"dfxp_xml_sax_error: libxml2 error: %*s", n + 1, buf);
-}
-
-static void vod_cdecl
-dfxp_xml_schema_error(void *data, const char *msg, ...)
-{
-	xmlParserCtxtPtr ctxt = data;
-	request_context_t* request_context;
-	va_list args;
-	u_char buf[VOD_MAX_ERROR_STR];
-	size_t n;
-
-	request_context = ctxt->sax->_private;
-
-	buf[0] = '\0';
-
-	va_start(args, msg);
-	n = (size_t)vsnprintf((char *)buf, VOD_MAX_ERROR_STR, msg, args);
-	va_end(args);
-
-	while (--n && (buf[n] == CR || buf[n] == LF)) { /* void */ }
-
-	dfxp_strip_new_lines(buf, n);
-
-	vod_log_error(VOD_LOG_WARN, request_context->log, 0,
-		"dfxp_xml_schema_error: libxml2 error: %*s", n + 1, buf);
-}
-
-static void
-dfxp_free_xml_doc(void *data)
-{
-	xmlFreeDoc(data);
-}
-
 static vod_status_t
 dfxp_parse(
 	request_context_t* request_context,
@@ -409,56 +315,14 @@ dfxp_parse(
 	size_t metadata_part_count,
 	media_base_metadata_t** result)
 {
-	vod_pool_cleanup_t *cln;
-	xmlParserCtxtPtr ctxt;
+	vod_status_t rc;
 	xmlDoc *doc;
 
-	// parse the xml
-	cln = vod_pool_cleanup_add(request_context->pool, 0);
-	if (cln == NULL)
+	rc = xml_parse(request_context, source->data, &doc);
+	if (rc != VOD_OK)
 	{
-		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
-			"dfxp_parse: vod_pool_cleanup_add failed");
-		return VOD_ALLOC_FAILED;
+		return rc;
 	}
-
-	ctxt = xmlCreateDocParserCtxt(source->data);
-	if (ctxt == NULL)
-	{
-		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-			"dfxp_parse: xmlCreateDocParserCtxt failed");
-		return VOD_ALLOC_FAILED;
-	}
-
-	xmlCtxtUseOptions(ctxt, XML_PARSE_RECOVER | XML_PARSE_NOWARNING | XML_PARSE_NONET);
-	
-	ctxt->sax->setDocumentLocator = NULL;
-	ctxt->sax->error = dfxp_xml_sax_error;
-	ctxt->sax->fatalError = dfxp_xml_sax_error;
-	ctxt->vctxt.error = dfxp_xml_schema_error;
-	ctxt->sax->_private = request_context;
-
-	if (xmlParseDocument(ctxt) != 0 ||
-		ctxt->myDoc == NULL ||
-		(!ctxt->wellFormed && !ctxt->recovery))
-	{
-		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
-			"dfxp_parse: xml parsing failed");
-		if (ctxt->myDoc != NULL)
-		{
-			xmlFreeDoc(ctxt->myDoc);
-		}
-		xmlFreeParserCtxt(ctxt);
-		return VOD_BAD_DATA;
-	}
-
-	doc = ctxt->myDoc;
-	ctxt->myDoc = NULL;
-
-	xmlFreeParserCtxt(ctxt);
-
-	cln->handler = dfxp_free_xml_doc;
-	cln->data = doc;
 
 	return subtitle_parse(
 		request_context,
@@ -784,7 +648,7 @@ dfxp_parse_frames(
 		}
 
 		// handle p element
-		attr = dfxp_get_xml_prop(cur_node, DFXP_ATTR_END);
+		attr = xml_get_prop(cur_node, DFXP_ATTR_END);
 		if (attr != NULL)
 		{
 			// has end time
@@ -800,7 +664,7 @@ dfxp_parse_frames(
 				continue;
 			}
 
-			attr = dfxp_get_xml_prop(cur_node, DFXP_ATTR_BEGIN);
+			attr = xml_get_prop(cur_node, DFXP_ATTR_BEGIN);
 			if (attr == NULL)
 			{
 				continue;
@@ -815,7 +679,7 @@ dfxp_parse_frames(
 		else
 		{
 			// no end time
-			attr = dfxp_get_xml_prop(cur_node, DFXP_ATTR_DUR);
+			attr = xml_get_prop(cur_node, DFXP_ATTR_DUR);
 			if (attr == NULL)
 			{
 				continue;
@@ -827,7 +691,7 @@ dfxp_parse_frames(
 				continue;
 			}
 
-			attr = dfxp_get_xml_prop(cur_node, DFXP_ATTR_BEGIN);
+			attr = xml_get_prop(cur_node, DFXP_ATTR_BEGIN);
 			if (attr == NULL)
 			{
 				continue;
